@@ -1,0 +1,69 @@
+import { Schema, model, Document, Types } from 'mongoose';
+
+/**
+ * Mongoose document type for rental contracts.
+ */
+export interface IContract extends Document {
+  landlord: Types.ObjectId;
+  tenant: Types.ObjectId;
+  property: Types.ObjectId;
+  rent: number;
+  deposit: number;
+  startDate: Date;
+  endDate: Date;
+  signedByTenant?: boolean;
+  signedAt?: Date;
+  signedByLandlord?: boolean;
+  ibanEncrypted?: string;
+  stripeCustomerId?: string;
+  /**
+   * The current status of the contract. Contracts begin in a 'draft' state
+   * upon creation. Once both parties have signed, the status transitions
+   * to 'active'. When the rental period ends or the landlord marks it as
+   * finished, the status should be set to 'completed'. In the event of
+   * early termination, the status can be set to 'cancelled'.
+   */
+  status: 'draft' | 'active' | 'completed' | 'cancelled';
+  /**
+   * Indicates whether the deposit (fianza) has been paid. Deposits can be
+   * transferred either to a platform escrow account or to a public authority
+   * depending on the chosen workflow. When the deposit is paid, the
+   * timestamp is recorded in depositPaidAt.
+   */
+  depositPaid?: boolean;
+  depositPaidAt?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+const contractSchema = new Schema<IContract>(
+  {
+    landlord: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    tenant: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+    property: { type: Schema.Types.ObjectId, ref: 'Property', required: true },
+    rent: { type: Number, required: true },
+    deposit: { type: Number, required: true },
+    startDate: { type: Date, required: true },
+    endDate: { type: Date, required: true },
+    // Digital signature fields
+    signedByTenant: { type: Boolean, default: false },
+    signedByLandlord: { type: Boolean, default: false },
+    signedAt: { type: Date },
+    // Encrypted IBAN for automatic payments (if provided)
+    ibanEncrypted: { type: String },
+    // Optional Stripe customer ID for payment processing
+    stripeCustomerId: { type: String },
+    // Current lifecycle status of the contract
+    status: {
+      type: String,
+      enum: ['draft', 'active', 'completed', 'cancelled'],
+      default: 'draft',
+    },
+    // Deposit paid flag and timestamp
+    depositPaid: { type: Boolean, default: false },
+    depositPaidAt: { type: Date },
+  },
+  { timestamps: true },
+);
+
+export const Contract = model<IContract>('Contract', contractSchema);
