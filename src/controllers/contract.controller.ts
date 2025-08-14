@@ -11,7 +11,7 @@ import { decryptIBAN, createCustomerAndMandate, createPaymentIntent } from '../u
 import { depositToEscrow, depositToAuthority } from '../utils/deposit';
 import { sendForSignature, checkSignatureStatus } from '../utils/signature';
 import { sendRentReminderEmail, sendContractRenewalNotification } from '../utils/notification';
-
+import PDFDocument from 'pdfkit';
 /**
  * Create a new rental contract. Requires the tenantId, propertyId, rent,
  * deposit, startDate and endDate in the request body. The landlord is
@@ -76,46 +76,73 @@ export const getContractPDF = async (req: Request, res: Response) => {
     const contract = await Contract.findById(req.params.id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
 
-    // Load related data
     const landlord = await User.findById(contract.landlord);
     const tenant = await User.findById(contract.tenant);
     const property = await Property.findById(contract.property);
+
     if (!landlord || !tenant || !property) {
       return res.status(404).json({ error: 'Datos incompletos para el contrato' });
     }
 
-    // Build payload for PDF generator
-    const data = {
-      landlordName: landlord.name,
-      landlordDNI: (landlord as any).dni || '',
-      landlordAddress: (landlord as any).address || '',
-      tenantName: tenant.name,
-      tenantDNI: (tenant as any).dni || '',
-      tenantAddress: (tenant as any).address || '',
-      propertyAddress: property.address || '',
-      cadastralRef: (property as any).cadastralReference || '',
-      durationMonths: Math.ceil(
-        (new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) /
-          (1000 * 60 * 60 * 24 * 30),
-      ),
-      startDate: contract.startDate.toISOString().split('T')[0],
-      endDate: contract.endDate.toISOString().split('T')[0],
-      monthlyRent: contract.rent,
-      deposit: contract.deposit,
-      paymentDay: 5,
-      bankAccount: process.env.BANK_ACCOUNT || '',
-      city: (property as any).city || '',
-      dateSigned: contract.signedAt
-        ? contract.signedAt.toISOString().split('T')[0]
-        : new Date().toISOString().split('T')[0],
-    };
-    const pdfBuffer = generateContractPDF(data);
-    res.writeHead(200, {
-      'Content-Type': 'application/pdf',
-      'Content-Disposition': `attachment; filename=contrato_${contract._id}.pdf`,
-      'Content-Length': pdfBuffer.length,
-    });
-    res.end(pdfBuffer);
+    // Preparar cabeceras HTTP para la descarga
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename=contrato_${contract._id}.pdf`
+    );
+
+    // Crear documento PDF en streaming
+    const doc = new PDFDocument({ size: 'A4', margin: 50 });
+    doc.pipe(res);
+
+    // ======================
+    // Contenido del contrato
+    // ======================
+    doc.fontSize(18).text('CONTRATO DE ARRENDAMIENTO DE VIVIENDA', { align: 'center' });
+    doc.moveDown(0.5);
+    doc.fontSize(10).text(`En ${(property as any).city || ''}, a ${new Date().toISOString().split('T')[0]}`, { align: 'right' });
+    doc.moveDown(1);
+
+    doc.fontSize(12).text('REUNIDOS', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10)
+      .text(`Arrendador: ${landlord.name}, DNI ${(landlord as any).dni || ''}, domicilio en ${(landlord as any).address || ''}.`)
+      .moveDown(0.3)
+      .text(`Inquilino: ${tenant.name}, DNI ${(tenant as any).dni || ''}, domicilio en ${(tenant as any).address || ''}.`);
+    doc.moveDown(1);
+
+    doc.fontSize(12).text('EXPONEN', { underline: true });
+    doc.moveDown(0.5);
+    doc.fontSize(10).text(
+      `Que el arrendador es titular de la vivienda sita en ${property.address}, referencia catastral ${(property as any).cadastralReference || ''}, y desea ceder su uso al inquilino bajo las siguientes cláusulas:`
+    );
+    doc.moveDown(1);
+
+    doc.fontSize(12).text('CLÁUSULAS', { underline: true });
+    doc.moveDown(0.5);
+    const clauses = [
+      `1. Objeto: uso y disfrute de la vivienda descrita.`,
+      `2. Duración: ${Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30))} meses, desde ${contract.startDate.toISOString().split('T')[0]} hasta ${contract.endDate.toISOString().split('T')[0]}.`,
+      `3. Renta: €${contract.rent} mensuales, pagaderos antes del día 5 de cada mes.`,
+      `4. Fianza: €${contract.deposit}, entregada en este acto conforme al artículo 36 LAU.`,
+      `5. Gastos: suministros y comunidad a cargo del inquilino.`,
+      `6. Conservación: reparaciones menores por el inquilino; mayores por el arrendador.`,
+      `7. Obras: no se podrán realizar sin autorización escrita del arrendador.`,
+      `8. Subarriendo: prohibido sin consentimiento expreso.`,
+      `9. Inventario: se adjunta como Anexo I.`,
+    ];
+    clauses.forEach(c => doc.fontSize(10).text(c).moveDown(0.3));
+
+    doc.moveDown(2);
+    const sigY = doc.y;
+    doc.text('__________________________', 80, sigY);
+    doc.text('__________________________', 350, sigY);
+    doc.text(`Arrendador: ${landlord.name}`, 80, sigY + 15);
+    doc.text(`Inquilino: ${tenant.name}`, 350, sigY + 15);
+
+    // Finalizar y enviar
+    doc.end();
+
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'Error generando el PDF' });
@@ -326,7 +353,7 @@ export const requestSignature = async (req: Request, res: Response) => {
       city: (property as any).city || '',
       dateSigned: new Date().toISOString().split('T')[0],
     };
-    const pdfBuffer = generateContractPDF(data);
+    const pdfBuffer = await generateContractPDF(data);
     // Determine who is requesting the signature and set up the signer
     const user = (req as any).user;
     const signerEmail = user.role === 'landlord' ? landlord.email : tenant.email;
