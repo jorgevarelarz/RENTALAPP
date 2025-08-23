@@ -12,6 +12,8 @@ import { requireAdmin } from './middleware/requireAdmin';
 import proRoutes from './routes/pro.routes';
 import ticketRoutes from './routes/ticket.routes';
 import reviewRoutes from './routes/review.routes';
+import verificationRoutes from './routes/verification.routes';
+import { requireVerified } from './middleware/requireVerified';
 
 // Load environment variables
 dotenv.config();
@@ -24,15 +26,16 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Mount API routes
 app.use('/api/auth', authRoutes);
+app.use('/api/verification', verificationRoutes);
 app.use('/api/properties', propertyRoutes);
-app.use('/api/contracts', contractRoutes);
+app.use('/api/contracts', requireVerified, contractRoutes);
 // User management routes
-app.use('/api/users', userRoutes);
+app.use('/api/users', requireVerified, userRoutes);
 // Admin functionality
-app.use('/api/admin', requireAdmin, adminRoutes, adminEarningsRoutes);
-app.use('/api', proRoutes);
-app.use('/api/tickets', ticketRoutes);
-app.use('/api/reviews', reviewRoutes);
+app.use('/api/admin', requireVerified, requireAdmin, adminRoutes, adminEarningsRoutes);
+app.use('/api/pros', requireVerified, proRoutes);
+app.use('/api/tickets', requireVerified, ticketRoutes);
+app.use('/api/reviews', requireVerified, reviewRoutes);
 
 const PORT = process.env.PORT || 3000;
 
