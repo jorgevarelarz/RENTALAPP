@@ -88,3 +88,34 @@ export const createPaymentIntent = async (
     confirm: true,
   });
 };
+
+export interface HoldArgs { customerId: string; amount: number; currency?: 'eur'; meta?: any }
+export interface HoldResult { provider: 'stripe'|'mock'; ref: string; amount: number; currency: 'eur'; heldAt: string; meta?: any }
+export interface ReleaseArgs { ref: string; amount?: number; currency?: 'eur' }
+export interface ReleaseResult { provider: 'stripe'|'mock'; ref: string; releasedAt: string }
+
+export async function holdPayment(args: HoldArgs): Promise<HoldResult> {
+  if (process.env.ESCROW_DRIVER === 'mock') {
+    return { provider: 'mock', ref: `pay_${Date.now()}`, amount: args.amount, currency: 'eur', heldAt: new Date().toISOString(), meta: args.meta };
+  }
+  const intent = await stripe.paymentIntents.create({
+    customer: args.customerId,
+    amount: Math.round(args.amount * 100),
+    currency: args.currency ?? 'eur',
+    payment_method_types: ['sepa_debit'],
+    capture_method: 'manual',
+    metadata: args.meta,
+    confirm: true,
+  });
+  return { provider: 'stripe', ref: intent.id, amount: args.amount, currency: 'eur', heldAt: new Date().toISOString(), meta: { status: intent.status } };
+}
+
+export async function releasePayment(args: ReleaseArgs): Promise<ReleaseResult> {
+  if (process.env.ESCROW_DRIVER === 'mock') {
+    return { provider: 'mock', ref: args.ref, releasedAt: new Date().toISOString() };
+  }
+  const captured = await stripe.paymentIntents.capture(args.ref, {
+    amount_to_capture: args.amount ? Math.round(args.amount * 100) : undefined,
+  });
+  return { provider: 'stripe', ref: captured.id, releasedAt: new Date().toISOString() };
+}

@@ -7,6 +7,8 @@ import propertyRoutes from './routes/property.routes';
 import contractRoutes from './routes/contract.routes';
 import userRoutes from './routes/user.routes';
 import adminRoutes from './routes/admin.routes';
+import proRoutes from './routes/pro.routes';
+import ticketRoutes from './routes/ticket.routes';
 
 // Load environment variables
 dotenv.config();
@@ -25,6 +27,8 @@ app.use('/api/contracts', contractRoutes);
 app.use('/api/users', userRoutes);
 // Admin functionality
 app.use('/api/admin', adminRoutes);
+app.use('/api', proRoutes);
+app.use('/api/tickets', ticketRoutes);
 
 const PORT = process.env.PORT || 3000;
 
