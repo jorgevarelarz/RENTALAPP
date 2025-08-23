@@ -7,6 +7,8 @@ import propertyRoutes from './routes/property.routes';
 import contractRoutes from './routes/contract.routes';
 import userRoutes from './routes/user.routes';
 import adminRoutes from './routes/admin.routes';
+import adminEarningsRoutes from './routes/admin.earnings.routes';
+import { requireAdmin } from './middleware/requireAdmin';
 import proRoutes from './routes/pro.routes';
 import ticketRoutes from './routes/ticket.routes';
 import reviewRoutes from './routes/review.routes';
@@ -27,7 +29,7 @@ app.use('/api/contracts', contractRoutes);
 // User management routes
 app.use('/api/users', userRoutes);
 // Admin functionality
-app.use('/api/admin', adminRoutes);
+app.use('/api/admin', requireAdmin, adminRoutes, adminEarningsRoutes);
 app.use('/api', proRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/reviews', reviewRoutes);

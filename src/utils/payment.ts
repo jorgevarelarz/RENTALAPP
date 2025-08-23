@@ -91,8 +91,14 @@ export const createPaymentIntent = async (
 
 export interface HoldArgs { customerId: string; amount: number; currency?: 'eur'; meta?: any }
 export interface HoldResult { provider: 'stripe'|'mock'; ref: string; amount: number; currency: 'eur'; heldAt: string; meta?: any }
-export interface ReleaseArgs { ref: string; amount?: number; currency?: 'eur' }
-export interface ReleaseResult { provider: 'stripe'|'mock'; ref: string; releasedAt: string }
+export interface ReleaseArgs {
+  ref: string;
+  amount: number;
+  currency: 'eur';
+  fee?: number;
+  meta?: Record<string, any>;
+}
+export interface ReleaseResult { provider: 'stripe'|'mock'; ref: string }
 
 export async function holdPayment(args: HoldArgs): Promise<HoldResult> {
   if (process.env.ESCROW_DRIVER === 'mock') {
@@ -112,10 +118,12 @@ export async function holdPayment(args: HoldArgs): Promise<HoldResult> {
 
 export async function releasePayment(args: ReleaseArgs): Promise<ReleaseResult> {
   if (process.env.ESCROW_DRIVER === 'mock') {
-    return { provider: 'mock', ref: args.ref, releasedAt: new Date().toISOString() };
+    return { provider: 'mock', ref: `mock_release_${Date.now()}` };
   }
   const captured = await stripe.paymentIntents.capture(args.ref, {
-    amount_to_capture: args.amount ? Math.round(args.amount * 100) : undefined,
+    amount_to_capture: Math.round(args.amount * 100),
+    application_fee_amount: args.fee ? Math.round(args.fee * 100) : undefined,
+    metadata: args.meta,
   });
-  return { provider: 'stripe', ref: captured.id, releasedAt: new Date().toISOString() };
+  return { provider: 'stripe', ref: captured.id };
 }
