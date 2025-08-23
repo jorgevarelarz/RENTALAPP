@@ -2,6 +2,7 @@ import { Router } from 'express';
 import Ticket from '../models/ticket.model';
 import Escrow from '../models/escrow.model';
 import Pro from '../models/pro.model';
+import { User } from '../models/user.model';
 import { getUserId } from '../utils/getUserId';
 import { holdPayment, releasePayment } from '../utils/payment';
 
@@ -204,10 +205,41 @@ r.get('/my/tenant', async (req, res) => {
     const q: any = { openedBy: userId };
     if (status) q.status = status;
     const [items, total] = await Promise.all([
-      Ticket.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+      Ticket.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       Ticket.countDocuments(q)
     ]);
-    res.json({ items, total, page, limit });
+    const userIds = new Set<string>();
+    const proIds: string[] = [];
+    items.forEach(t => {
+      userIds.add(t.ownerId);
+      userIds.add(t.openedBy);
+      if (t.proId) proIds.push(t.proId);
+    });
+    const [users, pros] = await Promise.all([
+      User.find({ _id: { $in: Array.from(userIds) } }, { ratingAvg: 1, reviewCount: 1 }).lean(),
+      Pro.find({ userId: { $in: proIds } }, { userId: 1, ratingAvg: 1, reviewCount: 1 }).lean()
+    ]);
+    const userMap = new Map(users.map(u => [String(u._id), u]));
+    const proMap = new Map(pros.map(p => [p.userId, p]));
+    const hydrated = items.map(t => ({
+      ...t,
+      pro: t.proId ? {
+        id: t.proId,
+        ratingAvg: proMap.get(t.proId)?.ratingAvg ?? 0,
+        reviewCount: proMap.get(t.proId)?.reviewCount ?? 0,
+      } : null,
+      owner: {
+        id: t.ownerId,
+        ratingAvg: userMap.get(t.ownerId)?.ratingAvg ?? 0,
+        reviewCount: userMap.get(t.ownerId)?.reviewCount ?? 0,
+      },
+      tenant: {
+        id: t.openedBy,
+        ratingAvg: userMap.get(t.openedBy)?.ratingAvg ?? 0,
+        reviewCount: userMap.get(t.openedBy)?.reviewCount ?? 0,
+      },
+    }));
+    res.json({ items: hydrated, total, page, limit });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
@@ -221,10 +253,41 @@ r.get('/my/owner', async (req, res) => {
     const q: any = { ownerId: userId };
     if (status) q.status = status;
     const [items, total] = await Promise.all([
-      Ticket.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+      Ticket.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       Ticket.countDocuments(q)
     ]);
-    res.json({ items, total, page, limit });
+    const userIds = new Set<string>();
+    const proIds: string[] = [];
+    items.forEach(t => {
+      userIds.add(t.ownerId);
+      userIds.add(t.openedBy);
+      if (t.proId) proIds.push(t.proId);
+    });
+    const [users, pros] = await Promise.all([
+      User.find({ _id: { $in: Array.from(userIds) } }, { ratingAvg: 1, reviewCount: 1 }).lean(),
+      Pro.find({ userId: { $in: proIds } }, { userId: 1, ratingAvg: 1, reviewCount: 1 }).lean()
+    ]);
+    const userMap = new Map(users.map(u => [String(u._id), u]));
+    const proMap = new Map(pros.map(p => [p.userId, p]));
+    const hydrated = items.map(t => ({
+      ...t,
+      pro: t.proId ? {
+        id: t.proId,
+        ratingAvg: proMap.get(t.proId)?.ratingAvg ?? 0,
+        reviewCount: proMap.get(t.proId)?.reviewCount ?? 0,
+      } : null,
+      owner: {
+        id: t.ownerId,
+        ratingAvg: userMap.get(t.ownerId)?.ratingAvg ?? 0,
+        reviewCount: userMap.get(t.ownerId)?.reviewCount ?? 0,
+      },
+      tenant: {
+        id: t.openedBy,
+        ratingAvg: userMap.get(t.openedBy)?.ratingAvg ?? 0,
+        reviewCount: userMap.get(t.openedBy)?.reviewCount ?? 0,
+      },
+    }));
+    res.json({ items: hydrated, total, page, limit });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
@@ -238,10 +301,77 @@ r.get('/my/pro', async (req, res) => {
     const q: any = { proId: userId };
     if (status) q.status = status;
     const [items, total] = await Promise.all([
-      Ticket.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+      Ticket.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       Ticket.countDocuments(q)
     ]);
-    res.json({ items, total, page, limit });
+    const userIds = new Set<string>();
+    const proIds: string[] = [];
+    items.forEach(t => {
+      userIds.add(t.ownerId);
+      userIds.add(t.openedBy);
+      if (t.proId) proIds.push(t.proId);
+    });
+    const [users, pros] = await Promise.all([
+      User.find({ _id: { $in: Array.from(userIds) } }, { ratingAvg: 1, reviewCount: 1 }).lean(),
+      Pro.find({ userId: { $in: proIds } }, { userId: 1, ratingAvg: 1, reviewCount: 1 }).lean()
+    ]);
+    const userMap = new Map(users.map(u => [String(u._id), u]));
+    const proMap = new Map(pros.map(p => [p.userId, p]));
+    const hydrated = items.map(t => ({
+      ...t,
+      pro: t.proId ? {
+        id: t.proId,
+        ratingAvg: proMap.get(t.proId)?.ratingAvg ?? 0,
+        reviewCount: proMap.get(t.proId)?.reviewCount ?? 0,
+      } : null,
+      owner: {
+        id: t.ownerId,
+        ratingAvg: userMap.get(t.ownerId)?.ratingAvg ?? 0,
+        reviewCount: userMap.get(t.ownerId)?.reviewCount ?? 0,
+      },
+      tenant: {
+        id: t.openedBy,
+        ratingAvg: userMap.get(t.openedBy)?.ratingAvg ?? 0,
+        reviewCount: userMap.get(t.openedBy)?.reviewCount ?? 0,
+      },
+    }));
+    res.json({ items: hydrated, total, page, limit });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+  }
+});
+
+r.get('/:id', async (req, res) => {
+  try {
+    const t = await Ticket.findById(req.params.id).lean();
+    if (!t) return res.status(404).json({ error: 'not found', code: 404 });
+    const userIds = [t.ownerId, t.openedBy];
+    const proIds = t.proId ? [t.proId] : [];
+    const [users, pros] = await Promise.all([
+      User.find({ _id: { $in: userIds } }, { ratingAvg: 1, reviewCount: 1 }).lean(),
+      Pro.find({ userId: { $in: proIds } }, { userId: 1, ratingAvg: 1, reviewCount: 1 }).lean()
+    ]);
+    const userMap = new Map(users.map(u => [String(u._id), u]));
+    const proMap = new Map(pros.map(p => [p.userId, p]));
+    const result = {
+      ...t,
+      pro: t.proId ? {
+        id: t.proId,
+        ratingAvg: proMap.get(t.proId)?.ratingAvg ?? 0,
+        reviewCount: proMap.get(t.proId)?.reviewCount ?? 0,
+      } : null,
+      owner: {
+        id: t.ownerId,
+        ratingAvg: userMap.get(t.ownerId)?.ratingAvg ?? 0,
+        reviewCount: userMap.get(t.ownerId)?.reviewCount ?? 0,
+      },
+      tenant: {
+        id: t.openedBy,
+        ratingAvg: userMap.get(t.openedBy)?.ratingAvg ?? 0,
+        reviewCount: userMap.get(t.openedBy)?.reviewCount ?? 0,
+      },
+    };
+    res.json(result);
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }

@@ -45,7 +45,7 @@ r.get('/pros', async (req, res) => {
     if (service) q['services.key'] = service;
     if (city) q.city = new RegExp(`^${city}$`, 'i');
     const [items, total] = await Promise.all([
-      Pro.find(q).sort({ ratingAvg: -1, jobsDone: -1 }).skip((page - 1) * limit).limit(limit),
+      Pro.find(q).sort({ ratingAvg: -1, reviewCount: -1 }).skip((page - 1) * limit).limit(limit),
       Pro.countDocuments(q)
     ]);
     res.json({ items, total, page, limit });

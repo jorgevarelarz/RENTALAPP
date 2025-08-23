@@ -5,7 +5,7 @@ import { User } from '../models/user.model';
  * Retrieve a list of all users. The password hash is excluded for security.
  */
 export const getAllUsers = async (_req: Request, res: Response) => {
-  const users = await User.find().select('-passwordHash');
+  const users = await User.find().select('-passwordHash').sort({ ratingAvg: -1, reviewCount: -1 });
   res.json(users);
 };
 

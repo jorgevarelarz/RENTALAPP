@@ -14,6 +14,7 @@ export interface IPro extends Document {
   city: string;
   services: { key: ProService; basePrice?: number }[];
   ratingAvg: number;
+  reviewCount: number;
   jobsDone: number;
   verified: boolean;
   active: boolean;
@@ -30,6 +31,7 @@ const s = new Schema<IPro>({
   city: { type: String, required: true, index: true },
   services: [serviceSchema],
   ratingAvg: { type: Number, default: 0 },
+  reviewCount: { type: Number, default: 0 },
   jobsDone: { type: Number, default: 0 },
   verified: { type: Boolean, default: false },
   active: { type: Boolean, default: true },
