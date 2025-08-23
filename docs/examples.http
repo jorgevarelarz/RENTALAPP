@@ -1,0 +1,46 @@
+### Crear/editar PRO
+POST http://localhost:3000/api/pros
+Content-Type: application/json
+x-user-id: PRO1
+
+{
+  "displayName": "Manitas SL",
+  "city": "A Coruña",
+  "services": [
+    { "key": "plumbing", "basePrice": 50 },
+    { "key": "locksmith", "basePrice": 40 }
+  ],
+  "verified": true
+}
+
+### Ver mi PRO
+GET http://localhost:3000/api/pros/me
+x-user-id: PRO1
+
+### Listar PROs
+GET http://localhost:3000/api/pros?service=plumbing&city=A%20Coru%C3%B1a&page=1&limit=10
+
+### Asignar PRO a ticket
+POST http://localhost:3000/api/tickets/{{TICKET_ID}}/assign
+Content-Type: application/json
+x-user-id: L1
+
+{
+  "proId": "{{PRO_OBJECT_ID}}"
+}
+
+### Desasignar PRO de ticket
+POST http://localhost:3000/api/tickets/{{TICKET_ID}}/unassign
+x-user-id: L1
+
+### Tickets por inquilino
+GET http://localhost:3000/api/tickets/my/tenant
+x-user-id: T1
+
+### Tickets por propietario
+GET http://localhost:3000/api/tickets/my/owner
+x-user-id: L1
+
+### Tickets por profesional
+GET http://localhost:3000/api/tickets/my/pro
+x-user-id: PRO1
