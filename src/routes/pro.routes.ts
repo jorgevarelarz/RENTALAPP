@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import Pro from '../models/pro.model';
 import { getUserId } from '../utils/getUserId';
+import { requireVerified } from '../middleware/requireVerified';
 
 const r = Router();
 
 // Alta/edición PRO del usuario autenticado
-r.post('/pros', async (req, res) => {
+r.post('/', requireVerified, async (req, res) => {
   try {
     const userId = getUserId(req);
     const { displayName, city, services = [], verified } = req.body || {};
@@ -24,7 +25,7 @@ r.post('/pros', async (req, res) => {
 });
 
 // Obtener mi perfil PRO
-r.get('/pros/me', async (req, res) => {
+r.get('/me', requireVerified, async (req, res) => {
   try {
     const userId = getUserId(req);
     const pro = await Pro.findOne({ userId });
@@ -36,7 +37,7 @@ r.get('/pros/me', async (req, res) => {
 });
 
 // Listado con filtros y paginación
-r.get('/pros', async (req, res) => {
+r.get('/', async (req, res) => {
   try {
     const { service, city } = req.query as any;
     let page = Math.max(1, parseInt((req.query.page as string) || '1'));
@@ -55,7 +56,7 @@ r.get('/pros', async (req, res) => {
 });
 
 // Obtener PRO por id
-r.get('/pros/:id', async (req, res) => {
+r.get('/:id', async (req, res) => {
   try {
     const pro = await Pro.findById(req.params.id);
     if (!pro) return res.status(404).json({ error: 'not found', code: 404 });
