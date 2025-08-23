@@ -5,6 +5,8 @@ import Pro from '../models/pro.model';
 import { User } from '../models/user.model';
 import { getUserId } from '../utils/getUserId';
 import { holdPayment, releasePayment } from '../utils/payment';
+import { calcPlatformFee } from '../utils/calcFee';
+import PlatformEarning from '../models/platformEarning.model';
 
 const r = Router();
 
@@ -141,15 +143,39 @@ r.post('/:id/validate', async (req, res) => {
     const esc = await Escrow.findById(t.escrowId);
     if (!esc) return res.status(404).json({ error: 'escrow not found', code: 404 });
 
-    const total = (t.quote?.amount ?? 0) + ((t.extra && t.extra.status === 'approved') ? t.extra.amount : 0);
-    await releasePayment({ ref: esc.paymentRef!, amount: total, currency: 'eur' });
+    const gross =
+      (t.quote?.amount ?? 0) +
+      ((t.extra && t.extra.status === 'approved') ? t.extra.amount : 0);
+
+    const breakdown = calcPlatformFee(gross);
+
+    const rel = await releasePayment({
+      ref: esc.paymentRef!, amount: breakdown.gross, currency: 'eur', fee: breakdown.fee,
+      meta: { ticketId: String(t._id) }
+    });
 
     esc.status = 'released';
-    esc.ledger.push({ ts: new Date(), type: 'release', payload: { amount: total } });
+    esc.breakdown = breakdown;
+    esc.ledger.push({ ts: new Date(), type: 'release', payload: { ...rel, breakdown } });
     await esc.save();
 
+    await PlatformEarning.create({
+      ticketId: String(t._id),
+      escrowId: String(esc._id),
+      gross: breakdown.gross,
+      fee: breakdown.fee,
+      netToPro: breakdown.netToPro,
+      currency: esc.currency || 'EUR',
+      releaseRef: rel.ref,
+      proId: t.proId,
+      serviceKey: t.service
+    });
+
     t.status = 'closed';
-    t.history.push({ ts: new Date(), actor: userId, action: 'validated_and_released', payload: { total } });
+    t.history.push({
+      ts: new Date(), actor: userId, action: 'validated_and_released',
+      payload: breakdown
+    });
     await t.save();
 
     res.json({ ticket: t, escrow: esc });
