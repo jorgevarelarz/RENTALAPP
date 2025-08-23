@@ -9,6 +9,7 @@ import userRoutes from './routes/user.routes';
 import adminRoutes from './routes/admin.routes';
 import proRoutes from './routes/pro.routes';
 import ticketRoutes from './routes/ticket.routes';
+import reviewRoutes from './routes/review.routes';
 
 // Load environment variables
 dotenv.config();
@@ -29,6 +30,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api', proRoutes);
 app.use('/api/tickets', ticketRoutes);
+app.use('/api/reviews', reviewRoutes);
 
 const PORT = process.env.PORT || 3000;
 
