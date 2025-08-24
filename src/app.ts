@@ -14,12 +14,17 @@ import ticketRoutes from './routes/ticket.routes';
 import reviewRoutes from './routes/review.routes';
 import verificationRoutes from './routes/verification.routes';
 import { requireVerified } from './middleware/requireVerified';
+import connectRoutes from './routes/connect.routes';
+import paymentsRoutes from './routes/payments.routes';
+import contractPaymentsRoutes from './routes/contract.payments.routes';
+import stripeWebhookRoutes from './routes/stripe.webhook';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
 app.use(cors());
+app.use('/api', stripeWebhookRoutes);
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -36,6 +41,9 @@ app.use('/api/admin', requireVerified, requireAdmin, adminRoutes, adminEarningsR
 app.use('/api/pros', requireVerified, proRoutes);
 app.use('/api/tickets', requireVerified, ticketRoutes);
 app.use('/api/reviews', requireVerified, reviewRoutes);
+app.use('/api', requireVerified, connectRoutes);
+app.use('/api', requireVerified, paymentsRoutes);
+app.use('/api', requireVerified, contractPaymentsRoutes);
 
 const PORT = process.env.PORT || 3000;
 

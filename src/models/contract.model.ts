@@ -8,6 +8,8 @@ export interface IContract extends Document {
   tenant: Types.ObjectId;
   property: Types.ObjectId;
   rent: number;
+  rentAmount?: number;
+  currency?: string;
   deposit: number;
   startDate: Date;
   endDate: Date;
@@ -16,6 +18,8 @@ export interface IContract extends Document {
   signedByLandlord?: boolean;
   ibanEncrypted?: string;
   stripeCustomerId?: string;
+  paymentRef?: string;
+  lastPaidAt?: Date;
   /**
    * The current status of the contract. Contracts begin in a 'draft' state
    * upon creation. Once both parties have signed, the status transitions
@@ -42,6 +46,8 @@ const contractSchema = new Schema<IContract>(
     tenant: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     property: { type: Schema.Types.ObjectId, ref: 'Property', required: true },
     rent: { type: Number, required: true },
+    rentAmount: { type: Number },
+    currency: { type: String, default: 'EUR' },
     deposit: { type: Number, required: true },
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
@@ -53,6 +59,8 @@ const contractSchema = new Schema<IContract>(
     ibanEncrypted: { type: String },
     // Optional Stripe customer ID for payment processing
     stripeCustomerId: { type: String },
+    paymentRef: { type: String },
+    lastPaidAt: { type: Date },
     // Current lifecycle status of the contract
     status: {
       type: String,
