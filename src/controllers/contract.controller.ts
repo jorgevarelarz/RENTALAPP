@@ -12,6 +12,12 @@ import { depositToEscrow, depositToAuthority } from '../utils/deposit';
 import { sendForSignature, checkSignatureStatus } from '../utils/signature';
 import { sendRentReminderEmail, sendContractRenewalNotification } from '../utils/notification';
 import PDFDocument from 'pdfkit';
+
+function parsePagination(query: any) {
+  const page = Math.max(1, parseInt(query.page as string) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(query.limit as string) || 10));
+  return { page, limit };
+}
 /**
  * Create a new rental contract. Requires the tenantId, propertyId, rent,
  * deposit, startDate and endDate in the request body. The landlord is
@@ -428,5 +434,79 @@ export const sendRenewalNotification = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: 'Error enviando notificaciones', details: error.message });
+  }
+};
+
+export const listContracts = async (req: Request, res: Response) => {
+  try {
+    const { page, limit } = parsePagination(req.query);
+    const q: any = {};
+    if (req.query.status) q.status = req.query.status;
+    const [items, total] = await Promise.all([
+      Contract.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      Contract.countDocuments(q)
+    ]);
+    const userIds = new Set<string>();
+    items.forEach(c => {
+      userIds.add(String(c.landlord));
+      userIds.add(String(c.tenant));
+    });
+    const users = await User.find(
+      { _id: { $in: Array.from(userIds) } },
+      { ratingAvg: 1, reviewCount: 1 }
+    ).lean();
+    const userMap = new Map(users.map(u => [String(u._id), u]));
+    const hydrated = items.map(c => {
+      const ownerId = String(c.landlord);
+      const tenantId = String(c.tenant);
+      return {
+        ...c,
+        ownerId,
+        tenantId,
+        owner: {
+          id: ownerId,
+          ratingAvg: userMap.get(ownerId)?.ratingAvg ?? 0,
+          reviewCount: userMap.get(ownerId)?.reviewCount ?? 0,
+        },
+        tenant: {
+          id: tenantId,
+          ratingAvg: userMap.get(tenantId)?.ratingAvg ?? 0,
+          reviewCount: userMap.get(tenantId)?.reviewCount ?? 0,
+        },
+      } as any;
+    });
+    res.json({ items: hydrated, total, page, limit });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+  }
+};
+
+export const getContract = async (req: Request, res: Response) => {
+  try {
+    const c = await Contract.findById(req.params.id).lean();
+    if (!c) return res.status(404).json({ error: 'Contrato no encontrado' });
+    const ids = [String(c.landlord), String(c.tenant)];
+    const users = await User.find({ _id: { $in: ids } }, { ratingAvg: 1, reviewCount: 1 }).lean();
+    const userMap = new Map(users.map(u => [String(u._id), u]));
+    const ownerId = String(c.landlord);
+    const tenantId = String(c.tenant);
+    const result: any = {
+      ...c,
+      ownerId,
+      tenantId,
+      owner: {
+        id: ownerId,
+        ratingAvg: userMap.get(ownerId)?.ratingAvg ?? 0,
+        reviewCount: userMap.get(ownerId)?.reviewCount ?? 0,
+      },
+      tenant: {
+        id: tenantId,
+        ratingAvg: userMap.get(tenantId)?.ratingAvg ?? 0,
+        reviewCount: userMap.get(tenantId)?.reviewCount ?? 0,
+      },
+    };
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
 };

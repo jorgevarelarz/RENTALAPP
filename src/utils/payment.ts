@@ -47,9 +47,7 @@ export const decryptIBAN = (encryptedIban: string): string => {
 
 /**
  * Creates a Stripe customer and attaches a SEPA Direct Debit mandate using
- * the provided IBAN. Returns the created customer ID. Note: this is a
- * placeholder and will only work if the Stripe secret key is properly
- * configured and the environment allows outbound network calls.
+ * the provided IBAN. Returns the created customer ID.
  */
 export const createCustomerAndMandate = async (
   name: string,
@@ -57,8 +55,7 @@ export const createCustomerAndMandate = async (
   iban: string,
 ): Promise<string> => {
   const customer = await stripe.customers.create({ name, email });
-  // Attach a SEPA debit source to the customer. The Stripe typings require using
-  // customers.createSource rather than the deprecated customerSources API.
+  // Attach a SEPA debit source to the customer.
   await stripe.customers.createSource(customer.id, {
     source: {
       object: 'source',
@@ -89,15 +86,45 @@ export const createPaymentIntent = async (
   });
 };
 
-export interface HoldArgs { customerId: string; amount: number; currency?: 'eur'; meta?: any }
-export interface HoldResult { provider: 'stripe'|'mock'; ref: string; amount: number; currency: 'eur'; heldAt: string; meta?: any }
-export interface ReleaseArgs { ref: string; amount?: number; currency?: 'eur' }
-export interface ReleaseResult { provider: 'stripe'|'mock'; ref: string; releasedAt: string }
+export interface HoldArgs {
+  customerId: string;
+  amount: number;                 // gross amount to hold (EUR units)
+  currency?: 'eur';
+  meta?: any;
+}
+export interface HoldResult {
+  provider: 'stripe' | 'mock';
+  ref: string;                    // PaymentIntent id (stripe) or mock ref
+  amount: number;
+  currency: 'eur';
+  heldAt: string;
+  meta?: any;
+}
+
+export interface ReleaseArgs {
+  ref: string;                    // PaymentIntent id to capture
+  amount: number;                 // amount to capture (EUR units)
+  currency: 'eur';
+  fee?: number;                   // platform fee (EUR units) -> application_fee_amount
+  meta?: Record<string, any>;     // metadata to attach to the capture
+}
+export interface ReleaseResult {
+  provider: 'stripe' | 'mock';
+  ref: string;                    // capture id / PaymentIntent id
+}
 
 export async function holdPayment(args: HoldArgs): Promise<HoldResult> {
   if (process.env.ESCROW_DRIVER === 'mock') {
-    return { provider: 'mock', ref: `pay_${Date.now()}`, amount: args.amount, currency: 'eur', heldAt: new Date().toISOString(), meta: args.meta };
+    return {
+      provider: 'mock',
+      ref: `pay_${Date.now()}`,
+      amount: args.amount,
+      currency: 'eur',
+      heldAt: new Date().toISOString(),
+      meta: args.meta,
+    };
   }
+
   const intent = await stripe.paymentIntents.create({
     customer: args.customerId,
     amount: Math.round(args.amount * 100),
@@ -107,15 +134,27 @@ export async function holdPayment(args: HoldArgs): Promise<HoldResult> {
     metadata: args.meta,
     confirm: true,
   });
-  return { provider: 'stripe', ref: intent.id, amount: args.amount, currency: 'eur', heldAt: new Date().toISOString(), meta: { status: intent.status } };
+
+  return {
+    provider: 'stripe',
+    ref: intent.id,
+    amount: args.amount,
+    currency: 'eur',
+    heldAt: new Date().toISOString(),
+    meta: { status: intent.status },
+  };
 }
 
 export async function releasePayment(args: ReleaseArgs): Promise<ReleaseResult> {
   if (process.env.ESCROW_DRIVER === 'mock') {
-    return { provider: 'mock', ref: args.ref, releasedAt: new Date().toISOString() };
+    return { provider: 'mock', ref: `mock_release_${Date.now()}` };
   }
+
   const captured = await stripe.paymentIntents.capture(args.ref, {
-    amount_to_capture: args.amount ? Math.round(args.amount * 100) : undefined,
+    amount_to_capture: Math.round(args.amount * 100),
+    application_fee_amount: args.fee ? Math.round(args.fee * 100) : undefined,
+    metadata: args.meta,
   });
-  return { provider: 'stripe', ref: captured.id, releasedAt: new Date().toISOString() };
+
+  return { provider: 'stripe', ref: captured.id };
 }

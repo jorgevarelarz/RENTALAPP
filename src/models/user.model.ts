@@ -24,6 +24,11 @@ const userSchema = new Schema(
       enum: ['landlord', 'tenant', 'admin'],
       required: true,
     },
+    ratingAvg: { type: Number, default: 0 },
+    reviewCount: { type: Number, default: 0 },
+    // Optional Stripe identifiers for payments
+    stripeAccountId: { type: String },
+    stripeCustomerId: { type: String },
   },
   { timestamps: true },
 );

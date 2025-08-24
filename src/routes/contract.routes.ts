@@ -5,6 +5,9 @@ import { validateContract } from '../middleware/validation.middleware';
 
 const router = Router();
 
+// List contracts
+router.get('/', authenticate, contractController.listContracts);
+
 // Crear contrato
 router.post('/', authenticate, validateContract, contractController.createContract);
 
@@ -31,5 +34,8 @@ router.post('/:id/renew', authenticate, contractController.sendRenewalNotificati
 
 // Pagar fianza
 router.post('/:id/deposit', authenticate, contractController.payDeposit);
+
+// Obtener contrato con reputación
+router.get('/:id', authenticate, contractController.getContract);
 
 export default router;
