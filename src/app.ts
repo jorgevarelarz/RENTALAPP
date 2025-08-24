@@ -18,6 +18,8 @@ import connectRoutes from './routes/connect.routes';
 import paymentsRoutes from './routes/payments.routes';
 import contractPaymentsRoutes from './routes/contract.payments.routes';
 import stripeWebhookRoutes from './routes/stripe.webhook';
+import identityRoutes from './routes/identity.routes';
+import signatureRoutes from './routes/signature.routes';
 
 // Load environment variables
 dotenv.config();
@@ -32,6 +34,7 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 // Mount API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/verification', verificationRoutes);
+app.use('/api/kyc', identityRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api/contracts', requireVerified, contractRoutes);
 // User management routes
@@ -44,6 +47,7 @@ app.use('/api/reviews', requireVerified, reviewRoutes);
 app.use('/api', requireVerified, connectRoutes);
 app.use('/api', requireVerified, paymentsRoutes);
 app.use('/api', requireVerified, contractPaymentsRoutes);
+app.use('/api', requireVerified, signatureRoutes);
 
 const PORT = process.env.PORT || 3000;
 
