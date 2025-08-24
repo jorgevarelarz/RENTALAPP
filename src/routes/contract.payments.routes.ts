@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { stripe } from '../utils/stripe';
 import { Contract } from '../models/contract.model';
 import { User } from '../models/user.model';
-import { calcPlatformFeeOnRent, calcSurchargeCents } from '../utils/rentFees';
+import { calcPlatformFeeOnRent, calcSurchargeCents, calcSignFeeOnRent } from '../utils/rentFees';
 
 const r = Router();
 
@@ -28,8 +28,10 @@ r.post('/contracts/:id/pay-rent', async (req, res) => {
   const rentBase = contract.rentAmount ?? contract.rent;
   const rentCents = Math.round((rentBase || 0) * 100);
   const surchargeCents = calcSurchargeCents(method, rentCents);
+  const signFeeCents = contract.signFeeCollected ? 0 : calcSignFeeOnRent(rentCents);
+  const rentFeeCents = calcPlatformFeeOnRent(rentCents);
+  const applicationFeeCents = rentFeeCents + signFeeCents;
   const amountCents = rentCents + surchargeCents;
-  const platformFeeCents = calcPlatformFeeOnRent(rentCents);
 
   const intent = await stripe.paymentIntents.create({
     amount: amountCents,
@@ -39,7 +41,7 @@ r.post('/contracts/:id/pay-rent', async (req, res) => {
     confirm: true,
     payment_method_types: [method],
     transfer_data: { destination: owner.stripeAccountId! },
-    application_fee_amount: platformFeeCents,
+    application_fee_amount: applicationFeeCents,
     metadata: {
       kind: 'rent',
       contractId: String(contract._id),
@@ -48,12 +50,17 @@ r.post('/contracts/:id/pay-rent', async (req, res) => {
       method,
       rentCents,
       surchargeCents,
-      platformFeeCents,
-    },
+      rentFeeCents,
+      signFeeCents,
+      },
   });
 
   contract.paymentRef = intent.id;
   contract.lastPaidAt = new Date();
+  if (signFeeCents > 0) {
+    contract.signFeeCollected = true;
+    contract.signFeeCollectedAt = new Date();
+  }
   await contract.save();
 
   res.json({
@@ -62,7 +69,8 @@ r.post('/contracts/:id/pay-rent', async (req, res) => {
     method,
     rentAmount: rentCents / 100,
     surcharge: surchargeCents / 100,
-    platformFee: platformFeeCents / 100,
+    platformFee: rentFeeCents / 100,
+    signFee: signFeeCents / 100,
     totalToTenant: amountCents / 100,
   });
 });

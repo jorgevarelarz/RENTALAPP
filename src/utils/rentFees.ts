@@ -4,6 +4,11 @@ export function calcPlatformFeeOnRent(rentCents: number) {
   return Math.max(Math.round(rentCents * pct), min);
 }
 
+export function calcSignFeeOnRent(rentCents: number) {
+  const pct = Number(process.env.PLATFORM_SIGN_FEE_PCT || 0) / 100;
+  return Math.round(rentCents * pct);
+}
+
 // Surcharge to tenant to cover Stripe fees for card/bizum; SEPA has no surcharge
 export function calcSurchargeCents(method: 'sepa_debit'|'card'|'bizum', rentCents: number) {
   if (method === 'sepa_debit') return 0;
