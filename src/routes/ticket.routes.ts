@@ -1,3 +1,4 @@
+
 import { Router } from 'express';
 import Ticket from '../models/ticket.model';
 import Escrow from '../models/escrow.model';
@@ -18,7 +19,7 @@ function parsePagination(query: any) {
 
 r.get('/ping', (_req, res) => res.json({ ok: true }));
 
-// 1) Inquilino abre incidencia
+/** 1) Inquilino abre incidencia */
 r.post('/', async (req, res) => {
   try {
     const userId = getUserId(req);
@@ -40,13 +41,14 @@ r.post('/', async (req, res) => {
   }
 });
 
-// 2) Profesional envía presupuesto
+/** 2) Profesional envía presupuesto */
 r.post('/:id/quote', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { amount } = req.body || {};
     const t = await Ticket.findById(req.params.id);
     if (!t) return res.status(404).json({ error: 'not found', code: 404 });
+
     t.quote = { amount: Number(amount), currency: 'EUR', proId: userId, ts: new Date() };
     t.proId = userId;
     t.status = 'quoted';
@@ -58,20 +60,31 @@ r.post('/:id/quote', async (req, res) => {
   }
 });
 
-// 3) Propietario aprueba → hold (escrow)
+/** 3) Propietario aprueba → hold (escrow) */
 r.post('/:id/approve', async (req, res) => {
   try {
     const userId = getUserId(req);
     const t = await Ticket.findById(req.params.id);
     if (!t?.quote) return res.status(400).json({ error: 'quote required', code: 400 });
+
     const { customerId } = req.body as { customerId?: string };
     if (!customerId) return res.status(400).json({ error: 'customerId (Stripe) is required', code: 400 });
 
-    const pay = await holdPayment({ customerId, amount: t.quote.amount, currency: 'eur', meta: { ticketId: String(t._id) } });
+    const pay = await holdPayment({
+      customerId,
+      amount: t.quote.amount,
+      currency: 'eur',
+      meta: { ticketId: String(t._id) }
+    });
 
     const esc = await Escrow.create({
-      contractId: t.contractId, ticketId: String(t._id), amount: t.quote.amount,
-      currency: 'EUR', status: 'held', provider: pay.provider, paymentRef: pay.ref,
+      contractId: t.contractId,
+      ticketId: String(t._id),
+      amount: t.quote.amount,
+      currency: 'EUR',
+      status: 'held',
+      provider: pay.provider,
+      paymentRef: pay.ref,
       ledger: [{ ts: new Date(), type: 'hold', payload: pay }]
     });
 
@@ -79,19 +92,21 @@ r.post('/:id/approve', async (req, res) => {
     t.status = 'in_progress';
     t.history.push({ ts: new Date(), actor: userId, action: 'approved_quote', payload: { escrowId: String(esc._id) } });
     await t.save();
+
     res.json({ ticket: t, escrow: esc });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
 });
 
-// 4) Profesional solicita EXTRA
+/** 4) Profesional solicita EXTRA */
 r.post('/:id/extra', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { amount, reason } = req.body || {};
     const t = await Ticket.findById(req.params.id);
     if (!t) return res.status(404).json({ error: 'not found', code: 404 });
+
     t.extra = { amount: Number(amount), reason, status: 'pending' };
     t.history.push({ ts: new Date(), actor: userId, action: 'extra_requested', payload: { amount: Number(amount), reason } });
     await t.save();
@@ -101,13 +116,14 @@ r.post('/:id/extra', async (req, res) => {
   }
 });
 
-// 5) Propietario decide EXTRA
+/** 5) Propietario decide EXTRA */
 r.post('/:id/extra/decide', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { approve } = req.body || {};
     const t = await Ticket.findById(req.params.id);
     if (!t?.extra) return res.status(400).json({ error: 'no extra pending', code: 400 });
+
     t.extra.status = approve ? 'approved' : 'rejected';
     t.history.push({ ts: new Date(), actor: userId, action: approve ? 'extra_approved' : 'extra_rejected' });
     await t.save();
@@ -117,13 +133,14 @@ r.post('/:id/extra/decide', async (req, res) => {
   }
 });
 
-// 6) Profesional completa + factura
+/** 6) Profesional completa + factura */
 r.post('/:id/complete', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { invoiceUrl } = req.body || {};
     const t = await Ticket.findById(req.params.id);
     if (!t) return res.status(404).json({ error: 'not found', code: 404 });
+
     t.invoiceUrl = invoiceUrl;
     t.status = 'awaiting_validation';
     t.history.push({ ts: new Date(), actor: userId, action: 'completed', payload: { invoiceUrl } });
@@ -134,12 +151,13 @@ r.post('/:id/complete', async (req, res) => {
   }
 });
 
-// 7) Propietario valida → release (escrow)
+/** 7) Propietario valida → release (escrow + earnings + breakdown) */
 r.post('/:id/validate', async (req, res) => {
   try {
     const userId = getUserId(req);
     const t = await Ticket.findById(req.params.id);
     if (!t?.escrowId) return res.status(400).json({ error: 'no escrow', code: 400 });
+
     const esc = await Escrow.findById(t.escrowId);
     if (!esc) return res.status(404).json({ error: 'escrow not found', code: 404 });
 
@@ -150,7 +168,10 @@ r.post('/:id/validate', async (req, res) => {
     const breakdown = calcPlatformFee(gross);
 
     const rel = await releasePayment({
-      ref: esc.paymentRef!, amount: breakdown.gross, currency: 'eur', fee: breakdown.fee,
+      ref: esc.paymentRef!,
+      amount: breakdown.gross,
+      currency: 'eur',
+      fee: breakdown.fee,
       meta: { ticketId: String(t._id) }
     });
 
@@ -172,10 +193,7 @@ r.post('/:id/validate', async (req, res) => {
     });
 
     t.status = 'closed';
-    t.history.push({
-      ts: new Date(), actor: userId, action: 'validated_and_released',
-      payload: breakdown
-    });
+    t.history.push({ ts: new Date(), actor: userId, action: 'validated_and_released', payload: breakdown });
     await t.save();
 
     res.json({ ticket: t, escrow: esc });
@@ -184,56 +202,66 @@ r.post('/:id/validate', async (req, res) => {
   }
 });
 
-// 8) Asignar profesional a un ticket
+/** 8) Asignar profesional a un ticket */
 r.post('/:id/assign', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { proId } = req.body || {};
     if (!proId) return res.status(400).json({ error: 'proId required', code: 400 });
+
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) return res.status(404).json({ error: 'ticket not found', code: 404 });
+
     const pro = await Pro.findById(proId);
     if (!pro || !pro.active) return res.status(404).json({ error: 'pro not found', code: 404 });
+
     if (ticket.proId && ticket.proId !== pro.userId) {
       return res.status(409).json({ error: 'ticket already assigned', code: 409 });
     }
+
     ticket.proId = pro.userId;
     ticket.history.push({ ts: new Date(), actor: userId, action: 'assigned_pro', payload: { proId } });
     await ticket.save();
+
     res.json({ ticket });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
 });
 
-// 9) Desasignar profesional
+/** 9) Desasignar profesional */
 r.post('/:id/unassign', async (req, res) => {
   try {
     const userId = getUserId(req);
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) return res.status(404).json({ error: 'ticket not found', code: 404 });
     if (!ticket.proId) return res.status(400).json({ error: 'ticket has no pro assigned', code: 400 });
+
     ticket.proId = undefined;
     ticket.history.push({ ts: new Date(), actor: userId, action: 'unassigned_pro' });
     await ticket.save();
+
     res.json({ ticket });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
 });
 
-// Listados de tickets por rol
+/** Listados por rol con hidratado de reputación */
 r.get('/my/tenant', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { status } = req.query as any;
     const { page, limit } = parsePagination(req.query);
+
     const q: any = { openedBy: userId };
     if (status) q.status = status;
+
     const [items, total] = await Promise.all([
       Ticket.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       Ticket.countDocuments(q)
     ]);
+
     const userIds = new Set<string>();
     const proIds: string[] = [];
     items.forEach(t => {
@@ -241,12 +269,15 @@ r.get('/my/tenant', async (req, res) => {
       userIds.add(t.openedBy);
       if (t.proId) proIds.push(t.proId);
     });
+
     const [users, pros] = await Promise.all([
       User.find({ _id: { $in: Array.from(userIds) } }, { ratingAvg: 1, reviewCount: 1 }).lean(),
       Pro.find({ userId: { $in: proIds } }, { userId: 1, ratingAvg: 1, reviewCount: 1 }).lean()
     ]);
+
     const userMap = new Map(users.map(u => [String(u._id), u]));
     const proMap = new Map(pros.map(p => [p.userId, p]));
+
     const hydrated = items.map(t => ({
       ...t,
       pro: t.proId ? {
@@ -265,6 +296,7 @@ r.get('/my/tenant', async (req, res) => {
         reviewCount: userMap.get(t.openedBy)?.reviewCount ?? 0,
       },
     }));
+
     res.json({ items: hydrated, total, page, limit });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
@@ -276,12 +308,15 @@ r.get('/my/owner', async (req, res) => {
     const userId = getUserId(req);
     const { status } = req.query as any;
     const { page, limit } = parsePagination(req.query);
+
     const q: any = { ownerId: userId };
     if (status) q.status = status;
+
     const [items, total] = await Promise.all([
       Ticket.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       Ticket.countDocuments(q)
     ]);
+
     const userIds = new Set<string>();
     const proIds: string[] = [];
     items.forEach(t => {
@@ -289,12 +324,15 @@ r.get('/my/owner', async (req, res) => {
       userIds.add(t.openedBy);
       if (t.proId) proIds.push(t.proId);
     });
+
     const [users, pros] = await Promise.all([
       User.find({ _id: { $in: Array.from(userIds) } }, { ratingAvg: 1, reviewCount: 1 }).lean(),
       Pro.find({ userId: { $in: proIds } }, { userId: 1, ratingAvg: 1, reviewCount: 1 }).lean()
     ]);
+
     const userMap = new Map(users.map(u => [String(u._id), u]));
     const proMap = new Map(pros.map(p => [p.userId, p]));
+
     const hydrated = items.map(t => ({
       ...t,
       pro: t.proId ? {
@@ -313,6 +351,7 @@ r.get('/my/owner', async (req, res) => {
         reviewCount: userMap.get(t.openedBy)?.reviewCount ?? 0,
       },
     }));
+
     res.json({ items: hydrated, total, page, limit });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
@@ -324,12 +363,15 @@ r.get('/my/pro', async (req, res) => {
     const userId = getUserId(req);
     const { status } = req.query as any;
     const { page, limit } = parsePagination(req.query);
+
     const q: any = { proId: userId };
     if (status) q.status = status;
+
     const [items, total] = await Promise.all([
       Ticket.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       Ticket.countDocuments(q)
     ]);
+
     const userIds = new Set<string>();
     const proIds: string[] = [];
     items.forEach(t => {
@@ -337,12 +379,15 @@ r.get('/my/pro', async (req, res) => {
       userIds.add(t.openedBy);
       if (t.proId) proIds.push(t.proId);
     });
+
     const [users, pros] = await Promise.all([
       User.find({ _id: { $in: Array.from(userIds) } }, { ratingAvg: 1, reviewCount: 1 }).lean(),
       Pro.find({ userId: { $in: proIds } }, { userId: 1, ratingAvg: 1, reviewCount: 1 }).lean()
     ]);
+
     const userMap = new Map(users.map(u => [String(u._id), u]));
     const proMap = new Map(pros.map(p => [p.userId, p]));
+
     const hydrated = items.map(t => ({
       ...t,
       pro: t.proId ? {
@@ -361,24 +406,30 @@ r.get('/my/pro', async (req, res) => {
         reviewCount: userMap.get(t.openedBy)?.reviewCount ?? 0,
       },
     }));
+
     res.json({ items: hydrated, total, page, limit });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
 });
 
+/** Detalle con hidratado */
 r.get('/:id', async (req, res) => {
   try {
     const t = await Ticket.findById(req.params.id).lean();
     if (!t) return res.status(404).json({ error: 'not found', code: 404 });
+
     const userIds = [t.ownerId, t.openedBy];
     const proIds = t.proId ? [t.proId] : [];
+
     const [users, pros] = await Promise.all([
       User.find({ _id: { $in: userIds } }, { ratingAvg: 1, reviewCount: 1 }).lean(),
       Pro.find({ userId: { $in: proIds } }, { userId: 1, ratingAvg: 1, reviewCount: 1 }).lean()
     ]);
+
     const userMap = new Map(users.map(u => [String(u._id), u]));
     const proMap = new Map(pros.map(p => [p.userId, p]));
+
     const result = {
       ...t,
       pro: t.proId ? {
@@ -397,6 +448,7 @@ r.get('/:id', async (req, res) => {
         reviewCount: userMap.get(t.openedBy)?.reviewCount ?? 0,
       },
     };
+
     res.json(result);
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });

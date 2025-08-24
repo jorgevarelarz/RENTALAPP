@@ -6,6 +6,8 @@ import { Request } from 'express';
  */
 export function getUserId(req: Request): string {
   const uid = req.header('x-user-id');
-  if (!uid) throw Object.assign(new Error('Missing x-user-id'), { status: 400 });
+  if (!uid) {
+    throw Object.assign(new Error('Missing x-user-id'), { status: 400 });
+  }
   return String(uid);
 }
