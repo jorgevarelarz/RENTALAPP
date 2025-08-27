@@ -30,8 +30,10 @@ export const register = async (req: Request, res: Response) => {
  * Expects: email and password in the request body.
  */
 export const login = async (req: Request, res: Response) => {
+  console.log('Login  request recibido:', req.body);
   try {
     const { email, password } = req.body;
+    console.log('Email:', email);
     // Find the user by email
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });

@@ -34,7 +34,12 @@ const app = express();
 // (stripeWebhookRoutes define su propia ruta, p.ej. /api/stripe/webhook con express.raw)
 app.use('/api', stripeWebhookRoutes);
 
-app.use(cors());
+app.use(cors({
+  origin:'http://localhost:3001',
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS",],
+  allowedHeaders: ["Content-Type", "Authorization", "x-user-id"],
+  credentials:true
+}));
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
