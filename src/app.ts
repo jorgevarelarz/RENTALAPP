@@ -40,12 +40,12 @@ app.use(morgan('dev'));
 // Stripe webhook BEFORE JSON parser (uses express.raw)
 app.use('/api', stripeWebhookRoutes);
 
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN,
-    credentials: true,
-  })
-);
+app.use(cors({
+  origin:'http://localhost:3001',
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization", "x-user-id"],
+  credentials:true
+}));
 app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
@@ -88,7 +88,8 @@ mongoose
       server = app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`));
     }
   })
-  .catch((err) => console.error('Error al conectar a MongoDB:', err));
+  .catch(err => console.error('Error al conectar a MongoDB:', err));
+ 
 
 export { app, server };
 export default app;
