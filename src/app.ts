@@ -36,13 +36,12 @@ const app = express();
 
 app.use(morgan('dev'));
 
-// ⚠️ Stripe webhook debe ir ANTES del JSON parser
-// (stripeWebhookRoutes define su propia ruta, p.ej. /api/stripe/webhook con express.raw)
+// Stripe webhook BEFORE JSON parser (uses express.raw)
 app.use('/api', stripeWebhookRoutes);
 
 app.use(cors({
   origin:'http://localhost:3001',
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS",],
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization", "x-user-id"],
   credentials:true
 }));
@@ -50,14 +49,14 @@ app.use(express.json());
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
-// Público
+// Public routes
 app.use('/api/auth', authRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/kyc', identityRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api', demoContractRoutes);
 
-// Rutas protegidas (usuario verificado)
+// Protected routes (verified users)
 app.use('/api/contracts', requireVerified, contractRoutes);
 app.use('/api/users', requireVerified, userRoutes);
 app.use('/api/pros', requireVerified, proRoutes);
@@ -82,11 +81,16 @@ app.use((err: any, _req: any, res: any, _next: any) => {
 const PORT = process.env.PORT || 3000;
 const mongoUrl = process.env.MONGO_URL || process.env.MONGO_URI || '';
 
+let server: any;
+
 mongoose
   .connect(mongoUrl)
-  .then(() =>
-    app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`)),
-  )
+  .then(() => {
+    if (process.env.NODE_ENV !== 'test') {
+      server = app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`));
+    }
+  })
   .catch(err => console.error('Error al conectar a MongoDB:', err));
 
+export { app, server };
 export default app;
