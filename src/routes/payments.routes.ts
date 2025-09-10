@@ -6,6 +6,7 @@ import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 
+
 const r = Router();
 
 r.post('/payments/customer', async (req, res) => {
@@ -23,6 +24,7 @@ r.post('/payments/customer', async (req, res) => {
   res.json({ customerId: user.stripeCustomerId });
 });
 
+
 r.post(
   '/payments/intent',
   authenticate,
@@ -32,11 +34,25 @@ r.post(
     const { amountEUR } = req.body;
     const intent = await stripe.paymentIntents.create({
       amount: Math.round(amountEUR * 100),
+
+r.post('/payments/intent', authenticate, async (req, res) => {
+  const { amountEUR } = req.body;
+  try {
+    const intent = await stripe.paymentIntents.create({
+      amount: Math.round((amountEUR || 0) * 100),
+
       currency: 'eur',
       automatic_payment_methods: { enabled: true },
     });
     res.json({ clientSecret: intent.client_secret });
+
   }),
 );
+
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 
 export default r;

@@ -30,6 +30,7 @@ import serviceOfferRoutes from './routes/serviceOffers.routes';
 import demoContractRoutes from './routes/demoContract.routes';
 import { errorHandler } from './middleware/errorHandler';
 
+
 // Load environment variables
 dotenv.config();
 
@@ -87,6 +88,21 @@ mongoose
       server = app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`));
     }
   })
+
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
+
+const PORT = process.env.PORT || 3000;
+const mongoUrl = process.env.MONGO_URL || process.env.MONGO_URI || '';
+
+mongoose
+  .connect(mongoUrl)
+  .then(() =>
+    app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`)),
+  )
+
   .catch(err => console.error('Error al conectar a MongoDB:', err));
 
 export { app, server };

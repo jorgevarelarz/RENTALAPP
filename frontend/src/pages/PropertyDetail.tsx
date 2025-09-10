@@ -13,6 +13,7 @@ const PropertyDetail: React.FC = () => {
   const [stripe, setStripe] = useState<Stripe | null>(null);
   const [card, setCard] = useState<StripeCardElement | null>(null);
   const [status, setStatus] = useState<'idle' | 'paying' | 'success' | 'error'>('idle');
+
   const token = localStorage.getItem('token') || '';
 
   useEffect(() => {
@@ -33,6 +34,7 @@ const PropertyDetail: React.FC = () => {
 
   const handlePay = async () => {
     if (!stripe || !card || !property) return;
+
     try {
       setStatus('paying');
       const clientSecret = await createPaymentIntent(token, property.price);
@@ -53,6 +55,16 @@ const PropertyDetail: React.FC = () => {
       }
     } catch {
       setStatus('error');
+    const clientSecret = await createPaymentIntent(token, property.price);
+    const { error, paymentIntent } = await stripe.confirmCardPayment(clientSecret, {
+      payment_method: { card },
+    });
+    if (error) {
+      alert(error.message);
+    } else if (paymentIntent?.status === 'succeeded') {
+      const blob = await downloadDemoContract(token, { landlord: property.ownerId, property: property.title, rent: property.price });
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank');
     }
   };
 
@@ -62,10 +74,14 @@ const PropertyDetail: React.FC = () => {
       <h1>{property.title}</h1>
       <p>{property.address}</p>
       <div id="card-element" style={{ border: '1px solid #ccc', padding: '10px' }}></div>
+
       <button onClick={handlePay} disabled={status === 'paying'}>
         {status === 'paying' ? 'Pagando...' : status === 'success' ? 'Reservado' : 'Reservar'}
       </button>
       {status === 'error' && <div>Error en el pago</div>}
+
+      <button onClick={handlePay}>Pagar</button>
+
     </div>
   );
 };
