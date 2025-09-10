@@ -7,9 +7,6 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true
-  }
-  ,
-  "exclude": [
-    "frontend"
-  ]
+  },
+  "include": ["src/**/*"]
 }
