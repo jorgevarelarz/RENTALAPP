@@ -24,6 +24,8 @@ import contractPaymentsRoutes from './routes/contract.payments.routes';
 import stripeWebhookRoutes from './routes/stripe.webhook';
 import identityRoutes from './routes/identity.routes';
 import signatureRoutes from './routes/signature.routes';
+import chatRoutes from './routes/chat.routes';
+import serviceOfferRoutes from './routes/serviceOffers.routes';
 
 // Load environment variables
 dotenv.config();
@@ -56,10 +58,12 @@ app.use('/api/users', requireVerified, userRoutes);
 app.use('/api/pros', requireVerified, proRoutes);
 app.use('/api/tickets', requireVerified, ticketRoutes);
 app.use('/api/reviews', requireVerified, reviewRoutes);
+app.use('/api/chat', requireVerified, chatRoutes);
 app.use('/api', requireVerified, contractPaymentsRoutes);
 app.use('/api', requireVerified, paymentsRoutes);
 app.use('/api', requireVerified, connectRoutes);
 app.use('/api', requireVerified, signatureRoutes);
+app.use('/api', requireVerified, serviceOfferRoutes);
 
 // Admin
 app.use('/api/admin', requireVerified, requireAdmin, adminRoutes, adminEarningsRoutes);

@@ -1,0 +1,171 @@
+import { Router } from 'express';
+import Conversation from '../models/conversation.model';
+import Message from '../models/message.model';
+import { Contract } from '../models/contract.model';
+import Ticket from '../models/ticket.model';
+import Appointment from '../models/appointment.model';
+import { getUserId } from '../utils/getUserId';
+
+const r = Router();
+
+function parsePagination(query: any) {
+  const page = Math.max(1, parseInt(query.page as string) || 1);
+  const limit = Math.min(50, Math.max(1, parseInt(query.limit as string) || 20));
+  return { page, limit };
+}
+
+async function ensureConversation(kind: string, refId: string, userId: string) {
+  let conv = await Conversation.findOne({ kind, refId });
+  if (conv) return conv;
+
+  let participants: string[] = [];
+  let meta: any = {};
+  if (kind === 'contract') {
+    const c = await Contract.findById(refId).lean();
+    if (!c) throw Object.assign(new Error('Contract not found'), { status: 404 });
+    if (![String(c.landlord), String(c.tenant)].includes(userId)) {
+      throw Object.assign(new Error('Forbidden'), { status: 403 });
+    }
+    participants = [String(c.landlord), String(c.tenant)];
+    meta.contractId = refId;
+    meta.ownerId = String(c.landlord);
+    meta.tenantId = String(c.tenant);
+  } else if (kind === 'ticket') {
+    const t = await Ticket.findById(refId).lean();
+    if (!t) throw Object.assign(new Error('Ticket not found'), { status: 404 });
+    if (![t.ownerId, t.proId].includes(userId)) {
+      throw Object.assign(new Error('Forbidden'), { status: 403 });
+    }
+    participants = [t.ownerId, t.proId!];
+    meta.ticketId = refId;
+    meta.ownerId = t.ownerId;
+    meta.proUserId = t.proId;
+    meta.contractId = t.contractId;
+    meta.tenantId = t.openedBy;
+    if (t.propertyId) meta.propertyId = t.propertyId;
+  } else if (kind === 'appointment') {
+    const a = await Appointment.findById(refId).lean();
+    if (!a) throw Object.assign(new Error('Appointment not found'), { status: 404 });
+    if (![a.proId, a.tenantId].includes(userId)) {
+      throw Object.assign(new Error('Forbidden'), { status: 403 });
+    }
+    participants = [a.proId, a.tenantId];
+    meta.appointmentId = refId;
+    meta.proUserId = a.proId;
+    meta.tenantId = a.tenantId;
+    meta.ownerId = a.ownerId;
+    meta.ticketId = a.ticketId;
+  } else {
+    throw Object.assign(new Error('Invalid kind'), { status: 400 });
+  }
+
+  conv = await Conversation.create({ kind, refId, participants, meta, unread: {} });
+  return conv;
+}
+
+// Rate limiting messages per conversation: 20 per minute
+const messageTimestamps = new Map<string, number[]>();
+
+r.get('/conversations', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { page, limit } = parsePagination(req.query);
+    const list = await Conversation.find({ participants: userId })
+      .sort({ lastMessageAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(limit)
+      .lean();
+    const result = list.map(c => ({
+      ...c,
+      unreadForMe: c.unread?.[userId] || 0,
+    }));
+    res.json(result);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+r.post('/conversations/ensure', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { kind, refId } = req.body || {};
+    const conv = await ensureConversation(kind, refId, userId);
+    res.json(conv);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+r.post('/:conversationId/messages', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { conversationId } = req.params;
+    const conv = await Conversation.findById(conversationId);
+    if (!conv) throw Object.assign(new Error('Conversation not found'), { status: 404 });
+    if (!conv.participants.includes(userId)) {
+      throw Object.assign(new Error('Forbidden'), { status: 403 });
+    }
+    // rate limit
+    const now = Date.now();
+    const timestamps = messageTimestamps.get(conversationId) || [];
+    const recent = timestamps.filter(ts => now - ts < 60 * 1000);
+    if (recent.length >= 20) {
+      throw Object.assign(new Error('Rate limit'), { status: 429 });
+    }
+    recent.push(now);
+    messageTimestamps.set(conversationId, recent);
+
+    const { body, attachmentUrl } = req.body || {};
+    const msg = await Message.create({ conversationId, senderId: userId, type: 'user', body, attachmentUrl, readBy: [userId] });
+    conv.lastMessageAt = new Date();
+    conv.participants.forEach(p => {
+      conv.unread = conv.unread || {};
+      if (p !== userId) {
+        conv.unread[p] = (conv.unread[p] || 0) + 1;
+      }
+    });
+    await conv.save();
+    res.status(201).json(msg);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+r.get('/:conversationId/messages', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { conversationId } = req.params;
+    const { before, limit = 20 } = req.query as any;
+    const conv = await Conversation.findById(conversationId);
+    if (!conv) throw Object.assign(new Error('Conversation not found'), { status: 404 });
+    if (!conv.participants.includes(userId)) {
+      throw Object.assign(new Error('Forbidden'), { status: 403 });
+    }
+    const q: any = { conversationId };
+    if (before) q.createdAt = { $lt: new Date(before) };
+    const msgs = await Message.find(q).sort({ createdAt: -1 }).limit(Number(limit)).lean();
+    res.json(msgs);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+r.post('/:conversationId/read', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const { conversationId } = req.params;
+    const conv = await Conversation.findById(conversationId);
+    if (!conv) throw Object.assign(new Error('Conversation not found'), { status: 404 });
+    if (!conv.participants.includes(userId)) {
+      throw Object.assign(new Error('Forbidden'), { status: 403 });
+    }
+    conv.unread[userId] = 0;
+    await conv.save();
+    await Message.updateMany({ conversationId, readBy: { $ne: userId } }, { $addToSet: { readBy: userId } });
+    res.json({ ok: true });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message });
+  }
+});
+
+export default r;
