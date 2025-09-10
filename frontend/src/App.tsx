@@ -1,15 +1,20 @@
-import React, { useState } from 'react';
-import Login from './componets/Login';
+import React from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
+import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import PropertyList from './pages/PropertyList';
+import PropertyDetail from './pages/PropertyDetail';
 
-function App() {
-  const [token, setToken] = useState<string|null>(null);
-
+const App: React.FC = () => {
+  const token = localStorage.getItem('token');
   return (
-    <div>
-      {!token ? ( <Login onLoginSucces={setToken}/>) : (<Dashboard token={token}/>)}
-    </div>
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/dashboard" element={token ? <Dashboard /> : <Navigate to="/login" />} />
+      <Route path="/p/:id" element={<PropertyDetail />} />
+      <Route path="/" element={<PropertyList />} />
+    </Routes>
   );
-}
+};
 
 export default App;
