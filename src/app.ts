@@ -2,6 +2,7 @@ import express from 'express';
 import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors';
+import morgan from 'morgan';
 
 import authRoutes from './routes/auth.routes';
 import propertyRoutes from './routes/property.routes';
@@ -24,11 +25,16 @@ import contractPaymentsRoutes from './routes/contract.payments.routes';
 import stripeWebhookRoutes from './routes/stripe.webhook';
 import identityRoutes from './routes/identity.routes';
 import signatureRoutes from './routes/signature.routes';
+import chatRoutes from './routes/chat.routes';
+import serviceOfferRoutes from './routes/serviceOffers.routes';
+import demoContractRoutes from './routes/demoContract.routes';
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
+
+app.use(morgan('dev'));
 
 // ⚠️ Stripe webhook debe ir ANTES del JSON parser
 // (stripeWebhookRoutes define su propia ruta, p.ej. /api/stripe/webhook con express.raw)
@@ -49,6 +55,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/kyc', identityRoutes);
 app.use('/api/properties', propertyRoutes);
+app.use('/api', demoContractRoutes);
 
 // Rutas protegidas (usuario verificado)
 app.use('/api/contracts', requireVerified, contractRoutes);
@@ -56,19 +63,27 @@ app.use('/api/users', requireVerified, userRoutes);
 app.use('/api/pros', requireVerified, proRoutes);
 app.use('/api/tickets', requireVerified, ticketRoutes);
 app.use('/api/reviews', requireVerified, reviewRoutes);
+app.use('/api/chat', requireVerified, chatRoutes);
 app.use('/api', requireVerified, contractPaymentsRoutes);
-app.use('/api', requireVerified, paymentsRoutes);
+app.use('/api', paymentsRoutes);
 app.use('/api', requireVerified, connectRoutes);
 app.use('/api', requireVerified, signatureRoutes);
+app.use('/api', requireVerified, serviceOfferRoutes);
 
 // Admin
 app.use('/api/admin', requireVerified, requireAdmin, adminRoutes, adminEarningsRoutes);
 
-const PORT = process.env.PORT || 3000;
+// Error handler
+app.use((err: any, _req: any, res: any, _next: any) => {
+  console.error(err);
+  res.status(500).json({ error: 'Internal Server Error' });
+});
 
-// Connect to MongoDB and start the server
+const PORT = process.env.PORT || 3000;
+const mongoUrl = process.env.MONGO_URL || process.env.MONGO_URI || '';
+
 mongoose
-  .connect(process.env.MONGO_URI || '')
+  .connect(mongoUrl)
   .then(() =>
     app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`)),
   )

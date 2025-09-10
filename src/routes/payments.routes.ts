@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { stripe } from '../utils/stripe';
 import { User } from '../models/user.model';
+import { authenticate } from '../middleware/auth.middleware';
 
 const r = Router();
 
@@ -17,6 +18,20 @@ r.post('/payments/customer', async (req, res) => {
     await user.save();
   }
   res.json({ customerId: user.stripeCustomerId });
+});
+
+r.post('/payments/intent', authenticate, async (req, res) => {
+  const { amountEUR } = req.body;
+  try {
+    const intent = await stripe.paymentIntents.create({
+      amount: Math.round((amountEUR || 0) * 100),
+      currency: 'eur',
+      automatic_payment_methods: { enabled: true },
+    });
+    res.json({ clientSecret: intent.client_secret });
+  } catch (err: any) {
+    res.status(400).json({ error: err.message });
+  }
 });
 
 export default r;

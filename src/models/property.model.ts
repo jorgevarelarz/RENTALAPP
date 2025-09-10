@@ -13,6 +13,7 @@ const propertySchema = new Schema(
     photos: [String],
     ownerId: { type: Schema.Types.ObjectId, ref: 'User' },
     available: { type: Boolean, default: true },
+    status: { type: String, enum: ['draft', 'published'], default: 'published' },
   },
   { timestamps: true },
 );

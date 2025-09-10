@@ -1,12 +1,11 @@
 import { Router } from 'express';
-import { createProperty, getAllProperties } from '../controllers/property.controller';
+import { createProperty, getAllProperties, getPropertyById } from '../controllers/property.controller';
 import { authenticate } from '../middleware/auth.middleware';
-import { authorizeRoles } from '../middleware/role.middleware';
-import { requireVerified } from '../middleware/requireVerified';
 
 const router = Router();
-// Only landlords can create properties (requires verification)
-router.post('/', authenticate, requireVerified, authorizeRoles('landlord'), createProperty);
-// Both landlords and tenants can view properties
+// Create property (published by default)
+router.post('/', authenticate, createProperty);
+// Public listings
 router.get('/', getAllProperties);
+router.get('/:id', getPropertyById);
 export default router;
