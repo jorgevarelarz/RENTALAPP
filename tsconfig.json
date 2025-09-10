@@ -8,4 +8,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true
   }
+  ,
+  "exclude": [
+    "frontend"
+  ]
 }
