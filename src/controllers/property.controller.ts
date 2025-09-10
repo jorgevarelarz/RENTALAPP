@@ -7,10 +7,9 @@ import { Property } from '../models/property.model';
  */
 export const createProperty = async (req: Request, res: Response) => {
   const { title, description, price, address, photos } = req.body;
-  // The authenticate middleware attaches the decoded token to req.user
   const ownerId = (req as any).user.id;
   try {
-    const property = new Property({ title, description, price, address, photos, ownerId });
+    const property = new Property({ title, description, price, address, photos, ownerId, status: 'published' });
     await property.save();
     res.status(201).json(property);
   } catch {
@@ -22,6 +21,12 @@ export const createProperty = async (req: Request, res: Response) => {
  * Retrieve all properties, populating the owner name and email.
  */
 export const getAllProperties = async (_req: Request, res: Response) => {
-  const properties = await Property.find().populate('ownerId', 'name email');
+  const properties = await Property.find({ status: 'published' }).lean();
   res.json(properties);
+};
+
+export const getPropertyById = async (req: Request, res: Response) => {
+  const property = await Property.findOne({ _id: req.params.id, status: 'published' }).lean();
+  if (!property) return res.status(404).json({ error: 'Propiedad no encontrada' });
+  res.json(property);
 };

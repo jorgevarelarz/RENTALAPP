@@ -1,6 +1,10 @@
 import { Router } from 'express';
+import { body } from 'express-validator';
 import { stripe } from '../utils/stripe';
 import { User } from '../models/user.model';
+import { authenticate } from '../middleware/auth.middleware';
+import { validate } from '../middleware/validate';
+import { asyncHandler } from '../utils/asyncHandler';
 
 const r = Router();
 
@@ -18,5 +22,21 @@ r.post('/payments/customer', async (req, res) => {
   }
   res.json({ customerId: user.stripeCustomerId });
 });
+
+r.post(
+  '/payments/intent',
+  authenticate,
+  [body('amountEUR').isNumeric().custom(v => v > 0)],
+  validate,
+  asyncHandler(async (req, res) => {
+    const { amountEUR } = req.body;
+    const intent = await stripe.paymentIntents.create({
+      amount: Math.round(amountEUR * 100),
+      currency: 'eur',
+      automatic_payment_methods: { enabled: true },
+    });
+    res.json({ clientSecret: intent.client_secret });
+  }),
+);
 
 export default r;

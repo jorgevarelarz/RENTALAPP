@@ -18,7 +18,8 @@ export const register = async (req: Request, res: Response) => {
     // Save new user with hashed password
     const user = new User({ name, email, passwordHash, role });
     await user.save();
-    res.status(201).json({ message: 'Usuario creado' });
+    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    res.status(201).json({ token });
   } catch (error) {
     res.status(400).json({ error: 'Error al registrar' });
   }

@@ -181,6 +181,7 @@ r.post('/:id/validate', async (req, res) => {
     await esc.save();
 
     await PlatformEarning.create({
+      kind: 'rent',
       ticketId: String(t._id),
       escrowId: String(esc._id),
       gross: breakdown.gross,
