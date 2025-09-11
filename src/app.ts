@@ -29,6 +29,7 @@ import chatRoutes from './routes/chat.routes';
 import serviceOfferRoutes from './routes/serviceOffers.routes';
 import demoContractRoutes from './routes/demoContract.routes';
 import { errorHandler } from './middleware/errorHandler';
+import appointmentsFlowRoutes from './routes/appointments.routes';
 
 // Load environment variables
 dotenv.config();
@@ -56,6 +57,7 @@ app.use('/api/verification', verificationRoutes);
 app.use('/api/kyc', identityRoutes);
 app.use('/api/properties', propertyRoutes);
 app.use('/api', demoContractRoutes);
+app.use('/api', requireVerified, appointmentsFlowRoutes);
 
 // Protected routes (verified users)
 app.use('/api/contracts', requireVerified, contractRoutes);

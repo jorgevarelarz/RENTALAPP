@@ -1,6 +1,8 @@
 
 import { Router } from 'express';
 import Ticket from '../models/ticket.model';
+import Conversation from '../models/conversation.model';
+import Message from '../models/message.model';
 import Escrow from '../models/escrow.model';
 import Pro from '../models/pro.model';
 import { User } from '../models/user.model';
@@ -15,6 +17,11 @@ function parsePagination(query: any) {
   const page = Math.max(1, parseInt(query.page as string) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(query.limit as string) || 10));
   return { page, limit };
+}
+
+async function publishSystem(conversationId: string, senderId: string, systemCode: string, payload?: any) {
+  await Message.create({ conversationId, senderId, type: 'system', systemCode, payload, readBy: [] });
+  await Conversation.findByIdAndUpdate(conversationId, { lastMessageAt: new Date() });
 }
 
 r.get('/ping', (_req, res) => res.json({ ok: true }));
@@ -89,10 +96,12 @@ r.post('/:id/approve', async (req, res) => {
     });
 
     t.escrowId = String(esc._id);
-    t.status = 'in_progress';
+    t.status = 'awaiting_schedule';
     t.history.push({ ts: new Date(), actor: userId, action: 'approved_quote', payload: { escrowId: String(esc._id) } });
     await t.save();
-
+    // Abrir canal de cita (pro<->tenant)
+    const aConv = await Conversation.create({ kind: 'appointment', refId: String(t._id), participants: [t.proId!, t.openedBy], meta: { ticketId: String(t._id), proUserId: t.proId!, tenantId: t.openedBy, ownerId: t.ownerId }, unread: {} });
+    await publishSystem(aConv.id, userId, 'APPOINTMENT_CHANNEL_OPENED', { ticketId: String(t._id) });
     res.json({ ticket: t, escrow: esc });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
@@ -146,6 +155,49 @@ r.post('/:id/complete', async (req, res) => {
     t.history.push({ ts: new Date(), actor: userId, action: 'completed', payload: { invoiceUrl } });
     await t.save();
     res.json(t);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+  }
+});
+
+// Pro solicita cierre
+r.post('/:id/request-close', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const t = await Ticket.findById(req.params.id);
+    if (!t) return res.status(404).json({ error: 'not found', code: 404 });
+    if (t.proId !== userId) return res.status(403).json({ error: 'forbidden', code: 403 });
+    t.status = 'awaiting_validation';
+    t.history.push({ ts: new Date(), actor: userId, action: 'close_requested' });
+    await t.save();
+    // publicar en conversación appointment si existe
+    const conv = await Conversation.findOne({ kind: 'appointment', 'meta.ticketId': String(t._id) });
+    if (conv) await publishSystem(conv.id, userId, 'CLOSE_REQUESTED', { ticketId: String(t._id) });
+    res.json(t);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+  }
+});
+
+// Tenant confirma solucionado → release
+r.post('/:id/resolve', async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const t = await Ticket.findById(req.params.id);
+    if (!t?.escrowId) return res.status(400).json({ error: 'no escrow', code: 400 });
+    if (t.openedBy !== userId) return res.status(403).json({ error: 'forbidden', code: 403 });
+    const esc = await Escrow.findById(t.escrowId);
+    if (!esc) return res.status(404).json({ error: 'escrow not found', code: 404 });
+
+    const gross = (t.quote?.amount ?? 0) + ((t.extra && t.extra.status === 'approved') ? t.extra.amount : 0);
+    const breakdown = calcPlatformFee(gross);
+    const rel = await releasePayment({ ref: esc.paymentRef!, amount: breakdown.gross, currency: 'eur', fee: breakdown.fee, meta: { ticketId: String(t._id) } });
+    esc.status = 'released'; esc.breakdown = breakdown; esc.ledger.push({ ts: new Date(), type: 'release', payload: { ...rel, breakdown } }); await esc.save();
+    await PlatformEarning.create({ kind: 'rent', ticketId: String(t._id), escrowId: String(esc._id), gross: breakdown.gross, fee: breakdown.fee, netToPro: breakdown.netToPro, currency: esc.currency || 'EUR', releaseRef: rel.ref, proId: t.proId, serviceKey: t.service });
+    t.status = 'closed'; t.history.push({ ts: new Date(), actor: userId, action: 'resolved_by_tenant', payload: breakdown }); await t.save();
+    const conv = await Conversation.findOne({ kind: 'appointment', 'meta.ticketId': String(t._id) });
+    if (conv) await publishSystem(conv.id, userId, 'CLOSED_BY_TENANT', { ticketId: String(t._id) });
+    res.json({ ticket: t, escrow: esc });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
@@ -412,6 +464,11 @@ r.get('/my/pro', async (req, res) => {
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
+async function publishSystem(conversationId: string, senderId: string, systemCode: string, payload?: any) {
+  await Message.create({ conversationId, senderId, type: 'system', systemCode, payload, readBy: [] });
+  await Conversation.findByIdAndUpdate(conversationId, { lastMessageAt: new Date() });
+}
+
 });
 
 /** Detalle con hidratado */

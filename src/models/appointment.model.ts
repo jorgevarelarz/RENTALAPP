@@ -1,7 +1,7 @@
 import { Schema, model, Document } from 'mongoose';
 
 export interface IAppointment extends Document {
-  serviceOfferId: string;
+  serviceOfferId?: string;
   ticketId?: string;
   proId: string;
   tenantId: string;
@@ -16,7 +16,7 @@ export interface IAppointment extends Document {
 }
 
 const AppointmentSchema = new Schema<IAppointment>({
-  serviceOfferId: { type: String, index: true, required: true },
+  serviceOfferId: { type: String, index: true },
   ticketId: { type: String, index: true },
   proId: { type: String, index: true, required: true },
   tenantId: { type: String, index: true, required: true },
