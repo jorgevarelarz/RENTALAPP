@@ -8,7 +8,7 @@ export interface ITicket extends Document {
   service: string;
   title: string;
   description: string;
-  status: 'open'|'quoted'|'in_progress'|'awaiting_validation'|'closed'|'disputed';
+  status: 'open'|'quoted'|'in_progress'|'awaiting_schedule'|'scheduled'|'awaiting_validation'|'closed'|'disputed';
   quote?: { amount: number; currency: 'EUR'; proId: string; ts: Date };
   extra?: { amount: number; reason: string; status: 'pending'|'approved'|'rejected' };
   invoiceUrl?: string;

@@ -53,3 +53,4 @@ Configura las variables:
 Tarjeta: `4242 4242 4242 4242`, fecha futura y CVC cualquiera.
 
 Tarjetas de prueba adicionales: [Stripe testing docs](https://stripe.com/docs/testing).
+
