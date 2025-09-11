@@ -1,0 +1,35 @@
+name: Ops
+
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: Select task to run on self-hosted runner
+        required: true
+        default: build
+        type: choice
+        options:
+          - build
+          - test
+
+jobs:
+  ops:
+    runs-on: self-hosted
+    env:
+      NODE_ENV: test
+      MONGOMS_VERSION: '7.0.5'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci || npm install
+      - name: Build
+        if: ${{ inputs.task == 'build' || inputs.task == 'test' }}
+        run: npm run build
+      - name: Test
+        if: ${{ inputs.task == 'test' }}
+        run: npm test
+
