@@ -139,6 +139,41 @@ async function main() {
   if (r.status !== 200) throw new Error('approve failed ' + JSON.stringify(r.body));
   console.log('Approved, escrow created');
 
+  // 9.1) Pro propone franja (cita)
+  const start1 = new Date(Date.now() + 24 * 60 * 60 * 1000);
+  const end1 = new Date(Date.now() + 26 * 60 * 60 * 1000);
+  r = await req(`/api/appointments/${ticketId}/propose`, {
+    method: 'POST',
+    headers: { 'x-user-id': proId },
+    body: JSON.stringify({ start: start1, end: end1, timezone: 'Europe/Madrid' }),
+  });
+  if (r.status !== 200) throw new Error('propose failed ' + JSON.stringify(r.body));
+
+  // 9.2) Tenant rechaza con motivo
+  r = await req(`/api/appointments/${ticketId}/reject`, {
+    method: 'POST',
+    headers: { 'x-user-id': tenantId },
+    body: JSON.stringify({ reason: 'No puedo a esa hora' }),
+  });
+  if (r.status !== 200) throw new Error('reject failed ' + JSON.stringify(r.body));
+
+  // 9.3) Pro repropone
+  const start2 = new Date(Date.now() + 48 * 60 * 60 * 1000);
+  const end2 = new Date(Date.now() + 50 * 60 * 60 * 1000);
+  r = await req(`/api/appointments/${ticketId}/propose`, {
+    method: 'POST',
+    headers: { 'x-user-id': proId },
+    body: JSON.stringify({ start: start2, end: end2, timezone: 'Europe/Madrid' }),
+  });
+  if (r.status !== 200) throw new Error('repropose failed ' + JSON.stringify(r.body));
+
+  // 9.4) Tenant acepta
+  r = await req(`/api/appointments/${ticketId}/accept`, {
+    method: 'POST',
+    headers: { 'x-user-id': tenantId },
+  });
+  if (r.status !== 200) throw new Error('accept failed ' + JSON.stringify(r.body));
+
   // 10) Pro completes
   r = await req(`/api/tickets/${ticketId}/complete`, {
     method: 'POST',

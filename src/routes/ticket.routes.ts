@@ -99,9 +99,7 @@ r.post('/:id/approve', async (req, res) => {
     t.status = 'awaiting_schedule';
     t.history.push({ ts: new Date(), actor: userId, action: 'approved_quote', payload: { escrowId: String(esc._id) } });
     await t.save();
-    // Abrir canal de cita (pro<->tenant)
-    const aConv = await Conversation.create({ kind: 'appointment', refId: String(t._id), participants: [t.proId!, t.openedBy], meta: { ticketId: String(t._id), proUserId: t.proId!, tenantId: t.openedBy, ownerId: t.ownerId }, unread: {} });
-    await publishSystem(aConv.id, userId, 'APPOINTMENT_CHANNEL_OPENED', { ticketId: String(t._id) });
+    // El canal de cita (pro<->tenant) se abrirá en la primera propuesta
     res.json({ ticket: t, escrow: esc });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
