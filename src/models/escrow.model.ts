@@ -20,7 +20,11 @@ const s = new Schema<IEscrow>(
     currency: { type: String, default: 'EUR' },
     status: { type: String, default: 'held' },
     breakdown: { gross: Number, fee: Number, netToPro: Number },
-    ledger: [{ ts: Date, type: String, payload: Schema.Types.Mixed }],
+    ledger: [{
+      ts: { type: Date },
+      type: { type: String, enum: ['hold', 'release', 'refund'] },
+      payload: { type: Schema.Types.Mixed },
+    }],
     provider: { type: String, default: 'mock' },
     paymentRef: String,
   },
