@@ -48,6 +48,21 @@ async function main() {
   const tenantId = decodeUserId(tenantToken);
   console.log('Tenant registered', tenantId);
 
+  // 2.1) Verify identities (owner, tenant, pro) to pass requireVerified
+  const verify = async (uid: string) => {
+    let vr = await req('/api/verification/submit', {
+      method: 'POST',
+      headers: { 'x-user-id': uid },
+      body: JSON.stringify({ method: 'manual', files: [] }),
+    });
+    if (vr.status !== 201) throw new Error('verification submit failed ' + JSON.stringify(vr.body));
+    vr = await req(`/api/verification/${uid}/approve`, {
+      method: 'POST',
+      headers: { 'x-admin': 'true' },
+    });
+    if (vr.status !== 200) throw new Error('verification approve failed ' + JSON.stringify(vr.body));
+  };
+
   // 3) Register pro
   r = await req('/api/auth/register', {
     method: 'POST',
@@ -57,6 +72,11 @@ async function main() {
   const proToken = r.body.token as Token;
   const proId = decodeUserId(proToken);
   console.log('Pro registered', proId);
+
+  // Verify all users
+  await verify(ownerId);
+  await verify(tenantId);
+  await verify(proId);
 
   // 4) Create property (owner)
   r = await req('/api/properties', {
@@ -123,14 +143,14 @@ async function main() {
   console.log('Released');
 
   // 11) Ensure chat conversation and send a message
-  r = await req('/api/conversations/ensure', {
+  r = await req('/api/chat/conversations/ensure', {
     method: 'POST',
     headers: { 'x-user-id': ownerId },
     body: JSON.stringify({ kind: 'ticket', refId: ticketId }),
   });
   if (r.status !== 200) throw new Error('ensure conversation failed ' + JSON.stringify(r.body));
   const convId = r.body._id as string;
-  r = await req(`/api/${convId}/messages`, {
+  r = await req(`/api/chat/${convId}/messages`, {
     method: 'POST',
     headers: { 'x-user-id': tenantId },
     body: JSON.stringify({ body: 'Hola, ¿cuándo vienen?' }),
@@ -145,4 +165,3 @@ main().catch((e) => {
   console.error('E2E failed:', e);
   process.exit(1);
 });
-
