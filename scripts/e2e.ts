@@ -98,17 +98,30 @@ async function main() {
   if (r.status !== 201) throw new Error('create pro failed ' + JSON.stringify(r.body));
   console.log('Pro profile created');
 
-  // 6) Tenant opens a ticket
+  // 6) Create minimal contract (owner auth + verified)
+  const startDate = new Date();
+  const endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+  r = await req('/api/contracts', {
+    method: 'POST',
+    headers: { 'x-user-id': ownerId, Authorization: `Bearer ${ownerToken}` },
+    body: JSON.stringify({ tenantId, propertyId, rent: 1000, deposit: 1000, startDate, endDate }),
+  });
+  if (r.status !== 201) throw new Error('create contract failed ' + JSON.stringify(r.body));
+  const contractId = r.body.contract?._id || r.body.contract?.id || r.body.contract?.contract?._id;
+  if (!contractId) throw new Error('no contract id in response ' + JSON.stringify(r.body));
+  console.log('Contract created', contractId);
+
+  // 7) Tenant opens a ticket
   r = await req('/api/tickets', {
     method: 'POST',
     headers: { 'x-user-id': tenantId },
-    body: JSON.stringify({ contractId: null, ownerId, propertyId, service: 'plumbing', title: 'Leak', description: 'Kitchen leak' }),
+    body: JSON.stringify({ contractId, ownerId, propertyId, service: 'plumbing', title: 'Leak', description: 'Kitchen leak' }),
   });
   if (r.status !== 201) throw new Error('open ticket failed ' + JSON.stringify(r.body));
   const ticketId = r.body._id as string;
   console.log('Ticket opened', ticketId);
 
-  // 7) Pro sends quote
+  // 8) Pro sends quote
   r = await req(`/api/tickets/${ticketId}/quote`, {
     method: 'POST',
     headers: { 'x-user-id': proId },
@@ -117,7 +130,7 @@ async function main() {
   if (r.status !== 200) throw new Error('quote failed ' + JSON.stringify(r.body));
   console.log('Quote sent');
 
-  // 8) Owner approves (hold mock escrow)
+  // 9) Owner approves (hold mock escrow)
   r = await req(`/api/tickets/${ticketId}/approve`, {
     method: 'POST',
     headers: { 'x-user-id': ownerId },
@@ -126,7 +139,7 @@ async function main() {
   if (r.status !== 200) throw new Error('approve failed ' + JSON.stringify(r.body));
   console.log('Approved, escrow created');
 
-  // 9) Pro completes
+  // 10) Pro completes
   r = await req(`/api/tickets/${ticketId}/complete`, {
     method: 'POST',
     headers: { 'x-user-id': proId },
@@ -135,7 +148,7 @@ async function main() {
   if (r.status !== 200) throw new Error('complete failed ' + JSON.stringify(r.body));
   console.log('Completed');
 
-  // 10) Owner validates (release)
+  // 11) Owner validates (release)
   r = await req(`/api/tickets/${ticketId}/validate`, {
     method: 'POST',
     headers: { 'x-user-id': ownerId },
@@ -143,7 +156,7 @@ async function main() {
   if (r.status !== 200) throw new Error('validate failed ' + JSON.stringify(r.body));
   console.log('Released');
 
-  // 11) Ensure chat conversation and send a message
+  // 12) Ensure chat conversation and send a message
   r = await req('/api/chat/conversations/ensure', {
     method: 'POST',
     headers: { 'x-user-id': ownerId },
