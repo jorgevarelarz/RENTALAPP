@@ -53,7 +53,7 @@ async function main() {
     let vr = await req('/api/verification/submit', {
       method: 'POST',
       headers: { 'x-user-id': uid },
-      body: JSON.stringify({ method: 'manual', files: [] }),
+      body: JSON.stringify({ method: 'dni', files: { idFrontUrl: 'https://ex/id-front', selfieUrl: 'https://ex/selfie' } }),
     });
     if (vr.status !== 201) throw new Error('verification submit failed ' + JSON.stringify(vr.body));
     vr = await req(`/api/verification/${uid}/approve`, {
