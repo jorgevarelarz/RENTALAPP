@@ -40,6 +40,15 @@ jobs:
           MONGO_URL: ${{ env.MONGO_URL || 'mongodb://127.0.0.1:27017/rentalapp_ops' }}
           NODE_ENV: development
         run: |
+          # Ensure MongoDB is available locally
+          if ! command -v mongod >/dev/null 2>&1; then
+            echo "Installing MongoDB Community via Homebrew..."
+            brew tap mongodb/brew
+            brew install mongodb-community@7.0
+          fi
+          echo "Starting MongoDB service (if not running)..."
+          brew services start mongodb-community@7.0 || true
+          sleep 3
           echo "Starting app on :$PORT with MONGO_URL=$MONGO_URL"
           npm run build
           node dist/app.js &
