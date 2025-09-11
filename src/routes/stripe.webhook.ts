@@ -7,6 +7,7 @@ import Appointment from '../models/appointment.model';
 import Conversation from '../models/conversation.model';
 import Message from '../models/message.model';
 import PlatformEarning from '../models/platformEarning.model';
+import ProcessedEvent from '../models/processedEvent.model';
 import { calcServiceFee } from '../utils/calcServiceFee';
 
 const r = Router();
@@ -32,6 +33,18 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
     event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET || '');
   } catch (err: any) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Idempotency: ensure each Stripe event is processed once
+  try {
+    await ProcessedEvent.create({ eventId: event.id });
+  } catch (e: any) {
+    // Duplicate event (unique index violation) → acknowledge and exit
+    if (e && e.code === 11000) {
+      return res.json({ received: true, duplicate: true });
+    }
+    // For other DB errors, surface 500 to allow Stripe to retry later
+    return res.status(500).json({ error: 'idempotency_store_failed' });
   }
 
   switch (event.type) {
