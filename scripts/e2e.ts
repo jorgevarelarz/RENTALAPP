@@ -164,9 +164,10 @@ async function main() {
   });
   if (r.status !== 200) throw new Error('ensure conversation failed ' + JSON.stringify(r.body));
   const convId = r.body._id as string;
+  // Send message as owner (participants are owner + pro for ticket conversations)
   r = await req(`/api/chat/${convId}/messages`, {
     method: 'POST',
-    headers: { 'x-user-id': tenantId },
+    headers: { 'x-user-id': ownerId },
     body: JSON.stringify({ body: 'Hola, ¿cuándo vienen?' }),
   });
   if (r.status !== 201) throw new Error('send message failed ' + JSON.stringify(r.body));
