@@ -32,4 +32,30 @@ jobs:
       - name: Test
         if: ${{ inputs.task == 'test' }}
         run: npm test
-
+      - name: Start + Health check
+        if: ${{ inputs.task == 'start-check' }}
+        env:
+          PORT: 3000
+          # Expect a local MongoDB; override in dispatch if needed
+          MONGO_URL: ${{ env.MONGO_URL || 'mongodb://127.0.0.1:27017/rentalapp_ops' }}
+          NODE_ENV: development
+        run: |
+          echo "Starting app on :$PORT with MONGO_URL=$MONGO_URL"
+          npm run build
+          node dist/app.js &
+          APP_PID=$!
+          echo "PID=$APP_PID"
+          # wait a bit for server
+          for i in {1..30}; do
+            sleep 1
+            curl -fsS http://127.0.0.1:$PORT/health && break || true
+          done
+          echo "Health response:" && curl -sS http://127.0.0.1:$PORT/health || true
+          # Assert OK
+          STATUS=$(curl -sS http://127.0.0.1:$PORT/health | jq -r '.ok' || echo "")
+          if [ "$STATUS" != "true" ]; then
+            echo "Health check failed" >&2
+            kill $APP_PID || true
+            exit 1
+          fi
+          kill $APP_PID || true
