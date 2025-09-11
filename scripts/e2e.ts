@@ -28,10 +28,11 @@ async function req(path: string, options: any = {}) {
 
 async function main() {
   console.log('E2E start');
+  const suffix = Date.now();
   // 1) Register landlord
   let r = await req('/api/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ name: 'Owner', email: 'owner@example.com', password: 'password', role: 'landlord' }),
+    body: JSON.stringify({ name: 'Owner', email: `owner+${suffix}@example.com`, password: 'password', role: 'landlord' }),
   });
   if (r.status !== 201) throw new Error('register landlord failed ' + JSON.stringify(r.body));
   const ownerToken = r.body.token as Token;
@@ -41,7 +42,7 @@ async function main() {
   // 2) Register tenant
   r = await req('/api/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ name: 'Tenant', email: 'tenant@example.com', password: 'password', role: 'tenant' }),
+    body: JSON.stringify({ name: 'Tenant', email: `tenant+${suffix}@example.com`, password: 'password', role: 'tenant' }),
   });
   if (r.status !== 201) throw new Error('register tenant failed ' + JSON.stringify(r.body));
   const tenantToken = r.body.token as Token;
@@ -66,7 +67,7 @@ async function main() {
   // 3) Register pro
   r = await req('/api/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ name: 'Pro', email: 'pro@example.com', password: 'password', role: 'tenant' }),
+    body: JSON.stringify({ name: 'Pro', email: `pro+${suffix}@example.com`, password: 'password', role: 'tenant' }),
   });
   if (r.status !== 201) throw new Error('register pro failed ' + JSON.stringify(r.body));
   const proToken = r.body.token as Token;
