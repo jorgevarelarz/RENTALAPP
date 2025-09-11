@@ -40,7 +40,7 @@ r.post(
 r.post(
   '/payments/intent',
   authenticate,
-  [body('amountEUR').isNumeric().custom((v) => v > 0)],
+  [body('amountEUR').isFloat({ gt: 0 })],
   validate,
   asyncHandler(async (req, res) => {
     const { amountEUR } = req.body as { amountEUR: number };
