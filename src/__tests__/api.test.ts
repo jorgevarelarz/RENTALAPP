@@ -3,7 +3,7 @@ import mongoose from 'mongoose';
 import { MongoMemoryServer } from 'mongodb-memory-server';
 
 let app: any;
-let mongo: MongoMemoryServer;
+let mongo: MongoMemoryServer | undefined;
 
 jest.mock('../utils/stripe', () => ({
   stripe: {
@@ -14,6 +14,8 @@ jest.mock('../utils/stripe', () => ({
 }));
 
 beforeAll(async () => {
+  // Pin a modern MongoDB version on CI runners (OpenSSL 3)
+  process.env.MONGOMS_VERSION = process.env.MONGOMS_VERSION || '7.0.5';
   mongo = await MongoMemoryServer.create();
   process.env.MONGO_URL = mongo.getUri();
   process.env.NODE_ENV = 'test';
@@ -23,7 +25,7 @@ beforeAll(async () => {
 
 afterAll(async () => {
   await mongoose.connection.close();
-  await mongo.stop();
+  if (mongo) await mongo.stop();
 });
 
 describe('API basic flow', () => {
