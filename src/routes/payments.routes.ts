@@ -40,7 +40,12 @@ r.post(
 r.post(
   '/payments/intent',
   authenticate,
-  [body('amountEUR').isFloat({ gt: 0 })],
+  [
+    body('amountEUR').custom((v) => {
+      const n = typeof v === 'string' ? Number(v) : v;
+      return typeof n === 'number' && isFinite(n) && n > 0;
+    }),
+  ],
   validate,
   asyncHandler(async (req, res) => {
     const { amountEUR } = req.body as { amountEUR: number };
