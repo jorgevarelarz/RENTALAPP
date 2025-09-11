@@ -40,15 +40,12 @@ r.post(
 r.post(
   '/payments/intent',
   authenticate,
-  [
-    body('amountEUR').custom((v) => {
-      const n = typeof v === 'string' ? Number(v) : v;
-      return typeof n === 'number' && isFinite(n) && n > 0;
-    }),
-  ],
-  validate,
   asyncHandler(async (req, res) => {
-    const { amountEUR } = req.body as { amountEUR: number };
+    const raw = (req.body as any)?.amountEUR;
+    const amountEUR = typeof raw === 'string' ? Number(raw) : raw;
+    if (typeof amountEUR !== 'number' || !isFinite(amountEUR) || amountEUR <= 0) {
+      return res.status(400).json({ error: 'invalid_amount' });
+    }
 
     const intent = await stripe.paymentIntents.create({
       amount: Math.round(amountEUR * 100),
