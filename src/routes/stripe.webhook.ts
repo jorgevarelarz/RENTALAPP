@@ -35,15 +35,19 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Idempotency: ensure each Stripe event is processed once
+  // Idempotency: ensure each Stripe event is processed once (atomic upsert)
   try {
-    await ProcessedEvent.create({ eventId: event.id });
-  } catch (e: any) {
-    // Duplicate event (unique index violation) → acknowledge and exit
-    if (e && e.code === 11000) {
+    const r = await ProcessedEvent.updateOne(
+      { eventId: event.id },
+      { $setOnInsert: { eventId: event.id } },
+      { upsert: true },
+    );
+    // If the document already existed, treat as duplicate and ack
+    if ((r as any).upsertedCount === 0 && (r as any).matchedCount > 0) {
       return res.json({ received: true, duplicate: true });
     }
-    // For other DB errors, surface 500 to allow Stripe to retry later
+  } catch (_e: any) {
+    // For DB errors, surface 500 to allow Stripe to retry later
     return res.status(500).json({ error: 'idempotency_store_failed' });
   }
 
