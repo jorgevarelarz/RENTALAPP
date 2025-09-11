@@ -39,7 +39,7 @@ jobs:
         env:
           PORT: 3000
           MONGO_URL: ${{ env.MONGO_URL || 'mongodb://127.0.0.1:27017/rentalapp_ops' }}
-          NODE_ENV: test
+          NODE_ENV: development
           ESCROW_DRIVER: mock
           JWT_SECRET: insecure
         run: |
