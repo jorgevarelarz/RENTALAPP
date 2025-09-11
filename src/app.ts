@@ -64,7 +64,8 @@ app.use('/api/pros', requireVerified, proRoutes);
 app.use('/api/tickets', requireVerified, ticketRoutes);
 app.use('/api/reviews', requireVerified, reviewRoutes);
 app.use('/api/chat', requireVerified, chatRoutes);
-app.use('/api', requireVerified, contractPaymentsRoutes);
+// Contract-specific payments under /api/contracts require verificación
+app.use('/api/contracts', requireVerified, contractPaymentsRoutes);
 app.use('/api', paymentsRoutes);
 app.use('/api', requireVerified, connectRoutes);
 app.use('/api', requireVerified, signatureRoutes);
