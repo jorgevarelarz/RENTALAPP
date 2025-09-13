@@ -1,0 +1,30 @@
+{
+  "tenant": [
+    { "label": "Inicio", "path": "/tenant/dashboard" },
+    { "label": "Mis contratos", "path": "/tenant/contracts" },
+    { "label": "Pagos y facturas", "path": "/tenant/payments" },
+    { "label": "Incidencias", "path": "/tenant/issues" },
+    { "label": "Perfil", "path": "/tenant/profile" },
+    { "label": "Soporte", "path": "/tenant/support" }
+  ],
+  "landlord": [
+    { "label": "Inicio", "path": "/landlord/dashboard" },
+    { "label": "Mis propiedades", "path": "/landlord/properties" },
+    { "label": "Contratos", "path": "/landlord/contracts" },
+    { "label": "Pagos y fianzas", "path": "/landlord/payments" },
+    { "label": "Incidencias", "path": "/landlord/issues" },
+    { "label": "Perfil/Empresa", "path": "/landlord/profile" },
+    { "label": "Soporte", "path": "/landlord/support" }
+  ],
+  "pro": [
+    { "label": "Inicio", "path": "/pro/dashboard" },
+    { "label": "Incidencias", "path": "/pro/issues" },
+    { "label": "Trabajos", "path": "/pro/jobs" },
+    { "label": "Pagos", "path": "/pro/payments" },
+    { "label": "Perfil profesional", "path": "/pro/profile" },
+    { "label": "Soporte", "path": "/pro/support" }
+  ],
+  "admin": [
+    { "label": "Dashboard", "path": "/admin/dashboard" }
+  ]
+}

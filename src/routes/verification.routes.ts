@@ -65,3 +65,21 @@ router.post('/:userId/reject', requireAdmin, async (req, res) => {
 });
 
 export default router;
+
+// Dev helper: instantly verify current user if ALLOW_UNVERIFIED=true (non-prod)
+router.post('/dev/verify', async (req, res) => {
+  if (!(process.env.ALLOW_UNVERIFIED === 'true' && process.env.NODE_ENV !== 'production')) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  try {
+    const userId = getUserId(req);
+    const v = await Verification.findOneAndUpdate(
+      { userId },
+      { $set: { status: 'verified' } },
+      { upsert: true, new: true },
+    );
+    res.json(v);
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+  }
+});

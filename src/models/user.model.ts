@@ -21,7 +21,7 @@ const userSchema = new Schema(
      */
     role: {
       type: String,
-      enum: ['landlord', 'tenant', 'admin'],
+      enum: ['landlord', 'tenant', 'admin', 'pro'],
       required: true,
     },
     ratingAvg: { type: Number, default: 0 },

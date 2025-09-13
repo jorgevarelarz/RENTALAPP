@@ -11,6 +11,10 @@ export const requireVerified = async (
   res: Response,
   next: NextFunction,
 ) => {
+  // Dev bypass: allow skipping verification when explicitly enabled and not in production
+  if (process.env.ALLOW_UNVERIFIED === 'true' && process.env.NODE_ENV !== 'production') {
+    return next();
+  }
   let userId: string;
   try {
     userId = getUserId(req);

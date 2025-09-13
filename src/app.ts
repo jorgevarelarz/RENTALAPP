@@ -30,6 +30,7 @@ import serviceOfferRoutes from './routes/serviceOffers.routes';
 import demoContractRoutes from './routes/demoContract.routes';
 import { errorHandler } from './middleware/errorHandler';
 import appointmentsFlowRoutes from './routes/appointments.routes';
+import uploadRoutes from './routes/upload.routes';
 
 // Load environment variables
 dotenv.config();
@@ -41,13 +42,21 @@ app.use(morgan('dev'));
 // Stripe webhook BEFORE JSON parser (uses express.raw)
 app.use('/api', stripeWebhookRoutes);
 
+// CORS: permite configurar orígenes desde CORS_ORIGIN (coma-separado). Por defecto, 3000 para CRA.
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:3001')
+  .split(',')
+  .map(s => s.trim())
+  .filter(Boolean);
 app.use(cors({
-  origin:'http://localhost:3001',
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization", "x-user-id"],
+  origin: allowedOrigins.length > 0 ? allowedOrigins : true,
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
+  // Let the browser echo back requested headers to avoid preflight issues
+  allowedHeaders: undefined,
   credentials:true
 }));
 app.use(express.json());
+// Serve uploaded files
+app.use('/uploads', express.static('uploads'));
 
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
@@ -56,6 +65,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/kyc', identityRoutes);
 app.use('/api/properties', propertyRoutes);
+app.use('/api', uploadRoutes);
 app.use('/api', demoContractRoutes);
 app.use('/api', requireVerified, appointmentsFlowRoutes);
 

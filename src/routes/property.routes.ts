@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
-import { createProperty, getAllProperties, getPropertyById } from '../controllers/property.controller';
+import { createProperty, getAllProperties, getPropertyById, updateProperty, deleteProperty } from '../controllers/property.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
@@ -25,5 +25,9 @@ router.post(
 // Public listings
 router.get('/', asyncHandler(getAllProperties));
 router.get('/:id', asyncHandler(getPropertyById));
+
+// Owner management
+router.patch('/:id', authenticate, asyncHandler(updateProperty));
+router.delete('/:id', authenticate, asyncHandler(deleteProperty));
 
 export default router;
