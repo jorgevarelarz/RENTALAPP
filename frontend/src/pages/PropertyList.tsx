@@ -63,16 +63,16 @@ const PropertyList: React.FC = () => {
       ) : (
         <div className="grid-cards">
           {pageItems.map(p => (
-            <div key={p._id} className="card">
+            <div key={p._id} className="card card-minimal">
               <div className="card-media">
                 {p.photos?.[0] ? <img src={toAbsoluteUrl(p.photos[0])} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'Sin foto'}
               </div>
               <div className="card-body">
-                <h3 style={{ margin: '4px 0 8px' }}>{p.title}</h3>
+                <h3 style={{ margin: '6px 0 4px', textTransform: 'uppercase', letterSpacing: '.06em', fontSize: 14 }}>{p.title}</h3>
                 <div className="muted" style={{ fontSize: 14 }}>{p.address}</div>
                 <div className="price">€{p.price}</div>
                 <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Link to={`/p/${p._id}`}>Ver detalle</Link>
+                  <Link to={`/p/${p._id}`} className="link link-underline">Ver detalle</Link>
                   <button aria-label="favorito" onClick={() => { toggleFavorite(String(p._id)); setFavTick(x=>x+1); }} className="btn-icon" style={{ fontSize: 18 }}>
                     {isFavorite(String(p._id)) ? '❤' : '♡'}
                   </button>
