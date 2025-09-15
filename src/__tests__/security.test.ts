@@ -1,6 +1,7 @@
 import request from 'supertest';
 import mongoose from 'mongoose';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import type { MongoMemoryServer } from 'mongodb-memory-server';
+import { startMongoMemoryServer } from './utils/mongoMemoryServer';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
@@ -9,13 +10,10 @@ let app: any;
 let mongo: MongoMemoryServer | undefined;
 
 beforeAll(async () => {
-  const version = process.env.MONGOMS_VERSION || '7.0.5';
-  mongo = await MongoMemoryServer.create({
-    binary: { version },
-    instance: { storageEngine: 'wiredTiger' },
-  });
+  mongo = await startMongoMemoryServer();
   process.env.MONGO_URL = mongo.getUri();
   process.env.NODE_ENV = 'test';
+  process.env.ALLOW_UNVERIFIED = 'true';
   const mod = await import('../app');
   app = mod.app || mod.default;
 });

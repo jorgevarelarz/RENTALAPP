@@ -12,7 +12,7 @@ import { depositToEscrow, depositToAuthority } from '../utils/deposit';
 import { sendForSignature, checkSignatureStatus } from '../utils/signature';
 import { sendRentReminderEmail, sendContractRenewalNotification } from '../utils/notification';
 import PDFDocument from 'pdfkit';
-import { createContractAction, signContractAction } from '../services/contract.actions';
+import { createContractAction, signContractAction, initiatePaymentAction } from '../services/contract.actions';
 
 function parsePagination(query: any) {
   const page = Math.max(1, parseInt(query.page as string) || 1);
@@ -132,10 +132,6 @@ export const getContractHistory = async (req: Request, res: Response) => {
     res.status(500).json({ error: 'Error al obtener el historial del contrato' });
   }
 };
-
-import { createContractAction, signContractAction, initiatePaymentAction } from '../services/contract.actions';
-
-// ... (other imports)
 
 export const initiatePayment = async (req: Request, res: Response) => {
   try {
