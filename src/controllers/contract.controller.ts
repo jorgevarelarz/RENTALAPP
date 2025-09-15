@@ -12,71 +12,33 @@ import { depositToEscrow, depositToAuthority } from '../utils/deposit';
 import { sendForSignature, checkSignatureStatus } from '../utils/signature';
 import { sendRentReminderEmail, sendContractRenewalNotification } from '../utils/notification';
 import PDFDocument from 'pdfkit';
+import { createContractAction, signContractAction } from '../services/contract.actions';
 
 function parsePagination(query: any) {
   const page = Math.max(1, parseInt(query.page as string) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(query.limit as string) || 10));
   return { page, limit };
 }
-/**
- * Create a new rental contract. Requires the tenantId, propertyId, rent,
- * deposit, startDate and endDate in the request body. The landlord is
- * inferred from the property owner.
- */
+
 export const createContract = async (req: Request, res: Response) => {
   const { tenantId, propertyId, rent, deposit, startDate, endDate, iban } = req.body;
   try {
-    // Ensure the property exists
-    const property = await Property.findById(propertyId);
-    if (!property) return res.status(404).json({ error: 'Propiedad no encontrada' });
-
-    // Compose a new contract document. Optionally encrypt and store the IBAN
-    const newContractData: any = {
-      landlord: property.ownerId,
-      tenant: tenantId,
-      property: propertyId,
+    const contract = await createContractAction({
+      tenantId,
+      propertyId,
       rent,
       deposit,
       startDate,
       endDate,
-    };
-    if (iban) {
-      try {
-        newContractData.ibanEncrypted = encryptIBAN(iban);
-      } catch (encErr) {
-        const message = (encErr as any)?.message || String(encErr);
-        return res.status(400).json({ error: 'Error al encriptar el IBAN', details: message });
-      }
-    }
-    const contract = new Contract(newContractData);
-    await contract.save();
-    // Record history entry for creation
-    await recordContractHistory(contract.id, 'created', 'Contrato creado');
-    // After saving the contract we can send notification emails to landlord and tenant.
-    try {
-      const landlord = await User.findById(property.ownerId);
-      const tenant = await User.findById(tenantId);
-      if (landlord?.email) {
-        await sendContractCreatedEmail(landlord.email, contract.id);
-      }
-      if (tenant?.email) {
-        await sendContractCreatedEmail(tenant.email, contract.id);
-      }
-    } catch (notifyErr) {
-      // Log and proceed; email errors should not block the response
-      console.error('Error enviando notificaciones:', notifyErr);
-    }
+      iban,
+    });
     res.status(201).json({ message: 'Contrato creado', contract });
   } catch (err: any) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 };
 
-/**
- * Generate and return a PDF representation of a contract. The endpoint
- * expects the contract id as a path parameter.
- */
 export const getContractPDF = async (req: Request, res: Response) => {
   try {
     const contract = await Contract.findById(req.params.id);
@@ -90,20 +52,15 @@ export const getContractPDF = async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Datos incompletos para el contrato' });
     }
 
-    // Preparar cabeceras HTTP para la descarga
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader(
       'Content-Disposition',
       `attachment; filename=contrato_${contract._id}.pdf`
     );
 
-    // Crear documento PDF en streaming
     const doc = new PDFDocument({ size: 'A4', margin: 50 });
     doc.pipe(res);
 
-    // ======================
-    // Contenido del contrato
-    // ======================
     doc.fontSize(18).text('CONTRATO DE ARRENDAMIENTO DE VIVIENDA', { align: 'center' });
     doc.moveDown(0.5);
     doc.fontSize(10).text(`En ${(property as any).city || ''}, a ${new Date().toISOString().split('T')[0]}`, { align: 'right' });
@@ -146,7 +103,6 @@ export const getContractPDF = async (req: Request, res: Response) => {
     doc.text(`Arrendador: ${landlord.name}`, 80, sigY + 15);
     doc.text(`Inquilino: ${tenant.name}`, 350, sigY + 15);
 
-    // Finalizar y enviar
     doc.end();
 
   } catch (err: any) {
@@ -155,66 +111,17 @@ export const getContractPDF = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * Sign an existing contract. Marks the contract as signed by the tenant and
- * records the signature timestamp.
- */
 export const signContract = async (req: Request, res: Response) => {
   try {
-    const contract = await Contract.findById(req.params.id);
-    if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
     const user = (req as any).user;
-    if (!user) return res.status(401).json({ error: 'Autenticación requerida' });
-    let actionLabel = '';
-    // Determine who is signing based on the user's role
-    if (user.role === 'tenant') {
-      if (contract.signedByTenant) {
-        return res.status(400).json({ error: 'El inquilino ya ha firmado este contrato' });
-      }
-      contract.signedByTenant = true;
-      actionLabel = 'signedByTenant';
-    } else if (user.role === 'landlord') {
-      if (contract.signedByLandlord) {
-        return res.status(400).json({ error: 'El arrendador ya ha firmado este contrato' });
-      }
-      contract.signedByLandlord = true;
-      actionLabel = 'signedByLandlord';
-    } else {
-      return res.status(403).json({ error: 'Rol no autorizado para firmar' });
-    }
-    // If both parties have signed, set or update signedAt to now and activate
-    if (contract.signedByTenant && contract.signedByLandlord) {
-      contract.signedAt = new Date();
-      // When both have signed, mark the contract as active
-      contract.status = 'active';
-    }
-    await contract.save();
-    // Record history entry
-    await recordContractHistory(contract.id, actionLabel, `Contrato firmado por ${user.role}`);
-    // Notify the other party that the contract has been signed
-    try {
-      const landlord = await User.findById(contract.landlord);
-      const tenant = await User.findById(contract.tenant);
-      // Determine which party should be notified
-      if (user.role === 'tenant' && landlord?.email) {
-        await sendContractCreatedEmail(landlord.email, contract.id);
-      } else if (user.role === 'landlord' && tenant?.email) {
-        await sendContractCreatedEmail(tenant.email, contract.id);
-      }
-    } catch (notifyErr) {
-      console.error('Error enviando notificaciones de firma:', notifyErr);
-    }
+    const contract = await signContractAction(req.params.id, user);
     res.json({ message: 'Contrato firmado', contract });
   } catch (err: any) {
     console.error(err);
-    res.status(500).json({ error: 'Error al firmar el contrato' });
+    res.status(400).json({ error: err.message });
   }
 };
 
-/**
- * Retrieve the change history for a given contract. Returns an array of
- * history entries sorted by timestamp ascending.
- */
 export const getContractHistory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -226,30 +133,21 @@ export const getContractHistory = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * Initiate an automatic SEPA Direct Debit payment for a contract using Stripe.
- * If the contract does not yet have a Stripe customer ID, this handler
- * decrypts the stored IBAN, creates a customer and attaches a mandate.
- * The amount can be provided in the body; if omitted, the monthly rent is used.
- */
 export const initiatePayment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { amount } = req.body;
     const contract = await Contract.findById(id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
-    // Only tenants can initiate payments for rent/deposit
     const user = (req as any).user;
     if (user.role !== 'tenant' || String(contract.tenant) !== user.id) {
       return res.status(403).json({ error: 'Solo el inquilino puede iniciar pagos' });
     }
     let customerId = contract.stripeCustomerId;
-    // If no customer ID, decrypt IBAN and create customer + mandate
     if (!customerId) {
       if (!contract.ibanEncrypted) {
         return res.status(400).json({ error: 'El contrato no tiene un IBAN asociado' });
       }
-      // Decrypt IBAN from contract
       let iban: string;
       try {
         iban = decryptIBAN(contract.ibanEncrypted);
@@ -263,7 +161,6 @@ export const initiatePayment = async (req: Request, res: Response) => {
       contract.stripeCustomerId = customerId;
       await contract.save();
     }
-    // Determine payment amount (EUR). Use contract rent if no amount specified
     const payAmount = typeof amount === 'number' && amount > 0 ? amount : contract.rent;
     const paymentIntent = await createPaymentIntent(customerId, payAmount, 'eur');
     await recordContractHistory(contract.id, 'paymentInitiated', `Pago iniciado por €${payAmount / 1}`);
@@ -274,38 +171,26 @@ export const initiatePayment = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * Handles the payment of the deposit (fianza) for a contract. A deposit can
- * either be held by the platform (escrow) or transferred to a public
- * authority. The caller must specify a 'destination' in the body with
- * values 'escrow' (default) or 'authority'. Only the tenant of the
- * contract may pay the deposit. Once a deposit is paid the contract's
- * depositPaid flag is set and a history entry is recorded.
- */
 export const payDeposit = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { destination } = req.body;
     const contract = await Contract.findById(id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
-    // Only the tenant associated with the contract can pay the deposit
     const user = (req as any).user;
     if (user.role !== 'tenant' || String(contract.tenant) !== user.id) {
       return res.status(403).json({ error: 'Solo el inquilino puede pagar la fianza' });
     }
-    // Prevent paying the deposit twice
     if (contract.depositPaid) {
       return res.status(400).json({ error: 'La fianza ya ha sido pagada' });
     }
     const depositAmount = contract.deposit;
-    // Determine destination; default to escrow
     const dest = destination === 'authority' ? 'authority' : 'escrow';
     if (dest === 'escrow') {
       await depositToEscrow(contract.id, depositAmount);
     } else {
       await depositToAuthority(contract.id, depositAmount);
     }
-    // Mark deposit as paid
     contract.depositPaid = true;
     contract.depositPaidAt = new Date();
     await contract.save();
@@ -317,14 +202,6 @@ export const payDeposit = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * Initiates an electronic signature process for a contract. Generates the
- * PDF for the contract, sends it to the configured signature provider
- * and returns a URL where the user can sign the document. This endpoint
- * can be called by either party (tenant or landlord) but only once per
- * contract. After initiating, the signature provider will send webhooks or
- * require polling to update the status.
- */
 export const requestSignature = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -336,7 +213,6 @@ export const requestSignature = async (req: Request, res: Response) => {
     if (!landlord || !tenant || !property) {
       return res.status(404).json({ error: 'Datos incompletos para el contrato' });
     }
-    // Build PDF payload
     const data = {
       landlordName: landlord.name,
       landlordDNI: (landlord as any).dni || '',
@@ -360,7 +236,6 @@ export const requestSignature = async (req: Request, res: Response) => {
       dateSigned: new Date().toISOString().split('T')[0],
     };
     const pdfBuffer = await generateContractPDF(data);
-    // Determine who is requesting the signature and set up the signer
     const user = (req as any).user;
     const signerEmail = user.role === 'landlord' ? landlord.email : tenant.email;
     const signerName = user.role === 'landlord' ? landlord.name : tenant.name;
@@ -372,7 +247,6 @@ export const requestSignature = async (req: Request, res: Response) => {
       signerName,
       redirectUrl,
     });
-    // For demonstration we store the envelopeId on the contract document for later
     (contract as any).signatureEnvelopeId = envelopeId;
     await contract.save();
     await recordContractHistory(
@@ -387,11 +261,6 @@ export const requestSignature = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * Sends a rent payment reminder to the tenant associated with the
- * contract. This can be used by a landlord to nudge the tenant before
- * automatic charges or by a scheduled task. It records a history entry.
- */
 export const sendRentReminder = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -410,11 +279,6 @@ export const sendRentReminder = async (req: Request, res: Response) => {
   }
 };
 
-/**
- * Sends a contract renewal notification to both landlord and tenant when a
- * contract is close to its end date. This would typically be triggered
- * by a scheduled job but can also be invoked manually via this endpoint.
- */
 export const sendRenewalNotification = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
@@ -442,6 +306,12 @@ export const listContracts = async (req: Request, res: Response) => {
     const { page, limit } = parsePagination(req.query);
     const q: any = {};
     if (req.query.status) q.status = req.query.status;
+
+    const user = (req as any).user;
+    if (user.role !== 'admin') {
+      q.$or = [{ landlord: user.id }, { tenant: user.id }];
+    }
+
     const [items, total] = await Promise.all([
       Contract.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       Contract.countDocuments(q)
@@ -485,6 +355,12 @@ export const getContract = async (req: Request, res: Response) => {
   try {
     const c = await Contract.findById(req.params.id).lean();
     if (!c) return res.status(404).json({ error: 'Contrato no encontrado' });
+
+    const user = (req as any).user;
+    if (user.role !== 'admin' && String(c.landlord) !== user.id && String(c.tenant) !== user.id) {
+      return res.status(404).json({ error: 'Contrato no encontrado' });
+    }
+
     const ids = [String(c.landlord), String(c.tenant)];
     const users = await User.find({ _id: { $in: ids } }, { ratingAvg: 1, reviewCount: 1 }).lean();
     const userMap = new Map(users.map(u => [String(u._id), u]));

@@ -16,7 +16,7 @@ const MyContracts: React.FC = () => {
       if (!token || !user) return;
       try {
         setLoading(true); setError(null);
-        const r = await listContracts(token, user.id);
+        const r = await listContracts(token);
         const mine = (r.items || []).filter((c: any) =>
           String(c.ownerId) === user.id || String(c.tenantId) === user.id
         );

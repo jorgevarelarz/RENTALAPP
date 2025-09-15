@@ -5,6 +5,7 @@ import { createPaymentIntent } from '../services/payments';
 import { downloadDemoContract } from '../services/contracts';
 import { loadStripe, Stripe, StripeCardElement } from '@stripe/stripe-js';
 import { useAuth } from '../context/AuthContext';
+import { formatPriceEUR } from '../utils/format';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Alert from '../components/ui/Alert';
@@ -121,7 +122,7 @@ const PropertyDetail: React.FC = () => {
           <Gallery photos={property.photos} />
           <Card style={{ padding: 16, marginTop: 12 }}>
             <p className="muted">{property.address}</p>
-            <div className="price" style={{ fontSize: 20 }}>€{property.price}</div>
+            <div className="price" style={{ fontSize: 20 }}>{formatPriceEUR(property.price)}</div>
             {property.description && <p style={{ marginTop: 8 }}>{property.description}</p>}
           </Card>
         </div>

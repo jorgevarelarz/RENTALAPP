@@ -1,7 +1,7 @@
 import React from 'react';
 
 type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
   size?: 'sm' | 'md';
 };
 
@@ -18,6 +18,7 @@ const Button: React.FC<Props> = ({ variant = 'primary', size = 'md', children, .
     secondary: { background: 'var(--card)', color: 'var(--fg)' },
     ghost: { background: 'transparent', color: 'var(--fg)' },
     danger: { background: '#ef4444', color: 'white', borderColor: 'transparent' },
+    outline: { background: 'transparent', color: 'var(--fg)' },
   };
   return (
     <button style={{ ...base, ...variants[variant] }} {...rest}>
@@ -27,4 +28,3 @@ const Button: React.FC<Props> = ({ variant = 'primary', size = 'md', children, .
 };
 
 export default Button;
-

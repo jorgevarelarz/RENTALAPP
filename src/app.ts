@@ -32,10 +32,13 @@ import { errorHandler } from './middleware/errorHandler';
 import appointmentsFlowRoutes from './routes/appointments.routes';
 import uploadRoutes from './routes/upload.routes';
 
+import helmet from 'helmet';
+
 // Load environment variables
 dotenv.config();
 
 const app = express();
+app.use(helmet());
 
 app.use(morgan('dev'));
 

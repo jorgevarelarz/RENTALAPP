@@ -2,72 +2,71 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { downloadPdf, getContract, payDeposit, signContract } from '../services/contracts';
 import { useAuth } from '../context/AuthContext';
-import Badge from '../components/ui/Badge';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import { useToast } from '../context/ToastContext';
 
 const ContractDetail: React.FC = () => {
-  const { id } = useParams();
+  const { id } = useParams<{ id: string }>();
   const { token, user } = useAuth();
   const [c, setC] = useState<any | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { push } = useToast();
 
   const load = useCallback(async () => {
-    if (!token || !user || !id) return;
+    if (!token || !id) return;
     try {
-      setLoading(true); setError(null);
-      const data = await getContract(token, user.id, id);
+      setLoading(true);
+      setError(null);
+      const data = await getContract(token, id);
       setC(data);
     } catch (e: any) {
-      setError(e?.message || 'Error');
+      setError(e?.message || 'Error al cargar el contrato');
     } finally {
       setLoading(false);
     }
-  }, [token, user, id]);
+  }, [token, id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
-  if (!token || !user) return <div>Inicia sesión</div>;
-  if (loading) return <div>Cargando…</div>;
-  if (error) return <div>Error: {error}</div>;
-  if (!c) return null;
+  if (loading) return <div>Cargando contrato...</div>;
+  if (error) return <div style={{ color: 'red' }}>{error}</div>;
+  if (!c) return <div>Contrato no encontrado.</div>;
 
-  const amTenant = String(c.tenantId || c.tenant) === user.id || c.tenant?.id === user.id;
-  const amOwner = String(c.ownerId || c.landlord) === user.id || c.owner?.id === user.id;
-
-  const canSignTenant = amTenant && !c.signedByTenant;
-  const canSignOwner = amOwner && !c.signedByLandlord;
+  const amTenant = user?.id === c.tenant?.id || user?.id === c.tenant;
+  const amLandlord = user?.id === c.owner?.id || user?.id === c.landlord;
+  const canSign = (amTenant && !c.signedByTenant) || (amLandlord && !c.signedByLandlord);
   const canPayDeposit = amTenant && !c.depositPaid;
 
   return (
     <div>
-      <h2>Contrato <Badge tone={(c.status || 'draft') as any}>{c.status}</Badge></h2>
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-        <Card style={{ padding: 16 }}>
-          <p><b>Renta:</b> €{c.rent}</p>
-          <p><b>Fianza:</b> €{c.deposit}</p>
-          <p><b>Arrendador:</b> {String(c.ownerId)}</p>
-          <p><b>Inquilino:</b> {String(c.tenantId)}</p>
-        </Card>
-        <Card style={{ padding: 16 }}>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {(canSignTenant || canSignOwner) && (
-              <Button onClick={async () => { await signContract(token!, user.id, c._id || c.id); push({ title: 'Contrato firmado', tone: 'success' }); await load(); }}>
-                Firmar
-              </Button>
-            )}
-            {canPayDeposit && (
-              <Button onClick={async () => { await payDeposit(token!, user.id, c._id || c.id, 'escrow'); push({ title: 'Fianza pagada', tone: 'success' }); await load(); }}>
-                Pagar fianza (escrow)
-              </Button>
-            )}
-            <Button onClick={async () => { const blob = await downloadPdf(token!, user.id, c._id || c.id); const url = URL.createObjectURL(blob); window.open(url, '_blank'); }}>Descargar PDF</Button>
-          </div>
-        </Card>
-      </div>
+      <h1 className="page-title">Detalle del Contrato</h1>
+      <Card style={{ padding: 24 }}>
+        <p>ID: {c._id || c.id}</p>
+        <p>Inquilino: {c.tenant?.id || c.tenant}</p>
+        <p>Propietario: {c.owner?.id || c.landlord}</p>
+        <p>Firmado por inquilino: {c.signedByTenant ? 'Sí' : 'No'}</p>
+        <p>Firmado por propietario: {c.signedByLandlord ? 'Sí' : 'No'}</p>
+        <p>Fianza pagada: {c.depositPaid ? 'Sí' : 'No'}</p>
+        <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+          {canSign && (
+            <Button onClick={async () => { await signContract(token!, c._id || c.id); push({ title: 'Contrato firmado', tone: 'success' }); await load(); }}>
+              Firmar contrato
+            </Button>
+          )}
+          {canPayDeposit && (
+            <Button onClick={async () => { await payDeposit(token!, c._id || c.id, 'escrow'); push({ title: 'Fianza pagada', tone: 'success' }); await load(); }}>
+              Pagar fianza
+            </Button>
+          )}
+          <Button onClick={async () => { const blob = await downloadPdf(token!, c._id || c.id); const url = URL.createObjectURL(blob); window.open(url, '_blank'); }}>
+            Descargar PDF
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 };

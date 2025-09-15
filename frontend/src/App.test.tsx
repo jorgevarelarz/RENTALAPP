@@ -1,25 +1,36 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
+import { render } from '@testing-library/react';
+import App from './App';
+import { AuthProvider } from './context/AuthContext';
+import { ThemeProvider } from './context/ThemeContext';
+import { ToastProvider } from './context/ToastContext';
 
-// Mock react-router-dom to avoid resolver issues and to render Route elements
+// Mock react-router-dom completely to avoid resolver issues
 jest.mock('react-router-dom', () => ({
-  // Render children directly
+  BrowserRouter: ({ children }: any) => <div>{children}</div>,
   Routes: ({ children }: any) => <div>{children}</div>,
-  // Do not render nested routes in tests to avoid heavy deps
   Route: () => null,
-  // No-op for Navigate in tests
   Navigate: () => null,
-  // Hooks used by pages
   useNavigate: () => jest.fn(),
+  Link: ({ children, to }: any) => <a href={to}>{children}</a>,
+  NavLink: ({ children, to }: any) => <a href={to}>{children}</a>,
+  useLocation: () => ({ pathname: '/' }),
 }), { virtual: true });
 
-// Mock ESM-only deps used by pages/services so Jest (CJS) can run
+// Mock other external dependencies
 jest.mock('axios', () => ({ default: { post: jest.fn(), get: jest.fn() } }), { virtual: true });
 jest.mock('@stripe/stripe-js', () => ({ loadStripe: jest.fn(async () => null) }), { virtual: true });
 
-import App from './App';
-
 test('la app renderiza sin crashear', () => {
-  render(<App />);
+  render(
+    <ThemeProvider>
+      <ToastProvider>
+        <AuthProvider>
+          {/* App needs to be inside a Router, even a mocked one */}
+          <App />
+        </AuthProvider>
+      </ToastProvider>
+    </ThemeProvider>
+  );
   expect(true).toBe(true);
 });

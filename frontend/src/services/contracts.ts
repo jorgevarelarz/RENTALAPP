@@ -11,37 +11,37 @@ export const downloadDemoContract = async (token: string, payload: any) => {
   return res.data as Blob;
 };
 
-export const listContracts = async (token: string, userId: string) => {
+export const listContracts = async (token: string) => {
   const res = await axios.get(`${API_BASE}/api/contracts`, {
-    headers: { Authorization: `Bearer ${token}`, 'x-user-id': userId },
+    headers: { Authorization: `Bearer ${token}` },
   });
   return res.data as { items: any[] };
 };
 
-export const getContract = async (token: string, userId: string, id: string) => {
+export const getContract = async (token: string, id: string) => {
   const res = await axios.get(`${API_BASE}/api/contracts/${id}`, {
-    headers: { Authorization: `Bearer ${token}`, 'x-user-id': userId },
+    headers: { Authorization: `Bearer ${token}` },
   });
   return res.data as any;
 };
 
-export const signContract = async (token: string, userId: string, id: string) => {
+export const signContract = async (token: string, id: string) => {
   const res = await axios.patch(`${API_BASE}/api/contracts/${id}/sign`, {}, {
-    headers: { Authorization: `Bearer ${token}`, 'x-user-id': userId },
+    headers: { Authorization: `Bearer ${token}` },
   });
   return res.data as any;
 };
 
-export const payDeposit = async (token: string, userId: string, id: string, destination: 'escrow'|'authority'='escrow') => {
+export const payDeposit = async (token: string, id: string, destination: 'escrow'|'authority'='escrow') => {
   const res = await axios.post(`${API_BASE}/api/contracts/${id}/deposit`, { destination }, {
-    headers: { Authorization: `Bearer ${token}`, 'x-user-id': userId },
+    headers: { Authorization: `Bearer ${token}` },
   });
   return res.data as any;
 };
 
-export const downloadPdf = async (token: string, userId: string, id: string) => {
+export const downloadPdf = async (token: string, id: string) => {
   const res = await axios.get(`${API_BASE}/api/contracts/${id}/pdf`, {
-    headers: { Authorization: `Bearer ${token}`, 'x-user-id': userId },
+    headers: { Authorization: `Bearer ${token}` },
     responseType: 'blob',
   });
   return res.data as Blob;
