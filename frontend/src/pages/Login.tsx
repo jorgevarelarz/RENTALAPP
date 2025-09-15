@@ -42,8 +42,8 @@ const Login: React.FC = () => {
   };
 
   return (
-    <div className="login-wrapper">
-      <div className="login-container">
+    <div style={{ display: 'grid', placeItems: 'center', minHeight: '60vh' }}>
+      <Card style={{ width: 420, padding: 24 }}>
         <form onSubmit={handleSubmit}>
           <h1 style={{ marginTop: 0 }}>{isRegister ? 'Registro' : 'Login'}</h1>
           <div style={{ display: 'grid', gap: 12, marginTop: 12 }}>
@@ -59,17 +59,17 @@ const Login: React.FC = () => {
                 <option value="pro">Profesional</option>
               </Select>
             )}
-            <button type="submit" className="btn-form">{isRegister ? 'Registrar' : 'Entrar'}</button>
-            <p className="form-text">
+            <Button type="submit">{isRegister ? 'Registrar' : 'Entrar'}</Button>
+            <p style={{ textAlign: 'center' }}>
               {isRegister ? '¿Ya tienes cuenta?' : '¿No tienes cuenta?'}{' '}
               <button type="button" onClick={() => setIsRegister(!isRegister)} style={{ background: 'none', border: 'none', color: 'var(--primary)', cursor: 'pointer' }}>
                 {isRegister ? 'Inicia sesión' : 'Regístrate'}
               </button>
             </p>
-            {error && <p className="form-text" style={{ color: 'red' }}>{error}</p>}
+            {error && <p style={{ color: 'red', textAlign: 'center' }}>{error}</p>}
           </div>
         </form>
-      </div>
+      </Card>
     </div>
   );
 };
