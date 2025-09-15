@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../auth/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 
 const NavBar: React.FC = () => {
@@ -10,7 +10,7 @@ const NavBar: React.FC = () => {
 
   const handleLogout = () => {
     logout();
-    navigate('/');
+    navigate('/login', { replace: true });
   };
 
   const logoSrc = `${process.env.PUBLIC_URL || ''}/rental-logo.png`;
@@ -27,7 +27,7 @@ const NavBar: React.FC = () => {
         <span>Rental</span>
       </Link>
       <div className="nav-links">
-        <NavLink to="/" className={linkClass}>Propiedades</NavLink>
+        <NavLink to="/" end className={linkClass}>Propiedades</NavLink>
         <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
       </div>
       <div className="nav-spacer" />

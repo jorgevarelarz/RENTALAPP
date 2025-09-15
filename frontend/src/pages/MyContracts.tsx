@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { listContracts } from '../services/contracts';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../auth/AuthContext';
 import Badge from '../components/ui/Badge';
 import { Link } from 'react-router-dom';
 

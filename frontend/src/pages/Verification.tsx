@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../auth/AuthContext';
 import { devVerifyMe, getMyVerification } from '../services/verification';
 
 const Verification: React.FC = () => {

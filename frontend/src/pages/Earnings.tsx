@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { earningsSummary, earningsList, earningsExportCsv } from '../services/admin';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../auth/AuthContext';
 import Card from '../components/ui/Card';
 
 function fmt(n?: number) { return (n ?? 0).toFixed(2); }

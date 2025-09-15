@@ -4,7 +4,7 @@ import { getProperty } from '../services/properties';
 import { createPaymentIntent } from '../services/payments';
 import { downloadDemoContract } from '../services/contracts';
 import { loadStripe, Stripe, StripeCardElement } from '@stripe/stripe-js';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../auth/AuthContext';
 import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Alert from '../components/ui/Alert';

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { listProperties } from '../services/properties';
 import { Link } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../auth/AuthContext';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import { SkeletonCard } from '../components/ui/Skeleton';

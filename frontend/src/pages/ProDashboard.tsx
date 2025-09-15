@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
+import { useAuth } from '../auth/AuthContext';
 import { getMyPro, upsertPro } from '../services/pro';
 import Card from '../components/ui/Card';
 import Input from '../components/ui/Input';
