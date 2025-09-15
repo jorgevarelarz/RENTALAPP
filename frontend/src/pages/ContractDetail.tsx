@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import { useToast } from '../context/ToastContext';
+import pageStyles from './Page.module.css';
 
 const ContractDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -43,7 +44,7 @@ const ContractDetail: React.FC = () => {
 
   return (
     <div>
-      <h1 className="page-title">Detalle del Contrato</h1>
+      <h1 className={pageStyles.title}>Detalle del Contrato</h1>
       <Card style={{ padding: 24 }}>
         <p>ID: {c._id || c.id}</p>
         <p>Inquilino: {c.tenant?.id || c.tenant}</p>
