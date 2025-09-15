@@ -7,13 +7,15 @@ import Footer from './Footer';
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <div>
-      <div style={{ position: 'sticky', top: 0, zIndex: 20, background: 'var(--card)' }}>
-        <NavBar />
+      <div className="navbar">
+        <div className="container">
+          <NavBar />
+        </div>
       </div>
       <div style={{ display: 'flex' }}>
         <Sidebar />
         <main style={{ flex: 1, padding: 16 }}>
-          <div style={{ maxWidth: 1100, margin: '0 auto', width: '100%' }}>
+          <div className="container">
             <Breadcrumbs />
             {children}
           </div>

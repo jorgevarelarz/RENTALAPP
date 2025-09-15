@@ -13,35 +13,36 @@ const NavBar: React.FC = () => {
     navigate('/');
   };
 
-  const linkStyle: React.CSSProperties = { marginRight: 12, padding: '6px 10px', borderRadius: 8, textDecoration: 'none' };
-  const active = ({ isActive }: any) => ({ ...linkStyle, background: isActive ? 'var(--border)' : 'transparent' });
-
   const logoSrc = `${process.env.PUBLIC_URL || ''}/rental-logo.png`;
+  const linkClass = ({ isActive }: any) => `nav-link${isActive ? ' active' : ''}`;
   return (
-    <nav style={{ padding: 12, borderBottom: '1px solid #eee', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 12 }}>
-      <Link to="/" style={{ display: 'flex', alignItems: 'center', gap: 8, fontWeight: 700, marginRight: 16, textDecoration: 'none', color: 'inherit' }}>
+    <nav className="navbar-inner">
+      <Link to="/" className="nav-brand">
         <img
           src={logoSrc}
           alt="Rental"
           onError={(e: any) => { e.currentTarget.src = `${process.env.PUBLIC_URL || ''}/logo512.png`; }}
-          style={{ width: 28, height: 28, objectFit: 'contain' }}
+          className="nav-logo"
         />
         <span>Rental</span>
       </Link>
-      <NavLink to="/" style={active}>Propiedades</NavLink>
-      <NavLink to="/dashboard" style={active}>Dashboard</NavLink>
+      <div className="nav-links">
+        <NavLink to="/" className={linkClass}>Propiedades</NavLink>
+        <NavLink to="/dashboard" className={linkClass}>Dashboard</NavLink>
+      </div>
+      <div className="nav-spacer" />
       {user && (
-        <span style={{ marginLeft: 'auto', marginRight: 12, opacity: 0.7 }}>
+        <span className="muted" style={{ marginRight: 12 }}>
           Rol: <b>{user.role}</b>
         </span>
       )}
-      <button onClick={toggle} style={{ marginRight: 12 }}>
+      <button onClick={toggle} className="btn-icon" aria-label="toggle theme" style={{ marginRight: 8 }}>
         {theme === 'light' ? '🌙' : '☀️'}
       </button>
       {!token ? (
-        <NavLink to="/login" style={linkStyle}>Login</NavLink>
+        <NavLink to="/login" className="nav-link">Login</NavLink>
       ) : (
-        <button onClick={handleLogout}>Salir</button>
+        <button onClick={handleLogout} className="nav-link btn-icon" style={{ padding: '6px 10px' }}>Salir</button>
       )}
     </nav>
   );

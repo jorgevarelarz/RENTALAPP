@@ -43,3 +43,68 @@ button:focus, a:focus {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
+
+/* Layout helpers */
+.container {
+  max-width: 1100px;
+  width: 100%;
+  margin: 0 auto;
+  padding: 0 16px;
+}
+
+.navbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.navbar-inner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+}
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  text-decoration: none;
+  color: inherit;
+  margin-right: 16px;
+}
+.nav-logo {
+  width: 28px; height: 28px; object-fit: contain;
+}
+.nav-links {
+  display: flex; gap: 12px; align-items: center;
+}
+.nav-link { padding: 6px 10px; border-radius: 8px; text-decoration: none; }
+.nav-link.active { background: var(--border); }
+.nav-spacer { margin-left: auto; }
+.btn-icon { background: none; border: none; cursor: pointer; font-size: 16px; }
+
+/* Cards and grids */
+.grid-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.grid-detail { display: grid; grid-template-columns: 2fr 1fr; gap: 24px; }
+.card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; }
+.card-body { padding: 12px; }
+.card-media { height: 140px; background: #f5f5f5; display: flex; align-items: center; justify-content: center; color: #999; }
+.muted { color: var(--muted); }
+.price { margin-top: 8px; font-weight: 700; }
+
+/* Gallery */
+.gallery-main { height: 320px; border-radius: 12px; overflow: hidden; border: 1px solid var(--border); }
+.gallery-empty { height: 320px; background: #f5f5f5; border-radius: 12px; border: 1px solid var(--border); display: grid; place-items: center; color: #888; }
+.gallery-thumbs { display: flex; gap: 8px; margin-top: 8px; overflow-x: auto; }
+.thumb-btn { border: 1px solid var(--border); border-radius: 8px; padding: 0; background: transparent; }
+.thumb-btn.active { border: 2px solid var(--primary); }
+
+/* Forms */
+.form-row { display: flex; gap: 12px; margin: 8px 0 16px; flex-wrap: wrap; }
+.input-sm { width: 120px; }
+
+/* Utilities */
+.page-title { margin: 0 0 12px; }
+.divider { height: 1px; background: var(--border); margin: 12px 0; }

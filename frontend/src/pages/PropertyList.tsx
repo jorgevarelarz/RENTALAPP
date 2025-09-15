@@ -38,16 +38,16 @@ const PropertyList: React.FC = () => {
   const pageItems = filtered.slice(start, start + pageSize);
   return (
     <div>
-      <h1>Propiedades</h1>
-      <div style={{ display: 'flex', gap: 12, margin: '8px 0 16px', flexWrap: 'wrap' }}>
+      <h1 className="page-title">Propiedades</h1>
+      <div className="form-row">
         <Input placeholder="Buscar..." value={q} onChange={e => setQ(e.target.value)} />
-        <Input placeholder="Min €" value={min} onChange={e => setMin(e.target.value)} style={{ width: 120 }} />
-        <Input placeholder="Max €" value={max} onChange={e => setMax(e.target.value)} style={{ width: 120 }} />
+        <Input placeholder="Min €" value={min} onChange={e => setMin(e.target.value)} className="input-sm" />
+        <Input placeholder="Max €" value={max} onChange={e => setMax(e.target.value)} className="input-sm" />
         <Button variant="ghost" onClick={() => { setQ(''); setMin(''); setMax(''); }}>Limpiar</Button>
-        {user?.role === 'landlord' && <Link to="/dashboard" style={{ marginLeft: 'auto' }}>Publicar</Link>}
+        {user?.role === 'landlord' && <Link to="/dashboard" className="nav-link" style={{ marginLeft: 'auto' }}>Publicar</Link>}
       </div>
       {loading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+        <div className="grid-cards">
           {Array.from({ length: 8 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
@@ -61,19 +61,19 @@ const PropertyList: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
+        <div className="grid-cards">
           {pageItems.map(p => (
-            <div key={p._id} style={{ border: '1px solid #eee', borderRadius: 10, overflow: 'hidden', background: '#fff' }}>
-              <div style={{ height: 140, background: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#999' }}>
+            <div key={p._id} className="card">
+              <div className="card-media">
                 {p.photos?.[0] ? <img src={toAbsoluteUrl(p.photos[0])} alt={p.title} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : 'Sin foto'}
               </div>
-              <div style={{ padding: 12 }}>
+              <div className="card-body">
                 <h3 style={{ margin: '4px 0 8px' }}>{p.title}</h3>
-                <div style={{ opacity: 0.8, fontSize: 14 }}>{p.address}</div>
-                <div style={{ marginTop: 8, fontWeight: 700 }}>€{p.price}</div>
+                <div className="muted" style={{ fontSize: 14 }}>{p.address}</div>
+                <div className="price">€{p.price}</div>
                 <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <Link to={`/p/${p._id}`}>Ver detalle</Link>
-                  <button aria-label="favorito" onClick={() => { toggleFavorite(String(p._id)); setFavTick(x=>x+1); }} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 18 }}>
+                  <button aria-label="favorito" onClick={() => { toggleFavorite(String(p._id)); setFavTick(x=>x+1); }} className="btn-icon" style={{ fontSize: 18 }}>
                     {isFavorite(String(p._id)) ? '❤' : '♡'}
                   </button>
                 </div>

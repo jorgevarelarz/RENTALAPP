@@ -100,13 +100,13 @@ const PropertyDetail: React.FC = () => {
 
   if (loading) return (
     <div>
-      <h1>Cargando propiedad…</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+      <h1 className="page-title">Cargando propiedad…</h1>
+      <div className="grid-detail">
         <div>
-          <div style={{ height: 320, borderRadius: 12, border: '1px solid var(--border)', background: 'var(--border)' }} />
-          <div style={{ marginTop: 12, border: '1px solid var(--border)', borderRadius: 12, height: 120, background: 'var(--border)' }} />
+          <div className="gallery-empty" />
+          <div className="card" style={{ marginTop: 12, height: 120 }} />
         </div>
-        <div style={{ border: '1px solid var(--border)', borderRadius: 12, height: 280, background: 'var(--border)' }} />
+        <div className="card" style={{ height: 280 }} />
       </div>
     </div>
   );
@@ -115,13 +115,13 @@ const PropertyDetail: React.FC = () => {
   const stripePkMissing = !process.env.REACT_APP_STRIPE_PK;
   return (
     <div>
-      <h1>{property.title}</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 24 }}>
+      <h1 className="page-title">{property.title}</h1>
+      <div className="grid-detail">
         <div>
           <Gallery photos={property.photos} />
           <Card style={{ padding: 16, marginTop: 12 }}>
-            <p style={{ opacity: .8 }}>{property.address}</p>
-            <div style={{ marginTop: 8, fontWeight: 700, fontSize: 20 }}>€{property.price}</div>
+            <p className="muted">{property.address}</p>
+            <div className="price" style={{ fontSize: 20 }}>€{property.price}</div>
             {property.description && <p style={{ marginTop: 8 }}>{property.description}</p>}
           </Card>
         </div>
