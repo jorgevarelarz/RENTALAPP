@@ -133,41 +133,20 @@ export const getContractHistory = async (req: Request, res: Response) => {
   }
 };
 
+import { createContractAction, signContractAction, initiatePaymentAction } from '../services/contract.actions';
+
+// ... (other imports)
+
 export const initiatePayment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { amount } = req.body;
-    const contract = await Contract.findById(id);
-    if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
     const user = (req as any).user;
-    if (user.role !== 'tenant' || String(contract.tenant) !== user.id) {
-      return res.status(403).json({ error: 'Solo el inquilino puede iniciar pagos' });
-    }
-    let customerId = contract.stripeCustomerId;
-    if (!customerId) {
-      if (!contract.ibanEncrypted) {
-        return res.status(400).json({ error: 'El contrato no tiene un IBAN asociado' });
-      }
-      let iban: string;
-      try {
-        iban = decryptIBAN(contract.ibanEncrypted);
-      } catch (decErr) {
-        const message = (decErr as any)?.message || String(decErr);
-        return res.status(400).json({ error: 'No se pudo descifrar el IBAN', details: message });
-      }
-      const tenant = await User.findById(contract.tenant);
-      if (!tenant) return res.status(404).json({ error: 'Inquilino no encontrado' });
-      customerId = await createCustomerAndMandate(tenant.name, tenant.email, iban);
-      contract.stripeCustomerId = customerId;
-      await contract.save();
-    }
-    const payAmount = typeof amount === 'number' && amount > 0 ? amount : contract.rent;
-    const paymentIntent = await createPaymentIntent(customerId, payAmount, 'eur');
-    await recordContractHistory(contract.id, 'paymentInitiated', `Pago iniciado por €${payAmount / 1}`);
-    res.json({ message: 'Pago iniciado', clientSecret: paymentIntent.client_secret });
+    const clientSecret = await initiatePaymentAction(id, amount, user);
+    res.json({ message: 'Pago iniciado', clientSecret });
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: 'Error iniciando el pago', details: error.message });
+    res.status(400).json({ error: error.message });
   }
 };
 

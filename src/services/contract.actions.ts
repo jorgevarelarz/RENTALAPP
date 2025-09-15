@@ -122,3 +122,41 @@ export const signContractAction = async (contractId: string, user: { id: string;
 
   return contract;
 };
+
+export const initiatePaymentAction = async (contractId: string, amount: number | undefined, user: { id: string; role: string }) => {
+  const contract = await Contract.findById(contractId);
+  if (!contract) {
+    throw new Error('Contrato no encontrado');
+  }
+
+  if (user.role !== 'tenant' || String(contract.tenant) !== user.id) {
+    throw new Error('Solo el inquilino puede iniciar pagos');
+  }
+
+  let customerId = contract.stripeCustomerId;
+  if (!customerId) {
+    if (!contract.ibanEncrypted) {
+      throw new Error('El contrato no tiene un IBAN asociado');
+    }
+    let iban: string;
+    try {
+      iban = decryptIBAN(contract.ibanEncrypted);
+    } catch (decErr) {
+      const message = (decErr as any)?.message || String(decErr);
+      throw new Error(`No se pudo descifrar el IBAN: ${message}`);
+    }
+    const tenant = await User.findById(contract.tenant);
+    if (!tenant) {
+      throw new Error('Inquilino no encontrado');
+    }
+    customerId = await createCustomerAndMandate(tenant.name, tenant.email, iban);
+    contract.stripeCustomerId = customerId;
+    await contract.save();
+  }
+
+  const payAmount = typeof amount === 'number' && amount > 0 ? amount : contract.rent;
+  const paymentIntent = await createPaymentIntent(customerId, payAmount, 'eur');
+  await recordContractHistory(contract.id, 'paymentInitiated', `Pago iniciado por €${payAmount / 1}`);
+
+  return paymentIntent.client_secret;
+};
