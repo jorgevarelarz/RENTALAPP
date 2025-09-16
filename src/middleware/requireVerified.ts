@@ -11,6 +11,13 @@ export const requireVerified = async (
   res: Response,
   next: NextFunction,
 ) => {
+  const user: any = (req as any).user;
+  if (user) {
+    if (user.role === 'admin') return next();
+    if (user.isVerified) return next();
+    return res.status(403).json({ error: 'owner_not_verified' });
+  }
+
   // Dev bypass: allow skipping verification when explicitly enabled and not in production
   if (process.env.ALLOW_UNVERIFIED === 'true' && process.env.NODE_ENV !== 'production') {
     return next();

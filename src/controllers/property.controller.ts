@@ -31,6 +31,13 @@ export async function publish(req: Request, res: Response) {
   const { id } = req.params;
   const p = await Property.findById(id);
   if (!p) return res.status(404).json({ error: 'not_found' });
+  const user: any = (req as any).user;
+  const userId = user?._id ?? user?.id;
+  const isOwner = userId ? String(userId) === String(p.owner) : false;
+  const isAdmin = user?.role === 'admin';
+  if (!isAdmin && (!isOwner || !user?.isVerified)) {
+    return res.status(403).json({ error: 'owner_not_verified' });
+  }
   if ((p.images?.length || 0) < 3) return res.status(400).json({ error: 'min_images_3' });
   p.status = 'active';
   await p.save();

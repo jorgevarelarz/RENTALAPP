@@ -5,6 +5,7 @@ import { validate } from '../middleware/validate';
 import * as ctrl from '../controllers/property.controller';
 import { propertyCreateSchema, propertyUpdateSchema } from '../validators/property.schema';
 import { asyncHandler } from '../utils/asyncHandler';
+import { requireVerified } from '../middleware/requireVerified';
 
 const r = Router();
 
@@ -22,7 +23,13 @@ r.put(
   validate(propertyUpdateSchema),
   asyncHandler(ctrl.update),
 );
-r.post('/properties/:id/publish', authenticate, authorizeRoles('landlord', 'admin'), asyncHandler(ctrl.publish));
+r.post(
+  '/properties/:id/publish',
+  authenticate,
+  authorizeRoles('landlord', 'admin'),
+  requireVerified,
+  asyncHandler(ctrl.publish),
+);
 r.post('/properties/:id/archive', authenticate, authorizeRoles('landlord', 'admin'), asyncHandler(ctrl.archive));
 
 r.get('/properties/:id', asyncHandler(ctrl.getById));
