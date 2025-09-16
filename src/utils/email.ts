@@ -1,32 +1,37 @@
-import nodemailer from 'nodemailer';
-
-// Configure the transport using environment variables. When deploying you
-// should set SMTP_HOST, SMTP_PORT, SMTP_USER and SMTP_PASS in your .env file.
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
-
 /**
- * Send an email notification when a new contract has been created. This is a
- * placeholder; in a production environment you would customise the
- * message and handle errors appropriately.
+ * Email utility functions used across the application. Right now this module
+ * exposes a very simple console-based mock that simulates email delivery. When
+ * a real provider (Sendgrid, SES, etc.) is integrated the implementation of
+ * sendEmail can be replaced while keeping the rest of the app untouched.
  */
-export const sendContractCreatedEmail = async (to: string, contractId: string) => {
-  const mailOptions = {
-    from: process.env.SMTP_FROM || 'noreply@rental-app.com',
+export async function sendEmail(userId: string, subject: string, body: string) {
+  console.log(`[EMAIL MOCK] To user=${userId} | ${subject}\n${body}`);
+}
+
+export async function sendPriceAlert(userId: string, property: any) {
+  return sendEmail(
+    userId,
+    'Aviso: cambio de precio en propiedad',
+    `La propiedad "${property.title}" ahora cuesta ${property.price} €`,
+  );
+}
+
+export async function sendAvailabilityAlert(userId: string, property: any) {
+  const range = property.availableTo
+    ? `${property.availableFrom} - ${property.availableTo}`
+    : property.availableFrom;
+
+  return sendEmail(
+    userId,
+    'Aviso: cambio de disponibilidad',
+    `La propiedad "${property.title}" tiene nueva fecha de disponibilidad: ${range}`,
+  );
+}
+
+export async function sendContractCreatedEmail(to: string, contractId: string) {
+  return sendEmail(
     to,
-    subject: 'Nuevo contrato creado',
-    text: `Se ha creado un nuevo contrato con ID ${contractId}.`,
-  };
-  try {
-    await transporter.sendMail(mailOptions);
-  } catch (error) {
-    console.error('Error enviando email de notificación:', error);
-  }
-};
+    'Nuevo contrato creado',
+    `Se ha creado un nuevo contrato con ID ${contractId}.`,
+  );
+}

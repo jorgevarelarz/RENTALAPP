@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Property } from '../models/property.model';
 import { UserFavorite } from '../models/userFavorite.model';
 import { AlertSubscription } from '../models/alertSubscription.model';
+import { sendAvailabilityAlert, sendPriceAlert } from '../utils/email';
 
 export async function create(req: Request, res: Response) {
   const b: any = req.body;
@@ -19,11 +20,31 @@ export async function update(req: Request, res: Response) {
   if (b.location) b.location = { type: 'Point', coordinates: [b.location.lng, b.location.lat] };
 
   const updated = await Property.findByIdAndUpdate(id, b, { new: true });
+  if (!updated) return res.status(404).json({ error: 'not_found' });
 
-  if (updated && (prev.price !== updated.price || String(prev.availableFrom) !== String(updated.availableFrom))) {
+  const priceChanged = prev.price !== updated.price;
+
+  const prevAvailableFrom = prev.availableFrom ? String(prev.availableFrom) : null;
+  const updatedAvailableFrom = updated.availableFrom ? String(updated.availableFrom) : null;
+  const prevAvailableTo = prev.availableTo ? String(prev.availableTo) : null;
+  const updatedAvailableTo = updated.availableTo ? String(updated.availableTo) : null;
+  const availabilityChanged =
+    prevAvailableFrom !== updatedAvailableFrom || prevAvailableTo !== updatedAvailableTo;
+
+  if (priceChanged) {
     const subs = await AlertSubscription.find({ propertyId: id, type: 'price' });
-    void subs;
+    for (const s of subs) {
+      await sendPriceAlert(String(s.userId), updated);
+    }
   }
+
+  if (availabilityChanged) {
+    const subs = await AlertSubscription.find({ propertyId: id, type: 'availability' });
+    for (const s of subs) {
+      await sendAvailabilityAlert(String(s.userId), updated);
+    }
+  }
+
   res.json(updated);
 }
 
