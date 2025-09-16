@@ -31,7 +31,7 @@ import demoContractRoutes from './routes/demoContract.routes';
 import { errorHandler } from './middleware/errorHandler';
 import appointmentsFlowRoutes from './routes/appointments.routes';
 import uploadRoutes from './routes/upload.routes';
-import clauseRoutes from './routes/clauses.routes';
+import clausesRoutes from './routes/clauses.routes';
 
 import helmet from 'helmet';
 
@@ -69,7 +69,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/kyc', identityRoutes);
 app.use('/api/properties', propertyRoutes);
-app.use('/api/clauses', clauseRoutes);
+app.use('/api', clausesRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api', demoContractRoutes);
 app.use('/api', requireVerified, appointmentsFlowRoutes);
