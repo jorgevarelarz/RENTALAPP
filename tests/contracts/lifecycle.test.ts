@@ -25,18 +25,27 @@ describe("Contract lifecycle", () => {
   });
 
   it("pasa a signed con el callback mock", async () => {
-    const res = await request(app).post(`/api/contracts/${id}/signature/callback`).send().expect(200);
+    const res = await request(app)
+      .post(`/api/contracts/${id}/signature/callback`)
+      .send({ eventId: `evt_${Date.now()}_signed`, provider: "mock", status: "signed" })
+      .expect(200);
     expect(res.body.status).toBe("signed");
   });
 
   it("activa si la fecha de inicio ya llegó", async () => {
-    await request(app).post(`/api/contracts/${id}/signature/callback`).send().expect(200);
+    await request(app)
+      .post(`/api/contracts/${id}/signature/callback`)
+      .send({ eventId: `evt_${Date.now()}_activate`, provider: "mock", status: "signed" })
+      .expect(200);
     const res = await request(app).post(`/api/contracts/${id}/activate`).send().expect(200);
     expect(res.body.status).toBe("active");
   });
 
   it("termina el contrato", async () => {
-    await request(app).post(`/api/contracts/${id}/signature/callback`).send().expect(200);
+    await request(app)
+      .post(`/api/contracts/${id}/signature/callback`)
+      .send({ eventId: `evt_${Date.now()}_terminate`, provider: "mock", status: "signed" })
+      .expect(200);
     await request(app).post(`/api/contracts/${id}/activate`).send().expect(200);
     const res = await request(app)
       .post(`/api/contracts/${id}/terminate`)

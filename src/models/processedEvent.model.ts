@@ -1,19 +1,27 @@
-import mongoose, { Schema, Document, Model } from 'mongoose';
+import { Schema, model, Model, Document, Types, models } from 'mongoose';
 
 export interface IProcessedEvent extends Document {
+  provider: string;
   eventId: string;
+  contractId: Types.ObjectId;
+  receivedAt: Date;
   createdAt: Date;
+  updatedAt: Date;
 }
 
-const ProcessedEventSchema = new Schema<IProcessedEvent>(
+const processedEventSchema = new Schema<IProcessedEvent>(
   {
-    eventId: { type: String, required: true, unique: true, index: true },
+    provider: { type: String, required: true },
+    eventId: { type: String, required: true },
+    contractId: { type: Schema.Types.ObjectId, ref: 'Contract', required: true },
+    receivedAt: { type: Date, default: Date.now },
   },
-  { timestamps: { createdAt: true, updatedAt: false } }
+  { timestamps: true },
 );
 
+processedEventSchema.index({ provider: 1, eventId: 1 }, { unique: true });
+
 export const ProcessedEvent: Model<IProcessedEvent> =
-  mongoose.models.ProcessedEvent || mongoose.model<IProcessedEvent>('ProcessedEvent', ProcessedEventSchema);
+  models.ProcessedEvent || model<IProcessedEvent>('ProcessedEvent', processedEventSchema);
 
 export default ProcessedEvent;
-

@@ -55,7 +55,7 @@ describe('Stripe webhook idempotency', () => {
       .send(rawBody);
     expect(r2.status).toBe(200);
 
-    const count = await ProcessedEvent.countDocuments({ eventId: 'evt_test_1' });
+    const count = await ProcessedEvent.countDocuments({ provider: 'stripe', eventId: 'evt_test_1' });
     expect(count).toBe(1);
   });
 });
