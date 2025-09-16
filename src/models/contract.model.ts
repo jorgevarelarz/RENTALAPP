@@ -13,6 +13,16 @@ export interface IContract extends Document {
   deposit: number;
   startDate: Date;
   endDate: Date;
+  region: string;
+  clauses: {
+    id: string;
+    label: string;
+    version: string;
+    params: Record<string, unknown>;
+    text: string;
+    scope: 'base' | 'regional';
+  }[];
+  pdfHash?: string;
   signedByTenant?: boolean;
   signedAt?: Date;
   signedByLandlord?: boolean;
@@ -55,6 +65,21 @@ const contractSchema = new Schema<IContract>(
     deposit: { type: Number, required: true },
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
+    region: { type: String, required: true, default: 'general' },
+    clauses: {
+      type: [
+        {
+          id: { type: String, required: true },
+          label: { type: String, required: true },
+          version: { type: String, required: true },
+          params: { type: Schema.Types.Mixed, default: {} },
+          text: { type: String, required: true },
+          scope: { type: String, enum: ['base', 'regional'], required: true },
+        },
+      ],
+      default: [],
+    },
+    pdfHash: { type: String },
     // Digital signature fields
     signedByTenant: { type: Boolean, default: false },
     signedByLandlord: { type: Boolean, default: false },

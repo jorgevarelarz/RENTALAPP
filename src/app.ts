@@ -31,6 +31,7 @@ import demoContractRoutes from './routes/demoContract.routes';
 import { errorHandler } from './middleware/errorHandler';
 import appointmentsFlowRoutes from './routes/appointments.routes';
 import uploadRoutes from './routes/upload.routes';
+import clauseRoutes from './routes/clauses.routes';
 
 import helmet from 'helmet';
 
@@ -68,6 +69,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/kyc', identityRoutes);
 app.use('/api/properties', propertyRoutes);
+app.use('/api/clauses', clauseRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api', demoContractRoutes);
 app.use('/api', requireVerified, appointmentsFlowRoutes);
@@ -97,14 +99,18 @@ const mongoUrl = process.env.MONGO_URL || process.env.MONGO_URI || '';
 
 let server: any;
 
-mongoose
-  .connect(mongoUrl)
-  .then(() => {
-    if (process.env.NODE_ENV !== 'test') {
-      server = app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`));
-    }
-  })
-  .catch(err => console.error('Error al conectar a MongoDB:', err));
+if (mongoUrl) {
+  mongoose
+    .connect(mongoUrl)
+    .then(() => {
+      if (process.env.NODE_ENV !== 'test') {
+        server = app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`));
+      }
+    })
+    .catch(err => console.error('Error al conectar a MongoDB:', err));
+} else if (process.env.NODE_ENV !== 'test') {
+  console.warn('Mongo URL no configurada; la conexión a la base de datos se omitirá');
+}
  
 
 export { app, server };
