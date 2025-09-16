@@ -41,7 +41,8 @@ export interface IContract extends Document {
    * upon creation. Once both parties have signed, the status transitions
    * to 'active'. When the rental period ends or the landlord marks it as
    * finished, the status should be set to 'completed'. In the event of
-   * early termination, the status can be set to 'cancelled'.
+   * early termination, the status can be set to 'terminated'. Legacy
+   * workflows may still use 'cancelled' for similar scenarios.
    */
   status:
     | 'draft'
@@ -51,7 +52,8 @@ export interface IContract extends Document {
     | 'active'
     | 'completed'
     | 'cancelled'
-    | 'pending_signature';
+    | 'pending_signature'
+    | 'terminated';
   /**
    * Indicates whether the deposit (fianza) has been paid. Deposits can be
    * transferred either to a platform escrow account or to a public authority
@@ -117,7 +119,17 @@ const contractSchema = new Schema<IContract>(
     // Current lifecycle status of the contract
     status: {
       type: String,
-      enum: ['draft', 'generated', 'signing', 'signed', 'active', 'completed', 'cancelled', 'pending_signature'],
+      enum: [
+        'draft',
+        'generated',
+        'signing',
+        'signed',
+        'active',
+        'completed',
+        'cancelled',
+        'pending_signature',
+        'terminated',
+      ],
       default: 'draft',
     },
     // Deposit paid flag and timestamp
