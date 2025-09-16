@@ -1,4 +1,5 @@
 import express, { Router } from 'express';
+import { Types } from 'mongoose';
 import { stripe } from '../utils/stripe';
 import { Contract } from '../models/contract.model';
 import Stripe from 'stripe';
@@ -37,9 +38,22 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
 
   // Idempotency: ensure each Stripe event is processed once (atomic upsert)
   try {
+    const metadata = (event.data.object as any)?.metadata || {};
+    const rawContractId = typeof metadata.contractId === 'string' ? metadata.contractId : undefined;
+    const contractIdForEvent =
+      rawContractId && Types.ObjectId.isValid(rawContractId)
+        ? new Types.ObjectId(rawContractId)
+        : new Types.ObjectId();
     const r = await ProcessedEvent.updateOne(
-      { eventId: event.id },
-      { $setOnInsert: { eventId: event.id } },
+      { provider: 'stripe', eventId: event.id },
+      {
+        $setOnInsert: {
+          provider: 'stripe',
+          eventId: event.id,
+          contractId: contractIdForEvent,
+          receivedAt: new Date(),
+        },
+      },
       { upsert: true },
     );
     // If the document already existed, treat as duplicate and ack
