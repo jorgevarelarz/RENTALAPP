@@ -1,8 +1,13 @@
 import { Request, Response } from 'express';
+import fs from 'fs/promises';
+import { z, ZodError } from 'zod';
 import { Contract } from '../models/contract.model';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { generateContractPDF } from '../utils/pdfGenerator';
+import { getCatalogByRegion } from '../policies/clauses';
+import { CLAUSE_POLICY_VERSION } from '../policies/clauses/catalog.v1';
+import { computePdfHash } from '../utils/pdfHash';
 import { sendContractCreatedEmail } from '../utils/email';
 import { encryptIBAN } from '../utils/payment';
 import { recordContractHistory } from '../utils/history';
@@ -15,10 +20,107 @@ import PDFDocument from 'pdfkit';
 import { createContractAction, signContractAction, initiatePaymentAction } from '../services/contract.actions';
 import type { ResolvedClause } from '../services/clauses.service';
 
+const objectId = z.string().regex(/^[a-f\d]{24}$/i);
+
+const createContractSchema = z.object({
+  landlord: objectId,
+  tenant: objectId,
+  property: objectId,
+  region: z.string().toLowerCase(),
+  rent: z.number().positive(),
+  deposit: z.number().min(0),
+  startDate: z.string().transform((s: string) => new Date(s)),
+  endDate: z.string().transform((s: string) => new Date(s)),
+  clauses: z.array(z.object({ id: z.string(), params: z.record(z.any()).default({}) })),
+});
+
 function parsePagination(query: any) {
   const page = Math.max(1, parseInt(query.page as string) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(query.limit as string) || 10));
   return { page, limit };
+}
+
+export async function create(req: Request, res: Response) {
+  let data: z.infer<typeof createContractSchema>;
+  try {
+    data = createContractSchema.parse(req.body);
+  } catch (error: unknown) {
+    if (error instanceof ZodError) {
+      return res.status(400).json({ error: 'invalid_payload', details: error.flatten() });
+    }
+    return res.status(400).json({ error: 'invalid_payload' });
+  }
+
+  const startTime = data.startDate.getTime();
+  const endTime = data.endDate.getTime();
+  if (Number.isNaN(startTime) || Number.isNaN(endTime) || endTime <= startTime) {
+    return res.status(400).json({ error: 'invalid_date_range' });
+  }
+
+  const catalog = getCatalogByRegion(data.region);
+  if (!catalog || Object.keys(catalog).length === 0) {
+    return res.status(400).json({ error: 'region_not_supported' });
+  }
+
+  let normalized: { id: string; version: string; params: Record<string, unknown> }[];
+  try {
+    normalized = data.clauses.map(clause => {
+      const def = catalog[clause.id];
+      if (!def) {
+        throw Object.assign(new Error('clause_unknown'), { status: 400, id: clause.id });
+      }
+      const parsed = def.paramsSchema.parse(clause.params || {});
+      return { id: def.id, version: def.version, params: parsed as Record<string, unknown> };
+    });
+  } catch (error: unknown) {
+    if ((error as any)?.status) {
+      return res.status((error as any).status).json({ error: (error as any).message, clauseId: (error as any).id });
+    }
+    if (error instanceof ZodError) {
+      return res.status(400).json({ error: 'invalid_clause_params', details: error.flatten() });
+    }
+    console.error('Error validando cláusulas:', error);
+    return res.status(400).json({ error: 'clause_validation_failed' });
+  }
+
+  try {
+    const contract = await Contract.create({
+      landlord: data.landlord,
+      tenant: data.tenant,
+      property: data.property,
+      region: data.region,
+      rent: data.rent,
+      deposit: data.deposit,
+      startDate: data.startDate,
+      endDate: data.endDate,
+      clauses: normalized,
+      clausePolicyVersion: CLAUSE_POLICY_VERSION,
+      status: 'pending_signature',
+    });
+
+    const clausesText = normalized.map(clause => {
+      const def = catalog[clause.id];
+      return `• ${def.label}
+${def.render(clause.params)}`;
+    });
+
+    const { absolutePath, publicPath } = await generateContractPDF({ contract, clausesText });
+    const pdfHash = computePdfHash(absolutePath);
+
+    await Contract.findByIdAndUpdate(contract._id, { pdfPath: publicPath, pdfHash });
+
+    const actorId = (req as any).user?.id;
+    await recordContractHistory(contract._id, 'CREATED', actorId, {
+      region: data.region,
+      clausePolicyVersion: CLAUSE_POLICY_VERSION,
+    });
+    await recordContractHistory(contract._id, 'PDF_GENERATED', actorId, { pdfPath: publicPath, pdfHash });
+
+    return res.status(201).json({ contract: { ...contract.toObject(), pdfPath: publicPath, pdfHash } });
+  } catch (error) {
+    console.error('Error al crear el contrato:', error);
+    return res.status(500).json({ error: 'contract_creation_failed' });
+  }
 }
 
 export const createContract = async (req: Request, res: Response) => {
@@ -208,29 +310,24 @@ export const requestSignature = async (req: Request, res: Response) => {
     if (!landlord || !tenant || !property) {
       return res.status(404).json({ error: 'Datos incompletos para el contrato' });
     }
-    const data = {
-      landlordName: landlord.name,
-      landlordDNI: (landlord as any).dni || '',
-      landlordAddress: (landlord as any).address || '',
-      tenantName: tenant.name,
-      tenantDNI: (tenant as any).dni || '',
-      tenantAddress: (tenant as any).address || '',
-      propertyAddress: property.address || '',
-      cadastralRef: (property as any).cadastralReference || '',
-      durationMonths: Math.ceil(
-        (new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) /
-          (1000 * 60 * 60 * 24 * 30),
-      ),
-      startDate: contract.startDate.toISOString().split('T')[0],
-      endDate: contract.endDate.toISOString().split('T')[0],
-      monthlyRent: contract.rent,
-      deposit: contract.deposit,
-      paymentDay: 5,
-      bankAccount: process.env.BANK_ACCOUNT || '',
-      city: (property as any).city || '',
-      dateSigned: new Date().toISOString().split('T')[0],
-    };
-    const pdfBuffer = await generateContractPDF(data);
+    const catalogForSignature = contract.region ? getCatalogByRegion(contract.region) : null;
+    const clausesText = Array.isArray(contract.clauses)
+      ? contract.clauses.map(clause => {
+          const current = clause as any;
+          const definition = catalogForSignature?.[current.id];
+          if (definition) {
+            try {
+              return `• ${definition.label}\n${definition.render(current.params ?? {})}`;
+            } catch (err) {
+              console.error('Error renderizando cláusula para firma:', err);
+            }
+          }
+          const paramsText = current?.params ? JSON.stringify(current.params) : '';
+          return paramsText ? `• ${current.id}\n${paramsText}` : `• ${current.id}`;
+        })
+      : [];
+    const { absolutePath: signaturePdfPath } = await generateContractPDF({ contract, clausesText });
+    const pdfBuffer = await fs.readFile(signaturePdfPath);
     const user = (req as any).user;
     const signerEmail = user.role === 'landlord' ? landlord.email : tenant.email;
     const signerName = user.role === 'landlord' ? landlord.name : tenant.name;
