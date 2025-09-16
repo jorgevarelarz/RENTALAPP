@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import * as contractController from '../controllers/contract.controller';
 import { authenticate } from '../middleware/auth.middleware';
-import { validateContract } from '../middleware/validation.middleware';
 
 const router = Router();
 
@@ -9,7 +8,7 @@ const router = Router();
 router.get('/', authenticate, contractController.listContracts);
 
 // Crear contrato
-router.post('/', authenticate, validateContract, contractController.createContract);
+router.post('/', authenticate, contractController.create);
 
 // Descargar contrato en PDF
 router.get('/:id/pdf', authenticate, contractController.getContractPDF);

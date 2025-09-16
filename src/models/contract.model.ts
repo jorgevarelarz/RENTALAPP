@@ -14,14 +14,16 @@ export interface IContract extends Document {
   startDate: Date;
   endDate: Date;
   region: string;
+  clausePolicyVersion?: string;
   clauses: {
     id: string;
-    label: string;
+    label?: string;
     version: string;
     params: Record<string, unknown>;
-    text: string;
-    scope: 'base' | 'regional';
+    text?: string;
+    scope?: 'base' | 'regional';
   }[];
+  pdfPath?: string;
   pdfHash?: string;
   signedByTenant?: boolean;
   signedAt?: Date;
@@ -41,7 +43,15 @@ export interface IContract extends Document {
    * finished, the status should be set to 'completed'. In the event of
    * early termination, the status can be set to 'cancelled'.
    */
-  status: 'draft' | 'generated' | 'signing' | 'signed' | 'active' | 'completed' | 'cancelled';
+  status:
+    | 'draft'
+    | 'generated'
+    | 'signing'
+    | 'signed'
+    | 'active'
+    | 'completed'
+    | 'cancelled'
+    | 'pending_signature';
   /**
    * Indicates whether the deposit (fianza) has been paid. Deposits can be
    * transferred either to a platform escrow account or to a public authority
@@ -50,6 +60,12 @@ export interface IContract extends Document {
    */
   depositPaid?: boolean;
   depositPaidAt?: Date;
+  history?: {
+    ts: Date;
+    actorId?: string;
+    action: string;
+    payload: Record<string, unknown>;
+  }[];
   createdAt: Date;
   updatedAt: Date;
 }
@@ -66,19 +82,21 @@ const contractSchema = new Schema<IContract>(
     startDate: { type: Date, required: true },
     endDate: { type: Date, required: true },
     region: { type: String, required: true, default: 'general' },
+    clausePolicyVersion: { type: String },
     clauses: {
       type: [
         {
           id: { type: String, required: true },
-          label: { type: String, required: true },
+          label: { type: String },
           version: { type: String, required: true },
           params: { type: Schema.Types.Mixed, default: {} },
-          text: { type: String, required: true },
-          scope: { type: String, enum: ['base', 'regional'], required: true },
+          text: { type: String },
+          scope: { type: String, enum: ['base', 'regional'] },
         },
       ],
       default: [],
     },
+    pdfPath: { type: String },
     pdfHash: { type: String },
     // Digital signature fields
     signedByTenant: { type: Boolean, default: false },
@@ -99,7 +117,7 @@ const contractSchema = new Schema<IContract>(
     // Current lifecycle status of the contract
     status: {
       type: String,
-      enum: ['draft', 'generated', 'signing', 'signed', 'active', 'completed', 'cancelled'],
+      enum: ['draft', 'generated', 'signing', 'signed', 'active', 'completed', 'cancelled', 'pending_signature'],
       default: 'draft',
     },
     // Deposit paid flag and timestamp
@@ -107,6 +125,17 @@ const contractSchema = new Schema<IContract>(
     depositPaidAt: { type: Date },
     signFeeCollected: { type: Boolean, default: false },
     signFeeCollectedAt: { type: Date },
+    history: {
+      type: [
+        {
+          ts: { type: Date, default: Date.now },
+          actorId: { type: String },
+          action: { type: String, required: true },
+          payload: { type: Schema.Types.Mixed, default: {} },
+        },
+      ],
+      default: [],
+    },
   },
   { timestamps: true },
 );
