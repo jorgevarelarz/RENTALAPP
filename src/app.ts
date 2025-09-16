@@ -68,7 +68,7 @@ app.get('/health', (_req, res) => res.json({ ok: true }));
 app.use('/api/auth', authRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/kyc', identityRoutes);
-app.use('/api/properties', propertyRoutes);
+app.use('/api', propertyRoutes);
 app.use('/api', clausesRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api', demoContractRoutes);

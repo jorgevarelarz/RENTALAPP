@@ -1,77 +1,150 @@
 import { Request, Response } from 'express';
 import { Property } from '../models/property.model';
+import { UserFavorite } from '../models/userFavorite.model';
+import { AlertSubscription } from '../models/alertSubscription.model';
 
-/**
- * Create a new property listing.
- * Requires authentication – the user ID is taken from the request.user object.
- */
-export const createProperty = async (req: Request, res: Response) => {
-  const { title, description, price, address, photos } = req.body;
-  const ownerId = (req as any).user.id;
-  try {
-    const property = new Property({ title, description, price, address, photos, ownerId, status: 'published' });
-    await property.save();
-    res.status(201).json(property);
-  } catch {
-    res.status(400).json({ error: 'Error al crear propiedad' });
+export async function create(req: Request, res: Response) {
+  const b: any = req.body;
+  const coords: [number, number] = [b.location.lng, b.location.lat];
+  const doc = await Property.create({ ...b, location: { type: 'Point', coordinates: coords }, status: 'draft' });
+  res.status(201).json(doc);
+}
+
+export async function update(req: Request, res: Response) {
+  const { id } = req.params;
+  const prev = await Property.findById(id);
+  if (!prev) return res.status(404).json({ error: 'not_found' });
+
+  const b: any = req.body;
+  if (b.location) b.location = { type: 'Point', coordinates: [b.location.lng, b.location.lat] };
+
+  const updated = await Property.findByIdAndUpdate(id, b, { new: true });
+
+  if (updated && (prev.price !== updated.price || String(prev.availableFrom) !== String(updated.availableFrom))) {
+    const subs = await AlertSubscription.find({ propertyId: id, type: 'price' });
+    void subs;
   }
-};
+  res.json(updated);
+}
 
-/**
- * Retrieve all properties, populating the owner name and email.
- */
-export const getAllProperties = async (_req: Request, res: Response) => {
-  const properties = await Property.find({ status: 'published' }).lean();
-  res.json(properties);
-};
+export async function publish(req: Request, res: Response) {
+  const { id } = req.params;
+  const p = await Property.findById(id);
+  if (!p) return res.status(404).json({ error: 'not_found' });
+  if ((p.images?.length || 0) < 3) return res.status(400).json({ error: 'min_images_3' });
+  p.status = 'active';
+  await p.save();
+  res.json({ _id: p._id, status: p.status });
+}
 
-export const getPropertyById = async (req: Request, res: Response) => {
-  const property = await Property.findOne({ _id: req.params.id, status: 'published' }).lean();
-  if (!property) return res.status(404).json({ error: 'Propiedad no encontrada' });
-  res.json(property);
-};
+export async function archive(req: Request, res: Response) {
+  const p = await Property.findByIdAndUpdate(req.params.id, { status: 'archived' }, { new: true });
+  if (!p) return res.status(404).json({ error: 'not_found' });
+  res.json({ _id: p._id, status: p.status });
+}
 
-/**
- * Update a property (owner only). Allows updating title, description, price, address, photos.
- */
-export const updateProperty = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params as any;
-    const user = (req as any).user;
-    const prop: any = await Property.findById(id);
-    if (!prop) return res.status(404).json({ error: 'Propiedad no encontrada' });
-    if (String(prop.ownerId) !== String(user.id)) {
-      return res.status(403).json({ error: 'No autorizado' });
-    }
-    const { title, description, price, address, photos, status } = req.body || {};
-    if (title !== undefined) prop.title = title;
-    if (description !== undefined) prop.description = description;
-    if (price !== undefined) prop.price = price;
-    if (address !== undefined) prop.address = address;
-    if (photos !== undefined) prop.photos = photos;
-    if (status !== undefined) prop.status = status;
-    await prop.save();
-    res.json(prop);
-  } catch (e: any) {
-    res.status(400).json({ error: 'Error al actualizar propiedad', details: e.message });
+export async function getById(req: Request, res: Response) {
+  const p = await Property.findById(req.params.id);
+  if (!p) return res.status(404).json({ error: 'not_found' });
+  res.json(p);
+}
+
+export async function search(req: Request, res: Response) {
+  const q: any = {};
+  const {
+    region,
+    city,
+    priceMin,
+    priceMax,
+    roomsMin,
+    roomsMax,
+    bathMin,
+    furnished,
+    petsAllowed,
+    availableDate,
+    nearLng,
+    nearLat,
+    maxKm,
+    sort = 'createdAt',
+    dir = 'desc',
+    page = '1',
+    limit = '20',
+  } = req.query as any;
+
+  if (region) q.region = String(region).toLowerCase();
+  if (city) q.city = city;
+  if (priceMin || priceMax) q.price = { ...(priceMin ? { $gte: +priceMin } : {}), ...(priceMax ? { $lte: +priceMax } : {}) };
+  if (roomsMin || roomsMax) q.rooms = { ...(roomsMin ? { $gte: +roomsMin } : {}), ...(roomsMax ? { $lte: +roomsMax } : {}) };
+  if (bathMin) q.bathrooms = { $gte: +bathMin };
+  if (furnished !== undefined) q.furnished = furnished === 'true';
+  if (petsAllowed !== undefined) q.petsAllowed = petsAllowed === 'true';
+  if (availableDate) q.availableFrom = { $lte: new Date(String(availableDate)) };
+
+  let geo: any = {};
+  if (nearLng && nearLat && maxKm) {
+    geo = {
+      location: {
+        $near: {
+          $geometry: { type: 'Point', coordinates: [Number(nearLng), Number(nearLat)] },
+          $maxDistance: Number(maxKm) * 1000,
+        },
+      },
+    };
   }
-};
 
-/**
- * Delete a property (owner only).
- */
-export const deleteProperty = async (req: Request, res: Response) => {
-  try {
-    const { id } = req.params as any;
-    const user = (req as any).user;
-    const prop: any = await Property.findById(id);
-    if (!prop) return res.status(404).json({ error: 'Propiedad no encontrada' });
-    if (String(prop.ownerId) !== String(user.id)) {
-      return res.status(403).json({ error: 'No autorizado' });
-    }
-    await Property.deleteOne({ _id: id });
-    res.json({ ok: true });
-  } catch (e: any) {
-    res.status(400).json({ error: 'Error al eliminar propiedad', details: e.message });
+  const sortSpec: [string, 1 | -1][] = [[String(sort), String(dir).toLowerCase() === 'asc' ? 1 : -1]];
+  const pg = Math.max(1, parseInt(String(page)));
+  const lim = Math.min(50, Math.max(1, parseInt(String(limit))));
+
+  const hasGeo = Boolean((geo as any).location);
+  if (hasGeo) {
+    await Property.init();
   }
-};
+
+  const finder = Property.find({ ...q, ...geo });
+  if (!hasGeo) {
+    finder.sort(sortSpec);
+  }
+
+  const items = await finder.skip((pg - 1) * lim).limit(lim);
+  const total = hasGeo ? items.length : await Property.countDocuments({ ...q, ...geo });
+
+  res.json({ items, page: pg, limit: lim, total });
+}
+
+export async function favorite(req: Request, res: Response) {
+  const userId = (req as any).user.id;
+  const { id: propertyId } = req.params;
+  const result = await UserFavorite.updateOne({ userId, propertyId }, {}, { upsert: true });
+  if (result.upsertedCount) {
+    await Property.findByIdAndUpdate(propertyId, { $inc: { favoritesCount: 1 } });
+  }
+  res.json({ ok: true });
+}
+
+export async function unfavorite(req: Request, res: Response) {
+  const userId = (req as any).user.id;
+  const { id: propertyId } = req.params;
+  const del = await UserFavorite.deleteOne({ userId, propertyId });
+  if (del.deletedCount) await Property.findByIdAndUpdate(propertyId, { $inc: { favoritesCount: -1 } });
+  res.json({ ok: true });
+}
+
+export async function subscribePriceAlert(req: Request, res: Response) {
+  const userId = (req as any).user.id;
+  const { id: propertyId } = req.params;
+  await AlertSubscription.updateOne({ userId, propertyId, type: 'price' }, {}, { upsert: true });
+  res.json({ ok: true });
+}
+
+export async function unsubscribePriceAlert(req: Request, res: Response) {
+  const userId = (req as any).user.id;
+  const { id: propertyId } = req.params;
+  await AlertSubscription.deleteOne({ userId, propertyId, type: 'price' });
+  res.json({ ok: true });
+}
+
+export async function countView(req: Request, res: Response) {
+  await Property.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
+  res.json({ ok: true });
+}

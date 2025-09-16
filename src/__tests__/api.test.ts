@@ -2,6 +2,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import type { MongoMemoryServer } from 'mongodb-memory-server';
 import { startMongoMemoryServer } from './utils/mongoMemoryServer';
+import { User } from '../models/user.model';
 
 let app: any;
 let mongo: MongoMemoryServer | undefined;
@@ -41,12 +42,32 @@ describe('API basic flow', () => {
   });
 
   it('creates a property', async () => {
+    const owner = await User.findOne({ email: 'test@example.com' });
+    expect(owner).toBeTruthy();
+    const payload = {
+      owner: String(owner!._id),
+      title: 'Propiedad Centro',
+      description: 'Desc',
+      address: 'Calle Mayor 1',
+      region: 'madrid',
+      city: 'Madrid',
+      location: { lng: -3.70379, lat: 40.41678 },
+      price: 1000,
+      deposit: 1000,
+      sizeM2: 80,
+      rooms: 2,
+      bathrooms: 1,
+      furnished: false,
+      petsAllowed: false,
+      availableFrom: new Date().toISOString(),
+      images: ['https://cdn/img1.jpg', 'https://cdn/img2.jpg', 'https://cdn/img3.jpg'],
+    };
     const res = await request(app)
       .post('/api/properties')
       .set('Authorization', `Bearer ${token}`)
-      .send({ title: 'Prop', description: 'Desc', price: 1000, address: 'Addr 1' });
+      .send(payload);
     expect(res.status).toBe(201);
-    expect(res.body.status).toBe('published');
+    expect(res.body.status).toBe('draft');
   });
 
   it('creates payment intent (feature branch tolerant)', async () => {
