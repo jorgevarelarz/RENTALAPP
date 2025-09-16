@@ -13,6 +13,7 @@ import { sendForSignature, checkSignatureStatus } from '../utils/signature';
 import { sendRentReminderEmail, sendContractRenewalNotification } from '../utils/notification';
 import PDFDocument from 'pdfkit';
 import { createContractAction, signContractAction, initiatePaymentAction } from '../services/contract.actions';
+import type { ResolvedClause } from '../services/clauses.service';
 
 function parsePagination(query: any) {
   const page = Math.max(1, parseInt(query.page as string) || 1);
@@ -21,11 +22,30 @@ function parsePagination(query: any) {
 }
 
 export const createContract = async (req: Request, res: Response) => {
-  const { tenantId, propertyId, rent, deposit, startDate, endDate, iban } = req.body;
+  const {
+    landlord,
+    landlordId,
+    tenant,
+    tenantId,
+    property,
+    propertyId,
+    region,
+    clauses,
+    rent,
+    deposit,
+    startDate,
+    endDate,
+    iban,
+  } = req.body;
+  const resolvedClauses = (req as any).resolvedClauses as ResolvedClause[] | undefined;
   try {
     const contract = await createContractAction({
-      tenantId,
-      propertyId,
+      landlordId: landlord ?? landlordId,
+      tenantId: tenant ?? tenantId,
+      propertyId: property ?? propertyId,
+      region,
+      clauses,
+      resolvedClauses,
       rent,
       deposit,
       startDate,

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import crypto from 'crypto';
 import { Contract } from '../models/contract.model';
 import { Property } from '../models/property.model';
 import { User } from '../models/user.model';
@@ -10,35 +11,93 @@ import {
 } from '../utils/payment';
 import { recordContractHistory } from '../utils/history';
 import { sendContractCreatedEmail } from '../utils/email';
+import { normalizeRegion, resolveClauses, type ClauseInput, type ResolvedClause } from './clauses.service';
 
 interface CreateContractParams {
-  tenantId: mongoose.Types.ObjectId;
-  propertyId: mongoose.Types.ObjectId;
+  tenantId: mongoose.Types.ObjectId | string;
+  landlordId?: mongoose.Types.ObjectId | string;
+  propertyId: mongoose.Types.ObjectId | string;
   rent: number;
   deposit: number;
   startDate: Date;
   endDate: Date;
   iban?: string;
+  region?: string;
+  clauses?: ClauseInput[];
+  resolvedClauses?: ResolvedClause[];
 }
 
 export const createContractAction = async (params: CreateContractParams) => {
-  const { tenantId, propertyId, rent, deposit, startDate, endDate, iban } = params;
-
-  // Ensure the property exists
-  const property = await Property.findById(propertyId);
-  if (!property) {
-    throw new Error('Propiedad no encontrada');
-  }
-
-  // Compose a new contract document. Optionally encrypt and store the IBAN
-  const newContractData: any = {
-    landlord: property.ownerId,
-    tenant: tenantId,
-    property: propertyId,
+  const {
+    tenantId,
+    landlordId,
+    propertyId,
     rent,
     deposit,
     startDate,
     endDate,
+    iban,
+    region,
+    clauses,
+    resolvedClauses,
+  } = params;
+
+  const toObjectId = (value: mongoose.Types.ObjectId | string, field: string) => {
+    if (value instanceof mongoose.Types.ObjectId) {
+      return value;
+    }
+    if (typeof value === 'string' && mongoose.Types.ObjectId.isValid(value)) {
+      return new mongoose.Types.ObjectId(value);
+    }
+    throw new Error(`${field} debe ser un ObjectId válido`);
+  };
+
+  const tenantObjectId = toObjectId(tenantId, 'tenant');
+  const propertyObjectId = toObjectId(propertyId, 'property');
+
+  const property = await Property.findById(propertyObjectId).catch(() => null);
+
+  let landlordObjectId: mongoose.Types.ObjectId | undefined;
+  if (landlordId) {
+    landlordObjectId = toObjectId(landlordId, 'landlord');
+  } else if (property?.ownerId) {
+    landlordObjectId = property.ownerId as mongoose.Types.ObjectId;
+  }
+
+  if (!landlordObjectId) {
+    throw new Error('No se pudo determinar el arrendador del contrato');
+  }
+
+  const normalizedRegion = normalizeRegion(region ?? undefined) ?? 'general';
+
+  let parsedClauses: ResolvedClause[] = [];
+  if (Array.isArray(resolvedClauses) && resolvedClauses.length > 0) {
+    parsedClauses = resolvedClauses;
+  } else if (normalizedRegion !== 'general' && Array.isArray(clauses)) {
+    parsedClauses = resolveClauses(normalizedRegion, clauses);
+  }
+
+  const startAt = startDate instanceof Date ? startDate : new Date(startDate);
+  const endAt = endDate instanceof Date ? endDate : new Date(endDate);
+
+  // Compose a new contract document. Optionally encrypt and store the IBAN
+  const newContractData: any = {
+    landlord: landlordObjectId,
+    tenant: tenantObjectId,
+    property: propertyObjectId,
+    rent,
+    deposit,
+    startDate: startAt,
+    endDate: endAt,
+    region: normalizedRegion,
+    clauses: parsedClauses.map(clause => ({
+      id: clause.id,
+      label: clause.label,
+      version: clause.version,
+      params: clause.params,
+      text: clause.text,
+      scope: clause.scope,
+    })),
   };
   if (iban) {
     try {
@@ -49,6 +108,24 @@ export const createContractAction = async (params: CreateContractParams) => {
     }
   }
   const contract = new Contract(newContractData);
+  const pdfPayload = {
+    landlord: String(contract.landlord),
+    tenant: String(contract.tenant),
+    property: String(contract.property),
+    region: contract.region,
+    rent: contract.rent,
+    deposit: contract.deposit,
+    startDate: contract.startDate.toISOString(),
+    endDate: contract.endDate.toISOString(),
+    clauses: contract.clauses.map(c => ({ id: c.id, text: c.text, params: c.params })),
+  };
+  const pdfHash = crypto.createHash('sha256').update(JSON.stringify(pdfPayload)).digest('hex');
+  contract.pdfHash = pdfHash;
+  contract.pdf = {
+    ...(contract.pdf ?? {}),
+    sha256: pdfHash,
+    generatedAt: new Date(),
+  };
   await contract.save();
 
   // Record history entry for creation
@@ -56,8 +133,8 @@ export const createContractAction = async (params: CreateContractParams) => {
 
   // After saving the contract we can send notification emails to landlord and tenant.
   try {
-    const landlord = await User.findById(property.ownerId);
-    const tenant = await User.findById(tenantId);
+    const landlord = await User.findById(contract.landlord);
+    const tenant = await User.findById(contract.tenant);
     if (landlord?.email) {
       await sendContractCreatedEmail(landlord.email, contract.id);
     }
