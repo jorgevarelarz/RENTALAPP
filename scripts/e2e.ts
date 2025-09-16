@@ -83,7 +83,24 @@ async function main() {
   r = await req('/api/properties', {
     method: 'POST',
     headers: { Authorization: `Bearer ${ownerToken}` },
-    body: JSON.stringify({ title: 'Nice flat', description: '2 rooms', price: 1000, address: 'Main St 1' }),
+    body: JSON.stringify({
+      owner: ownerId,
+      title: 'Nice flat',
+      description: '2 rooms',
+      address: 'Main St 1',
+      region: 'madrid',
+      city: 'Madrid',
+      location: { lng: -3.70379, lat: 40.41678 },
+      price: 1000,
+      deposit: 1000,
+      sizeM2: 70,
+      rooms: 2,
+      bathrooms: 1,
+      furnished: false,
+      petsAllowed: false,
+      availableFrom: new Date().toISOString(),
+      images: ['https://cdn/x1.jpg', 'https://cdn/x2.jpg', 'https://cdn/x3.jpg'],
+    }),
   });
   if (r.status !== 201) throw new Error('create property failed ' + JSON.stringify(r.body));
   const propertyId = r.body._id as string;

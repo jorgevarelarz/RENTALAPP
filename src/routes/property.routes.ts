@@ -1,33 +1,49 @@
 import { Router } from 'express';
-import { body } from 'express-validator';
-import { createProperty, getAllProperties, getPropertyById, updateProperty, deleteProperty } from '../controllers/property.controller';
 import { authenticate } from '../middleware/auth.middleware';
+import { authorizeRoles } from '../middleware/role.middleware';
 import { validate } from '../middleware/validate';
+import * as ctrl from '../controllers/property.controller';
+import { propertyCreateSchema, propertyUpdateSchema } from '../validators/property.schema';
 import { asyncHandler } from '../utils/asyncHandler';
 
-const router = Router();
+const r = Router();
 
-// Create property (published by default)
-router.post(
-  '/',
+r.post(
+  '/properties',
   authenticate,
-  [
-    body('title').isString().notEmpty(),
-    body('price').isNumeric().custom((v) => v > 0),
-    body('address').isString().notEmpty(),
-    body('description').optional().isString(),
-    body('photos').optional().isArray(),
-  ],
-  validate,
-  asyncHandler(createProperty)
+  authorizeRoles('landlord', 'admin'),
+  validate(propertyCreateSchema),
+  asyncHandler(ctrl.create),
+);
+r.put(
+  '/properties/:id',
+  authenticate,
+  authorizeRoles('landlord', 'admin'),
+  validate(propertyUpdateSchema),
+  asyncHandler(ctrl.update),
+);
+r.post('/properties/:id/publish', authenticate, authorizeRoles('landlord', 'admin'), asyncHandler(ctrl.publish));
+r.post('/properties/:id/archive', authenticate, authorizeRoles('landlord', 'admin'), asyncHandler(ctrl.archive));
+
+r.get('/properties/:id', asyncHandler(ctrl.getById));
+r.get('/properties', asyncHandler(ctrl.search));
+
+r.post(
+  '/properties/:id/favorite',
+  authenticate,
+  authorizeRoles('tenant', 'landlord', 'admin'),
+  asyncHandler(ctrl.favorite),
+);
+r.delete(
+  '/properties/:id/favorite',
+  authenticate,
+  authorizeRoles('tenant', 'landlord', 'admin'),
+  asyncHandler(ctrl.unfavorite),
 );
 
-// Public listings
-router.get('/', asyncHandler(getAllProperties));
-router.get('/:id', asyncHandler(getPropertyById));
+r.post('/properties/:id/subscribe-price', authenticate, asyncHandler(ctrl.subscribePriceAlert));
+r.delete('/properties/:id/subscribe-price', authenticate, asyncHandler(ctrl.unsubscribePriceAlert));
 
-// Owner management
-router.patch('/:id', authenticate, asyncHandler(updateProperty));
-router.delete('/:id', authenticate, asyncHandler(deleteProperty));
+r.post('/properties/:id/view', asyncHandler(ctrl.countView));
 
-export default router;
+export default r;

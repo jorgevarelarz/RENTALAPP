@@ -60,8 +60,8 @@ export const createContractAction = async (params: CreateContractParams) => {
   let landlordObjectId: mongoose.Types.ObjectId | undefined;
   if (landlordId) {
     landlordObjectId = toObjectId(landlordId, 'landlord');
-  } else if (property?.ownerId) {
-    landlordObjectId = property.ownerId as mongoose.Types.ObjectId;
+  } else if (property?.owner) {
+    landlordObjectId = property.owner as mongoose.Types.ObjectId;
   }
 
   if (!landlordObjectId) {

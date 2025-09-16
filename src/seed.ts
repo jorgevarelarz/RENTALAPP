@@ -15,23 +15,33 @@ async function main() {
     landlord = await User.create({ name: 'Demo Landlord', email, passwordHash, role: 'landlord' });
   }
 
-  const p1 = await Property.create({
-    title: 'Demo Apartment',
+  const baseProperty = {
+    owner: landlord.id,
     description: 'Nice flat',
-    price: 500,
     address: 'Demo street 1',
-    photos: [],
-    ownerId: landlord.id,
-    status: 'published',
-  });
+    region: 'madrid',
+    city: 'Madrid',
+    location: { type: 'Point', coordinates: [-3.70379, 40.41678] },
+    price: 500,
+    deposit: 500,
+    sizeM2: 70,
+    rooms: 2,
+    bathrooms: 1,
+    furnished: false,
+    petsAllowed: false,
+    availableFrom: new Date(),
+    images: ['https://example.com/p1.jpg', 'https://example.com/p2.jpg', 'https://example.com/p3.jpg'],
+    status: 'active',
+  };
+
+  const p1 = await Property.create({ ...baseProperty, title: 'Demo Apartment' });
   const p2 = await Property.create({
+    ...baseProperty,
     title: 'Second Property',
-    description: 'Great house',
-    price: 800,
     address: 'Sample avenue 2',
-    photos: [],
-    ownerId: landlord.id,
-    status: 'published',
+    price: 800,
+    deposit: 800,
+    location: { type: 'Point', coordinates: [-3.69, 40.41] },
   });
 
   console.log('Seed completed');

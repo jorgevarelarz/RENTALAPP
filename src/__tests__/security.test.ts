@@ -46,7 +46,24 @@ describe('Security: Contract Access (IDOR)', () => {
     const propRes = await request(app)
       .post('/api/properties')
       .set('Authorization', `Bearer ${tokenUserA}`)
-      .send({ title: 'Prop A', price: 100, address: 'Addr A' });
+      .send({
+        owner: String(userA?._id),
+        title: 'Prop A',
+        description: 'Nice flat',
+        address: 'Addr A',
+        region: 'madrid',
+        city: 'Madrid',
+        location: { lng: -3.70379, lat: 40.41678 },
+        price: 100,
+        deposit: 100,
+        sizeM2: 60,
+        rooms: 2,
+        bathrooms: 1,
+        furnished: false,
+        petsAllowed: false,
+        availableFrom: new Date().toISOString(),
+        images: ['https://cdn/a1.jpg', 'https://cdn/a2.jpg', 'https://cdn/a3.jpg'],
+      });
     const propertyId = propRes.body._id;
 
     // Create a contract for User A's property (with a dummy tenant for now)
