@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { body } from 'express-validator';
-import { register, login } from '../controllers/auth.controller';
+import { register, login, requestPasswordReset, resetPassword } from '../controllers/auth.controller';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 
@@ -21,5 +21,17 @@ router.post(
   [body('email').isEmail(), body('password').isString().notEmpty()],
   validate,
   asyncHandler(login),
+);
+router.post(
+  '/request-reset',
+  [body('email').isEmail()],
+  validate,
+  asyncHandler(requestPasswordReset),
+);
+router.post(
+  '/reset',
+  [body('token').isString().notEmpty(), body('password').isLength({ min: 6 })],
+  validate,
+  asyncHandler(resetPassword),
 );
 export default router;
