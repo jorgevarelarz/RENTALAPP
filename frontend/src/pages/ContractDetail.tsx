@@ -36,8 +36,8 @@ const ContractDetail: React.FC = () => {
   if (error) return <div style={{ color: 'red' }}>{error}</div>;
   if (!c) return <div>Contrato no encontrado.</div>;
 
-  const amTenant = user?.id === c.tenant?.id || user?.id === c.tenant;
-  const amLandlord = user?.id === c.owner?.id || user?.id === c.landlord;
+  const amTenant = user?._id === c.tenant?.id || user?._id === c.tenant;
+  const amLandlord = user?._id === c.owner?.id || user?._id === c.landlord;
   const canSign = (amTenant && !c.signedByTenant) || (amLandlord && !c.signedByLandlord);
   const canPayDeposit = amTenant && !c.depositPaid;
 

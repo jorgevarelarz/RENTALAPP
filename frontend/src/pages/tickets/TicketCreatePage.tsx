@@ -1,5 +1,7 @@
 import React, { useState } from "react";
 import { createTicket } from "../../services/tickets";
+import { useNotify } from "../../utils/notify";
+import { sendEmail } from "../../services/notify";
 
 export default function TicketCreatePage() {
   const [form, setForm] = useState({
@@ -9,6 +11,7 @@ export default function TicketCreatePage() {
     description: "",
   });
   const [result, setResult] = useState<any>(null);
+  const { push } = useNotify();
 
   const updateField = (key: string, value: any) =>
     setForm((state) => ({
@@ -18,8 +21,22 @@ export default function TicketCreatePage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const ticket = await createTicket(form);
-    setResult(ticket);
+    try {
+      const ticket = await createTicket(form);
+      setResult(ticket);
+      push("success", "Incidencia creada correctamente");
+      try {
+        await sendEmail(
+          "notificaciones@rental-app.test",
+          "Nueva incidencia creada",
+          `Se ha creado la incidencia ${ticket._id || "sin ID"}.`
+        );
+      } catch (error) {
+        console.warn("No se pudo disparar el email de incidencia", error);
+      }
+    } catch (err: any) {
+      push("error", err?.response?.data?.error || "No se pudo crear la incidencia");
+    }
   };
 
   return (

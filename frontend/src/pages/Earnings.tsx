@@ -31,9 +31,9 @@ const Earnings: React.FC = () => {
   useEffect(() => {
     const run = async () => {
       if (!token || !user) return;
-      const s = await earningsSummary(token, user.id, { from, to, groupBy });
+      const s = await earningsSummary(token, user._id, { from, to, groupBy });
       setSummary(s);
-      const l = await earningsList(token, user.id, { from, to, page: 1, limit: 20 });
+      const l = await earningsList(token, user._id, { from, to, page: 1, limit: 20 });
       setList(l);
     };
     run();
@@ -63,7 +63,7 @@ const Earnings: React.FC = () => {
           </label>
           <button onClick={async () => {
             if (!token || !user) return;
-            const blob = await earningsExportCsv(token, user.id, { from, to });
+            const blob = await earningsExportCsv(token, user._id, { from, to });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url; a.download = `earnings_${from||''}_${to||''}.csv`; a.click();

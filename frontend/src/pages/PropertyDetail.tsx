@@ -85,7 +85,7 @@ const PropertyDetail: React.FC = () => {
         setStatus('success');
         const blob = await downloadDemoContract(token || '', {
           landlord: property.ownerId,
-          tenant: user?.id || 'me',
+          tenant: user?._id || 'me',
           property: property.title,
           rent: property.price,
         });

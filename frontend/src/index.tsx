@@ -4,6 +4,7 @@ import "./index.css";
 import AppRoutes from "./AppRoutes";
 import { ThemeProvider } from "./context/ThemeContext";
 import { ToastProvider } from "./context/ToastContext";
+import { NotificationsProvider } from "./utils/notify";
 import reportWebVitals from "./reportWebVitals";
 import axios from "axios";
 
@@ -14,7 +15,9 @@ root.render(
   <React.StrictMode>
     <ThemeProvider>
       <ToastProvider>
-        <AppRoutes />
+        <NotificationsProvider>
+          <AppRoutes />
+        </NotificationsProvider>
       </ToastProvider>
     </ThemeProvider>
   </React.StrictMode>

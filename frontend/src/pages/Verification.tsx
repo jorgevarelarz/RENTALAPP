@@ -12,7 +12,7 @@ const Verification: React.FC = () => {
     if (!user) return;
     try {
       setLoading(true); setError(null);
-      const r = await getMyVerification(user.id);
+      const r = await getMyVerification(user._id);
       setStatus(r.status || 'unverified');
     } catch (e: any) {
       setError(e?.message || 'Error');
@@ -31,7 +31,7 @@ const Verification: React.FC = () => {
       {loading ? <p>Cargando…</p> : <p>Estado: <b>{status || 'unverified'}</b></p>}
       {error && <p style={{color:'red'}}>Error: {error}</p>}
       <p>En desarrollo puedes marcarte como verificado para probar las rutas protegidas.</p>
-      <button className="btn" onClick={async () => { await devVerifyMe(user.id); await fetchStatus(); }}>
+      <button className="btn" onClick={async () => { await devVerifyMe(user._id); await fetchStatus(); }}>
         Marcar como verificado (dev)
       </button>
     </div>
