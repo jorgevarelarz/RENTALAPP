@@ -1,18 +1,44 @@
-import axios from 'axios';
+import axios from "axios";
 
-const API_BASE =
-  process.env.REACT_APP_API_URL || process.env.VITE_API_URL || 'http://localhost:3000';
-
-export const login = async (email: string, password: string) => {
-  const response = await axios.post(`${API_BASE}/api/auth/login`, { email, password });
-  return response.data.token;
+export type User = {
+  _id: string;
+  email: string;
+  role: "tenant" | "landlord" | "pro" | "admin";
+  isVerified?: boolean;
+  token: string;
 };
 
-export const register = async (
+export async function login(email: string, password: string): Promise<User> {
+  const { data } = await axios.post("/api/auth/login", { email, password });
+  const user: User = { ...data.user, token: data.token };
+  localStorage.setItem("user", JSON.stringify(user));
+  axios.defaults.headers.common["Authorization"] = `Bearer ${user.token}`;
+  return user;
+}
+
+export async function register(
   name: string,
   email: string,
   password: string,
-  role: 'tenant' | 'landlord' | 'pro',
-) => {
-  await axios.post(`${API_BASE}/api/auth/register`, { name, email, password, role });
-};
+  role: "tenant" | "landlord" | "pro"
+) {
+  await axios.post("/api/auth/register", { name, email, password, role });
+}
+
+export function logout() {
+  localStorage.removeItem("user");
+  delete axios.defaults.headers.common["Authorization"];
+}
+
+export function getStoredUser(): User | null {
+  try {
+    return JSON.parse(localStorage.getItem("user") || "null");
+  } catch {
+    return null;
+  }
+}
+
+export function bootstrapAuthHeader() {
+  const u = getStoredUser();
+  if (u?.token) axios.defaults.headers.common["Authorization"] = `Bearer ${u.token}`;
+}
