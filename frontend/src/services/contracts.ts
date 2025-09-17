@@ -46,3 +46,13 @@ export const downloadPdf = async (token: string, id: string) => {
   });
   return res.data as Blob;
 };
+
+export async function getClauses(region: string, version = '1.0.0') {
+  const { data } = await axios.get(`${API_BASE}/api/clauses`, { params: { region, version } });
+  return data as { version: string; region: string; items: Array<{ id: string; label: string; version: string; paramsMeta: any }> };
+}
+
+export async function createContract(payload: any) {
+  const { data } = await axios.post(`${API_BASE}/api/contracts`, payload);
+  return data.contract as any;
+}
