@@ -18,6 +18,7 @@ import ProList from './pages/ProList';
 import ProDetail from './pages/ProDetail';
 import Placeholder from './pages/common/Placeholder';
 import AutoPlaceholder from './pages/common/AutoPlaceholder';
+import ContractWizard from './pages/contracts/ContractWizard';
 
 const ProtectedRoute: React.FC<{ children: React.ReactElement; roles?: Array<'tenant'|'landlord'|'admin'|'pro'> }> = ({ children, roles }) => {
   const { token, user } = useAuth();
@@ -40,6 +41,7 @@ const App: React.FC = () => {
         <Route path="/dashboard" element={<ProtectedRoute>{dashboard}</ProtectedRoute>} />
         <Route path="/landlord/properties" element={<ProtectedRoute roles={['landlord','admin']}><LandlordDashboard /></ProtectedRoute>} />
         <Route path="/contracts" element={<ProtectedRoute><MyContracts /></ProtectedRoute>} />
+        <Route path="/contracts/new" element={<ProtectedRoute><ContractWizard /></ProtectedRoute>} />
         <Route path="/contracts/:id" element={<ProtectedRoute><ContractDetail /></ProtectedRoute>} />
         <Route path="/earnings" element={<ProtectedRoute roles={['landlord','admin']}><Earnings /></ProtectedRoute>} />
         <Route path="/pro" element={<ProtectedRoute roles={['pro','admin']}><ProDashboard /></ProtectedRoute>} />
