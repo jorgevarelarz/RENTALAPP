@@ -1,0 +1,84 @@
+version: "3.9"
+
+networks:
+  nginx-proxy:
+    external: true
+
+volumes:
+  mongo_data:
+  nginx_certs:
+  nginx_vhost:
+  nginx_html:
+  nginx_acme:
+
+services:
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy:alpine
+    container_name: nginx-proxy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - nginx_certs:/etc/nginx/certs
+      - nginx_vhost:/etc/nginx/vhost.d
+      - nginx_html:/usr/share/nginx/html
+      - /var/run/docker.sock:/tmp/docker.sock:ro
+    networks:
+      - nginx-proxy
+
+  acme-companion:
+    image: nginxproxy/acme-companion
+    container_name: acme-companion
+    restart: unless-stopped
+    environment:
+      DEFAULT_EMAIL: "${LETSENCRYPT_EMAIL}"
+    volumes:
+      - nginx_certs:/etc/nginx/certs
+      - nginx_vhost:/etc/nginx/vhost.d
+      - nginx_html:/usr/share/nginx/html
+      - nginx_acme:/etc/acme.sh
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    depends_on:
+      - nginx-proxy
+    networks:
+      - nginx-proxy
+
+  mongo:
+    image: mongo:6
+    container_name: rental_mongo
+    restart: unless-stopped
+    expose:
+      - "27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - nginx-proxy
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "mongodb://localhost:27017", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: .
+    container_name: rental_api
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      MONGO_URI: "mongodb://rental_mongo:27017/rentalapp"
+      JWT_SECRET: "${JWT_SECRET}"
+      CLAUSE_POLICY_VERSION: "1.0.0"
+      VIRTUAL_HOST: "${API_HOST}"
+      VIRTUAL_PORT: "3000"
+      LETSENCRYPT_HOST: "${API_HOST}"
+      LETSENCRYPT_EMAIL: "${LETSENCRYPT_EMAIL}"
+    expose:
+      - "3000"
+    networks:
+      - nginx-proxy
+    command: ["npm","run","start:prod"]

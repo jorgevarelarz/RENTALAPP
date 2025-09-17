@@ -6,6 +6,7 @@
     "dev": "ts-node-dev src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
+    "start:prod": "node dist/app.js",
     "test": "jest",
     "test:unit": "jest tests/unit",
     "test:e2e": "jest --runInBand tests/e2e",
