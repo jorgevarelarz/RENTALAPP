@@ -49,6 +49,66 @@ Configura las variables:
 ### Frontend (Vercel)
 - `VITE_API_URL=https://<api-deploy>`
 
+## Arranque local con Docker Compose (API + Mongo)
+
+Para levantar la API y Mongo en local sin Nginx ni certificados, crea un `docker-compose.override.yml` junto al `docker-compose.yml` con el siguiente contenido. Docker lo cargará automáticamente al ejecutar `docker compose` y sobrescribirá los servicios necesarios para desarrollo:
+
+```yaml
+version: "3.9"
+
+services:
+  # Desactiva proxy y acme en local
+  nginx-proxy:
+    profiles: ["disabled"]
+  acme-companion:
+    profiles: ["disabled"]
+
+  mongo:
+    ports:
+      - "27017:27017"   # acceso local opcional (Studio 3T, mongosh)
+    volumes:
+      - mongo_data:/data/db
+
+  api:
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      MONGO_URI: "mongodb://mongo:27017/rentalapp"
+      JWT_SECRET: "dev-secret"
+      CLAUSE_POLICY_VERSION: "1.0.0"
+      # quita variables de Nginx/LE si existen
+      VIRTUAL_HOST: ""
+      LETSENCRYPT_HOST: ""
+      LETSENCRYPT_EMAIL: ""
+    ports:
+      - "3000:3000"     # http://localhost:3000
+    command: ["npm","run","start:prod"]
+```
+
+> 💡 Si prefieres hot reload con `ts-node-dev`, cambia la línea del `command` por `command: ["npm","run","dev"]` (el script `dev` ya existe en el `package.json`).
+
+Con el override guardado, arranca y observa los servicios con:
+
+```bash
+docker compose up -d --build
+docker compose logs -f api
+```
+
+Pruebas rápidas:
+
+- API → http://localhost:3000/api/health
+- Mongo (opcional) → mongodb://localhost:27017
+
+Cuando termines:
+
+```bash
+docker compose down
+# si quieres limpiar los datos persistidos de Mongo:
+docker volume rm rentalapp_mongo_data
+```
+
+> 🔁 Si ya utilizas los puertos `3000` o `27017`, ajusta los mapeos en el override (`3001:3000`, `27018:27017`, etc.).
+
 ## Staging/Producción con Nginx proxy + HTTPS (Let’s Encrypt)
 
 ### Requisitos previos
