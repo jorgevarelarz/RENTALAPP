@@ -10,6 +10,9 @@ import FavoritesPage from "./pages/properties/FavoritesPage";
 import ContractWizard from "./pages/contracts/ContractWizard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleGuard from "./components/RoleGuard";
+import TicketsList from "./pages/tickets/TicketsList";
+import TicketCreatePage from "./pages/tickets/TicketCreatePage";
+import TicketDetail from "./pages/tickets/TicketDetail";
 
 export default function AppRoutes() {
   return (
@@ -48,6 +51,33 @@ export default function AppRoutes() {
                   <RoleGuard roles={["landlord", "admin"]}>
                     <ContractWizard />
                   </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="/tickets"
+              element={
+                <ProtectedRoute>
+                  <TicketsList />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tickets/new"
+              element={
+                <ProtectedRoute>
+                  <RoleGuard roles={["tenant", "landlord", "admin"]}>
+                    <TicketCreatePage />
+                  </RoleGuard>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tickets/:id"
+              element={
+                <ProtectedRoute>
+                  <TicketDetail />
                 </ProtectedRoute>
               }
             />
