@@ -12,6 +12,8 @@ import Alert from '../components/ui/Alert';
 import { useToast } from '../context/ToastContext';
 import Gallery from '../components/ui/Gallery';
 import { useDocumentTitle } from '../utils/useDocumentTitle';
+import pageStyles from './Page.module.css';
+import styles from './PropertyDetail.module.css';
 
 type Params = { id: string };
 
@@ -101,13 +103,13 @@ const PropertyDetail: React.FC = () => {
 
   if (loading) return (
     <div>
-      <h1 className="page-title">Cargando propiedad…</h1>
-      <div className="grid-detail">
+      <h1 className={pageStyles.title}>Cargando propiedad…</h1>
+      <div className={styles.grid}>
         <div>
-          <div className="gallery-empty" />
-          <div className="card" style={{ marginTop: 12, height: 120 }} />
+          <div style={{ height: 320, borderRadius: 12, border: '1px solid var(--border)', background: '#f5f5f5', display: 'grid', placeItems: 'center', color: '#888' }} />
+          <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, marginTop: 12, height: 120 }} />
         </div>
-        <div className="card" style={{ height: 280 }} />
+        <div style={{ background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 12, height: 280 }} />
       </div>
     </div>
   );
@@ -116,13 +118,13 @@ const PropertyDetail: React.FC = () => {
   const stripePkMissing = !process.env.REACT_APP_STRIPE_PK;
   return (
     <div>
-      <h1 className="page-title">{property.title}</h1>
-      <div className="grid-detail">
+      <h1 className={pageStyles.title}>{property.title}</h1>
+      <div className={styles.grid}>
         <div>
           <Gallery photos={property.photos} />
           <Card style={{ padding: 16, marginTop: 12 }}>
-            <p className="muted">{property.address}</p>
-            <div className="price" style={{ fontSize: 20 }}>{formatPriceEUR(property.price)}</div>
+            <p style={{ color: 'var(--muted)' }}>{property.address}</p>
+            <div style={{ marginTop: 8, fontWeight: 600, letterSpacing: '.03em', fontSize: 20 }}>{formatPriceEUR(property.price)}</div>
             {property.description && <p style={{ marginTop: 8 }}>{property.description}</p>}
           </Card>
         </div>

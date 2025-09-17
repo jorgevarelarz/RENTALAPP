@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import styles from './Drawer.module.css';
 
 type Props = {
   open: boolean;
@@ -26,9 +27,9 @@ const Drawer: React.FC<Props> = ({ open, onClose, side='left', children, width=3
   const shadowStyle = side === 'right' ? { boxShadow: '-12px 0 24px rgba(0,0,0,.08)' } : { boxShadow: '12px 0 24px rgba(0,0,0,.08)' };
   return (
     <>
-      {open && <div className="drawer-backdrop" onClick={onClose} />}
+      {open && <div className={styles.backdrop} onClick={onClose} />}
       <div
-        className="drawer-panel"
+        className={styles.panel}
         style={{
           width: `min(${width}px, 92vw)`,
           transform: open ? 'translateX(0)' : side==='left' ? 'translateX(-100%)' : 'translateX(100%)',

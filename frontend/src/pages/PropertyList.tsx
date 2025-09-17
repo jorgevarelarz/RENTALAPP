@@ -5,12 +5,13 @@ import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 import Input from '../components/ui/Input';
 import { SkeletonCard } from '../components/ui/Skeleton';
-import Pagination from '../components/ui/Pagination';
 import { isFavorite, toggleFavorite } from '../utils/favorites';
 import { toAbsoluteUrl } from '../utils/media';
 import Drawer from '../components/ui/Drawer';
 import Badge from '../components/ui/Badge';
 import { formatPriceEUR, isNew } from '../utils/format';
+import pageStyles from './Page.module.css';
+import styles from './PropertyList.module.css';
 
 const PropertyList: React.FC = () => {
   const [properties, setProperties] = useState<any[]>([]);
@@ -20,7 +21,6 @@ const PropertyList: React.FC = () => {
   const [max, setMax] = useState('');
   const [favTick, setFavTick] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(1);
   const pageSize = 12;
   const [visible, setVisible] = useState(pageSize);
   const [showFilters, setShowFilters] = useState(false);
@@ -48,7 +48,7 @@ const PropertyList: React.FC = () => {
       return 0;
     });
     return out;
-  }, [properties, q, min, max]);
+  }, [properties, q, min, max, sort]);
 
   useEffect(() => { setVisible(pageSize); }, [q, min, max, sort]);
   useEffect(() => {
@@ -65,8 +65,8 @@ const PropertyList: React.FC = () => {
   const pageItems = filtered.slice(0, visible);
   return (
     <div>
-      <h1 className="page-title">Propiedades</h1>
-      <div className="form-row">
+      <h1 className={pageStyles.title}>Propiedades</h1>
+      <div className={styles.filtersRow}>
         <Button variant="outline" onClick={() => setShowFilters(true)}>Filtros</Button>
         <select value={sort} onChange={e => setSort(e.target.value as any)} style={{ border: '1px solid var(--border)', background: 'var(--card)', color: 'var(--fg)', borderRadius: 8, padding: '10px 12px' }}>
           <option value="relevant">Relevancia</option>
@@ -75,10 +75,10 @@ const PropertyList: React.FC = () => {
           <option value="newest">Novedades</option>
           <option value="oldest">Más antiguas</option>
         </select>
-        {user?.role === 'landlord' && <Link to="/dashboard" className="nav-link" style={{ marginLeft: 'auto' }}>Publicar</Link>}
+        {user?.role === 'landlord' && <Link to="/dashboard" className={styles.publishLink} style={{ marginLeft: 'auto' }}>Publicar</Link>}
       </div>
       {loading ? (
-        <div className="grid-cards">
+        <div className={styles.cardGrid}>
           {Array.from({ length: 8 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
@@ -92,15 +92,27 @@ const PropertyList: React.FC = () => {
           </p>
         </div>
       ) : (
-        <div className="grid-cards">
+        <div className={styles.cardGrid}>
           {pageItems.map(p => (
-            <div key={p._id} className="card card-minimal">
-              <div className="card-media">
+            <div key={p._id} className={styles.card}>
+              <div className={styles.cardMedia}>
                 {p.photos?.[0] ? (
-                  <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-                    <img loading="lazy" decoding="async" src={toAbsoluteUrl(p.photos[0])} alt={p.title} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transition: 'opacity .25s ease' }} />
+                  <div className={styles.mediaInner}>
+                    <img
+                      loading="lazy"
+                      decoding="async"
+                      src={toAbsoluteUrl(p.photos[0])}
+                      alt={p.title}
+                      className={styles.mediaImage}
+                    />
                     {p.photos?.[1] && (
-                      <img loading="lazy" decoding="async" src={toAbsoluteUrl(p.photos[1])} alt={p.title} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', opacity: 0, transition: 'opacity .25s ease' }} className="hover-second" />
+                      <img
+                        loading="lazy"
+                        decoding="async"
+                        src={toAbsoluteUrl(p.photos[1])}
+                        alt={p.title}
+                        className={`${styles.mediaImage} ${styles.hoverSecond}`}
+                      />
                     )}
                   </div>
                 ) : 'Sin foto'}
@@ -110,13 +122,18 @@ const PropertyList: React.FC = () => {
                   </div>
                 )}
               </div>
-              <div className="card-body">
+              <div className={styles.cardBody}>
                 <h3 style={{ margin: '6px 0 4px', textTransform: 'uppercase', letterSpacing: '.06em', fontSize: 14 }}>{p.title}</h3>
-                <div className="muted" style={{ fontSize: 14 }}>{p.address}</div>
-                <div className="price">{formatPriceEUR(p.price)}</div>
+                <div style={{ fontSize: 14, color: 'var(--muted)' }}>{p.address}</div>
+                <div className={styles.price}>{formatPriceEUR(p.price)}</div>
                 <div style={{ marginTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <Link to={`/p/${p._id}`} className="link link-underline">Ver detalle</Link>
-                  <button aria-label="favorito" onClick={() => { toggleFavorite(String(p._id)); setFavTick(x=>x+1); }} className="btn-icon" style={{ fontSize: 18 }}>
+                  <Link to={`/p/${p._id}`} className={`${styles.link} ${styles.linkUnderline}`}>Ver detalle</Link>
+                  <button
+                    aria-label="favorito"
+                    onClick={() => { toggleFavorite(String(p._id)); setFavTick(x=>x+1); }}
+                    className={styles.iconButton}
+                    style={{ fontSize: 18 }}
+                  >
                     {isFavorite(String(p._id)) ? '❤' : '♡'}
                   </button>
                 </div>
@@ -129,11 +146,11 @@ const PropertyList: React.FC = () => {
       {/* Drawer de filtros */}
       <Drawer open={showFilters} onClose={() => setShowFilters(false)} side="right">
         <h3 style={{ marginTop: 0 }}>Filtros</h3>
-        <div className="form-row" style={{ flexDirection: 'column' }}>
+        <div className={styles.filtersRow} style={{ flexDirection: 'column' }}>
           <Input placeholder="Buscar..." value={q} onChange={e => setQ(e.target.value)} />
           <div style={{ display: 'flex', gap: 12 }}>
-            <Input placeholder="Min €" value={min} onChange={e => setMin(e.target.value)} className="input-sm" />
-            <Input placeholder="Max €" value={max} onChange={e => setMax(e.target.value)} className="input-sm" />
+            <Input placeholder="Min €" value={min} onChange={e => setMin(e.target.value)} className={styles.inputSmall} />
+            <Input placeholder="Max €" value={max} onChange={e => setMax(e.target.value)} className={styles.inputSmall} />
           </div>
           <div>
             <Button variant="primary" onClick={() => setShowFilters(false)}>Aplicar</Button>

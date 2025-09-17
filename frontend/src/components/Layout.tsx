@@ -3,19 +3,20 @@ import Sidebar from './Sidebar';
 import NavBar from './NavBar';
 import Breadcrumbs from './Breadcrumbs';
 import Footer from './Footer';
+import styles from './Layout.module.css';
 
 const Layout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
     <div>
-      <div className="navbar">
-        <div className="container">
+      <div className={styles.navbar}>
+        <div className={styles.container}>
           <NavBar />
         </div>
       </div>
-      <div style={{ display: 'flex' }}>
+      <div className={styles.layoutBody}>
         <Sidebar />
-        <main style={{ flex: 1, padding: 16 }}>
-          <div className="container">
+        <main className={styles.main}>
+          <div className={styles.container}>
             <Breadcrumbs />
             {children}
           </div>
