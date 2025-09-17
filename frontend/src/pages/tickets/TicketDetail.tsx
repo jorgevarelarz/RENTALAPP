@@ -15,6 +15,8 @@ import {
 import { proposeAppointment as proposeAppt } from "../../services/appointments";
 import { searchPros } from "../../services/pros";
 import { useAuth } from "../../context/AuthContext";
+import { useNotify } from "../../utils/notify";
+import { sendEmail, sendSms } from "../../services/notify";
 
 export default function TicketDetail() {
   const { id } = useParams();
@@ -28,6 +30,27 @@ export default function TicketDetail() {
   const [when, setWhen] = useState<string>("");
 
   const role = user?.role;
+  const { push } = useNotify();
+
+  const showError = (err: any, fallback: string) => {
+    push("error", err?.response?.data?.error || fallback);
+  };
+
+  const triggerEmail = async (subject: string, body: string, to?: string) => {
+    try {
+      await sendEmail(to || "notificaciones@rental-app.test", subject, body);
+    } catch (error) {
+      console.warn("Fallo al disparar email mock", error);
+    }
+  };
+
+  const triggerSms = async (body: string, to?: string) => {
+    try {
+      await sendSms(to || "+34900123456", body);
+    } catch (error) {
+      console.warn("Fallo al disparar SMS mock", error);
+    }
+  };
 
   const reload = async () => {
     if (!id) return;
@@ -43,56 +66,136 @@ export default function TicketDetail() {
   const can = (statuses: string[]) => statuses.includes(ticket?.status);
 
   const onAssignPro = async (proId: string) => {
-    await assignPro(ticket._id, proId);
-    await reload();
+    try {
+      await assignPro(ticket._id, proId);
+      push("success", "Profesional asignado al ticket");
+      await triggerEmail(
+        "Nuevo profesional asignado",
+        `Se ha asignado un profesional a la incidencia ${ticket._id}.`
+      );
+      await reload();
+    } catch (err: any) {
+      showError(err, "No se pudo asignar el profesional");
+    }
   };
 
   const onUnassign = async () => {
-    await unassignPro(ticket._id);
-    await reload();
+    try {
+      await unassignPro(ticket._id);
+      push("info", "Asignación eliminada");
+      await reload();
+    } catch (err: any) {
+      showError(err, "No se pudo quitar la asignación");
+    }
   };
 
   const onSendQuote = async () => {
-    await sendQuote(ticket._id, amount, note);
-    await reload();
+    try {
+      await sendQuote(ticket._id, amount, note);
+      push("success", "Presupuesto enviado al propietario");
+      await triggerEmail(
+        "Nuevo presupuesto disponible",
+        `El profesional ha enviado un presupuesto por ${amount} €.`
+      );
+      await reload();
+    } catch (err: any) {
+      showError(err, "Error al enviar presupuesto");
+    }
   };
 
   const onApproveQuote = async () => {
-    await approveQuote(ticket._id);
-    await reload();
+    try {
+      await approveQuote(ticket._id);
+      push("success", "Presupuesto aprobado");
+      await triggerEmail(
+        "Presupuesto aprobado",
+        `El propietario ha aprobado el presupuesto del ticket ${ticket._id}.`
+      );
+      await reload();
+    } catch (err: any) {
+      showError(err, "No se pudo aprobar el presupuesto");
+    }
   };
 
   const onRequestExtra = async () => {
-    await requestExtra(ticket._id, extraAmount, extraReason);
-    await reload();
+    try {
+      await requestExtra(ticket._id, extraAmount, extraReason);
+      push("info", "Solicitud de extra enviada");
+      await triggerEmail(
+        "Solicitud de extra",
+        `Hay una nueva solicitud de extra por ${extraAmount} €. Motivo: ${extraReason}.`
+      );
+      await reload();
+    } catch (err: any) {
+      showError(err, "No se pudo solicitar el extra");
+    }
   };
 
   const onDecideExtra = async (decision: "approved" | "rejected") => {
-    await decideExtra(ticket._id, decision);
-    await reload();
+    try {
+      await decideExtra(ticket._id, decision);
+      push(
+        decision === "approved" ? "success" : "info",
+        decision === "approved" ? "Extra aprobado" : "Extra rechazado"
+      );
+      await triggerEmail(
+        "Resolución de extra",
+        `El extra solicitado ha sido ${decision === "approved" ? "aprobado" : "rechazado"}.`
+      );
+      await reload();
+    } catch (err: any) {
+      showError(err, "No se pudo actualizar el extra");
+    }
   };
 
   const onProposeAppt = async () => {
-    await proposeAppt(ticket._id, when);
-    setWhen("");
-    await reload();
+    try {
+      await proposeAppt(ticket._id, when);
+      setWhen("");
+      push("success", "Propuesta de cita enviada");
+      await triggerSms(
+        `Hay una nueva propuesta de cita para la incidencia ${ticket._id}.`
+      );
+      await reload();
+    } catch (err: any) {
+      showError(err, "No se pudo proponer la cita");
+    }
   };
 
   const onComplete = async () => {
-    await completeWork(ticket._id);
-    await reload();
+    try {
+      await completeWork(ticket._id);
+      push("success", "Trabajo marcado como completado");
+      await reload();
+    } catch (err: any) {
+      showError(err, "No se pudo completar el trabajo");
+    }
   };
 
   const onClose = async () => {
-    await closeTicket(ticket._id);
-    await reload();
+    try {
+      await closeTicket(ticket._id);
+      push("success", "Incidencia cerrada");
+      await reload();
+    } catch (err: any) {
+      showError(err, "No se pudo cerrar la incidencia");
+    }
   };
 
   const onDispute = async () => {
     const reason = window.prompt("Motivo de disputa");
     if (reason) {
-      await openDispute(ticket._id, reason);
-      await reload();
+      try {
+        await openDispute(ticket._id, reason);
+        push("info", "Disputa abierta");
+        await triggerEmail(
+          "Se ha abierto una disputa",
+          `El usuario ha abierto una disputa: ${reason}.`
+        );
+        await reload();
+      } catch (err: any) {
+        showError(err, "No se pudo abrir la disputa");
+      }
     }
   };
 

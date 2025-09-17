@@ -2,16 +2,45 @@ import nodemailer from 'nodemailer';
 // If you plan to add SMS notifications, integrate a provider like Twilio or
 // Nexmo here. For now we simulate SMS sends with a console log.
 
+const smtpConfigured = Boolean(process.env.SMTP_HOST);
+
 // Reuse the same transporter configuration defined in utils/email.ts
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST,
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+const transporter = smtpConfigured
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    })
+  : null;
+
+const defaultFrom = process.env.SMTP_FROM || 'noreply@rental-app.com';
+
+const deliverEmail = async (
+  mailOptions: Record<string, unknown> & { to?: string; subject?: string; text?: string; from?: string }
+) => {
+  if (!mailOptions.from) {
+    mailOptions.from = defaultFrom;
+  }
+  if (transporter) {
+    try {
+      await transporter.sendMail(mailOptions);
+    } catch (error) {
+      console.error('Error enviando email de notificación:', error);
+    }
+  } else {
+    console.log(
+      `[Mock email] To: ${mailOptions.to} | Subject: ${mailOptions.subject} | Body: ${mailOptions.text || ''}`
+    );
+  }
+};
+
+export const sendEmail = async (to: string, subject: string, body: string) => {
+  await deliverEmail({ to, subject, text: body });
+};
 
 /**
  * Sends an email reminding a tenant that their rent is due soon. Pass
@@ -23,17 +52,11 @@ export const sendRentReminderEmail = async (
   contractId: string,
   amount: number,
 ) => {
-  const mailOptions = {
-    from: process.env.SMTP_FROM || 'noreply@rental-app.com',
+  await deliverEmail({
     to,
     subject: 'Recordatorio de pago de renta',
     text: `Le recordamos que la renta de €${amount} correspondiente al contrato ${contractId} vencerá pronto. Por favor, acceda a la plataforma para realizar el pago.`,
-  };
-  try {
-    await transporter.sendMail(mailOptions);
-  } catch (error) {
-    console.error('Error enviando recordatorio de renta:', error);
-  }
+  });
 };
 
 /**
@@ -46,17 +69,11 @@ export const sendContractRenewalNotification = async (
   contractId: string,
   endDate: string,
 ) => {
-  const mailOptions = {
-    from: process.env.SMTP_FROM || 'noreply@rental-app.com',
+  await deliverEmail({
     to,
     subject: 'Próxima expiración de contrato',
     text: `Su contrato ${contractId} expirará el ${endDate}. Si desea renovar, póngase en contacto con la otra parte o inicie un nuevo contrato en la plataforma.`,
-  };
-  try {
-    await transporter.sendMail(mailOptions);
-  } catch (error) {
-    console.error('Error enviando notificación de renovación:', error);
-  }
+  });
 };
 
 /**
@@ -64,8 +81,10 @@ export const sendContractRenewalNotification = async (
  * production, integrate with your SMS provider of choice and handle
  * delivery failures.
  */
-export const sendSMS = async (phoneNumber: string, message: string) => {
+export const sendSms = async (phoneNumber: string, message: string) => {
   // TODO: integrate with Twilio or other SMS provider
-  console.log(`Simulated SMS to ${phoneNumber}: ${message}`);
+  console.log(`[Mock SMS] To: ${phoneNumber} | Body: ${message}`);
   await new Promise(resolve => setTimeout(resolve, 100));
 };
+
+export const sendSMS = sendSms;

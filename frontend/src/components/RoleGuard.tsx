@@ -4,7 +4,7 @@ import { useAuth } from "../context/AuthContext";
 
 type Props = {
   roles: Array<"tenant" | "landlord" | "pro" | "admin">;
-  children: JSX.Element;
+  children: React.ReactElement;
 };
 
 export default function RoleGuard({ roles, children }: Props) {

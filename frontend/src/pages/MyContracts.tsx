@@ -18,7 +18,7 @@ const MyContracts: React.FC = () => {
         setLoading(true); setError(null);
         const r = await listContracts(token);
         const mine = (r.items || []).filter((c: any) =>
-          String(c.ownerId) === user.id || String(c.tenantId) === user.id
+          String(c.ownerId) === user._id || String(c.tenantId) === user._id
         );
         setItems(mine);
       } catch (e: any) {

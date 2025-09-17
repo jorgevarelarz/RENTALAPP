@@ -32,6 +32,7 @@ import { errorHandler } from './middleware/errorHandler';
 import appointmentsFlowRoutes from './routes/appointments.routes';
 import uploadRoutes from './routes/upload.routes';
 import clausesRoutes from './routes/clauses.routes';
+import notifyRoutes from './routes/notify.routes';
 
 import helmet from 'helmet';
 
@@ -72,6 +73,7 @@ app.use('/api', propertyRoutes);
 app.use('/api', clausesRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api', demoContractRoutes);
+app.use('/api', notifyRoutes);
 app.use('/api', requireVerified, appointmentsFlowRoutes);
 
 // Protected routes (verified users)

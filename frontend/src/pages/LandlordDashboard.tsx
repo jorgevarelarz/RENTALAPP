@@ -25,7 +25,7 @@ const LandlordDashboard: React.FC = () => {
 
   const refresh = useCallback(async () => {
     const all = await listProperties();
-    const ownerId = user?.id;
+    const ownerId = user?._id;
     setMine(all.filter((p: any) => String(p.ownerId) === ownerId));
   }, [user]);
 

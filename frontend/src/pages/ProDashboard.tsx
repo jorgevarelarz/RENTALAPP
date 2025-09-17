@@ -29,7 +29,7 @@ const ProDashboard: React.FC = () => {
       if (!token || !user) return;
       try {
         setLoading(true);
-        const me = await getMyPro(token, user.id);
+        const me = await getMyPro(token, user._id);
         setDisplayName(me.displayName || '');
         setCity(me.city || '');
         setServices(me.services || []);
@@ -50,7 +50,7 @@ const ProDashboard: React.FC = () => {
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!token || !user) return;
-    await upsertPro(token, user.id, { displayName, city, services });
+    await upsertPro(token, user._id, { displayName, city, services });
     push({ title: 'Perfil PRO guardado', tone: 'success' });
   };
 

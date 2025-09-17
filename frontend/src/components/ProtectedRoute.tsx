@@ -3,7 +3,7 @@ import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 type Props = {
-  children: JSX.Element;
+  children: React.ReactElement;
 };
 
 export default function ProtectedRoute({ children }: Props) {
