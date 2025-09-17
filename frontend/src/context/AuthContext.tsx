@@ -1,47 +1,44 @@
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
-import { decodeJwt } from '../utils/jwt';
+import React, { createContext, useContext, useEffect, useState } from "react";
+import {
+  User,
+  getStoredUser,
+  login as apiLogin,
+  logout as apiLogout,
+  bootstrapAuthHeader,
+} from "../services/auth";
 
-type User = { id: string; role: 'tenant' | 'landlord' | 'admin' | 'pro' };
-
-type AuthContextType = {
+type AuthCtx = {
   token: string | null;
   user: User | null;
-  login: (token: string) => void;
+  login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  hasRole: (...roles: User["role"][]) => boolean;
 };
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const Ctx = createContext<AuthCtx>(null!);
 
-export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [token, setToken] = useState<string | null>(null);
-  const [user, setUser] = useState<User | null>(null);
+export function AuthProvider({ children }: { children: React.ReactNode }) {
+  const [user, setUser] = useState<User | null>(getStoredUser());
 
   useEffect(() => {
-    const t = localStorage.getItem('token');
-    if (t) applyToken(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    bootstrapAuthHeader();
   }, []);
 
-  const applyToken = useCallback((t: string) => {
-    setToken(t);
-    localStorage.setItem('token', t);
-    const p = decodeJwt(t);
-    if (p && p.id && p.role) setUser({ id: String(p.id), role: p.role as any });
-  }, []);
+  const login = async (email: string, password: string) => {
+    const u = await apiLogin(email, password);
+    setUser(u);
+  };
 
-  const login = useCallback((t: string) => applyToken(t), [applyToken]);
-  const logout = useCallback(() => {
-    localStorage.removeItem('token');
-    setToken(null);
+  const logout = () => {
+    apiLogout();
     setUser(null);
-  }, []);
+  };
 
-  const value = useMemo(() => ({ token, user, login, logout }), [token, user, login, logout]);
-  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-};
+  const hasRole = (...roles: User["role"][]) => !!user && roles.includes(user.role);
 
-export const useAuth = () => {
-  const ctx = useContext(AuthContext);
-  if (!ctx) throw new Error('useAuth must be used within AuthProvider');
-  return ctx;
-};
+  const token = user?.token ?? null;
+
+  return <Ctx.Provider value={{ token, user, login, logout, hasRole }}>{children}</Ctx.Provider>;
+}
+
+export const useAuth = () => useContext(Ctx);
