@@ -19,6 +19,9 @@ import ProDetail from './pages/ProDetail';
 import Placeholder from './pages/common/Placeholder';
 import AutoPlaceholder from './pages/common/AutoPlaceholder';
 import ContractWizard from './pages/contracts/ContractWizard';
+import PropertiesList from './pages/properties/PropertiesList';
+import PropertyDetailPage from './pages/properties/PropertyDetail';
+import FavoritesPage from './pages/properties/FavoritesPage';
 
 const ProtectedRoute: React.FC<{ children: React.ReactElement; roles?: Array<'tenant'|'landlord'|'admin'|'pro'> }> = ({ children, roles }) => {
   const { token, user } = useAuth();
@@ -49,6 +52,9 @@ const App: React.FC = () => {
         <Route path="/pros/:id" element={<ProDetail />} />
         <Route path="/favorites" element={<ProtectedRoute roles={['tenant','landlord','admin']}><Favorites /></ProtectedRoute>} />
         <Route path="/verify" element={<ProtectedRoute><Verification /></ProtectedRoute>} />
+        <Route path="/properties" element={<PropertiesList />} />
+        <Route path="/properties/:id" element={<PropertyDetailPage />} />
+        <Route path="/me/favorites" element={<FavoritesPage />} />
         <Route path="/p/:id" element={<PropertyDetail />} />
         {/* Role catch-alls to evitar 404 mientras se completa cada sección */}
         <Route path="/tenant/*" element={<ProtectedRoute roles={['tenant']}><AutoPlaceholder /></ProtectedRoute>} />

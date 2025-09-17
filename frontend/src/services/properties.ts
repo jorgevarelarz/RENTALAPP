@@ -3,19 +3,67 @@ import axios from 'axios';
 const API_BASE =
   process.env.REACT_APP_API_URL || process.env.VITE_API_URL || 'http://localhost:3000';
 
+const client = axios.create({
+  baseURL: API_BASE,
+});
+
+export type SearchParams = {
+  q?: string;
+  region?: string;
+  city?: string;
+  priceMin?: number;
+  priceMax?: number;
+  roomsMin?: number;
+  roomsMax?: number;
+  bathMin?: number;
+  furnished?: boolean;
+  petsAllowed?: boolean;
+  availableDate?: string;
+  nearLng?: number;
+  nearLat?: number;
+  maxKm?: number;
+  sort?: 'price' | 'createdAt' | 'views';
+  dir?: 'asc' | 'desc';
+  page?: number;
+  limit?: number;
+};
+
 export const createProperty = async (token: string, data: any) => {
-  const res = await axios.post(`${API_BASE}/api/properties`, data, {
+  const res = await client.post('/api/properties', data, {
     headers: { Authorization: `Bearer ${token}` },
   });
   return res.data;
 };
 
 export const listProperties = async () => {
-  const res = await axios.get(`${API_BASE}/api/properties`);
+  const res = await client.get('/api/properties');
   return res.data;
 };
 
 export const getProperty = async (id: string) => {
-  const res = await axios.get(`${API_BASE}/api/properties/${id}`);
+  const res = await client.get(`/api/properties/${id}`);
   return res.data;
 };
+
+export async function searchProperties(params: SearchParams = {}) {
+  const { data } = await client.get('/api/properties', { params });
+  return data as { items: any[]; page: number; limit: number; total: number };
+}
+
+export async function favoriteProperty(id: string) {
+  const { data } = await client.post(`/api/properties/${id}/favorite`);
+  return data;
+}
+
+export async function unfavoriteProperty(id: string) {
+  const { data } = await client.delete(`/api/properties/${id}/favorite`);
+  return data;
+}
+
+export async function incrementView(id: string) {
+  try {
+    await client.post(`/api/properties/${id}/view`);
+  } catch (error) {
+    // ignore
+  }
+}

@@ -18,7 +18,15 @@ jest.mock('react-router-dom', () => ({
 }), { virtual: true });
 
 // Mock other external dependencies
-jest.mock('axios', () => ({ default: { post: jest.fn(), get: jest.fn() } }), { virtual: true });
+jest.mock('axios', () => {
+  const axiosMock = {
+    get: jest.fn(),
+    post: jest.fn(),
+    delete: jest.fn(),
+  } as any;
+  axiosMock.create = jest.fn(() => axiosMock);
+  return { __esModule: true, default: axiosMock };
+}, { virtual: true });
 jest.mock('@stripe/stripe-js', () => ({ loadStripe: jest.fn(async () => null) }), { virtual: true });
 
 test('la app renderiza sin crashear', () => {
