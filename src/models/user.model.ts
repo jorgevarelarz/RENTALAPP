@@ -29,6 +29,9 @@ const userSchema = new Schema(
     // Optional Stripe identifiers for payments
     stripeAccountId: { type: String },
     stripeCustomerId: { type: String },
+    // Password reset support
+    resetToken: { type: String },
+    resetTokenExp: { type: Date },
   },
   { timestamps: true },
 );

@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { User } from '../models/user.model';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import crypto from 'crypto';
+import { sendEmail } from '../utils/email';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 
@@ -46,5 +48,51 @@ export const login = async (req: Request, res: Response) => {
     res.json({ token });
   } catch (error) {
     res.status(500).json({ message: 'Error del servidor' });
+  }
+};
+
+export const requestPasswordReset = async (req: Request, res: Response) => {
+  const { email } = req.body;
+  try {
+    const user = await User.findOne({ email });
+    if (user) {
+      const token = crypto.randomBytes(20).toString('hex');
+      user.resetToken = token;
+      user.resetTokenExp = new Date(Date.now() + 60 * 60 * 1000);
+      await user.save();
+      await sendEmail(
+        user.email,
+        'Password reset',
+        `Reset link: https://frontend/reset?token=${token}`,
+      );
+    }
+  } catch (error) {
+    console.error('Error generating password reset token', error);
+  }
+
+  res.json({ ok: true });
+};
+
+export const resetPassword = async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body;
+    const user = await User.findOne({
+      resetToken: token,
+      resetTokenExp: { $gt: new Date() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Token inválido o expirado' });
+    }
+
+    user.passwordHash = await bcrypt.hash(password, 10);
+    user.resetToken = undefined;
+    user.resetTokenExp = undefined;
+    await user.save();
+
+    res.json({ ok: true });
+  } catch (error) {
+    console.error('Error resetting password', error);
+    res.status(500).json({ error: 'Error al restablecer la contraseña' });
   }
 };

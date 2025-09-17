@@ -3,6 +3,8 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import AppLayout from "./components/AppLayout";
 import LoginPage from "./pages/auth/LoginPage";
+import ForgotPassword from "./pages/auth/ForgotPassword";
+import ResetPassword from "./pages/auth/ResetPassword";
 import ForbiddenPage from "./pages/system/ForbiddenPage";
 import PropertiesList from "./pages/properties/PropertiesList";
 import PropertyDetail from "./pages/properties/PropertyDetail";
@@ -118,6 +120,8 @@ export default function AppRoutes() {
           </Route>
 
           <Route path="/login" element={<LoginPage />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset" element={<ResetPassword />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>
