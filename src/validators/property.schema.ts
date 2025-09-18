@@ -20,6 +20,8 @@ export const propertyCreateSchema = z.object({
   availableFrom: z.string().transform(s => new Date(s)),
   availableTo: z.string().transform(s => new Date(s)).optional(),
   images: z.array(z.string().url()).max(20).optional(),
+  onlyTenantPro: z.boolean().optional(),
+  requiredTenantProMaxRent: z.number().min(0).optional(),
 });
 
 export const propertyUpdateSchema = propertyCreateSchema.partial();

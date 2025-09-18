@@ -1,5 +1,45 @@
 import { Schema, model } from 'mongoose';
 
+export type TenantProDocType = 'nomina' | 'contrato' | 'renta' | 'autonomo' | 'otros';
+
+const tenantProDocSchema = new Schema(
+  {
+    type: {
+      type: String,
+      enum: ['nomina', 'contrato', 'renta', 'autonomo', 'otros'],
+      required: true,
+    },
+    url: { type: String, required: true },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+    },
+    uploadedAt: { type: Date, default: Date.now },
+    reviewedAt: { type: Date },
+    reviewer: { type: Schema.Types.ObjectId, ref: 'User' },
+  },
+  { _id: true },
+);
+
+const tenantProSchema = new Schema(
+  {
+    isActive: { type: Boolean, default: false },
+    maxRent: { type: Number, default: 0 },
+    status: {
+      type: String,
+      enum: ['none', 'pending', 'verified', 'rejected'],
+      default: 'none',
+    },
+    docs: { type: [tenantProDocSchema], default: [] },
+    consentAccepted: { type: Boolean, default: false },
+    consentTextVersion: { type: String },
+    consentAcceptedAt: { type: Date },
+    lastDecisionAt: { type: Date },
+  },
+  { _id: false },
+);
+
 /**
  * Schema for users. The role distinguishes between landlords and tenants.
  * Passwords are stored hashed in the passwordHash field.
@@ -35,5 +75,9 @@ const userSchema = new Schema(
   },
   { timestamps: true },
 );
+
+userSchema.add({ tenantPro: { type: tenantProSchema, default: () => ({}) } });
+
+userSchema.index({ 'tenantPro.status': 1, 'tenantPro.maxRent': -1 });
 
 export const User = model('User', userSchema);

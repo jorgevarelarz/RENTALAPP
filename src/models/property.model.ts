@@ -33,6 +33,8 @@ const propertySchema = new Schema(
         payload: Schema.Types.Mixed,
       },
     ],
+    onlyTenantPro: { type: Boolean, default: false },
+    requiredTenantProMaxRent: { type: Number, default: 0 },
   },
   { timestamps: true },
 );

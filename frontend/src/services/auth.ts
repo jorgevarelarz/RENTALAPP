@@ -5,6 +5,11 @@ export type User = {
   email: string;
   role: "tenant" | "landlord" | "pro" | "admin";
   isVerified?: boolean;
+  tenantPro?: {
+    status?: string;
+    maxRent?: number;
+    consentAccepted?: boolean;
+  };
   token: string;
 };
 

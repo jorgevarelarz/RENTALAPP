@@ -11,6 +11,7 @@ export const connectDb = async () => {
   const uri = mongoServer.getUri();
   process.env.NODE_ENV = "test";
   process.env.ALLOW_UNVERIFIED = "true";
+  process.env.TENANT_PRO_UPLOADS_KEY = process.env.TENANT_PRO_UPLOADS_KEY || 'a'.repeat(64);
   process.env.MONGO_URL = uri;
   await mongoose.connect(uri);
 };
