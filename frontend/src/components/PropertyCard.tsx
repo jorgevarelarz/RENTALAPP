@@ -17,7 +17,12 @@ export default function PropertyCard({ p, onFavToggle }: Props) {
       </Link>
       <div style={{ padding: 12, display: 'grid', gap: 6 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <strong>{p.price} €</strong>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <strong>{p.price} €</strong>
+            {p.onlyTenantPro && (
+              <span style={{ fontSize: 12, fontWeight: 600, color: '#2563eb' }}>Solo inquilinos PRO</span>
+            )}
+          </div>
           {onFavToggle && (
             <button
               onClick={() => onFavToggle(p._id, !liked)}
