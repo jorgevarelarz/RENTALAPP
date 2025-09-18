@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import crypto from 'crypto';
 import multer from 'multer';
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth.middleware';
@@ -45,6 +46,7 @@ router.post(
     if (!u.tenantPro?.consentAccepted) {
       return res.status(409).json({ error: 'consent required' });
     }
+    const hash = crypto.createHash('sha256').update(fileUpload.buffer).digest('hex');
     const file = encryptAndSaveTP(fileUpload.originalname, fileUpload.buffer);
     u.tenantPro.status = 'pending';
     u.tenantPro.docs = u.tenantPro.docs || [];
@@ -53,6 +55,7 @@ router.post(
       url: file,
       status: 'pending',
       uploadedAt: new Date(),
+      hash,
     } as any);
     await u.save();
     res.json({ ok: true });

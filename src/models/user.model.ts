@@ -9,7 +9,12 @@ const tenantProDocSchema = new Schema(
       enum: ['nomina', 'contrato', 'renta', 'autonomo', 'otros'],
       required: true,
     },
-    url: { type: String, required: true },
+    url: {
+      type: String,
+      required(this: { archivedAt?: Date }) {
+        return !this.archivedAt;
+      },
+    },
     status: {
       type: String,
       enum: ['pending', 'approved', 'rejected'],
@@ -18,8 +23,28 @@ const tenantProDocSchema = new Schema(
     uploadedAt: { type: Date, default: Date.now },
     reviewedAt: { type: Date },
     reviewer: { type: Schema.Types.ObjectId, ref: 'User' },
+    hash: { type: String },
+    archivedAt: { type: Date },
   },
   { _id: true },
+);
+
+const tenantProDocAuditSchema = new Schema(
+  {
+    type: {
+      type: String,
+      enum: ['nomina', 'contrato', 'renta', 'autonomo', 'otros'],
+      required: true,
+    },
+    hash: { type: String },
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+    },
+    reviewedAt: { type: Date },
+    archivedAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
 );
 
 const tenantProSchema = new Schema(
@@ -32,6 +57,7 @@ const tenantProSchema = new Schema(
       default: 'none',
     },
     docs: { type: [tenantProDocSchema], default: [] },
+    auditTrail: { type: [tenantProDocAuditSchema], default: [] },
     consentAccepted: { type: Boolean, default: false },
     consentTextVersion: { type: String },
     consentAcceptedAt: { type: Date },
