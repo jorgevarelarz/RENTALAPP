@@ -76,6 +76,16 @@ export const sendContractRenewalNotification = async (
   });
 };
 
+export const notifyTenantProDecision = async (email: string, decision: 'approved' | 'rejected') => {
+  const subject =
+    decision === 'approved' ? 'Validación Tenant PRO aprobada' : 'Validación Tenant PRO rechazada';
+  const text =
+    decision === 'approved'
+      ? 'Tu cuenta Tenant PRO ha sido aprobada. Ya puedes disfrutar de las ventajas de Only PRO.'
+      : 'Tu solicitud Tenant PRO ha sido rechazada. Revisa la documentación y vuelve a intentarlo cuando estés listo.';
+  await deliverEmail({ to: email, subject, text });
+};
+
 /**
  * Sends a text message (SMS) to a phone number. This is a stub; in
  * production, integrate with your SMS provider of choice and handle

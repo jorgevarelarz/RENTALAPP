@@ -3,6 +3,8 @@ import mongoose from 'mongoose';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import morgan from 'morgan';
+import fs from 'fs';
+import path from 'path';
 
 import authRoutes from './routes/auth.routes';
 import propertyRoutes from './routes/property.routes';
@@ -35,10 +37,12 @@ import uploadRoutes from './routes/upload.routes';
 import clausesRoutes from './routes/clauses.routes';
 import notifyRoutes from './routes/notify.routes';
 import tenantProRoutes from './routes/tenantPro.routes';
+import tenantProMeRoutes from './routes/tenantPro.me';
 import adminTenantProRoutes from './routes/admin.tenantPro.routes';
 import { purgeOldTenantProDocs } from './jobs/tenantProRetention';
 
 import helmet from 'helmet';
+import rateLimit from 'express-rate-limit';
 
 // Load environment variables
 dotenv.config();
@@ -67,6 +71,28 @@ app.use(express.json());
 // Serve uploaded files
 app.use('/uploads', express.static('uploads'));
 
+const tenantProLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
+app.use('/api/tenant-pro', tenantProLimiter);
+
+const tenantProConsentVersion = process.env.TENANT_PRO_CONSENT_VERSION || 'v1';
+
+app.get('/api/legal/tenant-pro-consent', (_req, res) => {
+  const consentPath = path.resolve(process.cwd(), `legal/pro-consent_${tenantProConsentVersion}.md`);
+  try {
+    const content = fs.readFileSync(consentPath, 'utf-8');
+    res.json({ version: tenantProConsentVersion, content });
+  } catch (error) {
+    console.error('No se pudo servir el consentimiento Tenant PRO:', error);
+    res.status(500).json({ error: 'consent-text-unavailable', version: tenantProConsentVersion });
+  }
+});
+
 app.get('/health', (_req, res) => res.json({ ok: true }));
 
 // Public routes
@@ -79,6 +105,7 @@ app.use('/api', uploadRoutes);
 app.use('/api', demoContractRoutes);
 app.use('/api', notifyRoutes);
 app.use('/api', tenantProRoutes);
+app.use('/api', tenantProMeRoutes);
 app.use('/api', requireVerified, appointmentsFlowRoutes);
 
 // Protected routes (verified users)

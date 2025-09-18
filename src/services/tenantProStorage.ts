@@ -36,6 +36,7 @@ export function readDecryptedTP(file: string): Buffer {
 }
 
 export function deleteTP(file: string) {
+  if (!file) return;
   const p = path.join(DIR, file);
   if (fs.existsSync(p)) fs.unlinkSync(p);
 }
