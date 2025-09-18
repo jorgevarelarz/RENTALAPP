@@ -3,11 +3,16 @@ import { Property } from '../models/property.model';
 import { UserFavorite } from '../models/userFavorite.model';
 import { AlertSubscription } from '../models/alertSubscription.model';
 import { sendAvailabilityAlert, sendPriceAlert } from '../utils/email';
+import { User } from '../models/user.model';
 
 export async function create(req: Request, res: Response) {
   const b: any = req.body;
   const coords: [number, number] = [b.location.lng, b.location.lat];
-  const doc = await Property.create({ ...b, location: { type: 'Point', coordinates: coords }, status: 'draft' });
+  const payload: any = { ...b, location: { type: 'Point', coordinates: coords }, status: 'draft' };
+  if (payload.onlyTenantPro && (!payload.requiredTenantProMaxRent || payload.requiredTenantProMaxRent === 0)) {
+    payload.requiredTenantProMaxRent = payload.price;
+  }
+  const doc = await Property.create(payload);
   res.status(201).json(doc);
 }
 
@@ -18,6 +23,13 @@ export async function update(req: Request, res: Response) {
 
   const b: any = req.body;
   if (b.location) b.location = { type: 'Point', coordinates: [b.location.lng, b.location.lat] };
+
+  if (b.onlyTenantPro) {
+    const required = Number(b.requiredTenantProMaxRent ?? 0);
+    if (!required) {
+      b.requiredTenantProMaxRent = b.price ?? prev.price;
+    }
+  }
 
   const updated = await Property.findByIdAndUpdate(id, b, { new: true });
   if (!updated) return res.status(404).json({ error: 'not_found' });
@@ -175,4 +187,24 @@ export async function unsubscribePriceAlert(req: Request, res: Response) {
 export async function countView(req: Request, res: Response) {
   await Property.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
   res.json({ ok: true });
+}
+
+export async function apply(req: Request, res: Response) {
+  const property = await Property.findById(req.params.id);
+  if (!property) return res.status(404).json({ error: 'not_found' });
+
+  if (property.onlyTenantPro) {
+    const required = property.requiredTenantProMaxRent || property.price;
+    const userId = (req as any).user?._id || (req as any).user?.id;
+    const userDoc: any = userId ? await User.findById(userId) : null;
+    const userMax = userDoc?.tenantPro?.maxRent || 0;
+    if (!userDoc?.tenantPro || userDoc.tenantPro.status !== 'verified' || userMax < required) {
+      return res.status(403).json({
+        error: 'ONLY_TENANT_PRO',
+        message: `Requiere inquilino PRO ≥ ${required} €/mes. Tu validación: ${userMax} €/mes.`,
+      });
+    }
+  }
+
+  res.json({ ok: true, propertyId: property._id });
 }

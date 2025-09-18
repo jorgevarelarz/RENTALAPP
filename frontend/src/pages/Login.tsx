@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { login, register } from '../services/auth';
+import { register } from '../services/auth';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import Input from '../components/ui/Input';
@@ -21,7 +21,7 @@ const Login: React.FC = () => {
   const navigate = useNavigate();
   useEffect(() => {
     // Si ya hay sesión, redirige al dashboard
-    if (localStorage.getItem('token')) navigate('/dashboard', { replace: true });
+    if (localStorage.getItem('user')) navigate('/dashboard', { replace: true });
   }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -31,8 +31,7 @@ const Login: React.FC = () => {
       if (isRegister) {
         await register(name, email, password, role);
       }
-      const token = await login(email, password);
-      loginCtx(token);
+      await loginCtx(email, password);
       navigate('/dashboard', { replace: true });
     } catch (err: any) {
       const msg = err.response?.data?.message || err.response?.data?.error || 'Error';

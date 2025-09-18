@@ -18,6 +18,7 @@ import ticketRoutes from './routes/ticket.routes';
 import reviewRoutes from './routes/review.routes';
 import verificationRoutes from './routes/verification.routes';
 import { requireVerified } from './middleware/requireVerified';
+import { authenticate } from './middleware/auth.middleware';
 
 import connectRoutes from './routes/connect.routes';
 import paymentsRoutes from './routes/payments.routes';
@@ -33,6 +34,9 @@ import appointmentsFlowRoutes from './routes/appointments.routes';
 import uploadRoutes from './routes/upload.routes';
 import clausesRoutes from './routes/clauses.routes';
 import notifyRoutes from './routes/notify.routes';
+import tenantProRoutes from './routes/tenantPro.routes';
+import adminTenantProRoutes from './routes/admin.tenantPro.routes';
+import { purgeOldTenantProDocs } from './jobs/tenantProRetention';
 
 import helmet from 'helmet';
 
@@ -74,6 +78,7 @@ app.use('/api', clausesRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api', demoContractRoutes);
 app.use('/api', notifyRoutes);
+app.use('/api', tenantProRoutes);
 app.use('/api', requireVerified, appointmentsFlowRoutes);
 
 // Protected routes (verified users)
@@ -91,7 +96,15 @@ app.use('/api', requireVerified, signatureRoutes);
 app.use('/api', requireVerified, serviceOfferRoutes);
 
 // Admin
-app.use('/api/admin', requireVerified, requireAdmin, adminRoutes, adminEarningsRoutes);
+app.use(
+  '/api/admin',
+  authenticate,
+  requireVerified,
+  requireAdmin,
+  adminRoutes,
+  adminEarningsRoutes,
+  adminTenantProRoutes,
+);
 
 // Error handler
 app.use(errorHandler);
@@ -107,6 +120,7 @@ if (mongoUrl) {
     .then(() => {
       if (process.env.NODE_ENV !== 'test') {
         server = app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`));
+        setInterval(() => purgeOldTenantProDocs().catch(() => {}), 6 * 60 * 60 * 1000);
       }
     })
     .catch(err => console.error('Error al conectar a MongoDB:', err));

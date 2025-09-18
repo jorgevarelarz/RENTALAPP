@@ -15,6 +15,7 @@ import RoleGuard from "./components/RoleGuard";
 import TicketsList from "./pages/tickets/TicketsList";
 import TicketCreatePage from "./pages/tickets/TicketCreatePage";
 import TicketDetail from "./pages/tickets/TicketDetail";
+import AdminTenantProPage from "./pages/admin/AdminTenantProPage";
 
 export default function AppRoutes() {
   return (
@@ -109,7 +110,7 @@ export default function AppRoutes() {
               element={
                 <ProtectedRoute>
                   <RoleGuard roles={["admin"]}>
-                    <div>Panel admin</div>
+                    <AdminTenantProPage />
                   </RoleGuard>
                 </ProtectedRoute>
               }

@@ -1,11 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { favoriteProperty, getProperty, incrementView, unfavoriteProperty } from '../../services/properties';
+import TenantProPanel from '../../components/TenantProPanel';
+import { useAuth } from '../../context/AuthContext';
 
 export default function PropertyDetail() {
   const { id } = useParams();
   const [property, setProperty] = useState<any>(null);
   const [liked, setLiked] = useState(false);
+  const { user } = useAuth();
 
   useEffect(() => {
     (async () => {
@@ -31,10 +34,26 @@ export default function PropertyDetail() {
   }
 
   const images = property.images?.length ? property.images : ['https://via.placeholder.com/1000x600?text=Property'];
+  const requiredRent = property.onlyTenantPro ? property.requiredTenantProMaxRent || property.price : undefined;
+  const tenantBadge = property.onlyTenantPro ? (
+    <div
+      style={{
+        background: '#dbeafe',
+        color: '#1d4ed8',
+        padding: '6px 12px',
+        borderRadius: 999,
+        fontWeight: 600,
+        display: 'inline-block',
+      }}
+    >
+      Solo inquilinos PRO · mínimo {requiredRent} €/mes
+    </div>
+  ) : null;
 
   return (
     <div style={{ padding: '24px', display: 'grid', gap: 16, maxWidth: 980, margin: '0 auto' }}>
       <h2>{property.title}</h2>
+      {tenantBadge}
       <div style={{ display: 'grid', gap: 8 }}>
         <img
           src={images[0]}
@@ -59,6 +78,10 @@ export default function PropertyDetail() {
         </div>
         <button onClick={toggleFavorite}>{liked ? '❤️ Quitar de favoritos' : '🤍 Añadir a favoritos'}</button>
       </div>
+
+      {user?.role === 'tenant' && (
+        <TenantProPanel requiredRent={requiredRent} />
+      )}
 
       <div>
         <h3>Descripción</h3>

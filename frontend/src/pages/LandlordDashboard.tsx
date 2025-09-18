@@ -21,6 +21,8 @@ const LandlordDashboard: React.FC = () => {
   const [uploading, setUploading] = useState(false);
   const [errors, setErrors] = useState<{title?:string; address?:string; price?:string; photos?:string}>({});
   const [editing, setEditing] = useState<any | null>(null);
+  const [onlyTenantPro, setOnlyTenantPro] = useState(false);
+  const [requiredTenantProMaxRent, setRequiredTenantProMaxRent] = useState('');
   const { push } = useToast();
 
   const refresh = useCallback(async () => {
@@ -45,8 +47,16 @@ const LandlordDashboard: React.FC = () => {
     if (badUrl) errs.photos = 'Cada URL debe empezar por http(s)://';
     setErrors(errs);
     if (Object.keys(errs).length) return;
-    await createProperty(token, { title, address, price: priceNum, photos: photoArr });
+    await createProperty(token, {
+      title,
+      address,
+      price: priceNum,
+      photos: photoArr,
+      onlyTenantPro,
+      requiredTenantProMaxRent: Number(requiredTenantProMaxRent || 0),
+    });
     setTitle(''); setAddress(''); setPrice(''); setPhotos('');
+    setOnlyTenantPro(false); setRequiredTenantProMaxRent('');
     await refresh();
     push({ title: 'Propiedad creada', tone: 'success' });
   };
@@ -106,6 +116,21 @@ const LandlordDashboard: React.FC = () => {
               <Input label="Fotos (URLs separadas por coma)" placeholder="https://..." value={photos} onChange={e => setPhotos(e.target.value)} />
               {errors.photos && <div style={{ color: 'red', fontSize: 12 }}>{errors.photos}</div>}
             </div>
+            <div style={{ display: 'grid', gap: 6 }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <input type="checkbox" checked={onlyTenantPro} onChange={e => setOnlyTenantPro(e.target.checked)} />
+                Solo inquilinos PRO
+              </label>
+              {onlyTenantPro && (
+                <Input
+                  label="Validación mínima (EUR/mes)"
+                  type="number"
+                  value={requiredTenantProMaxRent}
+                  onChange={e => setRequiredTenantProMaxRent(e.target.value)}
+                  placeholder="Usa 0 para igualar el precio"
+                />
+              )}
+            </div>
             <div>
               <Button type="submit">Guardar</Button>
             </div>
@@ -147,6 +172,8 @@ const LandlordDashboard: React.FC = () => {
               title: editing.title,
               address: editing.address,
               price: editing.price,
+              onlyTenantPro: editing.onlyTenantPro,
+              requiredTenantProMaxRent: Number(editing.requiredTenantProMaxRent || 0),
             }, { headers: { Authorization: `Bearer ${token}` } });
             setEditing(null);
             await refresh();
@@ -155,6 +182,22 @@ const LandlordDashboard: React.FC = () => {
             <Input label="Título" value={editing.title} onChange={e => setEditing({ ...editing, title: e.target.value })} />
             <Input label="Dirección" value={editing.address} onChange={e => setEditing({ ...editing, address: e.target.value })} />
             <Input label="Renta (EUR)" type="number" value={editing.price} onChange={e => setEditing({ ...editing, price: e.target.value })} />
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <input
+                type="checkbox"
+                checked={!!editing.onlyTenantPro}
+                onChange={e => setEditing({ ...editing, onlyTenantPro: e.target.checked })}
+              />
+              Solo inquilinos PRO
+            </label>
+            {editing.onlyTenantPro && (
+              <Input
+                label="Validación mínima (EUR/mes)"
+                type="number"
+                value={editing.requiredTenantProMaxRent || ''}
+                onChange={e => setEditing({ ...editing, requiredTenantProMaxRent: e.target.value })}
+              />
+            )}
             <div>
               <Dropzone onFiles={async (files) => {
                 if (!token || !files.length) return;

@@ -48,6 +48,13 @@ r.delete(
   asyncHandler(ctrl.unfavorite),
 );
 
+r.post(
+  '/properties/:id/apply',
+  authenticate,
+  authorizeRoles('tenant', 'admin'),
+  asyncHandler(ctrl.apply),
+);
+
 r.post('/properties/:id/subscribe-price', authenticate, asyncHandler(ctrl.subscribePriceAlert));
 r.delete('/properties/:id/subscribe-price', authenticate, asyncHandler(ctrl.unsubscribePriceAlert));
 
