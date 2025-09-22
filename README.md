@@ -345,3 +345,43 @@ healthcheck:
 Tarjeta: `4242 4242 4242 4242`, fecha futura y CVC cualquiera.
 
 Tarjetas de prueba adicionales: [Stripe testing docs](https://stripe.com/docs/testing).
+# RentalApp
+
+## Quickstart
+
+Backend
+```
+cp .env.example .env
+npm ci && npm run dev
+curl -s http://localhost:3000/health
+```
+
+Frontend
+```
+cp frontend/.env.example frontend/.env
+npm --prefix frontend ci
+npm --prefix frontend start
+```
+
+Stripe (test)
+```
+stripe listen --forward-to localhost:3000/api/stripe/webhook
+```
+
+## Puertos & URLs
+- Backend: http://localhost:3000
+- Frontend (CRA): http://localhost:3001
+- Webhook Stripe: POST /api/stripe/webhook
+
+## Matriz RBAC (resumen)
+- Landlord: crear/editar/publish propiedades; aprobar/validar tickets; iniciar firma contrato.
+- Tenant: aplicar a propiedad; pagar/depositar; abrir/resolve ticket; flujo Tenant PRO.
+- Pro: cotizar/completar trabajos; solicitar extras.
+- Admin: paneles admin (revisión PRO, métricas…).
+- Webhooks/callbacks (Stripe, signature): sin auth; firma verificada en Stripe.
+
+## Scripts & Tests
+- `npm test` (backend completo)
+- `npm run test:rbac`
+- `npm run test:frontend`
+- `npm run dev:all` (arranca back y front con concurrently -k)
