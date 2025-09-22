@@ -21,10 +21,10 @@ jobs:
           npm config set fetch-retry-maxtimeout 120000
           npm config set prefer-offline true
           npm ci --no-audit --no-fund || npm install --no-audit --no-fund --legacy-peer-deps
-      - name: Backend tests
+      - name: Backend tests (in-band)
         env:
           NODE_ENV: test
-        run: npm run test:backend
+        run: npm run test:backend -- --runInBand
 
   rbac:
     runs-on: ubuntu-latest
