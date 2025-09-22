@@ -86,6 +86,39 @@ Notas
 - Si dejas un flag en `mock` en producción, la API devolverá 503 en los puntos críticos para evitar cambios de estado irreversibles.
 - Los flags sólo bloquean en `NODE_ENV=production`. En dev/test siguen funcionando los mocks.
 
+## Tenant PRO (solvencia verificada)
+
+Flujo y visibilidad
+- Consentimiento y subida: desde el panel del inquilino en `/tenant-pro` el usuario acepta el consentimiento y sube documentación (nómina/contrato/renta/autónomo/otros).
+- Estados: `pending` (en revisión), `verified` (badge PRO), `rejected`.
+- Badge PRO: se muestra junto al inquilino con “PRO · Hasta {maxRent} €/mes” cuando está verificado.
+- Only PRO: las propiedades marcadas como Only PRO muestran una etiqueta en la card y en la ficha. Al aplicar:
+  - Si no es PRO, la UI guía al flujo `/tenant-pro` (y el backend también valida el acceso al aplicar).
+  - Si es PRO pero su límite es inferior al precio, se informa (puede aplicar, decisión del propietario).
+
+Límites y RGPD
+- Tipos de archivo permitidos: PDF, JPG/JPEG, PNG.
+- Tamaño máximo: 10 MB por archivo.
+- Conservación (TTL): configurable vía `TENANT_PRO_DOCS_TTL_DAYS` (por defecto 365). La API expone `ttlDays` en `GET /api/tenant-pro/me` para mostrar el microcopy en el front.
+- Eliminación: desde el perfil, el usuario puede purgar su documentación PRO.
+
+Búsqueda y filtros
+- Backend: el listado de propiedades acepta `?onlyTenantPro=true` (alias: `?onlyPro=true`) para devolver solo anuncios Only PRO.
+- Frontend: añade/usa el toggle “Solo PRO” cuando proceda (p. ej., gestión de candidaturas del propietario).
+
+API relevante
+- `POST /api/tenant-pro/consent` — acepta el consentimiento (requiere rol tenant).
+- `POST /api/tenant-pro/docs` — sube documento (rol tenant, `multipart/form-data` con `file` y `type`).
+  - Errores normalizados:
+    - 400 `{ code: "file_required" | "unsupported_mime" | "bad_type", message }`
+    - 413 `{ code: "file_too_large", message: "Archivo demasiado grande (máx 10 MB)." }`
+- `GET /api/tenant-pro/me` — devuelve estado PRO y `ttlDays`.
+
+Configuración
+- `TENANT_PRO_DOCS_TTL_DAYS`: días de retención de documentos (ej. 365).
+- CORS: asegúrate de incluir el origen del front (por defecto `http://localhost:3001`).
+
+
 ## Arranque local con Docker Compose (API + Mongo)
 
 Para levantar la API y Mongo en local sin Nginx ni certificados, crea un `docker-compose.override.yml` junto al `docker-compose.yml` con el siguiente contenido. Docker lo cargará automáticamente al ejecutar `docker compose` y sobrescribirá los servicios necesarios para desarrollo:
