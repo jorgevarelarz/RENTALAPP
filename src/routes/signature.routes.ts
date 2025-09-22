@@ -3,11 +3,15 @@ import { signaturitProvider } from '../signature/signaturit';
 import { Contract } from '../models/contract.model';
 import { SignatureRequest } from '../models/signatureRequest.model';
 import { User } from '../models/user.model';
+import { isMock, isProd } from '../config/flags';
 
 const router = Router();
 
 // Start signing flow for a contract
 router.post('/contracts/:id/sign/start', async (req, res) => {
+  if (isProd() && isMock(process.env.SIGN_PROVIDER)) {
+    return res.status(503).json({ error: 'signature_mock_not_allowed_in_prod' });
+  }
   const contract = await Contract.findById(req.params.id);
   if (!contract) return res.status(404).json({ error: 'contract_not_found' });
   if (contract.status !== 'generated' && contract.status !== 'draft') {

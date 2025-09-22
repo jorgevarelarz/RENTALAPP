@@ -1,10 +1,10 @@
 import nodemailer from 'nodemailer';
-// If you plan to add SMS notifications, integrate a provider like Twilio or
-// Nexmo here. For now we simulate SMS sends with a console log.
+import twilio from 'twilio';
+import { isMock } from '../config/flags';
 
 const smtpConfigured = Boolean(process.env.SMTP_HOST);
+const twilioConfigured = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
 
-// Reuse the same transporter configuration defined in utils/email.ts
 const transporter = smtpConfigured
   ? nodemailer.createTransport({
       host: process.env.SMTP_HOST,
@@ -15,6 +15,11 @@ const transporter = smtpConfigured
         pass: process.env.SMTP_PASS,
       },
     })
+  : null;
+
+const forceMockSms = isMock(process.env.SMS_PROVIDER);
+const twilioClient = !forceMockSms && twilioConfigured
+  ? twilio(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN)
   : null;
 
 const defaultFrom = process.env.SMTP_FROM || 'noreply@rental-app.com';
@@ -42,11 +47,6 @@ export const sendEmail = async (to: string, subject: string, body: string) => {
   await deliverEmail({ to, subject, text: body });
 };
 
-/**
- * Sends an email reminding a tenant that their rent is due soon. Pass
- * contract details to customise the message. In production you might
- * localise the message and include a payment link.
- */
 export const sendRentReminderEmail = async (
   to: string,
   contractId: string,
@@ -59,11 +59,6 @@ export const sendRentReminderEmail = async (
   });
 };
 
-/**
- * Sends an email to inform both parties that the contract is about to
- * expire and may need renewal. In a real workflow you might create a new
- * contract automatically and include signature links.
- */
 export const sendContractRenewalNotification = async (
   to: string,
   contractId: string,
@@ -86,15 +81,20 @@ export const notifyTenantProDecision = async (email: string, decision: 'approved
   await deliverEmail({ to: email, subject, text });
 };
 
-/**
- * Sends a text message (SMS) to a phone number. This is a stub; in
- * production, integrate with your SMS provider of choice and handle
- * delivery failures.
- */
 export const sendSms = async (phoneNumber: string, message: string) => {
-  // TODO: integrate with Twilio or other SMS provider
-  console.log(`[Mock SMS] To: ${phoneNumber} | Body: ${message}`);
-  await new Promise(resolve => setTimeout(resolve, 100));
+  if (twilioClient) {
+    try {
+      await twilioClient.messages.create({
+        body: message,
+        from: process.env.TWILIO_PHONE_NUMBER,
+        to: phoneNumber,
+      });
+    } catch (error) {
+      console.error('Error sending SMS:', error);
+    }
+  } else {
+    console.log(`[Mock SMS${forceMockSms ? ' (forced)' : ''}] To: ${phoneNumber} | Body: ${message}`);
+  }
 };
 
 export const sendSMS = sendSms;

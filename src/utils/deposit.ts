@@ -1,27 +1,55 @@
-/**
- * Utility functions to manage rental deposits (fianzas). Depending on your
- * business logic deposits can either be paid into an escrow account
- * controlled by the platform or transferred directly to a public agency.
- *
- * The implementations below are placeholders; replace the body of these
- * functions with actual integrations with your banking provider or
- * governmental API when deploying the application in production.
- */
+import { stripe } from './stripe';
+import { isProd, isMock } from '../config/flags';
 
 /**
- * Simulates sending a deposit to a platform escrow account. In a real
- * implementation this would initiate a transfer via your payment provider.
- * Returns a promise that resolves when the transfer is considered
- * successful.
+ * Creates a Stripe Checkout Session to collect the deposit.
+ * Returns the session URL that the user should be redirected to.
  *
  * @param contractId The ID of the contract for which the deposit is paid.
  * @param amount The amount of the deposit in EUR.
+ * @param successUrl The URL to redirect the user to after a successful payment.
+ * @param cancelUrl The URL to redirect the user to after a canceled payment.
  */
-export const depositToEscrow = async (contractId: string, amount: number): Promise<void> => {
-  // TODO: integrate with your payment API here
-  console.log(`Simulating deposit of €${amount} for contract ${contractId} to escrow account.`);
-  // Simulate network delay
-  await new Promise(resolve => setTimeout(resolve, 500));
+export const depositToEscrow = async (
+  contractId: string,
+  amount: number,
+  successUrl: string,
+  cancelUrl: string
+): Promise<string> => {
+  if (isMock(process.env.ESCROW_DRIVER)) {
+    if (isProd()) {
+      throw Object.assign(new Error('escrow_mock_not_allowed_in_prod'), { status: 503 });
+    }
+    return `https://mock.checkout/${contractId}-${Date.now()}`;
+  }
+  const session = await stripe.checkout.sessions.create({
+    payment_method_types: ['card'],
+    line_items: [
+      {
+        price_data: {
+          currency: 'eur',
+          product_data: {
+            name: `Depósito para contrato ${contractId}`,
+          },
+          unit_amount: amount * 100, // amount in cents
+        },
+        quantity: 1,
+      },
+    ],
+    mode: 'payment',
+    success_url: successUrl,
+    cancel_url: cancelUrl,
+    metadata: {
+      contractId,
+      deposit: 'true',
+    },
+  });
+
+  if (!session.url) {
+    throw new Error('Could not create Stripe Checkout session');
+  }
+
+  return session.url;
 };
 
 /**

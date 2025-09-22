@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import Stripe from 'stripe';
+import { isProd, isMock } from '../config/flags';
 
 // Initialise Stripe client. In production, set STRIPE_SECRET_KEY in your .env.
 const stripeSecret = process.env.STRIPE_SECRET_KEY || '';
@@ -114,7 +115,10 @@ export interface ReleaseResult {
 }
 
 export async function holdPayment(args: HoldArgs): Promise<HoldResult> {
-  if (process.env.ESCROW_DRIVER === 'mock') {
+  if (isMock(process.env.ESCROW_DRIVER)) {
+    if (isProd()) {
+      throw Object.assign(new Error('escrow_mock_not_allowed_in_prod'), { status: 503 });
+    }
     return {
       provider: 'mock',
       ref: `pay_${Date.now()}`,
@@ -146,7 +150,10 @@ export async function holdPayment(args: HoldArgs): Promise<HoldResult> {
 }
 
 export async function releasePayment(args: ReleaseArgs): Promise<ReleaseResult> {
-  if (process.env.ESCROW_DRIVER === 'mock') {
+  if (isMock(process.env.ESCROW_DRIVER)) {
+    if (isProd()) {
+      throw Object.assign(new Error('escrow_mock_not_allowed_in_prod'), { status: 503 });
+    }
     return { provider: 'mock', ref: `mock_release_${Date.now()}` };
   }
 

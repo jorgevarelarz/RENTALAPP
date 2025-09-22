@@ -3,6 +3,7 @@ import { Contract } from "../models/contract.model";
 import { ProcessedEvent } from "../models/processedEvent.model";
 import { transitionContract } from "../services/contractState";
 import { recordContractHistory } from "../utils/history";
+import { isMock, isProd } from "../config/flags";
 
 type KnownStatuses = "signed" | "active" | "terminated" | "completed";
 
@@ -44,6 +45,9 @@ export async function signatureCallback(req: Request, res: Response) {
   }
 
   if (status === "signed") {
+    if (isProd() && isMock(process.env.SIGN_PROVIDER)) {
+      return res.status(503).json({ error: "signature_mock_not_allowed_in_prod" });
+    }
     try {
       const updated = await transitionContract(id, "signed");
       await recordContractHistory(id, "SIGNED", (req as any).user?.id, { provider, eventId });
