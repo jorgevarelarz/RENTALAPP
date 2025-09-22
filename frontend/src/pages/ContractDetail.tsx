@@ -5,6 +5,7 @@ import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 import ChatPanel from '../components/ChatPanel';
 import Card from '../components/ui/Card';
+import ProBadge from '../components/ProBadge';
 import CopyLinkButton from '../components/CopyLinkButton';
 import { useToast } from '../context/ToastContext';
 
@@ -46,6 +47,11 @@ const ContractDetail: React.FC = () => {
   return (
     <div>
       <h1 className="page-title">Detalle del Contrato</h1>
+      {user?.role === 'tenant' && user?.tenantPro?.status === 'verified' && (
+        <div style={{ marginBottom: 8 }}>
+          <ProBadge maxRent={user?.tenantPro?.maxRent} />
+        </div>
+      )}
       <Card style={{ padding: 24 }}>
         <p>ID: {c._id || c.id}</p>
         <p>Inquilino: {c.tenant?.id || c.tenant}</p>

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { listConversations, type Conversation } from '../services/chat';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import ProBadge from '../components/ProBadge';
 
 export default function Inbox() {
   const [items, setItems] = useState<Conversation[]>([]);
@@ -39,6 +40,11 @@ export default function Inbox() {
   return (
     <div>
       <h2>Conversaciones</h2>
+      {user?.role === 'tenant' && user?.tenantPro?.status === 'verified' && (
+        <div style={{ marginBottom: 8 }}>
+          <ProBadge maxRent={user?.tenantPro?.maxRent} />
+        </div>
+      )}
       {loading && <div>Cargando…</div>}
       {err && <div style={{ color: '#b91c1c' }}>{err}</div>}
       {!loading && items.length === 0 && <div>No hay conversaciones</div>}
