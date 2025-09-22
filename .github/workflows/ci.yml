@@ -30,7 +30,9 @@ jobs:
         run: npm i
       - name: Frontend typecheck
         working-directory: frontend
-        run: npm run typecheck
+        run: |
+          npm i -D typescript@^5.5 --no-audit --no-fund
+          npx tsc --noEmit
       - name: Frontend build
         working-directory: frontend
         run: npm run build
