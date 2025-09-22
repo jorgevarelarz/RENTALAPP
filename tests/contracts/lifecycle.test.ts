@@ -5,7 +5,10 @@ import { connectDb, disconnectDb, clearDb } from "../utils/db";
 describe("Contract lifecycle", () => {
   let id: string;
 
-  beforeAll(connectDb);
+  beforeAll(async () => {
+    process.env.SIGN_PROVIDER = 'mock';
+    await connectDb();
+  });
   afterAll(disconnectDb);
   afterEach(clearDb);
 
