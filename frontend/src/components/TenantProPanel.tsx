@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import {
-  TenantProInfo,
-  acceptTenantProConsent,
-  getTenantProInfo,
-  uploadTenantProDoc,
-} from '../services/tenantPro';
+import { TenantProInfo, acceptTenantProConsent, getTenantProInfo, uploadTenantProDoc } from '../services/tenantPro';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 
@@ -24,7 +19,7 @@ type Props = {
 export default function TenantProPanel({ requiredRent }: Props) {
   const { user } = useAuth();
   const qc = useQueryClient();
-  const { data: info, isLoading: loading, error } = useQuery<TenantProInfo>({
+  const { data: info, isLoading: loading, error, refetch } = useQuery<TenantProInfo>({
     queryKey: ['tenant-pro/me'],
     queryFn: getTenantProInfo,
     enabled: !!user && user.role === 'tenant',
@@ -82,11 +77,19 @@ export default function TenantProPanel({ requiredRent }: Props) {
       <strong>Programa Inquilino PRO</strong>
       {badge}
       {loading && <div>Cargando estado…</div>}
-      {error && <div style={{ color: '#ef4444' }}>{(error as any)?.message || 'Error'}</div>}
+      {error && (
+        <div style={{ color: '#ef4444' }}>
+          {(error as any)?.message || 'Error'}
+          <div><button onClick={() => refetch()}>Reintentar</button></div>
+        </div>
+      )}
       {!loading && !badge && (
         <p style={{ margin: 0, color: '#4b5563' }}>
           Sube tu documentación una vez y solicita viviendas exclusivas para inquilinos PRO.
         </p>
+      )}
+      {!!info?.consentAccepted && (info as any)?.docs?.length === 0 && (
+        <div style={{ color: '#6b7280' }}>Aún no has subido documentación. Sube tu nómina, contrato, etc. para obtener el badge PRO.</div>
       )}
       {needsUpgrade && (
         <div style={{ color: '#b91c1c', fontWeight: 500 }}>
@@ -149,6 +152,9 @@ export default function TenantProPanel({ requiredRent }: Props) {
                 />
               </label>
               {uploadMut.isPending && <div>Subiendo…</div>}
+              <div style={{ fontSize: 12, color: '#6b7280' }}>
+                Conservamos esta documentación durante {(info as any)?.ttlDays ?? 365} días; puedes eliminarla cuando quieras desde tu perfil.
+              </div>
             </div>
           )}
         </div>

@@ -111,6 +111,7 @@ export async function search(req: Request, res: Response) {
     page = '1',
     limit = '20',
     onlyTenantPro,
+    onlyPro,
     status,
   } = req.query as any;
 
@@ -122,7 +123,11 @@ export async function search(req: Request, res: Response) {
   if (furnished !== undefined) q.furnished = furnished === 'true';
   if (petsAllowed !== undefined) q.petsAllowed = petsAllowed === 'true';
   if (availableDate) q.availableFrom = { $lte: new Date(String(availableDate)) };
-  if (onlyTenantPro !== undefined) q.onlyTenantPro = ['true', '1', 'yes', 'on'].includes(String(onlyTenantPro).toLowerCase());
+  const onlyProParam =
+    onlyTenantPro !== undefined ? onlyTenantPro : (onlyPro !== undefined ? onlyPro : undefined);
+  if (onlyProParam !== undefined) {
+    q.onlyTenantPro = ['true', '1', 'yes', 'on'].includes(String(onlyProParam).toLowerCase());
+  }
   if (status) q.status = String(status);
   if (text) {
     const safe = String(text).trim();

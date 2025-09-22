@@ -132,10 +132,7 @@ export default function PropertyDetail() {
               toast.error(e?.response?.data?.message || e?.response?.data?.error || 'No se pudo enviar la solicitud');
             }
           }}
-          disabled={
-            (property.onlyTenantPro && (!tp || tp.status !== 'verified' || (tp.maxRent ?? 0) < (property.requiredTenantProMaxRent || property.price)))
-            || user?.role !== 'tenant'
-          }
+          disabled={user?.role !== 'tenant'}
           title={
             property.onlyTenantPro && user?.role === 'tenant' && (!tp || tp.status !== 'verified')
               ? 'Esta propiedad solo admite solicitudes de inquilinos con solvencia verificada (PRO).'
@@ -143,7 +140,7 @@ export default function PropertyDetail() {
           }
           style={{
             background: '#111827', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', cursor: 'pointer',
-            opacity: (property.onlyTenantPro && (!tp || tp.status !== 'verified')) || user?.role !== 'tenant' ? 0.6 : 1,
+            opacity: user?.role !== 'tenant' ? 0.6 : 1,
           }}
         >
           Solicitar alquiler

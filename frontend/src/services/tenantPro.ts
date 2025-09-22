@@ -7,6 +7,8 @@ export type TenantProInfo = {
   consentTextVersion?: string;
   consentAcceptedAt?: string;
   lastDecisionAt?: string;
+  docs?: Array<any>;
+  ttlDays?: number;
 };
 
 export async function getTenantProInfo(): Promise<TenantProInfo> {
