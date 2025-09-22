@@ -1,5 +1,12 @@
 # RentalApp
 
+[![CI](https://github.com/jorgevarelarz/RENTALAPP/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jorgevarelarz/RENTALAPP/actions/workflows/ci.yml)
+
+<p align="left">
+  <a href="https://github.com/jorgevarelarz/RENTALAPP/actions/workflows/ci.yml">
+    <img alt="CI" src="https://github.com/jorgevarelarz/RENTALAPP/actions/workflows/ci.yml/badge.svg?branch=main" />
+  </a>
+</p>
 
 ## Cómo probar la demo
 
@@ -385,3 +392,40 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 - `npm run test:rbac`
 - `npm run test:frontend`
 - `npm run dev:all` (arranca back y front con concurrently -k)
+
+## Firma electrónica (mock vs DocuSign)
+
+Soporte de firma electrónica con proveedor conmutable por flag.
+
+- Flags/ENV:
+  ```env
+  SIGN_PROVIDER=mock|docusign
+  SIGN_EMBEDDED=false
+  DOCUSIGN_BASE_URL=https://demo.docusign.net
+  DOCUSIGN_INTEGRATOR_KEY=...
+  DOCUSIGN_USER_ID=...
+  DOCUSIGN_ACCOUNT_ID=...
+  DOCUSIGN_AUTH_METHOD=jwt
+  DOCUSIGN_PRIVATE_KEY_BASE64=...
+  DOCUSIGN_WEBHOOK_SECRET=...
+  ```
+
+- Flujo de firma:
+  1) Inicio: `POST /api/contracts/:id/signature` (roles: landlord/admin)
+  2) Callback Connect: endpoint sin auth, protegido con HMAC `X-DocuSign-Signature-1` → actualiza `signature.status`.
+     - Si `completed`: guarda PDF firmado en `storage/contracts-signed/...` y calcula `signature.pdfHash`.
+  3) Descarga: `GET /api/contracts/:id/pdf/signed` (solo landlord/tenant del contrato o admin)
+
+- Verificación del PDF:
+  ```bash
+  shasum -a 256 path/to/signed.pdf
+  # Debe coincidir con signature.pdfHash
+  ```
+
+- Dev vs Prod:
+  - Dev: `SIGN_PROVIDER=mock` (no usa DocuSign).
+  - Prod (DocuSign): todas las `DOCUSIGN_*` son obligatorias; si falta alguna, el inicio de firma devuelve `500`.
+
+- Embedded signing (opcional):
+  - Activar con `SIGN_EMBEDDED=true`.
+  - La respuesta de inicio puede incluir `recipientUrls` para propietario/inquilino.
