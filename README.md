@@ -29,6 +29,10 @@
    stripe listen --forward-to http://localhost:3000/api/stripe/webhook
    ```
 
+   Nota: Stripe CLI mostrará un "Webhook signing secret" (por ejemplo, `whsec_...`).
+   - Puedes exportarlo temporalmente: `export STRIPE_WEBHOOK_SECRET=whsec_xxx`
+   - O añadirlo a tu `.env`. En producción este valor es obligatorio; si falta, la API devolverá `500 stripe_webhook_secret_missing` para evitar aceptar webhooks sin firma.
+
 5. Flujo manual en el navegador:
    - Regístrate en `/login` y conserva el token.
    - Desde `/dashboard` crea una propiedad publicada.
