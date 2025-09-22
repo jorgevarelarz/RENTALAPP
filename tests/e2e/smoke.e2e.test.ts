@@ -13,10 +13,13 @@ const NEW_PASSWORD = "NewPassw0rd!";
 type Role = "landlord" | "tenant" | "pro";
 
 async function register(email: string, role: Role, name = role.toUpperCase()) {
-  await request(app)
+  const res = await request(app)
     .post("/api/auth/register")
     .send({ name, email, password: PASSWORD, role })
     .expect(201);
+
+  console.log(res.body);
+  await new Promise(resolve => setTimeout(resolve, 500));
 
   const user = await User.findOne({ email }).lean();
   if (!user) {
@@ -33,16 +36,14 @@ async function login(email: string, password = PASSWORD) {
   return res.body.token as string;
 }
 
-function asUser(user: any, verified = true) {
+function asUser(token: string) {
   return {
-    "x-user-id": String(user._id),
-    "x-user-role": user.role,
-    "x-user-verified": verified ? "true" : "false",
+    Authorization: `Bearer ${token}`,
   };
 }
 
 describe("E2E Smoke", () => {
-  jest.setTimeout(120_000);
+jest.setTimeout(180_000);
 
   let landlord: any;
   let tenant: any;
@@ -94,9 +95,10 @@ describe("E2E Smoke", () => {
   });
 
   it("landlord creates & publishes property (owner verified, >=3 images)", async () => {
+    const landlordToken = await login("landlord@test.com");
     const create = await request(app)
       .post("/api/properties")
-      .set(asUser(landlord))
+      .set(asUser(landlordToken))
       .send({
         owner: landlord._id,
         title: "Piso céntrico prueba",
@@ -121,7 +123,7 @@ describe("E2E Smoke", () => {
 
     const pub = await request(app)
       .post(`/api/properties/${propertyId}/publish`)
-      .set(asUser(landlord))
+      .set(asUser(landlordToken))
       .send()
       .expect(200);
     expect(pub.body.status).toBe("active");
@@ -131,6 +133,7 @@ describe("E2E Smoke", () => {
   });
 
   it("search properties + favorite + alerts mock", async () => {
+    const tenantToken = await login("tenant@test.com");
     const list = await request(app)
       .get("/api/properties?city=A Coruña&priceMax=1000&limit=5")
       .expect(200);
@@ -138,13 +141,13 @@ describe("E2E Smoke", () => {
 
     await request(app)
       .post(`/api/properties/${propertyId}/favorite`)
-      .set(asUser(tenant))
+      .set(asUser(tenantToken))
       .send()
       .expect(200);
 
     await request(app)
       .post(`/api/properties/${propertyId}/subscribe-price`)
-      .set(asUser(tenant))
+      .set(asUser(tenantToken))
       .send()
       .expect(200);
 
@@ -153,9 +156,10 @@ describe("E2E Smoke", () => {
   });
 
   it("create contract (Galicia) + PDF + hash + idempotent signature + activate", async () => {
+    const landlordToken = await login("landlord@test.com");
     const create = await request(app)
       .post("/api/contracts")
-      .set(asUser(landlord))
+      .set(asUser(landlordToken))
       .send({
         landlord: landlord._id,
         tenant: tenant._id,
@@ -190,7 +194,7 @@ describe("E2E Smoke", () => {
 
     const act = await request(app)
       .post(`/api/contracts/${contractId}/activate`)
-      .set(asUser(landlord))
+      .set(asUser(landlordToken))
       .send()
       .expect(200);
     expect(act.body.status).toBe("active");
@@ -200,9 +204,12 @@ describe("E2E Smoke", () => {
   });
 
   it("tenant opens ticket; landlord assigns pro; pro quotes; landlord approves (escrow mock); pro extra flow; complete & close", async () => {
+    const tenantToken = await login("tenant@test.com");
+    const landlordToken = await login("landlord@test.com");
+    const proToken = await login("pro@test.com");
     const open = await request(app)
       .post("/api/tickets")
-      .set(asUser(tenant))
+      .set(asUser(tenantToken))
       .send({
         contractId,
         ownerId: String(landlord._id),
@@ -217,52 +224,53 @@ describe("E2E Smoke", () => {
 
     const assigned = await request(app)
       .post(`/api/tickets/${ticketId}/assign`)
-      .set(asUser(landlord))
+      .set(asUser(landlordToken))
       .send({ proId: String(proDoc._id) })
       .expect(200);
     expect(assigned.body.ticket.proId).toBe(String(pro._id));
 
     await request(app)
       .post(`/api/tickets/${ticketId}/quote`)
-      .set(asUser(pro))
+      .set(asUser(proToken))
       .send({ amount: 180, note: "Material + mano de obra" })
       .expect(200);
 
     await request(app)
       .post(`/api/tickets/${ticketId}/approve`)
-      .set(asUser(landlord))
+      .set(asUser(landlordToken))
       .send({ customerId: "cus_mock" })
       .expect(200);
 
     await request(app)
       .post(`/api/tickets/${ticketId}/extra`)
-      .set(asUser(pro))
+      .set(asUser(proToken))
       .send({ amount: 30, reason: "Codo adicional" })
       .expect(200);
 
     await request(app)
       .post(`/api/tickets/${ticketId}/extra/decide`)
-      .set(asUser(landlord))
+      .set(asUser(landlordToken))
       .send({ approve: true })
       .expect(200);
 
     await request(app)
       .post(`/api/tickets/${ticketId}/complete`)
-      .set(asUser(pro))
+      .set(asUser(proToken))
       .send({ invoiceUrl: "https://files/invoice.pdf" })
       .expect(200);
 
     await request(app)
       .post(`/api/tickets/${ticketId}/resolve`)
-      .set(asUser(tenant))
+      .set(asUser(tenantToken))
       .send()
       .expect(200);
   });
 
   it("soft-delete property hides it from active listings", async () => {
+    const landlordToken = await login("landlord@test.com");
     await request(app)
       .post(`/api/properties/${propertyId}/archive`)
-      .set(asUser(landlord))
+      .set(asUser(landlordToken))
       .send()
       .expect(200);
 

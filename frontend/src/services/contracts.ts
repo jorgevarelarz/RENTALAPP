@@ -22,6 +22,13 @@ export const getContract = async (token: string, id: string) => {
   return res.data as any;
 };
 
+export const sendToSignature = async (token: string, id: string) => {
+  const res = await axios.post(`/api/contracts/${id}/signature`, {}, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data as { status: string; envelopeId?: string; recipientUrls?: { landlordUrl?: string; tenantUrl?: string } };
+};
+
 export const signContract = async (token: string, id: string) => {
   const res = await axios.patch(`/api/contracts/${id}/sign`, {}, {
     headers: { Authorization: `Bearer ${token}` },
