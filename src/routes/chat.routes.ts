@@ -5,6 +5,7 @@ import { Contract } from '../models/contract.model';
 import Ticket from '../models/ticket.model';
 import Appointment from '../models/appointment.model';
 import { getUserId } from '../utils/getUserId';
+import { User } from '../models/user.model';
 
 const r = Router();
 
@@ -77,9 +78,21 @@ r.get('/conversations', async (req, res) => {
       .skip((page - 1) * limit)
       .limit(limit)
       .lean();
+    // Enriquecer con mini perfil público de participantes (isPro/proLimit)
+    const ids = Array.from(new Set(list.flatMap(c => c.participants.map(p => String(p)))));
+    const users = await User.find({ _id: { $in: ids } })
+      .select('name tenantPro.status tenantPro.maxRent')
+      .lean();
+    const umap = new Map(users.map((u: any) => [String(u._id), u]));
     const result = list.map(c => ({
       ...c,
       unreadForMe: c.unread?.[userId] || 0,
+      participantsInfo: c.participants.map((pid: any) => {
+        const u: any = umap.get(String(pid));
+        const isPro = u?.tenantPro?.status === 'verified';
+        const proLimit = typeof u?.tenantPro?.maxRent === 'number' && u.tenantPro.maxRent > 0 ? u.tenantPro.maxRent : undefined;
+        return { id: String(pid), name: u?.name, isPro, proLimit };
+      }),
     }));
     res.json(result);
   } catch (err: any) {
@@ -92,7 +105,18 @@ r.post('/conversations/ensure', async (req, res) => {
     const userId = getUserId(req);
     const { kind, refId } = req.body || {};
     const conv = await ensureConversation(kind, refId, userId);
-    res.json(conv);
+    const ids = conv.participants.map(p => String(p));
+    const users = await User.find({ _id: { $in: ids } })
+      .select('name tenantPro.status tenantPro.maxRent')
+      .lean();
+    const umap = new Map(users.map((u: any) => [String(u._id), u]));
+    const participantsInfo = conv.participants.map((pid: any) => {
+      const u: any = umap.get(String(pid));
+      const isPro = u?.tenantPro?.status === 'verified';
+      const proLimit = typeof u?.tenantPro?.maxRent === 'number' && u.tenantPro.maxRent > 0 ? u.tenantPro.maxRent : undefined;
+      return { id: String(pid), name: u?.name, isPro, proLimit };
+    });
+    res.json({ ...(conv.toObject ? conv.toObject() : conv), participantsInfo });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message });
   }

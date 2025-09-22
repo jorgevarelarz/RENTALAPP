@@ -5,6 +5,7 @@ export type Conversation = {
   kind: 'ticket' | 'contract' | 'appointment';
   refId: string;
   participants: string[];
+  participantsInfo?: Array<{ id: string; name?: string; isPro?: boolean; proLimit?: number }>;
   meta?: any;
   unread?: Record<string, number>;
   lastMessageAt?: string;

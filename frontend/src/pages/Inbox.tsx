@@ -57,6 +57,18 @@ export default function Inbox() {
           >
             <div>
               <div style={{ fontWeight: 600 }}>{c.kind.toUpperCase()}</div>
+              {c.participantsInfo && user?._id && (
+                (() => {
+                  const other = c.participantsInfo!.find(p => p.id !== user._id);
+                  if (!other) return null;
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span>{other.name || 'Usuario'}</span>
+                      {other.isPro && <ProBadge maxRent={other.proLimit} />}
+                    </div>
+                  );
+                })()
+              )}
               <div style={{ fontSize: 12, color: '#6B7280' }}>
                 {c.kind === 'ticket' && c.meta?.ticketId ? `Ticket ${String(c.meta.ticketId).slice(-6)}` : null}
                 {c.kind === 'contract' && c.meta?.contractId ? `Contrato ${String(c.meta.contractId).slice(-6)}` : null}
