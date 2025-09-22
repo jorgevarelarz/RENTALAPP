@@ -9,7 +9,7 @@
    cp frontend/.env.example frontend/.env
    ```
    Rellena `MONGO_URL`, `JWT_SECRET`, `STRIPE_SECRET_KEY`,
-   `STRIPE_WEBHOOK_SECRET` y `CORS_ORIGIN=http://localhost:5173`.
+   `STRIPE_WEBHOOK_SECRET` y `CORS_ORIGIN=http://localhost:3001`.
 
 2. Instala dependencias y ejecuta el seed:
    ```bash
@@ -26,7 +26,7 @@
 
 4. En una consola separada escucha los webhooks de Stripe:
    ```bash
-   stripe listen --forward-to localhost:4000/api/stripe/webhook
+   stripe listen --forward-to http://localhost:3000/api/stripe/webhook
    ```
 
 5. Flujo manual en el navegador:
@@ -47,7 +47,7 @@ Configura las variables:
 - `CORS_ORIGIN=https://<vercel-front>`
 
 ### Frontend (Vercel)
-- `VITE_API_URL=https://<api-deploy>`
+- `REACT_APP_API_URL=https://<api-deploy>`
 
 ## Arranque local con Docker Compose (API + Mongo)
 
@@ -96,7 +96,7 @@ docker compose logs -f api
 
 Pruebas rápidas:
 
-- API → http://localhost:3000/api/health
+- API → http://localhost:3000/health (alias: http://localhost:3000/api/health)
 - Mongo (opcional) → mongodb://localhost:27017
 
 Cuando termines:
@@ -275,4 +275,3 @@ healthcheck:
 Tarjeta: `4242 4242 4242 4242`, fecha futura y CVC cualquiera.
 
 Tarjetas de prueba adicionales: [Stripe testing docs](https://stripe.com/docs/testing).
-

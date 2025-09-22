@@ -141,6 +141,8 @@ app.get('/api/legal/tenant-pro-consent', (_req, res) => {
 app.get('/health', (_req, res) =>
   res.json({ ok: true, env: process.env.NODE_ENV, mongo: { state: mongoose.connection.readyState } }),
 );
+// Alias: /api/health redirige al endpoint canónico /health (evita romper clientes antiguos)
+app.get('/api/health', (_req, res) => res.redirect(301, '/health'));
 app.get('/metrics', metricsHandler);
 
 // Public routes
