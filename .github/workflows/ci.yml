@@ -19,6 +19,12 @@ jobs:
         run: npm ci || npm i
       - name: Typecheck backend
         run: npx tsc --noEmit
+      - name: Test backend (Jest)
+        env:
+          NODE_ENV: test
+          ALLOW_UNVERIFIED: 'true'
+          MONGOMS_VERSION: '7.0.5'
+        run: npm run test:backend -- --runInBand --ci
       - name: Frontend install
         working-directory: frontend
         run: npm ci || npm i
