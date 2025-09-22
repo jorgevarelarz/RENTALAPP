@@ -49,6 +49,39 @@ Configura las variables:
 ### Frontend (Vercel)
 - `REACT_APP_API_URL=https://<api-deploy>`
 
+## Feature flags de providers (mock vs real)
+
+Para evitar “simular” cobros/firma/SMS en producción, el proyecto expone flags de proveedor:
+
+- `ESCROW_DRIVER`: `mock` | `real`
+  - Dev/Test: `mock` crea referencias ficticias.
+  - Producción: si está en `mock`, las operaciones críticas (hold/release/deposit) responden 503 y NO cambian estado.
+- `SIGN_PROVIDER`: `mock` | `signaturit` | `docusign` (o el que uses)
+  - Dev/Test: `mock` permite flujo simulado.
+  - Producción: si está en `mock`, bloqueará iniciar firma y la transición a "signed" (503) en callbacks.
+- `SMS_PROVIDER`: `mock` | `twilio`
+  - `mock`: no envía SMS; registra en consola.
+  - `twilio`: requiere `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`.
+
+Ejemplos de configuración
+
+- Local (desarrollo):
+  ```env
+  ESCROW_DRIVER=mock
+  SIGN_PROVIDER=mock
+  SMS_PROVIDER=mock
+  ```
+- Producción (real):
+  ```env
+  ESCROW_DRIVER=real
+  SIGN_PROVIDER=signaturit
+  SMS_PROVIDER=twilio
+  ```
+
+Notas
+- Si dejas un flag en `mock` en producción, la API devolverá 503 en los puntos críticos para evitar cambios de estado irreversibles.
+- Los flags sólo bloquean en `NODE_ENV=production`. En dev/test siguen funcionando los mocks.
+
 ## Arranque local con Docker Compose (API + Mongo)
 
 Para levantar la API y Mongo en local sin Nginx ni certificados, crea un `docker-compose.override.yml` junto al `docker-compose.yml` con el siguiente contenido. Docker lo cargará automáticamente al ejecutar `docker compose` y sobrescribirá los servicios necesarios para desarrollo:
