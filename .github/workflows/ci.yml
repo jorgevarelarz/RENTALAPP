@@ -25,9 +25,9 @@ jobs:
           ALLOW_UNVERIFIED: 'true'
           MONGOMS_VERSION: '7.0.5'
         run: npm run test:backend -- --runInBand --ci
-      - name: Frontend install
+      - name: Frontend install (fresh)
         working-directory: frontend
-        run: npm ci || npm i
+        run: npm i
       - name: Frontend typecheck
         working-directory: frontend
         run: npm run typecheck
