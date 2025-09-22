@@ -1,4 +1,4 @@
-import axios from "axios";
+import { api as axios } from "../api/client";
 
 export async function fetchClauses(region: string, version = "1.0.0") {
   const { data } = await axios.get("/api/clauses", { params: { region, version } });

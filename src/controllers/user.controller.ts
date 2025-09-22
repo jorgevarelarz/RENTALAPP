@@ -4,9 +4,32 @@ import { User } from '../models/user.model';
 /**
  * Retrieve a list of all users. The password hash is excluded for security.
  */
-export const getAllUsers = async (_req: Request, res: Response) => {
-  const users = await User.find().select('-passwordHash').sort({ ratingAvg: -1, reviewCount: -1 });
-  res.json(users);
+export const getAllUsers = async (req: Request, res: Response) => {
+  const { q = '', role = '', page = '1', limit = '10' } = (req.query || {}) as any;
+  const pg = Math.max(1, parseInt(String(page)) || 1);
+  const lim = Math.min(100, Math.max(1, parseInt(String(limit)) || 10));
+
+  const query: any = {};
+  if (role) query.role = role;
+  if (q) {
+    const term = String(q).trim();
+    if (term) query.$or = [
+      { email: { $regex: term, $options: 'i' } },
+      { role: { $regex: term, $options: 'i' } },
+    ];
+  }
+
+  const [items, total] = await Promise.all([
+    User.find(query)
+      .select('-passwordHash')
+      .sort({ ratingAvg: -1, reviewCount: -1, createdAt: -1 })
+      .skip((pg - 1) * lim)
+      .limit(lim)
+      .lean(),
+    User.countDocuments(query),
+  ]);
+
+  res.json({ items, total, page: pg, limit: lim });
 };
 
 /**

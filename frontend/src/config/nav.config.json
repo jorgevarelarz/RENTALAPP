@@ -1,30 +1,45 @@
 {
+  "general": [
+    { "label": "Conversaciones", "path": "/inbox" }
+  ],
   "tenant": [
-    { "label": "Inicio", "path": "/tenant/dashboard" },
-    { "label": "Mis contratos", "path": "/tenant/contracts" },
-    { "label": "Pagos y facturas", "path": "/tenant/payments" },
-    { "label": "Incidencias", "path": "/tenant/issues" },
-    { "label": "Perfil", "path": "/tenant/profile" },
-    { "label": "Soporte", "path": "/tenant/support" }
+    { "label": "Inicio", "path": "/tenant" },
+    { "label": "Buscar pisos", "path": "/properties" },
+    { "label": "Favoritos", "path": "/me/favorites" },
+    { "label": "Solicitudes", "path": "/tenant/applications" },
+    { "label": "Contratos", "path": "/contracts" },
+    { "label": "Pagos", "path": "/tenant/payments" },
+    { "label": "Mis incidencias", "path": "/tickets" },
+    { "label": "Verificación KYC", "path": "/tenant/kyc" },
+    { "label": "Tenant PRO", "path": "/tenant-pro" },
+    { "label": "Perfil y cuenta", "path": "/profile" }
   ],
   "landlord": [
-    { "label": "Inicio", "path": "/landlord/dashboard" },
-    { "label": "Mis propiedades", "path": "/landlord/properties" },
-    { "label": "Contratos", "path": "/landlord/contracts" },
-    { "label": "Pagos y fianzas", "path": "/landlord/payments" },
-    { "label": "Incidencias", "path": "/landlord/issues" },
-    { "label": "Perfil/Empresa", "path": "/landlord/profile" },
-    { "label": "Soporte", "path": "/landlord/support" }
+    { "label": "Inicio", "path": "/landlord" },
+    { "label": "Mis propiedades", "path": "/owner/properties" },
+    { "label": "Contratos", "path": "/contracts" },
+    { "label": "Pagos", "path": "/landlord/payments" },
+    { "label": "Incidencias de mis propiedades", "path": "/landlord/issues" },
+    { "label": "Visitas", "path": "/landlord/showings" },
+    { "label": "Servicios", "path": "/landlord/services" },
+    { "label": "Perfil y cuenta", "path": "/profile" }
   ],
   "pro": [
-    { "label": "Inicio", "path": "/pro/dashboard" },
-    { "label": "Incidencias", "path": "/pro/issues" },
-    { "label": "Trabajos", "path": "/pro/jobs" },
-    { "label": "Pagos", "path": "/pro/payments" },
-    { "label": "Perfil profesional", "path": "/pro/profile" },
-    { "label": "Soporte", "path": "/pro/support" }
+    { "label": "Inicio", "path": "/pro" },
+    { "label": "Incidencias asignadas", "path": "/pro/tickets" },
+    { "label": "Presupuestos", "path": "/pro/quotes" },
+    { "label": "Facturación", "path": "/pro/billing" },
+    { "label": "Perfil profesional", "path": "/pro/profile" }
   ],
   "admin": [
-    { "label": "Dashboard", "path": "/admin/dashboard" }
+    { "label": "Inicio", "path": "/admin" },
+    { "label": "Usuarios", "path": "/admin/users" },
+    { "label": "Verificación KYC / Tenant PRO", "path": "/admin/tenant-pro" },
+    { "label": "Propiedades", "path": "/admin/properties" },
+    { "label": "Incidencias / Disputas", "path": "/admin/incidents" },
+    { "label": "Pagos", "path": "/admin/payments" },
+    { "label": "Reportes", "path": "/admin/reports" },
+    { "label": "Ajustes", "path": "/admin/settings" },
+    { "label": "Perfil y cuenta", "path": "/profile" }
   ]
 }

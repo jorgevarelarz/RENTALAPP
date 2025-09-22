@@ -1,14 +1,20 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { favoriteProperty, getProperty, incrementView, unfavoriteProperty } from '../../services/properties';
+import { applyToProperty, favoriteProperty, getProperty, incrementView, unfavoriteProperty } from '../../services/properties';
 import TenantProPanel from '../../components/TenantProPanel';
 import { useAuth } from '../../context/AuthContext';
+import { getTenantProInfo, type TenantProInfo } from '../../services/tenantPro';
+import LoginPrompt from '../../components/LoginPrompt';
+import toast from 'react-hot-toast';
+import SkeletonDetail from '../../components/ui/SkeletonDetail';
 
 export default function PropertyDetail() {
   const { id } = useParams();
   const [property, setProperty] = useState<any>(null);
   const [liked, setLiked] = useState(false);
   const { user } = useAuth();
+  const [tp, setTp] = useState<TenantProInfo | null>(null);
+  const [promptLogin, setPromptLogin] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -19,8 +25,19 @@ export default function PropertyDetail() {
     })();
   }, [id]);
 
+  useEffect(() => {
+    (async () => {
+      if (user?.role === 'tenant') {
+        try { const info = await getTenantProInfo(); setTp(info as any); } catch {}
+      } else {
+        setTp(null);
+      }
+    })();
+  }, [user?._id, user?.role]);
+
   const toggleFavorite = async () => {
     if (!property?._id) return;
+    if (!user) { setPromptLogin(true); return; }
     if (liked) {
       await unfavoriteProperty(property._id);
     } else {
@@ -29,9 +46,7 @@ export default function PropertyDetail() {
     setLiked(!liked);
   };
 
-  if (!property) {
-    return <div style={{ padding: 24 }}>Cargando…</div>;
-  }
+  if (!property) return <SkeletonDetail />;
 
   const images = property.images?.length ? property.images : ['https://via.placeholder.com/1000x600?text=Property'];
   const requiredRent = property.onlyTenantPro ? property.requiredTenantProMaxRent || property.price : undefined;
@@ -47,6 +62,29 @@ export default function PropertyDetail() {
       }}
     >
       Solo inquilinos PRO · mínimo {requiredRent} €/mes
+    </div>
+  ) : null;
+
+  const incomeBlock = property.onlyTenantPro ? (
+    <div style={{ background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12 }}>
+      <div style={{ fontWeight: 600, marginBottom: 6 }}>Requisito orientativo de ingresos (seguro de impago)</div>
+      {(() => {
+        const p = Number(property.price || 0);
+        if (!p) return <div>—</div>;
+        const inc35 = Math.ceil(p / 0.35);
+        const inc30 = Math.ceil(p / 0.30);
+        const inc40 = Math.ceil(p / 0.40);
+        return (
+          <div>
+            <div style={{ marginBottom: 6 }}>Mínimo recomendado (35%): <strong>{inc35.toLocaleString()} € / mes</strong></div>
+            <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
+              <li>Estricto 30%: ≈ {inc30.toLocaleString()} € / mes</li>
+              <li>Flexible 40%: ≈ {inc40.toLocaleString()} € / mes</li>
+            </ul>
+          </div>
+        );
+      })()}
+      <div style={{ marginTop: 6, color: '#6B7280' }}>Tu validación Tenant PRO debe ser ≥ la renta. Estos importes son orientativos.</div>
     </div>
   ) : null;
 
@@ -76,12 +114,46 @@ export default function PropertyDetail() {
             {property.city} · {property.rooms} hab · {property.bathrooms} baños · {property.sizeM2 || '—'} m²
           </div>
         </div>
-        <button onClick={toggleFavorite}>{liked ? '❤️ Quitar de favoritos' : '🤍 Añadir a favoritos'}</button>
+        <button onClick={toggleFavorite} title={!user ? 'Inicia sesión para guardar favoritos' : ''} disabled={!user}>
+          {liked ? '❤️ Quitar de favoritos' : '🤍 Añadir a favoritos'}
+        </button>
       </div>
 
-      {user?.role === 'tenant' && (
-        <TenantProPanel requiredRent={requiredRent} />
-      )}
+      {user?.role === 'tenant' && <TenantProPanel requiredRent={requiredRent} />}
+
+      <div>
+        <button
+          onClick={async () => {
+            if (!property?._id) return;
+            try {
+              await applyToProperty(property._id);
+              toast.success('Solicitud enviada');
+            } catch (e: any) {
+              toast.error(e?.response?.data?.message || e?.response?.data?.error || 'No se pudo enviar la solicitud');
+            }
+          }}
+          disabled={
+            (property.onlyTenantPro && (!tp || tp.status !== 'verified' || (tp.maxRent ?? 0) < (property.requiredTenantProMaxRent || property.price)))
+            || user?.role !== 'tenant'
+          }
+          title={
+            property.onlyTenantPro && user?.role === 'tenant' && (!tp || tp.status !== 'verified')
+              ? 'Esta propiedad solo admite solicitudes de inquilinos con solvencia verificada (PRO).'
+              : undefined
+          }
+          style={{
+            background: '#111827', color: '#fff', border: 'none', borderRadius: 8, padding: '10px 16px', cursor: 'pointer',
+            opacity: (property.onlyTenantPro && (!tp || tp.status !== 'verified')) || user?.role !== 'tenant' ? 0.6 : 1,
+          }}
+        >
+          Solicitar alquiler
+        </button>
+        {property.onlyTenantPro && user?.role === 'tenant' && (!tp || tp.status !== 'verified') && (
+          <div style={{ marginTop: 8, color: '#b91c1c' }}>
+            Solo inquilinos PRO. <a href="/tenant-pro">Hazte PRO</a> para optar a esta vivienda.
+          </div>
+        )}
+      </div>
 
       <div>
         <h3>Descripción</h3>
@@ -98,6 +170,8 @@ export default function PropertyDetail() {
           </li>
         </ul>
       </div>
+      {incomeBlock}
+      <LoginPrompt open={promptLogin} onClose={() => setPromptLogin(false)} />
     </div>
   );
 }

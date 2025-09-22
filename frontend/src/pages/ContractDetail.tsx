@@ -3,7 +3,9 @@ import { useParams } from 'react-router-dom';
 import { downloadPdf, getContract, payDeposit, signContract } from '../services/contracts';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
+import ChatPanel from '../components/ChatPanel';
 import Card from '../components/ui/Card';
+import CopyLinkButton from '../components/CopyLinkButton';
 import { useToast } from '../context/ToastContext';
 
 const ContractDetail: React.FC = () => {
@@ -67,6 +69,12 @@ const ContractDetail: React.FC = () => {
           </Button>
         </div>
       </Card>
+      <div style={{ marginTop: 12 }}>
+        <CopyLinkButton />
+      </div>
+      <div style={{ marginTop: 16 }}>
+        <ChatPanel kind="contract" refId={c._id || c.id} />
+      </div>
     </div>
   );
 };

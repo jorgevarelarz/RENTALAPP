@@ -8,9 +8,13 @@
     "start": "node dist/app.js",
     "start:prod": "node dist/app.js",
     "test": "jest",
+    "test:backend": "jest --config jest.config.js",
+    "test:frontend": "npm test --prefix frontend -- --watchAll=false",
     "test:unit": "jest tests/unit",
     "test:e2e": "jest --runInBand tests/e2e",
-    "seed": "ts-node src/seed.ts"
+    "seed": "ts-node src/seed.ts",
+    "seed:services": "ts-node scripts/seed_services.ts",
+    "seed:tenantpro-demo": "ts-node scripts/seed_tenantpro_demo.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.650.0",
@@ -19,7 +23,7 @@
     "date-fns": "^2.30.0",
     "dotenv": "^16.0.3",
     "express": "^4.21.2",
-    "express-rate-limit": "^8.1.0",
+    "express-rate-limit": "^7.5.1",
     "express-validator": "^7.2.1",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.0",
@@ -30,6 +34,7 @@
     "nodemailer": "^6.9.1",
     "pdfkit": "^0.17.1",
     "stripe": "^12.11.0",
+    "twilio": "^5.10.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-import axios from "axios";
+import { api as axios } from "../api/client";
 
 export type TicketRole = "tenant" | "landlord" | "pro";
 
@@ -15,10 +15,10 @@ export async function getTicket(id: string) {
 export async function listMyTickets(role: TicketRole, params: Record<string, unknown> = {}) {
   const path =
     role === "tenant"
-      ? "/api/tickets/mine/tenant"
+      ? "/api/tickets/my/tenant"
       : role === "landlord"
-        ? "/api/tickets/mine/owner"
-        : "/api/tickets/mine/pro";
+        ? "/api/tickets/my/owner"
+        : "/api/tickets/my/pro";
   const { data } = await axios.get(path, { params });
   return data as { items: any[]; page: number; total: number };
 }

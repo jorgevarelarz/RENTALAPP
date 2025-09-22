@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 
 export default function LoginPage() {
@@ -9,7 +9,8 @@ export default function LoginPage() {
   const { login } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
-  const next = (loc.state as any)?.from || "/";
+  const sp = new URLSearchParams(loc.search);
+  const next = sp.get('redirect') || (loc.state as any)?.from || "/";
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -22,20 +23,44 @@ export default function LoginPage() {
   };
 
   return (
-    <form
-      onSubmit={submit}
-      style={{ maxWidth: 360, margin: "64px auto", display: "grid", gap: 12 }}
-    >
-      <h2>Entrar</h2>
-      <input placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} />
-      <input
-        placeholder="Contraseña"
-        type="password"
-        value={password}
-        onChange={(e) => setPassword(e.target.value)}
-      />
-      {err && <div style={{ color: "crimson" }}>{err}</div>}
-      <button type="submit">Acceder</button>
-    </form>
+    <>
+      <h1 className="auth-title">Inicia sesión</h1>
+      <p className="auth-subtitle">Gestiona propiedades, contratos e incidencias en un único lugar.</p>
+      <form className="auth-form" onSubmit={submit} noValidate>
+        <label className="auth-label" htmlFor="email">
+          Correo electrónico
+          <input
+            id="email"
+            type="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="auth-input"
+            placeholder="correo@dominio.com"
+            autoComplete="email"
+          />
+        </label>
+        <label className="auth-label" htmlFor="password">
+          Contraseña
+          <input
+            id="password"
+            type="password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            className="auth-input"
+            placeholder="••••••••"
+            autoComplete="current-password"
+          />
+        </label>
+        {err && <p className="auth-error" style={{ color: '#b91c1c' }}>{err}</p>}
+        <button type="submit" className="auth-button">
+          Entrar
+        </button>
+      </form>
+      <div className="auth-footer">
+        ¿No tienes cuenta? <Link to="/register" className="auth-link">Regístrate</Link>
+      </div>
+    </>
   );
 }

@@ -20,11 +20,13 @@ const storage = multer.diskStorage({
 });
 
 function fileFilter(_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) {
-  if (file.mimetype.startsWith('image/')) cb(null, true);
+  const ok = file.mimetype.startsWith('image/') || file.mimetype === 'application/pdf';
+  if (ok) cb(null, true);
   else cb(new Error('invalid_file_type'));
 }
 
-const upload = multer({ storage, fileFilter, limits: { fileSize: 5 * 1024 * 1024 } });
+// 10MB por archivo; hasta 6 archivos
+const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 1024 } });
 
 // POST /api/uploads/images
 router.post('/uploads/images', authenticate as any, (req, res) => {

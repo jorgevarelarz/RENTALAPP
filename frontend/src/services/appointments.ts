@@ -1,16 +1,22 @@
-import axios from "axios";
+import { api as axios } from "../api/client";
 
+// Backend expects: POST /api/appointments/:ticketId/propose with { start, end, timezone }
 export async function proposeAppointment(ticketId: string, whenIso: string) {
-  const { data } = await axios.post(`/api/appointments/${ticketId}/propose`, { when: whenIso });
+  const start = new Date(whenIso);
+  const end = new Date(start.getTime() + 60 * 60 * 1000); // default to 1h slot
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'UTC';
+  const payload = { start: start.toISOString(), end: end.toISOString(), timezone };
+  const { data } = await axios.post(`/api/appointments/${ticketId}/propose`, payload);
   return data;
 }
 
-export async function confirmAppointment(appointmentId: string) {
-  const { data } = await axios.post(`/api/appointments/${appointmentId}/confirm`);
+// Accept/reject are keyed by ticketId per backend
+export async function acceptAppointment(ticketId: string) {
+  const { data } = await axios.post(`/api/appointments/${ticketId}/accept`);
   return data;
 }
 
-export async function rejectAppointment(appointmentId: string, reason?: string) {
-  const { data } = await axios.post(`/api/appointments/${appointmentId}/reject`, { reason });
+export async function rejectAppointment(ticketId: string, reason?: string) {
+  const { data } = await axios.post(`/api/appointments/${ticketId}/reject`, { reason });
   return data;
 }

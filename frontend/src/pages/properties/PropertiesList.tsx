@@ -1,79 +1,101 @@
-import React, { useEffect, useState } from 'react';
-import PropertyFilters from '../../components/PropertyFilters';
+import React, { useState } from 'react';
 import PropertyCard from '../../components/PropertyCard';
-import { favoriteProperty, searchProperties, unfavoriteProperty } from '../../services/properties';
-
-type SearchResponse = {
-  items: any[];
-  page: number;
-  limit: number;
-  total: number;
-};
+import { favoriteProperty, unfavoriteProperty } from '../../services/properties';
+import FilterBar from '../../components/FilterBar';
+import SkeletonGrid from '../../components/ui/SkeletonGrid';
+import { usePropertyFilters, usePropertiesQuery } from '../../hooks/useProperties';
+import Drawer from '../../components/ui/Drawer';
+import LoginPrompt from '../../components/LoginPrompt';
+import { useAuth } from '../../context/AuthContext';
+import EmptyState from '../../components/ui/EmptyState';
+import ErrorCard from '../../components/ui/ErrorCard';
 
 export default function PropertiesList() {
-  const [params, setParams] = useState<any>({ limit: 12, sort: 'createdAt', dir: 'desc' });
-  const [data, setData] = useState<SearchResponse>({ items: [], page: 1, limit: 12, total: 0 });
-  const [loading, setLoading] = useState(false);
+  const { filters, setFilters } = usePropertyFilters();
+  const { data, isLoading, isFetching } = usePropertiesQuery(filters);
+  const [showFilters, setShowFilters] = useState(false);
+  const [promptLogin, setPromptLogin] = useState(false);
+  const { user } = useAuth();
 
-  const load = async (override?: any) => {
-    setLoading(true);
-    const res = await searchProperties({ ...params, ...override });
-    setData(res);
-    setParams((prev: any) => ({ ...prev, ...override, page: res.page }));
-    setLoading(false);
-  };
-
-  useEffect(() => {
-    load({ page: 1 });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  const onApplyFilters = (filters: any) => load({ ...filters, page: 1 });
+  // filtros se aplican inline en FilterBar: no necesitamos handler aparte
 
   const onFavToggle = async (id: string, liked: boolean) => {
+    if (!user) { setPromptLogin(true); return; }
     try {
       const fn = liked ? favoriteProperty : unfavoriteProperty;
       await fn(id);
-      setData(current => ({
-        ...current,
-        items: current.items.map(item =>
-          item._id === id
-            ? { ...item, _liked: liked, favoritesCount: (item.favoritesCount || 0) + (liked ? 1 : -1) }
-            : item
-        ),
-      }));
-    } catch (error) {
-      // ignore
-    }
+    } catch {}
   };
 
-  const pages = Math.ceil((data.total || 0) / (data.limit || 1)) || 1;
+  const items = ((data?.items as any[]) || []).filter((it: any) => (filters as any).onlyTenantPro ? !!it.onlyTenantPro : true);
+  const page = (data as any)?.page || 1;
+  const limit = (data as any)?.limit || filters.limit || 12;
+  const total = (data as any)?.total || 0;
+  const pages = Math.ceil((total || 0) / (limit || 1)) || 1;
 
   return (
     <div style={{ padding: '24px', display: 'grid', gap: 16 }}>
-      <h2>Propiedades</h2>
-      <PropertyFilters initial={params} onApply={onApplyFilters} />
-      {loading && <div>Cargando…</div>}
-      {!loading && (
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-semibold">Propiedades</h2>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50 md:hidden"
+            onClick={() => setShowFilters(true)}
+          >
+            Filtros
+          </button>
+          <div className="text-sm text-gray-600">{isFetching ? 'Actualizando…' : null}</div>
+        </div>
+      </div>
+      {/* Filtros sticky en desktop */}
+      <div className="hidden md:block sticky top-14 z-10">
+        <FilterBar initial={filters} onApply={(next) => { setFilters({ ...next, page: 1 }); }} />
+      </div>
+      {isLoading ? (
+        <SkeletonGrid />
+      ) : (data as any)?.error ? (
+        <ErrorCard message={(data as any)?.error || 'No se pudo cargar el listado'} />
+      ) : items.length === 0 ? (
+        <EmptyState
+          title="No encontramos propiedades con esos filtros"
+          detail="Ajusta los criterios o borra los filtros para ver más resultados."
+          cta={<button className="px-3 py-1.5 rounded border border-gray-300" onClick={() => setFilters({})}>Borrar filtros</button>}
+        />
+      ) : (
         <>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12 }}>
-            {data.items.map(property => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+            {items.map((property: any) => (
               <PropertyCard key={property._id} p={property} onFavToggle={onFavToggle} />
             ))}
           </div>
-          <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 }}>
-            <button disabled={data.page <= 1} onClick={() => load({ page: data.page - 1 })}>
-              Anterior
-            </button>
-            <span>
-              Página {data.page} / {pages}
-            </span>
-            <button disabled={data.page >= pages} onClick={() => load({ page: data.page + 1 })}>
-              Siguiente
-            </button>
-          </div>
+          <nav className="flex items-center justify-center gap-2 mt-3" aria-label="Paginación">
+            <button
+              className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50"
+              onClick={() => setFilters({ page: Math.max(1, page - 1) })}
+              disabled={page <= 1}
+            >Anterior</button>
+            <span className="text-sm text-gray-700">Página {page} / {pages}</span>
+            <button
+              className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50"
+              onClick={() => setFilters({ page: Math.min(pages, page + 1) })}
+              disabled={page >= pages}
+            >Siguiente</button>
+          </nav>
         </>
       )}
+
+      {/* Drawer móvil para filtros */}
+      <Drawer open={showFilters} onClose={() => setShowFilters(false)} side="right">
+        <div className="p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Filtros</h3>
+            <button className="px-3 py-1.5 rounded border border-gray-300" onClick={() => setShowFilters(false)}>Cerrar</button>
+          </div>
+          <FilterBar initial={filters} onApply={(next) => { setFilters({ ...next, page: 1 }); setShowFilters(false); }} />
+        </div>
+      </Drawer>
+      <LoginPrompt open={promptLogin} onClose={() => setPromptLogin(false)} />
     </div>
   );
 }

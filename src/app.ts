@@ -36,6 +36,7 @@ import appointmentsFlowRoutes from './routes/appointments.routes';
 import uploadRoutes from './routes/upload.routes';
 import clausesRoutes from './routes/clauses.routes';
 import notifyRoutes from './routes/notify.routes';
+import postsignRouter from './routes/postsign';
 import tenantProRoutes from './routes/tenantPro.routes';
 import tenantProMeRoutes from './routes/tenantPro.me';
 import adminTenantProRoutes from './routes/admin.tenantPro.routes';
@@ -43,31 +44,75 @@ import { purgeOldTenantProDocs } from './jobs/tenantProRetention';
 
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import { requestId } from './middleware/requestId';
+import { loadEnv } from './config/env';
+import { metricsMiddleware, metricsHandler } from './metrics';
 
 // Load environment variables
 dotenv.config();
+const env = loadEnv();
 
 const app = express();
-app.use(helmet());
+app.use(
+  helmet({
+    crossOriginEmbedderPolicy: false,
+    contentSecurityPolicy:
+      process.env.NODE_ENV === 'production'
+        ? {
+            useDefaults: true,
+            directives: {
+              defaultSrc: ["'self'"],
+              imgSrc: ["'self'", 'data:', 'https:', 'http:'],
+              scriptSrc: ["'self'", "'unsafe-inline'"],
+              styleSrc: ["'self'", "'unsafe-inline'"],
+              connectSrc: [
+                "'self'",
+                ...(process.env.CORS_ORIGIN || '')
+                  .split(',')
+                  .map(s => s.trim())
+                  .filter(Boolean),
+              ],
+            },
+          }
+        : false,
+    hsts: process.env.NODE_ENV === 'production' ? undefined : false,
+  }),
+);
+
+// ID de solicitud para trazabilidad
+app.use(requestId);
+// Compresión (si el paquete está disponible)
+let compressionFn: any;
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  compressionFn = require('compression');
+} catch {}
+if (compressionFn) {
+  app.use(compressionFn());
+}
+app.use(metricsMiddleware);
 
 app.use(morgan('dev'));
 
 // Stripe webhook BEFORE JSON parser (uses express.raw)
 app.use('/api', stripeWebhookRoutes);
 
-// CORS: permite configurar orígenes desde CORS_ORIGIN (coma-separado). Por defecto, 3000 para CRA.
-const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:3001')
+// CORS: configurar orígenes desde CORS_ORIGIN (coma-separado). En producción, sin fallback amplio.
+const allowedOrigins = (process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000,http://localhost:3001'))
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
 app.use(cors({
-  origin: allowedOrigins.length > 0 ? allowedOrigins : true,
+  origin: allowedOrigins.length > 0 ? allowedOrigins : false,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
-  // Let the browser echo back requested headers to avoid preflight issues
-  allowedHeaders: undefined,
+  allowedHeaders: [
+    'Content-Type', 'Authorization', 'X-Requested-With', 'x-admin', 'x-user-id'
+  ],
+  exposedHeaders: ['Content-Disposition'],
   credentials:true
 }));
-app.use(express.json());
+app.use(express.json({ limit: '1mb' }));
+app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 // Serve uploaded files
 app.use('/uploads', express.static('uploads'));
 
@@ -93,7 +138,10 @@ app.get('/api/legal/tenant-pro-consent', (_req, res) => {
   }
 });
 
-app.get('/health', (_req, res) => res.json({ ok: true }));
+app.get('/health', (_req, res) =>
+  res.json({ ok: true, env: process.env.NODE_ENV, mongo: { state: mongoose.connection.readyState } }),
+);
+app.get('/metrics', metricsHandler);
 
 // Public routes
 app.use('/api/auth', authRoutes);
@@ -104,6 +152,7 @@ app.use('/api', clausesRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api', demoContractRoutes);
 app.use('/api', notifyRoutes);
+app.use('/api', authenticate, postsignRouter);
 app.use('/api', tenantProRoutes);
 app.use('/api', tenantProMeRoutes);
 app.use('/api', requireVerified, appointmentsFlowRoutes);
@@ -136,8 +185,8 @@ app.use(
 // Error handler
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 3000;
-const mongoUrl = process.env.MONGO_URL || process.env.MONGO_URI || '';
+const PORT = env.PORT || 3000;
+const mongoUrl = env.MONGO || '';
 
 let server: any;
 
@@ -154,7 +203,22 @@ if (mongoUrl) {
 } else if (process.env.NODE_ENV !== 'test') {
   console.warn('Mongo URL no configurada; la conexión a la base de datos se omitirá');
 }
- 
+// Apagado elegante
+if (process.env.NODE_ENV !== 'test') {
+  const shutdown = async (signal: string) => {
+    try {
+      console.log(`[shutdown] Señal recibida: ${signal}`);
+      if (server) {
+        await new Promise<void>(resolve => server.close(() => resolve()));
+      }
+      await mongoose.connection.close().catch(() => {});
+    } finally {
+      process.exit(0);
+    }
+  };
+  process.on('SIGINT', () => shutdown('SIGINT'));
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+}
 
 export { app, server };
 export default app;

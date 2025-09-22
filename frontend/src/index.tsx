@@ -7,16 +7,24 @@ import { ToastProvider } from "./context/ToastContext";
 import { NotificationsProvider } from "./utils/notify";
 import reportWebVitals from "./reportWebVitals";
 import axios from "axios";
+import api from "./api/client";
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { Toaster } from 'react-hot-toast';
 
-axios.defaults.baseURL = process.env.REACT_APP_API_URL || process.env.VITE_API_URL || "";
+// api client centralizado configura baseURL, Authorization y toasts
+axios.defaults.baseURL = (api.defaults && api.defaults.baseURL) || '';
 
 const root = ReactDOM.createRoot(document.getElementById("root") as HTMLElement);
+const queryClient = new QueryClient();
 root.render(
   <React.StrictMode>
     <ThemeProvider>
       <ToastProvider>
         <NotificationsProvider>
-          <AppRoutes />
+          <QueryClientProvider client={queryClient}>
+            <Toaster position="top-right" />
+            <AppRoutes />
+          </QueryClientProvider>
         </NotificationsProvider>
       </ToastProvider>
     </ThemeProvider>

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import axios from "axios";
+import { resetPassword as apiResetPassword } from "../../services/auth";
 
 const containerStyle: React.CSSProperties = {
   maxWidth: 360,
@@ -52,7 +52,7 @@ const ResetPassword: React.FC = () => {
     setStatus("idle");
     setErrorMessage("");
     try {
-      await axios.post("/api/auth/reset", { token, password });
+      await apiResetPassword(token, password);
       setStatus("success");
     } catch (error: any) {
       console.error("Error resetting password", error);

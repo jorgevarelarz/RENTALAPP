@@ -63,8 +63,10 @@ async function ensureConversation(kind: string, refId: string, userId: string) {
   return conv;
 }
 
-// Rate limiting messages per conversation: 20 per minute
+// Rate limiting messages per conversation: 20 por minuto
 const messageTimestamps = new Map<string, number[]>();
+// Rate limiting mensajes por usuario (global): 60 por minuto
+const userTimestamps = new Map<string, number[]>();
 
 r.get('/conversations', async (req, res) => {
   try {
@@ -107,16 +109,36 @@ r.post('/:conversationId/messages', async (req, res) => {
     }
     // rate limit
     const now = Date.now();
-    const timestamps = messageTimestamps.get(conversationId) || [];
-    const recent = timestamps.filter(ts => now - ts < 60 * 1000);
-    if (recent.length >= 20) {
+    const convStamps = messageTimestamps.get(conversationId) || [];
+    const convRecent = convStamps.filter(ts => now - ts < 60 * 1000);
+    if (convRecent.length >= 20) {
       throw Object.assign(new Error('Rate limit'), { status: 429 });
     }
-    recent.push(now);
-    messageTimestamps.set(conversationId, recent);
+    convRecent.push(now);
+    messageTimestamps.set(conversationId, convRecent);
+
+    const userStamps = userTimestamps.get(userId) || [];
+    const userRecent = userStamps.filter(ts => now - ts < 60 * 1000);
+    if (userRecent.length >= 60) {
+      throw Object.assign(new Error('Rate limit (user)'), { status: 429 });
+    }
+    userRecent.push(now);
+    userTimestamps.set(userId, userRecent);
 
     const { body, attachmentUrl } = req.body || {};
-    const msg = await Message.create({ conversationId, senderId: userId, type: 'user', body, attachmentUrl, readBy: [userId] });
+    // Sanitizar: cuerpo máximo 2k, attachmentUrl solo dominios permitidos
+    const text = typeof body === 'string' ? String(body).slice(0, 2000) : undefined;
+    let url: string | undefined = typeof attachmentUrl === 'string' ? String(attachmentUrl) : undefined;
+    if (url) {
+      const allow = (process.env.UPLOADS_BASE_URL || '').split(',').map(s=>s.trim()).filter(Boolean);
+      const ok = allow.length === 0
+        ? /^https?:\/\//i.test(url) || url.startsWith('/uploads/')
+        : allow.some(prefix => url.startsWith(prefix));
+      if (!ok) {
+        return res.status(400).json({ error: 'attachment_domain_not_allowed' });
+      }
+    }
+    const msg = await Message.create({ conversationId, senderId: userId, type: 'user', body: text, attachmentUrl: url, readBy: [userId] });
     conv.lastMessageAt = new Date();
     conv.participants.forEach(p => {
       conv.unread = conv.unread || {};

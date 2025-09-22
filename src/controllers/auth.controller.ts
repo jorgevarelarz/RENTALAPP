@@ -21,7 +21,10 @@ export const register = async (req: Request, res: Response) => {
     const user = new User({ name, email, passwordHash, role });
     await user.save();
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    res.status(201).json({ token });
+    res.status(201).json({
+      token,
+      user: { _id: user._id, email: user.email, role: user.role },
+    });
   } catch (error) {
     res.status(400).json({ error: 'Error al registrar' });
   }
@@ -45,7 +48,10 @@ export const login = async (req: Request, res: Response) => {
     if (!isMatch) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
     // Generate and return JWT
     const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
-    res.json({ token });
+    res.json({
+      token,
+      user: { _id: user._id, email: user.email, role: user.role },
+    });
   } catch (error) {
     res.status(500).json({ message: 'Error del servidor' });
   }

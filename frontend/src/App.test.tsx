@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react';
-import App from './App';
+import AppRoutes from './AppRoutes';
 import { AuthProvider } from './context/AuthContext';
 import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
@@ -35,7 +35,7 @@ test('la app renderiza sin crashear', () => {
       <ToastProvider>
         <AuthProvider>
           {/* App needs to be inside a Router, even a mocked one */}
-          <App />
+          <AppRoutes />
         </AuthProvider>
       </ToastProvider>
     </ThemeProvider>

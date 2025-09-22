@@ -12,10 +12,12 @@ import {
   closeTicket,
   openDispute,
 } from "../../services/tickets";
-import { proposeAppointment as proposeAppt } from "../../services/appointments";
+import { proposeAppointment as proposeAppt, acceptAppointment, rejectAppointment } from "../../services/appointments";
+import ChatPanel from "../../components/ChatPanel";
 import { searchPros } from "../../services/pros";
 import { useAuth } from "../../context/AuthContext";
 import { useNotify } from "../../utils/notify";
+import CopyLinkButton from "../../components/CopyLinkButton";
 import { sendEmail, sendSms } from "../../services/notify";
 
 export default function TicketDetail() {
@@ -28,6 +30,7 @@ export default function TicketDetail() {
   const [extraAmount, setExtraAmount] = useState<number>(0);
   const [extraReason, setExtraReason] = useState("");
   const [when, setWhen] = useState<string>("");
+  const [rejectWhy, setRejectWhy] = useState<string>("");
 
   const role = user?.role;
   const { push } = useNotify();
@@ -159,6 +162,27 @@ export default function TicketDetail() {
       await reload();
     } catch (err: any) {
       showError(err, "No se pudo proponer la cita");
+    }
+  };
+
+  const onAcceptAppt = async () => {
+    try {
+      await acceptAppointment(ticket._id);
+      push("success", "Cita aceptada");
+      await reload();
+    } catch (err: any) {
+      showError(err, "No se pudo aceptar la cita");
+    }
+  };
+
+  const onRejectAppt = async () => {
+    try {
+      await rejectAppointment(ticket._id, rejectWhy || undefined);
+      push("info", "Cita rechazada. Proponed otra franja.");
+      setRejectWhy("");
+      await reload();
+    } catch (err: any) {
+      showError(err, "No se pudo rechazar la cita");
     }
   };
 
@@ -331,6 +355,19 @@ export default function TicketDetail() {
             </div>
           )}
 
+          {role === "tenant" && can(["awaiting_schedule"]) && (
+            <div style={{ border: "1px solid #eee", padding: 10, borderRadius: 8, marginBottom: 8 }}>
+              <div>
+                <b>Responder a la cita propuesta</b>
+              </div>
+              <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 6 }}>
+                <button onClick={onAcceptAppt}>Aceptar</button>
+                <input placeholder="Motivo del rechazo (opcional)" value={rejectWhy} onChange={e=>setRejectWhy(e.target.value)} />
+                <button onClick={onRejectAppt}>Rechazar</button>
+              </div>
+            </div>
+          )}
+
           {(role === "landlord" || role === "tenant") && can(["done"]) && (
             <div style={{ border: "1px solid #eee", padding: 10, borderRadius: 8, marginBottom: 8 }}>
               <button onClick={onClose}>Cerrar incidencia</button>
@@ -355,6 +392,13 @@ export default function TicketDetail() {
           </ul>
         </div>
       ) : null}
+
+      <div style={{ marginTop: 16 }}>
+        <div style={{ marginBottom: 8 }}>
+          <CopyLinkButton />
+        </div>
+        <ChatPanel kind="ticket" refId={ticket._id} />
+      </div>
     </div>
   );
 }

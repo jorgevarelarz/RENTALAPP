@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import {
   TenantProInfo,
@@ -6,6 +6,8 @@ import {
   getTenantProInfo,
   uploadTenantProDoc,
 } from '../services/tenantPro';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import toast from 'react-hot-toast';
 
 const DOC_TYPES: { value: string; label: string }[] = [
   { value: 'nomina', label: 'Nómina' },
@@ -21,31 +23,31 @@ type Props = {
 
 export default function TenantProPanel({ requiredRent }: Props) {
   const { user } = useAuth();
-  const [info, setInfo] = useState<TenantProInfo | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const qc = useQueryClient();
+  const { data: info, isLoading: loading, error } = useQuery<TenantProInfo>({
+    queryKey: ['tenant-pro/me'],
+    queryFn: getTenantProInfo,
+    enabled: !!user && user.role === 'tenant',
+    staleTime: 10_000,
+  });
   const [showFlow, setShowFlow] = useState(false);
   const [docType, setDocType] = useState('nomina');
-  const [uploading, setUploading] = useState(false);
-
-  const loadInfo = async () => {
-    if (!user || user.role !== 'tenant') return;
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getTenantProInfo();
-      setInfo(data);
-    } catch (err: any) {
-      setError(err?.message || 'No se pudo cargar la información PRO');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    loadInfo();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?._id]);
+  const uploadMut = useMutation({
+    mutationFn: async (file: File) => uploadTenantProDoc(docType, file),
+    onSuccess: async () => {
+      toast.success('Documento subido');
+      await qc.invalidateQueries({ queryKey: ['tenant-pro/me'] });
+    },
+    onError: () => toast.error('No se pudo subir el documento'),
+  });
+  const consentMut = useMutation({
+    mutationFn: async () => acceptTenantProConsent('v1'),
+    onSuccess: async () => {
+      toast.success('Consentimiento aceptado');
+      await qc.invalidateQueries({ queryKey: ['tenant-pro/me'] });
+    },
+    onError: () => toast.error('No se pudo registrar el consentimiento'),
+  });
 
   if (!user || user.role !== 'tenant') {
     return null;
@@ -71,28 +73,16 @@ export default function TenantProPanel({ requiredRent }: Props) {
     setShowFlow(true);
   };
 
-  const handleConsent = async () => {
-    await acceptTenantProConsent('v1');
-    await loadInfo();
-  };
+  const handleConsent = async () => { consentMut.mutate(); };
 
-  const handleUpload = async (file: File | null) => {
-    if (!file) return;
-    try {
-      setUploading(true);
-      await uploadTenantProDoc(docType, file);
-      await loadInfo();
-    } finally {
-      setUploading(false);
-    }
-  };
+  const handleUpload = async (file: File | null) => { if (file) uploadMut.mutate(file); };
 
   return (
     <div style={{ border: '1px solid #d4d4d8', padding: 16, borderRadius: 10, display: 'grid', gap: 12 }}>
       <strong>Programa Inquilino PRO</strong>
       {badge}
       {loading && <div>Cargando estado…</div>}
-      {error && <div style={{ color: '#ef4444' }}>{error}</div>}
+      {error && <div style={{ color: '#ef4444' }}>{(error as any)?.message || 'Error'}</div>}
       {!loading && !badge && (
         <p style={{ margin: 0, color: '#4b5563' }}>
           Sube tu documentación una vez y solicita viviendas exclusivas para inquilinos PRO.
@@ -158,7 +148,7 @@ export default function TenantProPanel({ requiredRent }: Props) {
                   accept=".pdf,.jpg,.jpeg,.png"
                 />
               </label>
-              {uploading && <div>Subiendo…</div>}
+              {uploadMut.isPending && <div>Subiendo…</div>}
             </div>
           )}
         </div>

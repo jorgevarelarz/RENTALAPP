@@ -28,6 +28,17 @@ r.post('/appointments/:ticketId/propose', async (req, res) => {
     const userId = getUserId(req); // pro
     const { ticketId } = req.params;
     const { start, end, timezone } = req.body || {};
+    if (!start || !end || !timezone) {
+      return res.status(400).json({ error: 'start_end_timezone_required', code: 400 });
+    }
+    const s = new Date(start);
+    const e = new Date(end);
+    if (!(s instanceof Date) || isNaN(s.getTime()) || !(e instanceof Date) || isNaN(e.getTime())) {
+      return res.status(400).json({ error: 'invalid_dates', code: 400 });
+    }
+    if (e <= s) {
+      return res.status(400).json({ error: 'end_must_be_after_start', code: 400 });
+    }
 
     const t = await Ticket.findById(ticketId).lean();
     if (!t) return res.status(404).json({ error: 'ticket_not_found' });
@@ -86,4 +97,3 @@ r.post('/appointments/:ticketId/reject', async (req, res) => {
 });
 
 export default r;
-

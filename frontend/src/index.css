@@ -1,11 +1,10 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-* {
-  margin: 0;
-  padding: 0;
-  box-sizing: border-box;
-  font-family: 'Poppins', sans-serif;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* { box-sizing: border-box; }
 
 :root {
   --bg: #f8fafc;
@@ -31,14 +30,37 @@ html[data-theme='dark'] {
   --primary-hover-rgb: 99, 102, 241; /* Añadido para sombras */
 }
 
-body {
-  margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial, "Apple Color Emoji", "Segoe UI Emoji";
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  background: var(--bg); /* Usar variable CSS para el fondo */
-  color: var(--fg);
+body { @apply m-0 antialiased bg-white text-gray-900 font-sans; }
+
+/* Auth (blue gradient background) */
+.auth-shell {
+  min-height: 100vh;
+  width: 100%;
+  background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 55%, #06b6d4 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
 }
+.auth-card {
+  width: min(100%, 520px);
+  background: rgba(255, 255, 255, 0.92);
+  border-radius: 24px;
+  padding: 36px 32px;
+  box-shadow: 0 40px 80px -45px rgba(15, 23, 42, 0.55);
+  backdrop-filter: blur(16px);
+}
+.auth-title { margin: 0 0 12px; font-size: 2rem; font-weight: 700; color: #0f172a; }
+.auth-subtitle { margin: 0 0 24px; font-size: 0.95rem; color: rgba(15,23,42,.75); }
+.auth-form { display: grid; gap: 18px; }
+.auth-label { font-size: .9rem; color: #1e293b; font-weight: 600; display: flex; flex-direction: column; gap: 8px; }
+.auth-input {
+  width: 100%; border: 1px solid rgba(148,163,184,.45); border-radius: 14px; padding: 12px 14px; font-size: .95rem; background: rgba(255,255,255,.9);
+}
+.auth-input:focus { border-color: #4f46e5; box-shadow: 0 0 0 4px rgba(79,70,229,.18); outline: none; background: #fff; }
+.auth-button { height: 44px; border-radius: 14px; border: none; background: #111827; color: #fff; font-size: 1rem; font-weight: 600; cursor: pointer; box-shadow: 0 24px 40px -20px rgba(17,24,39,.45); }
+.auth-button:hover { background: #0B1220; }
+.auth-footer { margin-top: 20px; text-align: center; font-size: .9rem; color: rgba(15,23,42,.7); }
 
 code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',

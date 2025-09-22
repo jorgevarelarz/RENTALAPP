@@ -92,6 +92,7 @@ export async function getById(req: Request, res: Response) {
 export async function search(req: Request, res: Response) {
   const q: any = {};
   const {
+    q: text,
     region,
     city,
     priceMin,
@@ -109,6 +110,8 @@ export async function search(req: Request, res: Response) {
     dir = 'desc',
     page = '1',
     limit = '20',
+    onlyTenantPro,
+    status,
   } = req.query as any;
 
   if (region) q.region = String(region).toLowerCase();
@@ -119,6 +122,18 @@ export async function search(req: Request, res: Response) {
   if (furnished !== undefined) q.furnished = furnished === 'true';
   if (petsAllowed !== undefined) q.petsAllowed = petsAllowed === 'true';
   if (availableDate) q.availableFrom = { $lte: new Date(String(availableDate)) };
+  if (onlyTenantPro !== undefined) q.onlyTenantPro = ['true', '1', 'yes', 'on'].includes(String(onlyTenantPro).toLowerCase());
+  if (status) q.status = String(status);
+  if (text) {
+    const safe = String(text).trim();
+    if (safe) {
+      q.$or = [
+        { title: { $regex: safe, $options: 'i' } },
+        { city: { $regex: safe, $options: 'i' } },
+        { address: { $regex: safe, $options: 'i' } },
+      ];
+    }
+  }
 
   let geo: any = {};
   if (nearLng && nearLat && maxKm) {

@@ -1,4 +1,4 @@
-import axios from "axios";
+import { api as axios } from "../api/client";
 
 export type User = {
   _id: string;
@@ -46,4 +46,12 @@ export function getStoredUser(): User | null {
 export function bootstrapAuthHeader() {
   const u = getStoredUser();
   if (u?.token) axios.defaults.headers.common["Authorization"] = `Bearer ${u.token}`;
+}
+
+export async function requestPasswordReset(email: string) {
+  await axios.post(`/api/auth/request-reset`, { email });
+}
+
+export async function resetPassword(token: string, password: string) {
+  await axios.post(`/api/auth/reset`, { token, password });
 }

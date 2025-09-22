@@ -1,11 +1,4 @@
-import axios from 'axios';
-
-const API_BASE =
-  process.env.REACT_APP_API_URL || process.env.VITE_API_URL || 'http://localhost:3000';
-
-const client = axios.create({
-  baseURL: API_BASE,
-});
+import { api as client } from '../api/client';
 
 export type SearchParams = {
   q?: string;
@@ -35,9 +28,11 @@ export const createProperty = async (token: string, data: any) => {
   return res.data;
 };
 
-export const listProperties = async () => {
-  const res = await client.get('/api/properties');
-  return res.data;
+export const listProperties = async (params: Partial<SearchParams> = {}) => {
+  const res = await client.get('/api/properties', { params });
+  const data = res.data;
+  if (Array.isArray(data)) return data;
+  return (data && Array.isArray(data.items)) ? data.items : [];
 };
 
 export const getProperty = async (id: string) => {
@@ -66,4 +61,9 @@ export async function incrementView(id: string) {
   } catch (error) {
     // ignore
   }
+}
+
+export async function applyToProperty(id: string) {
+  const { data } = await client.post(`/api/properties/${id}/apply`);
+  return data as { ok: boolean };
 }

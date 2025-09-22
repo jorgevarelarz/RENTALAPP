@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import axios from "axios";
+import { requestPasswordReset } from "../../services/auth";
 
 const containerStyle: React.CSSProperties = {
   maxWidth: 360,
@@ -44,7 +44,7 @@ const ForgotPassword: React.FC = () => {
     setLoading(true);
     setStatus("idle");
     try {
-      await axios.post("/api/auth/request-reset", { email });
+      await requestPasswordReset(email);
       setStatus("success");
     } catch (error) {
       console.error("Error requesting password reset", error);
