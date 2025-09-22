@@ -3,12 +3,13 @@ import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { User } from '../models/user.model';
 import { deleteTP } from '../services/tenantProStorage';
+import { assertRole } from '../middleware/assertRole';
 
 const router = Router();
 
 router.get(
   '/me/tenant-pro',
-  authenticate,
+  ...assertRole('tenant'),
   asyncHandler(async (req, res) => {
     const user = (await User.findById((req as any).user?.id || (req as any).user?._id)
       .select('tenantPro email')
@@ -20,7 +21,7 @@ router.get(
 
 router.post(
   '/me/tenant-pro/delete',
-  authenticate,
+  ...assertRole('tenant'),
   asyncHandler(async (req, res) => {
     const user = (await User.findById((req as any).user?.id || (req as any).user?._id)) as any;
     if (!user) return res.sendStatus(404);

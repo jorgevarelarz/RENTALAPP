@@ -11,7 +11,15 @@ export default function RoleGuard({ roles, children }: Props) {
   const { user } = useAuth();
 
   if (!user) return <Navigate to="/login" replace />;
-  if (!roles.includes(user.role)) return <Navigate to="/403" replace />;
+  if (!roles.includes(user.role)) {
+    const home: Record<string, string> = {
+      tenant: '/tenant',
+      landlord: '/landlord',
+      pro: '/pro',
+      admin: '/admin',
+    };
+    return <Navigate to={home[user.role] || '/'} replace />;
+  }
 
   return children;
 }

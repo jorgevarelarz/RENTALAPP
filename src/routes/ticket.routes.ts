@@ -10,6 +10,7 @@ import { getUserId } from '../utils/getUserId';
 import { holdPayment, releasePayment } from '../utils/payment';
 import { calcPlatformFee } from '../utils/calcFee';
 import PlatformEarning from '../models/platformEarning.model';
+import { assertRole } from '../middleware/assertRole';
 
 const r = Router();
 
@@ -27,7 +28,7 @@ async function publishSystem(conversationId: string, senderId: string, systemCod
 r.get('/ping', (_req, res) => res.json({ ok: true }));
 
 /** 1) Inquilino abre incidencia */
-r.post('/', async (req, res) => {
+r.post('/', ...assertRole('tenant'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { contractId, ownerId, propertyId, service, title, description } = req.body || {};
@@ -49,7 +50,7 @@ r.post('/', async (req, res) => {
 });
 
 /** 2) Profesional envía presupuesto */
-r.post('/:id/quote', async (req, res) => {
+r.post('/:id/quote', ...assertRole('pro'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { amount } = req.body || {};
@@ -68,7 +69,7 @@ r.post('/:id/quote', async (req, res) => {
 });
 
 /** 3) Propietario aprueba → hold (escrow) */
-r.post('/:id/approve', async (req, res) => {
+r.post('/:id/approve', ...assertRole('landlord'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const t = await Ticket.findById(req.params.id);
@@ -107,7 +108,7 @@ r.post('/:id/approve', async (req, res) => {
 });
 
 /** 4) Profesional solicita EXTRA */
-r.post('/:id/extra', async (req, res) => {
+r.post('/:id/extra', ...assertRole('pro'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { amount, reason } = req.body || {};
@@ -124,7 +125,7 @@ r.post('/:id/extra', async (req, res) => {
 });
 
 /** 5) Propietario decide EXTRA */
-r.post('/:id/extra/decide', async (req, res) => {
+r.post('/:id/extra/decide', ...assertRole('landlord'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { approve } = req.body || {};
@@ -141,7 +142,7 @@ r.post('/:id/extra/decide', async (req, res) => {
 });
 
 /** 6) Profesional completa + factura */
-r.post('/:id/complete', async (req, res) => {
+r.post('/:id/complete', ...assertRole('pro'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { invoiceUrl } = req.body || {};
@@ -159,7 +160,7 @@ r.post('/:id/complete', async (req, res) => {
 });
 
 // Pro solicita cierre
-r.post('/:id/request-close', async (req, res) => {
+r.post('/:id/request-close', ...assertRole('landlord'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const t = await Ticket.findById(req.params.id);
@@ -178,7 +179,7 @@ r.post('/:id/request-close', async (req, res) => {
 });
 
 // Tenant confirma solucionado → release
-r.post('/:id/resolve', async (req, res) => {
+r.post('/:id/resolve', ...assertRole('tenant'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const t = await Ticket.findById(req.params.id);
@@ -299,7 +300,7 @@ r.post('/:id/unassign', async (req, res) => {
 });
 
 /** Listados por rol con hidratado de reputación */
-r.get('/my/tenant', async (req, res) => {
+r.get('/my/tenant', ...assertRole('tenant'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { status } = req.query as any;
@@ -354,7 +355,7 @@ r.get('/my/tenant', async (req, res) => {
   }
 });
 
-r.get('/my/owner', async (req, res) => {
+r.get('/my/owner', ...assertRole('landlord'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { status } = req.query as any;
@@ -409,7 +410,7 @@ r.get('/my/owner', async (req, res) => {
   }
 });
 
-r.get('/my/pro', async (req, res) => {
+r.get('/my/pro', ...assertRole('pro'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { status } = req.query as any;

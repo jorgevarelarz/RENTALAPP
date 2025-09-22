@@ -11,8 +11,8 @@ const Sidebar: React.FC = () => {
     <aside style={{ width: 220, borderRight: '1px solid #eee', padding: 16 }}>
       <div style={{ fontWeight: 700, marginBottom: 12 }}>Panel</div>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        <NavLink to="/" style={{ textDecoration: 'none' }}>Explorar</NavLink>
-        {((nav as any)[role || 'tenant'] || []).map((item: any) => (
+        {!role && <NavLink to="/" style={{ textDecoration: 'none' }}>Explorar</NavLink>}
+        {role && ((nav as any)[role] || []).map((item: any) => (
           <NavLink key={item.path} to={item.path}>{item.label}</NavLink>
         ))}
       </div>

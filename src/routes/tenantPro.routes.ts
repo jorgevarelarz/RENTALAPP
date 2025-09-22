@@ -6,6 +6,7 @@ import { authenticate } from '../middleware/auth.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { User } from '../models/user.model';
 import { ensureTenantProDir, encryptAndSaveTP } from '../services/tenantProStorage';
+import { assertRole } from '../middleware/assertRole';
 
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } });
@@ -15,7 +16,7 @@ const ConsentSchema = z.object({ consent: z.literal(true), version: z.string().m
 
 router.post(
   '/tenant-pro/consent',
-  authenticate,
+  ...assertRole('tenant'),
   asyncHandler(async (req, res) => {
     const parsed = ConsentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
@@ -32,7 +33,7 @@ router.post(
 
 router.post(
   '/tenant-pro/docs',
-  authenticate,
+  ...assertRole('tenant'),
   upload.single('file'),
   asyncHandler(async (req, res) => {
     const fileUpload = (req as any).file as { originalname: string; buffer: Buffer } | undefined;
@@ -64,7 +65,7 @@ router.post(
 
 router.get(
   '/tenant-pro/me',
-  authenticate,
+  ...assertRole('tenant'),
   asyncHandler(async (req, res) => {
     const u: any = await User.findById((req as any).user?.id || (req as any).user?._id)
       .select('email tenantPro')

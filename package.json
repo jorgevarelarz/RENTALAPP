@@ -10,6 +10,7 @@
     "test": "jest",
     "test:backend": "jest --config jest.config.js",
     "test:frontend": "npm test --prefix frontend -- --watchAll=false",
+    "test:rbac": "jest --runInBand src/__tests__/rbac.test.ts",
     "test:unit": "jest tests/unit",
     "test:e2e": "jest --runInBand tests/e2e",
     "seed": "ts-node src/seed.ts",
