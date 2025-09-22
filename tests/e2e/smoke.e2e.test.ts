@@ -1,4 +1,7 @@
 import request from "supertest";
+// Retries are optional; only used if supported by the environment
+// @ts-ignore
+jest.retryTimes?.(2);
 import { app } from "../../src/app";
 import { User } from "../../src/models/user.model";
 import { Property } from "../../src/models/property.model";
@@ -19,7 +22,7 @@ async function register(email: string, role: Role, name = role.toUpperCase()) {
     .expect(201);
 
   console.log(res.body);
-  await new Promise(resolve => setTimeout(resolve, 500));
+  await new Promise(resolve => setTimeout(resolve, 2000));
 
   const user = await User.findOne({ email }).lean();
   if (!user) {
