@@ -5,7 +5,11 @@ const API_BASE = process.env.REACT_APP_API_URL || (process.env as any).VITE_API_
 export const api = axios.create({ baseURL: API_BASE });
 
 // Request: inject Authorization and dev-only x-admin for admin routes
-api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+// En entorno de test algunos mocks de axios no implementan interceptors;
+// protegemos las llamadas para evitar TypeError en Jest.
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - api puede ser un mock parcial en tests
+api?.interceptors?.request?.use?.((config: InternalAxiosRequestConfig) => {
   try {
     // Authorization from stored user
     const raw = typeof window !== 'undefined' ? localStorage.getItem('user') : null;
@@ -25,7 +29,9 @@ api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
 });
 
 // Response: toast errors globally (excluding auth endpoints)
-api.interceptors.response.use(
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore
+api?.interceptors?.response?.use?.(
   (res) => res,
   (err) => {
     try {
@@ -41,4 +47,3 @@ api.interceptors.response.use(
 );
 
 export default api;
-

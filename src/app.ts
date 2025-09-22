@@ -161,7 +161,8 @@ app.use('/api', requireVerified, appointmentsFlowRoutes);
 app.use('/api/contracts', requireVerified, contractRoutes);
 app.use('/api/users', requireVerified, userRoutes);
 app.use('/api/pros', requireVerified, proRoutes);
-app.use('/api/tickets', requireVerified, ticketRoutes);
+// Tickets necesitan usuario autenticado; permitir bypass de verificación en test si aplica
+app.use('/api/tickets', authenticate, requireVerified, ticketRoutes);
 app.use('/api/reviews', requireVerified, reviewRoutes);
 app.use('/api/chat', requireVerified, chatRoutes);
 // Contract-specific payments under /api/contracts require verificación

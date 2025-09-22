@@ -41,6 +41,9 @@
     "typecheck": "tsc --noEmit",
     "eject": "react-scripts eject"
   },
+  "overrides": {
+    "zod": "^3.23.8"
+  },
   "eslintConfig": {
     "extends": [
       "react-app",
