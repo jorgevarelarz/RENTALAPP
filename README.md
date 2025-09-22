@@ -8,8 +8,10 @@
    cp .env.example .env
    cp frontend/.env.example frontend/.env
    ```
-   Rellena `MONGO_URL`, `JWT_SECRET`, `STRIPE_SECRET_KEY`,
-   `STRIPE_WEBHOOK_SECRET` y `CORS_ORIGIN=http://localhost:5173`.
+   Rellena al menos `MONGO_URL`, `JWT_SECRET` y `CORS_ORIGIN=http://localhost:3000`.
+   En producción, `JWT_SECRET` debe ser robusto. Consulta también:
+   - Seguridad y CORS: helmet + CSP básico y CORS más estricto
+   - Salud y métricas: `GET /health`, `GET /metrics`
 
 2. Instala dependencias y ejecuta el seed:
    ```bash
@@ -24,7 +26,7 @@
    npm --prefix frontend run dev
    ```
 
-4. En una consola separada escucha los webhooks de Stripe:
+4. (Opcional) En una consola separada escucha los webhooks de Stripe:
    ```bash
    stripe listen --forward-to localhost:4000/api/stripe/webhook
    ```
@@ -35,6 +37,14 @@
    - Visita `/` y luego el detalle `/p/:id`.
    - Pulsa **Reservar**, paga con la tarjeta `4242 4242 4242 4242`.
    - Tras el pago se abrirá un contrato PDF con el texto "DEMO – sin validez legal".
+
+## Mejoras recientes (infra/observabilidad)
+
+- Validación de entorno con Zod (`src/config/env.ts`). En producción se exige `MONGO_URL` y `JWT_SECRET` fuerte.
+- Seguridad: Helmet con CSP básico en prod; CORS más estricto basado en `CORS_ORIGIN`.
+- Observabilidad: `X-Request-Id` por petición, logs estructurados y endpoint `/metrics` (Prometheus).
+- Apagado elegante: manejo de `SIGINT`/`SIGTERM`.
+- Tests: `npm run test:backend` (Node) y `npm run test:frontend` (CRA/jsdom).
 
 ## Deploy rápido
 
@@ -275,4 +285,3 @@ healthcheck:
 Tarjeta: `4242 4242 4242 4242`, fecha futura y CVC cualquiera.
 
 Tarjetas de prueba adicionales: [Stripe testing docs](https://stripe.com/docs/testing).
-
