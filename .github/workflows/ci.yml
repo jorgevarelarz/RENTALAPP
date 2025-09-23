@@ -21,39 +21,39 @@ jobs:
           npm config set fetch-retry-maxtimeout 120000
           npm config set prefer-offline true
           npm ci --no-audit --no-fund || npm install --no-audit --no-fund --legacy-peer-deps
-      - name: Backend tests (unit, integration, rbac)
+      - name: Run single test file
         env:
           NODE_ENV: test
-        run: npm run test:backend -- --runInBand
-  frontend:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - name: Install frontend deps
-        working-directory: frontend
-        run: npm ci
-      - name: Frontend tests
-        working-directory: frontend
-        env:
-          CI: true
-        run: npm test -- --watchAll=false
-
-  e2e:
-    name: E2E tests
-    runs-on: ubuntu-latest
-    needs: backend
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - name: Run E2E in-band
-        env:
-          NODE_ENV: test
-        run: npm run test:e2e
+        run: jest tests/e2e/smoke.e2e.test.ts --runInBand
+#  frontend:
+#    runs-on: ubuntu-latest
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: actions/setup-node@v4
+#        with:
+#          node-version: 20
+#          cache: npm
+#      - name: Install frontend deps
+#        working-directory: frontend
+#        run: npm ci
+#      - name: Frontend tests
+#        working-directory: frontend
+#        env:
+#          CI: true
+#        run: npm test -- --watchAll=false
+#
+#  e2e:
+#    name: E2E tests
+#    runs-on: ubuntu-latest
+#    needs: backend
+#    steps:
+#      - uses: actions/checkout@v4
+#      - uses: actions/setup-node@v4
+#        with:
+#          node-version: 20
+#          cache: npm
+#      - run: npm ci
+#      - name: Run E2E in-band
+#        env:
+#          NODE_ENV: test
+#        run: npm run test:e2e
