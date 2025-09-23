@@ -13,7 +13,7 @@ const storageDir = TENANT_PRO_DIR;
 
 describe('Tenant PRO flows', () => {
   beforeAll(async () => {
-    process.env.TENANT_PRO_UPLOADS_KEY = process.env.TENANT_PRO_UPLOADS_KEY || 'a'.repeat(64);
+    process.env.TENANT_PRO_UPLOADS_KEY = 'a'.repeat(64);
     process.env.TENANT_PRO_DOCS_TTL_DAYS = '365';
     ensureTenantProDir();
     await connectDb();

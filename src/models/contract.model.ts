@@ -36,6 +36,16 @@ export interface IContract extends Document {
   pdf?: { url?: string; sha256?: string; generatedAt?: Date };
   signFeeCollected?: boolean;
   signFeeCollectedAt?: Date;
+  signature?: {
+    provider?: 'mock' | 'docusign';
+    envelopeId?: string;
+    status?: 'none' | 'created' | 'sent' | 'completed' | 'declined' | 'error';
+    updatedAt?: Date;
+    events?: { at: Date; type: string; meta?: Record<string, unknown> }[];
+    providerEventId?: string;
+    pdfUrl?: string;
+    pdfHash?: string;
+  };
   /**
    * The current status of the contract. Contracts begin in a 'draft' state
    * upon creation. Once both parties have signed, the status transitions
@@ -109,6 +119,25 @@ const contractSchema = new Schema<IContract>(
       url: { type: String },
       sha256: { type: String },
       generatedAt: { type: Date },
+    },
+    signature: {
+      provider: { type: String, enum: ['mock', 'docusign'] },
+      envelopeId: { type: String },
+      status: { type: String, enum: ['none', 'created', 'sent', 'completed', 'declined', 'error'], default: 'none' },
+      updatedAt: { type: Date },
+      events: {
+        type: [
+          {
+            at: { type: Date, default: Date.now },
+            type: { type: String, required: true },
+            meta: { type: Schema.Types.Mixed },
+          },
+        ],
+        default: [],
+      },
+      providerEventId: { type: String },
+      pdfUrl: { type: String },
+      pdfHash: { type: String },
     },
     // Encrypted IBAN for automatic payments (if provided)
     ibanEncrypted: { type: String },

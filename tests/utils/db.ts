@@ -5,15 +5,17 @@ import { startMongoMemoryServer } from "../../src/__tests__/utils/mongoMemorySer
 let mongoServer: MongoMemoryServer | null = null;
 
 export const connectDb = async () => {
-  if (!mongoServer) {
-    mongoServer = await startMongoMemoryServer();
+  if (mongoose.connection.readyState === 0) {
+    if (!mongoServer) {
+      mongoServer = await startMongoMemoryServer();
+    }
+    const uri = mongoServer.getUri();
+    process.env.NODE_ENV = "test";
+    process.env.ALLOW_UNVERIFIED = "true";
+    process.env.TENANT_PRO_UPLOADS_KEY = process.env.TENANT_PRO_UPLOADS_KEY || 'a'.repeat(64);
+    process.env.MONGO_URL = uri;
+    await mongoose.connect(uri);
   }
-  const uri = mongoServer.getUri();
-  process.env.NODE_ENV = "test";
-  process.env.ALLOW_UNVERIFIED = "true";
-  process.env.TENANT_PRO_UPLOADS_KEY = process.env.TENANT_PRO_UPLOADS_KEY || 'a'.repeat(64);
-  process.env.MONGO_URL = uri;
-  await mongoose.connect(uri);
 };
 
 export const disconnectDb = async () => {

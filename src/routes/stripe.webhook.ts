@@ -10,6 +10,7 @@ import Message from '../models/message.model';
 import PlatformEarning from '../models/platformEarning.model';
 import ProcessedEvent from '../models/processedEvent.model';
 import { calcServiceFee } from '../utils/calcServiceFee';
+import { recordContractHistory } from '../utils/history';
 
 const r = Router();
 
@@ -29,9 +30,14 @@ async function ensureContractConversation(contractId: string): Promise<string> {
 
 r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'] as string;
+  const secret = process.env.STRIPE_WEBHOOK_SECRET || '';
+  // In producción el secreto es obligatorio
+  if (process.env.NODE_ENV === 'production' && !secret) {
+    return res.status(500).json({ error: 'stripe_webhook_secret_missing' });
+  }
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(req.body, sig, process.env.STRIPE_WEBHOOK_SECRET || '');
+    event = stripe.webhooks.constructEvent(req.body, sig, secret);
   } catch (err: any) {
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
@@ -123,6 +129,22 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
         const offer = await ServiceOffer.findById(offerId);
         if (offer) {
           await publishSystem(offer.conversationId, 'PAYMENT_PROCESSING', { offerId });
+        }
+      }
+      break;
+    }
+    case 'checkout.session.completed': {
+      const session = event.data.object as Stripe.Checkout.Session;
+      if (session.metadata?.deposit === 'true') {
+        const contractId = session.metadata?.contractId;
+        if (contractId) {
+          const contract = await Contract.findById(contractId);
+          if (contract && !contract.depositPaid) {
+            contract.depositPaid = true;
+            contract.depositPaidAt = new Date();
+            await contract.save();
+            await recordContractHistory(contract.id, 'depositPaid', 'Fianza pagada a través de la plataforma');
+          }
         }
       }
       break;

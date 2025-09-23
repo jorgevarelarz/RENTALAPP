@@ -3,6 +3,10 @@ import { Contract } from "../models/contract.model";
 import { ProcessedEvent } from "../models/processedEvent.model";
 import { transitionContract } from "../services/contractState";
 import { recordContractHistory } from "../utils/history";
+import * as docusignProvider from "../services/signature/docusign.provider";
+import fs from 'fs';
+import path from 'path';
+import crypto from 'crypto';
 import { isMock, isProd } from "../config/flags";
 
 type KnownStatuses = "signed" | "active" | "terminated" | "completed";
@@ -19,7 +23,46 @@ const isDuplicateKeyError = (error: unknown) => {
  */
 export async function signatureCallback(req: Request, res: Response) {
   const { id } = req.params;
-  const { eventId, provider = "mock", status = "signed" } = req.body || {};
+  const providerFlag = (process.env.SIGN_PROVIDER || 'mock').toLowerCase();
+  // DocuSign branch
+  if (providerFlag === 'docusign') {
+    try {
+      const raw = typeof req.body === 'string' || Buffer.isBuffer(req.body) ? (req.body as any) : JSON.stringify(req.body || {});
+      const ok = docusignProvider.verifyConnectHmac(raw, req.header('X-DocuSign-Signature-1') || req.header('x-docusign-signature-1'));
+      if (!ok) return res.status(400).json({ error: 'invalid_hmac' });
+      const body: any = typeof req.body === 'object' ? req.body : JSON.parse(String(raw || '{}'));
+      const envelopeId: string | undefined = body?.envelopeId || body?.envelope_id;
+      const eventType: string | undefined = body?.event || body?.eventType || body?.status;
+      if (!envelopeId) return res.status(400).json({ error: 'missing_envelopeId' });
+      const contract = await Contract.findOne({ 'signature.envelopeId': envelopeId });
+      if (!contract) return res.status(404).json({ error: 'contract_not_found' });
+      const now = new Date();
+      const updates: any = { 'signature.updatedAt': now };
+      if (eventType) updates['signature.events'] = [...(contract.signature?.events || []), { at: now, type: eventType }];
+      if (['completed','declined','sent','created','error'].includes(String(eventType))) {
+        updates['signature.status'] = eventType;
+      }
+      // On completed, fetch and store PDF
+      if (String(eventType) === 'completed') {
+        const buf = await docusignProvider.fetchCompletedDocument(envelopeId);
+        const dir = path.resolve(process.cwd(), 'storage/contracts-signed');
+        try { fs.mkdirSync(dir, { recursive: true }); } catch {}
+        const fileName = `${String(contract._id)}-${envelopeId}.pdf`;
+        const abs = path.join(dir, fileName);
+        fs.writeFileSync(abs, buf);
+        const hash = crypto.createHash('sha256').update(buf).digest('hex');
+        updates['signature.pdfUrl'] = `/api/contracts/${String(contract._id)}/pdf/signed`;
+        updates['signature.pdfHash'] = hash;
+      }
+      await Contract.findByIdAndUpdate(contract._id, { $set: updates });
+      return res.json({ ok: true });
+    } catch (e: any) {
+      console.error('DocuSign callback error:', e);
+      return res.status(500).json({ error: 'callback_failed' });
+    }
+  }
+
+  const { eventId, provider = "mock", status = "signed" } = (req.body || {}) as any;
 
   if (!eventId || typeof eventId !== "string") {
     return res.status(400).json({ error: "missing_eventId" });

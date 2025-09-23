@@ -14,7 +14,8 @@ import { recordContractHistory } from '../utils/history';
 import { ContractHistory } from '../models/history.model';
 import { decryptIBAN, createCustomerAndMandate, createPaymentIntent } from '../utils/payment';
 import { depositToEscrow, depositToAuthority } from '../utils/deposit';
-import { sendForSignature, checkSignatureStatus } from '../utils/signature';
+import { signaturitProvider } from '../signature/signaturit';
+import * as docusignProvider from '../services/signature/docusign.provider';
 import { sendRentReminderEmail, sendContractRenewalNotification } from '../utils/notification';
 import PDFDocument from 'pdfkit';
 import { createContractAction, signContractAction, initiatePaymentAction } from '../services/contract.actions';
@@ -100,8 +101,7 @@ export async function create(req: Request, res: Response) {
 
     const clausesText = normalized.map(clause => {
       const def = catalog[clause.id];
-      return `• ${def.label}
-${def.render(clause.params)}`;
+      return `• ${def.label}\n${def.render(clause.params)}`;
     });
 
     const { absolutePath, publicPath } = await generateContractPDF({ contract, clausesText });
@@ -206,15 +206,15 @@ export const getContractPDF = async (req: Request, res: Response) => {
     doc.fontSize(12).text('CLÁUSULAS', { underline: true });
     doc.moveDown(0.5);
     const clauses = [
-      `1. Objeto: uso y disfrute de la vivienda descrita.`,
+      `1. Objeto: uso y disfrute de la vivienda descrita.`, 
       `2. Duración: ${Math.ceil((new Date(contract.endDate).getTime() - new Date(contract.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30))} meses, desde ${contract.startDate.toISOString().split('T')[0]} hasta ${contract.endDate.toISOString().split('T')[0]}.`,
-      `3. Renta: €${contract.rent} mensuales, pagaderos antes del día 5 de cada mes.`,
-      `4. Fianza: €${contract.deposit}, entregada en este acto conforme al artículo 36 LAU.`,
-      `5. Gastos: suministros y comunidad a cargo del inquilino.`,
-      `6. Conservación: reparaciones menores por el inquilino; mayores por el arrendador.`,
-      `7. Obras: no se podrán realizar sin autorización escrita del arrendador.`,
-      `8. Subarriendo: prohibido sin consentimiento expreso.`,
-      `9. Inventario: se adjunta como Anexo I.`,
+      `3. Renta: €${contract.rent} mensuales, pagaderos antes del día 5 de cada mes.`, 
+      `4. Fianza: €${contract.deposit}, entregada en este acto conforme al artículo 36 LAU.`, 
+      `5. Gastos: suministros y comunidad a cargo del inquilino.`, 
+      `6. Conservación: reparaciones menores por el inquilino; mayores por el arrendador.`, 
+      `7. Obras: no se podrán realizar sin autorización escrita del arrendador.`, 
+      `8. Subarriendo: prohibido sin consentimiento expreso.`, 
+      `9. Inventario: se adjunta como Anexo I.`, 
     ];
     clauses.forEach(c => doc.fontSize(10).text(c).moveDown(0.3));
 
@@ -264,6 +264,9 @@ export const initiatePayment = async (req: Request, res: Response) => {
     res.json({ message: 'Pago iniciado', clientSecret });
   } catch (error: any) {
     console.error(error);
+    if (error.message === 'Solo el inquilino puede iniciar pagos') {
+      return res.status(403).json({ error: error.message });
+    }
     res.status(400).json({ error: error.message });
   }
 };
@@ -271,7 +274,7 @@ export const initiatePayment = async (req: Request, res: Response) => {
 export const payDeposit = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { destination } = req.body;
+    const { destination, successUrl, cancelUrl } = req.body;
     const contract = await Contract.findById(id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
     const user = (req as any).user;
@@ -284,15 +287,21 @@ export const payDeposit = async (req: Request, res: Response) => {
     const depositAmount = contract.deposit;
     const dest = destination === 'authority' ? 'authority' : 'escrow';
     if (dest === 'escrow') {
-      await depositToEscrow(contract.id, depositAmount);
+      const sessionUrl = await depositToEscrow(
+        contract.id,
+        depositAmount,
+        successUrl || process.env.DEPOSIT_SUCCESS_URL || 'https://example.com/deposit/success',
+        cancelUrl || process.env.DEPOSIT_CANCEL_URL || 'https://example.com/deposit/cancel'
+      );
+      res.json({ message: 'Iniciando pago de fianza', sessionUrl });
     } else {
       await depositToAuthority(contract.id, depositAmount);
+      contract.depositPaid = true;
+      contract.depositPaidAt = new Date();
+      await contract.save();
+      await recordContractHistory(contract.id, 'depositPaid', `Fianza pagada a ${dest}`);
+      res.json({ message: 'Fianza pagada', contract });
     }
-    contract.depositPaid = true;
-    contract.depositPaidAt = new Date();
-    await contract.save();
-    await recordContractHistory(contract.id, 'depositPaid', `Fianza pagada a ${dest}`);
-    res.json({ message: 'Fianza pagada', contract });
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: 'Error al pagar la fianza', details: error.message });
@@ -317,7 +326,7 @@ export const requestSignature = async (req: Request, res: Response) => {
           const definition = catalogForSignature?.[current.id];
           if (definition) {
             try {
-              return `• ${definition.label}\n${definition.render(current.params ?? {})}`;
+              return `• ${definition.label}\n${definition.render(current.params ?? {})}`; 
             } catch (err) {
               console.error('Error renderizando cláusula para firma:', err);
             }
@@ -327,26 +336,43 @@ export const requestSignature = async (req: Request, res: Response) => {
         })
       : [];
     const { absolutePath: signaturePdfPath } = await generateContractPDF({ contract, clausesText });
-    const pdfBuffer = await fs.readFile(signaturePdfPath);
-    const user = (req as any).user;
-    const signerEmail = user.role === 'landlord' ? landlord.email : tenant.email;
-    const signerName = user.role === 'landlord' ? landlord.name : tenant.name;
-    const redirectUrl = process.env.SIGN_REDIRECT_URL || 'https://example.com/signing-complete';
-    const { signatureUrl, envelopeId } = await sendForSignature({
+
+    const provider = (process.env.SIGN_PROVIDER || 'mock').toLowerCase();
+    if (provider === 'docusign') {
+      const embedded = String(process.env.SIGN_EMBEDDED || 'false').toLowerCase() === 'true';
+      const env = await docusignProvider.createEnvelope({ contract, landlord, tenant, embedded });
+      await Contract.findByIdAndUpdate(contract._id, {
+        $set: {
+          signature: {
+            provider: 'docusign',
+            envelopeId: env.envelopeId,
+            status: env.status,
+            updatedAt: new Date(),
+            events: [{ at: new Date(), type: 'created' }, { at: new Date(), type: env.status }],
+          },
+          status: 'signing',
+        },
+      });
+      await recordContractHistory(contract.id, 'signatureRequested', 'Firma DocuSign solicitada');
+      return res.json({ envelopeId: env.envelopeId, status: env.status, recipientUrls: env.recipientUrls });
+    }
+
+    // Mock/default flow (signaturit stub)
+    const { requestId, signerLinks } = await signaturitProvider.createSignatureFlow({
       contractId: contract.id,
-      documentBuffer: pdfBuffer,
-      signerEmail,
-      signerName,
-      redirectUrl,
+      pdfPath: signaturePdfPath,
+      signers: [
+        { role: 'owner', userId: landlord.id, name: landlord.name, email: landlord.email },
+        { role: 'tenant', userId: tenant.id, name: tenant.name, email: tenant.email },
+      ],
+      returnUrl: process.env.SIGN_REDIRECT_URL || 'https://example.com/signing-complete',
+      webhookUrl: process.env.SIGN_WEBHOOK_URL || 'https://api.example.com/webhook/signature',
     });
-    (contract as any).signatureEnvelopeId = envelopeId;
+
+    (contract as any).signatureRequestId = requestId;
     await contract.save();
-    await recordContractHistory(
-      contract.id,
-      'signatureRequested',
-      `Firma electrónica solicitada por ${user.role}`,
-    );
-    res.json({ message: 'Firma electrónica iniciada', signatureUrl, envelopeId });
+    await recordContractHistory(contract.id, 'signatureRequested', 'Firma mock solicitada');
+    res.json({ message: 'Firma electrónica iniciada', signerLinks, requestId });
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: 'Error iniciando la firma', details: error.message });
@@ -400,6 +426,9 @@ export const listContracts = async (req: Request, res: Response) => {
     if (req.query.status) q.status = req.query.status;
 
     const user = (req as any).user;
+    if (!user) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
     if (user.role !== 'admin') {
       q.$or = [{ landlord: user.id }, { tenant: user.id }];
     }
@@ -408,6 +437,11 @@ export const listContracts = async (req: Request, res: Response) => {
       Contract.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
       Contract.countDocuments(q)
     ]);
+
+    if (user.role !== 'admin' && total === 0) {
+        return res.status(200).json({ items: [], total: 0, page, limit });
+    }
+
     const userIds = new Set<string>();
     items.forEach(c => {
       userIds.add(String(c.landlord));
@@ -449,6 +483,9 @@ export const getContract = async (req: Request, res: Response) => {
     if (!c) return res.status(404).json({ error: 'Contrato no encontrado' });
 
     const user = (req as any).user;
+    if (!user) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
     if (user.role !== 'admin' && String(c.landlord) !== user.id && String(c.tenant) !== user.id) {
       return res.status(404).json({ error: 'Contrato no encontrado' });
     }

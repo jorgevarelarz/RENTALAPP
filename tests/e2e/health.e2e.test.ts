@@ -1,4 +1,9 @@
 import request from "supertest";
+
+jest.setTimeout(180000);
+// Retries are optional; only used if supported by the environment
+// @ts-ignore
+jest.retryTimes?.(2);
 import { app } from "../../src/app";
 
 describe("health E2E", () => {

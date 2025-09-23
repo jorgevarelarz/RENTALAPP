@@ -6,6 +6,7 @@ const TTL = Number(process.env.TENANT_PRO_DOCS_TTL_DAYS || 365);
 
 export async function purgeOldTenantProDocs() {
   const users = await User.find({ 'tenantPro.docs.0': { $exists: true } });
+  const promises = [];
   for (const user of users as any[]) {
     let updated = false;
     const keep: any[] = [];
@@ -32,7 +33,8 @@ export async function purgeOldTenantProDocs() {
     if (updated) {
       user.tenantPro.docs = keep as any;
       user.tenantPro.auditTrail = auditTrail;
-      await user.save();
+      promises.push(user.save());
     }
   }
+  await Promise.all(promises);
 }
