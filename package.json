@@ -13,7 +13,7 @@
     "dev:all": "concurrently -k -n back,front \"npm run dev\" \"npm --prefix frontend start\"",
     "test:rbac": "jest --runInBand src/__tests__/rbac.test.ts",
     "test:unit": "jest tests/unit",
-    "test:e2e": "jest --runInBand tests/e2e",
+    "test:e2e": "jest --config jest.config.e2e.js --runInBand",
     "seed": "ts-node src/seed.ts",
     "seed:services": "ts-node scripts/seed_services.ts",
     "seed:tenantpro-demo": "ts-node scripts/seed_tenantpro_demo.ts"
