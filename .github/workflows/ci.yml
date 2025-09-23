@@ -21,10 +21,10 @@ jobs:
           npm config set fetch-retry-maxtimeout 120000
           npm config set prefer-offline true
           npm ci --no-audit --no-fund || npm install --no-audit --no-fund --legacy-peer-deps
-      - name: Run single test file
+      - name: Run e2e tests
         env:
           NODE_ENV: test
-        run: jest tests/e2e/smoke.e2e.test.ts --runInBand
+        run: npm run test:e2e
 #  frontend:
 #    runs-on: ubuntu-latest
 #    steps:
