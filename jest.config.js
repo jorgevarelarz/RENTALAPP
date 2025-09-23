@@ -8,7 +8,7 @@ module.exports = {
   forceExit: true,
   // Ignore frontend React tests here; they require a jsdom setup.
   // Frontend tests should run with the frontend tooling/config instead.
-  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/frontend/', '<rootDir>/tests/e2e/'],
+  testPathIgnorePatterns: ['/node_modules/', '<rootDir>/frontend/'],
   transform: {
     '^.+\\.(t|j)sx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
   },
