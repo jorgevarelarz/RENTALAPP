@@ -95,6 +95,13 @@ const userSchema = new Schema(
     // Optional Stripe identifiers for payments
     stripeAccountId: { type: String },
     stripeCustomerId: { type: String },
+    stripeCustomerPending: { type: Boolean, default: false },
+    stripeCustomerRetries: { type: Number, default: 0 },
+    termsAcceptedAt: { type: Date },
+    privacyAcceptedAt: { type: Date },
+    legalVersion: { type: String },
+    termsVersionAccepted: { type: String },
+    privacyVersionAccepted: { type: String },
     // Password reset support
     resetToken: { type: String },
     resetTokenExp: { type: Date },

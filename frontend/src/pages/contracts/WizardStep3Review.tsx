@@ -1,11 +1,13 @@
 import React from 'react';
-import { createContract } from '../../services/contracts';
+import { createContract } from '../../api/contracts';
 import { useNotify } from '../../utils/notify';
-import { sendEmail } from '../../services/notify';
+import { sendEmail } from '../../api/notify';
+import { useAuth } from '../../context/AuthContext';
 
 type Props = { basics: any; clauses: Record<string, any>; onBack: () => void; onCreated: (c: any) => void };
 export default function WizardStep3Review({ basics, clauses, onBack, onCreated }: Props) {
   const { push } = useNotify();
+  const { user } = useAuth();
   const handleCreate = async () => {
     try {
       const payload = {
@@ -17,19 +19,22 @@ export default function WizardStep3Review({ basics, clauses, onBack, onCreated }
         deposit: basics.deposit,
         startDate: basics.startDate,
         endDate: basics.endDate,
-        clauses: Object.entries(clauses).map(([id, params]) => ({ id, params })),
+        landlordType: basics.landlordType ?? 'individual',
+        clauses,
       };
       const contract = await createContract(payload);
       onCreated(contract);
       push('success', 'Contrato creado correctamente');
-      try {
-        await sendEmail(
-          'notificaciones@rental-app.test',
-          'Nuevo contrato creado',
-          `Se ha generado el contrato ${contract._id || contract.id || 'sin ID'}.`
-        );
-      } catch (error) {
-        console.warn('No se pudo disparar email de contrato', error);
+      if (user?.role === 'admin') {
+        try {
+          await sendEmail(
+            'notificaciones@rental-app.test',
+            'Nuevo contrato creado',
+            `Se ha generado el contrato ${contract._id || contract.id || 'sin ID'}.`
+          );
+        } catch (error) {
+          console.warn('No se pudo disparar email de contrato', error);
+        }
       }
     } catch (error: any) {
       push('error', error?.response?.data?.error || 'No se pudo crear el contrato');

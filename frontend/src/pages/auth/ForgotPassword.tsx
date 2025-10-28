@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { requestPasswordReset } from "../../services/auth";
+import { requestPasswordReset } from "../../api/auth";
 
 const containerStyle: React.CSSProperties = {
   maxWidth: 360,

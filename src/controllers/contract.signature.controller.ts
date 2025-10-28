@@ -1,13 +1,14 @@
-import { Request, Response } from "express";
-import { Contract } from "../models/contract.model";
-import { ProcessedEvent } from "../models/processedEvent.model";
-import { transitionContract } from "../services/contractState";
-import { recordContractHistory } from "../utils/history";
-import * as docusignProvider from "../services/signature/docusign.provider";
+import { Request, Response } from 'express';
+import { Contract } from '../models/contract.model';
+import { ProcessedEvent } from '../models/processedEvent.model';
+import { transitionContract } from '../core/contractState';
+import { recordContractHistory } from '../utils/history';
+import * as docusignProvider from '../core/signature/docusign.provider';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
-import { isMock, isProd } from "../config/flags";
+import { isMock, isProd } from '../config/flags';
+import getRequestLogger from '../utils/requestLogger';
 
 type KnownStatuses = "signed" | "active" | "terminated" | "completed";
 
@@ -24,13 +25,49 @@ const isDuplicateKeyError = (error: unknown) => {
 export async function signatureCallback(req: Request, res: Response) {
   const { id } = req.params;
   const providerFlag = (process.env.SIGN_PROVIDER || 'mock').toLowerCase();
+
+  if (providerFlag !== 'docusign') {
+    const sharedSecret = process.env.SIGNATURE_CALLBACK_SECRET;
+    if (!sharedSecret) {
+      getRequestLogger(req).error({ contractId: id }, 'Signature callback secret not configured');
+      return res.status(500).json({ error: 'signature_callback_secret_not_configured' });
+    }
+    const providedSecret =
+      req.header('x-signature-secret') ||
+      (typeof req.query.secret === 'string' ? req.query.secret : undefined);
+    if (providedSecret !== sharedSecret) {
+      getRequestLogger(req).warn({ contractId: id }, 'Invalid signature callback secret');
+      return res.status(401).json({ error: 'invalid_signature_secret' });
+    }
+  }
+
   // DocuSign branch
   if (providerFlag === 'docusign') {
     try {
-      const raw = typeof req.body === 'string' || Buffer.isBuffer(req.body) ? (req.body as any) : JSON.stringify(req.body || {});
-      const ok = docusignProvider.verifyConnectHmac(raw, req.header('X-DocuSign-Signature-1') || req.header('x-docusign-signature-1'));
+      const rawBuffer: Buffer | undefined = (req as any).rawBody
+        ? Buffer.from((req as any).rawBody)
+        : undefined;
+      const signatureHeader = req.header('X-DocuSign-Signature-1') || req.header('x-docusign-signature-1');
+      if (!signatureHeader) return res.status(400).json({ error: 'missing_signature_header' });
+      const payloadBuffer =
+        rawBuffer ||
+        (typeof req.body === 'string'
+          ? Buffer.from(req.body, 'utf8')
+          : Buffer.from(JSON.stringify(req.body || {}), 'utf8'));
+      const ok = docusignProvider.verifyConnectHmac(payloadBuffer, signatureHeader);
       if (!ok) return res.status(400).json({ error: 'invalid_hmac' });
-      const body: any = typeof req.body === 'object' ? req.body : JSON.parse(String(raw || '{}'));
+      let body: any;
+      if (rawBuffer) {
+        try {
+          body = JSON.parse(rawBuffer.toString('utf8') || '{}');
+        } catch {
+          body = {};
+        }
+      } else if (typeof req.body === 'object') {
+        body = req.body;
+      } else {
+        body = JSON.parse(String(req.body || '{}'));
+      }
       const envelopeId: string | undefined = body?.envelopeId || body?.envelope_id;
       const eventType: string | undefined = body?.event || body?.eventType || body?.status;
       if (!envelopeId) return res.status(400).json({ error: 'missing_envelopeId' });
@@ -57,7 +94,7 @@ export async function signatureCallback(req: Request, res: Response) {
       await Contract.findByIdAndUpdate(contract._id, { $set: updates });
       return res.json({ ok: true });
     } catch (e: any) {
-      console.error('DocuSign callback error:', e);
+      getRequestLogger(req).error({ err: e, contractId: id }, 'DocuSign callback error');
       return res.status(500).json({ error: 'callback_failed' });
     }
   }
@@ -79,7 +116,7 @@ export async function signatureCallback(req: Request, res: Response) {
     if (isDuplicateKeyError(error)) {
       return res.json({ ok: true, status: contract.status, idempotent: true });
     }
-    console.error("Error almacenando evento de firma:", error);
+    getRequestLogger(req).error({ err: error, contractId: id, eventId }, 'Error almacenando evento de firma');
     return res.status(500).json({ error: "event_store_failed" });
   }
 

@@ -1,50 +1,58 @@
 import { Request, Response, NextFunction } from 'express';
+import { Counter, Histogram, Registry, collectDefaultMetrics } from 'prom-client';
+import logger from './utils/logger';
+import getRequestLogger from './utils/requestLogger';
 
-type Labels = { method: string; status: number };
+const metricsRegistry: Registry = new Registry();
 
-let httpRequestsTotal = 0;
-const httpRequestsByLabel = new Map<string, number>();
-
-function labelKey(l: Labels) {
-  return `${l.method}_${l.status}`;
+if (!(globalThis as any).__rentalMetricsInitialized) {
+  collectDefaultMetrics({ register: metricsRegistry });
+  (globalThis as any).__rentalMetricsInitialized = true;
 }
+
+const httpRequestsTotal = new Counter({
+  name: 'http_requests_total',
+  help: 'Número total de peticiones HTTP',
+  labelNames: ['method', 'status'] as const,
+  registers: [metricsRegistry],
+});
+
+const httpRequestDurationSeconds = new Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duración de las peticiones HTTP en segundos',
+  labelNames: ['method', 'status'] as const,
+  buckets: [0.05, 0.1, 0.25, 0.5, 1, 2, 5, 10],
+  registers: [metricsRegistry],
+});
 
 export function metricsMiddleware(req: Request, res: Response, next: NextFunction) {
   const method = (req.method || 'GET').toUpperCase();
-  const started = Date.now();
+  const started = process.hrtime.bigint();
+
   res.on('finish', () => {
-    httpRequestsTotal += 1;
-    const key = labelKey({ method, status: res.statusCode });
-    httpRequestsByLabel.set(key, (httpRequestsByLabel.get(key) || 0) + 1);
-    const rt = Date.now() - started;
-    // Log básico estructurado incluyendo requestId si existe
-    const requestId = (res.locals as any)?.requestId;
-    console.log(
-      JSON.stringify({
-        type: 'http',
-        requestId,
-        method,
-        url: req.originalUrl,
-        status: res.statusCode,
-        responseTimeMs: rt,
-      }),
-    );
+    const status = res.statusCode;
+    httpRequestsTotal.inc({ method, status: String(status) });
+
+    const diffNs = process.hrtime.bigint() - started;
+    const durationSeconds = Number(diffNs) / 1e9;
+    httpRequestDurationSeconds.observe({ method, status: String(status) }, durationSeconds);
+
+    const requestLogger = getRequestLogger(req, res) ?? logger;
+    const requestId = res.locals.requestId;
+    requestLogger.info({
+      type: 'http',
+      requestId,
+      method,
+      url: req.originalUrl,
+      status,
+      responseTimeMs: durationSeconds * 1000,
+    });
   });
+
   next();
 }
 
-export function metricsHandler(_req: Request, res: Response) {
-  res.setHeader('Content-Type', 'text/plain; version=0.0.4');
-  let out = '';
-  out += '# HELP http_requests_total Número total de peticiones HTTP\n';
-  out += '# TYPE http_requests_total counter\n';
-  out += `http_requests_total ${httpRequestsTotal}\n`;
-  out += '# HELP http_requests_labeled_total Peticiones HTTP por método y estado\n';
-  out += '# TYPE http_requests_labeled_total counter\n';
-  for (const [key, value] of httpRequestsByLabel.entries()) {
-    const [method, status] = key.split('_');
-    out += `http_requests_labeled_total{method="${method}",status="${status}"} ${value}\n`;
-  }
-  res.end(out);
+export async function metricsHandler(_req: Request, res: Response) {
+  res.setHeader('Content-Type', metricsRegistry.contentType);
+  res.end(await metricsRegistry.metrics());
 }
-

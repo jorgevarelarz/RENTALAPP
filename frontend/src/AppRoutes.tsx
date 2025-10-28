@@ -6,13 +6,14 @@ import LoginPage from "./pages/auth/LoginPage";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
 import RegisterPage from "./pages/auth/RegisterPage";
+import LegalConsentPage from "./pages/auth/LegalConsentPage";
 import ForbiddenPage from "./pages/system/ForbiddenPage";
 import PropertiesList from "./pages/properties/PropertiesList";
 import PropertyDetail from "./pages/properties/PropertyDetail";
 import FavoritesPage from "./pages/properties/FavoritesPage";
 import ContractWizard from "./pages/contracts/ContractWizard";
-import ProtectedRoute from "./components/ProtectedRoute";
-import RoleGuard from "./components/RoleGuard";
+import ProtectedRoute from "./components/auth/ProtectedRoute";
+import RoleGuard from "./components/auth/RoleGuard";
 import Inbox from "./pages/Inbox";
 import TicketsList from "./pages/tickets/TicketsList";
 import TicketCreatePage from "./pages/tickets/TicketCreatePage";
@@ -48,6 +49,8 @@ import ProfilePage from "./pages/profile/ProfilePage";
 import ProList from "./pages/ProList";
 import ProDetail from "./pages/ProDetail";
 import ContractDetail from "./pages/ContractDetail";
+import ColivingList from "./pages/ColivingList";
+import ColivingDetail from "./pages/ColivingDetail";
 
 export default function AppRoutes() {
   return (
@@ -58,6 +61,8 @@ export default function AppRoutes() {
             <Route path="/" element={<RedirectHome />} />
             <Route path="/properties" element={<PropertiesList />} />
             <Route path="/properties/:id" element={<PropertyDetail />} />
+            <Route path="/coliving" element={<ColivingList />} />
+            <Route path="/coliving/:id" element={<ColivingDetail />} />
             <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
             <Route path="/tenant" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantHome /></RoleGuard></ProtectedRoute>} />
             <Route path="/tenant/payments" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantPayments /></RoleGuard></ProtectedRoute>} />
@@ -226,6 +231,14 @@ export default function AppRoutes() {
             <Route path="/register" element={<RegisterPage />} />
             <Route path="/forgot-password" element={<ForgotPassword />} />
             <Route path="/reset" element={<ResetPassword />} />
+            <Route
+              path="/legal-consent"
+              element={
+                <ProtectedRoute>
+                  <LegalConsentPage />
+                </ProtectedRoute>
+              }
+            />
           </Route>
         </Routes>
       </BrowserRouter>

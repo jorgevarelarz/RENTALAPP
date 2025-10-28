@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { listPros } from '../services/pro';
+import { listPros } from '../api/pro';
 import Input from '../components/ui/Input';
 import Button from '../components/ui/Button';
 import { Link } from 'react-router-dom';

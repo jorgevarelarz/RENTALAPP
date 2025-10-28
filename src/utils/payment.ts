@@ -1,62 +1,96 @@
 import crypto from 'crypto';
-import Stripe from 'stripe';
+import type Stripe from 'stripe';
 import { isProd, isMock } from '../config/flags';
+import { getStripeClient, isStripeConfigured } from './stripe';
 
-// Initialise Stripe client. In production, set STRIPE_SECRET_KEY in your .env.
-const stripeSecret = process.env.STRIPE_SECRET_KEY || '';
-// Stripe API version must match the typings provided by @types/stripe.
-// The supported version as of the installed types is '2022-11-15'.
-export const stripe = new Stripe(stripeSecret, {
-  apiVersion: '2022-11-15',
-});
+function ensureStripe(): Stripe {
+  if (!isStripeConfigured()) {
+    const err = Object.assign(new Error('payments_unavailable'), { status: 503 });
+    throw err;
+  }
+  return getStripeClient();
+}
+
+function getIbanKey(): Buffer {
+  const keyHex = process.env.IBAN_ENCRYPTION_KEY;
+  if (!keyHex) {
+    throw new Error('IBAN_ENCRYPTION_KEY no está definido');
+  }
+  if (!/^[0-9a-fA-F]{64}$/.test(keyHex)) {
+    throw new Error('IBAN_ENCRYPTION_KEY debe tener 64 caracteres hex (32 bytes)');
+  }
+  return Buffer.from(keyHex, 'hex');
+}
+
+const IBAN_AUTH_TAG_LENGTH = 16;
+const IBAN_IV_LENGTH = 12;
+const LEGACY_IBAN_IV_LENGTH = 16;
 
 /**
- * Encrypts an IBAN using AES‑256‑CBC. Requires a 32‑byte (64 hex chars)
- * encryption key set in the IBAN_ENCRYPTION_KEY environment variable. The
- * returned string is IV:encryptedHex.
+ * Encripta un IBAN usando AES-256-GCM. Devuelve un string con el formato
+ * IVHEX:PAYLOADHEX:TAGHEX para facilitar su almacenamiento.
  */
 export const encryptIBAN = (iban: string): string => {
-  const keyHex = process.env.IBAN_ENCRYPTION_KEY;
-  if (!keyHex) {
-    throw new Error('IBAN_ENCRYPTION_KEY no está definido');
-  }
-  const key = Buffer.from(keyHex, 'hex');
-  const iv = crypto.randomBytes(16);
-  const cipher = crypto.createCipheriv('aes-256-cbc', key, iv);
-  let encrypted = cipher.update(iban, 'utf8', 'hex');
-  encrypted += cipher.final('hex');
-  return `${iv.toString('hex')}:${encrypted}`;
+  const key = getIbanKey();
+  const iv = crypto.randomBytes(IBAN_IV_LENGTH);
+  const cipher = crypto.createCipheriv('aes-256-gcm', key, iv, {
+    authTagLength: IBAN_AUTH_TAG_LENGTH,
+  });
+  const encrypted = Buffer.concat([cipher.update(iban, 'utf8'), cipher.final()]);
+  const tag = cipher.getAuthTag();
+  return `${iv.toString('hex')}:${encrypted.toString('hex')}:${tag.toString('hex')}`;
 };
 
 /**
- * Decrypts an encrypted IBAN back to plain text. Expects the same
- * IBAN_ENCRYPTION_KEY used in encryptIBAN.
+ * Desencripta un IBAN previamente cifrado con encryptIBAN. Verifica el tag de
+ * autenticación para detectar manipulaciones.
  */
 export const decryptIBAN = (encryptedIban: string): string => {
-  const [ivHex, encrypted] = encryptedIban.split(':');
-  const keyHex = process.env.IBAN_ENCRYPTION_KEY;
-  if (!keyHex) {
-    throw new Error('IBAN_ENCRYPTION_KEY no está definido');
+  const parts = encryptedIban.split(':');
+  if (parts.length !== 2 && parts.length !== 3) {
+    throw new Error('formato_iban_invalido');
   }
-  const key = Buffer.from(keyHex, 'hex');
+  const key = getIbanKey();
+  if (parts.length === 2) {
+    const [ivHex, payloadHex] = parts;
+    const iv = Buffer.from(ivHex, 'hex');
+    const payload = Buffer.from(payloadHex, 'hex');
+    if (iv.length !== LEGACY_IBAN_IV_LENGTH) {
+      throw new Error('vector_inicializacion_invalido');
+    }
+    const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+    const decrypted = Buffer.concat([decipher.update(payload), decipher.final()]);
+    return decrypted.toString('utf8');
+  }
+  const [ivHex, payloadHex, tagHex] = parts;
   const iv = Buffer.from(ivHex, 'hex');
-  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
-  let decrypted = decipher.update(encrypted, 'hex', 'utf8');
-  decrypted += decipher.final('utf8');
-  return decrypted;
+  const payload = Buffer.from(payloadHex, 'hex');
+  const tag = Buffer.from(tagHex, 'hex');
+  if (iv.length !== IBAN_IV_LENGTH) {
+    throw new Error('vector_inicializacion_invalido');
+  }
+  if (tag.length !== IBAN_AUTH_TAG_LENGTH) {
+    throw new Error('tag_autenticacion_invalido');
+  }
+  const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv, {
+    authTagLength: IBAN_AUTH_TAG_LENGTH,
+  });
+  decipher.setAuthTag(tag);
+  const decrypted = Buffer.concat([decipher.update(payload), decipher.final()]);
+  return decrypted.toString('utf8');
 };
 
 /**
- * Creates a Stripe customer and attaches a SEPA Direct Debit mandate using
- * the provided IBAN. Returns the created customer ID.
+ * Crea un cliente en Stripe y adjunta un mandato SEPA usando el IBAN
+ * proporcionado. Devuelve el ID del cliente generado.
  */
 export const createCustomerAndMandate = async (
   name: string,
   email: string,
   iban: string,
 ): Promise<string> => {
+  const stripe = ensureStripe();
   const customer = await stripe.customers.create({ name, email });
-  // Attach a SEPA debit source to the customer.
   await stripe.customers.createSource(customer.id, {
     source: {
       object: 'source',
@@ -70,17 +104,17 @@ export const createCustomerAndMandate = async (
 };
 
 /**
- * Creates a payment intent to collect rent or deposit. The caller must
- * specify the Stripe customer ID obtained via createCustomerAndMandate.
+ * Crea un PaymentIntent para cobrar renta o depósito a un cliente Stripe.
  */
 export const createPaymentIntent = async (
   customerId: string,
   amount: number,
   currency = 'eur',
 ) => {
+  const stripe = ensureStripe();
   return stripe.paymentIntents.create({
     customer: customerId,
-    amount: Math.round(amount * 100), // convert to cents
+    amount: Math.round(amount * 100),
     currency,
     payment_method_types: ['sepa_debit'],
     confirm: true,
@@ -89,13 +123,13 @@ export const createPaymentIntent = async (
 
 export interface HoldArgs {
   customerId: string;
-  amount: number;                 // gross amount to hold (EUR units)
+  amount: number;
   currency?: 'eur';
   meta?: any;
 }
 export interface HoldResult {
   provider: 'stripe' | 'mock';
-  ref: string;                    // PaymentIntent id (stripe) or mock ref
+  ref: string;
   amount: number;
   currency: 'eur';
   heldAt: string;
@@ -103,15 +137,15 @@ export interface HoldResult {
 }
 
 export interface ReleaseArgs {
-  ref: string;                    // PaymentIntent id to capture
-  amount: number;                 // amount to capture (EUR units)
+  ref: string;
+  amount: number;
   currency: 'eur';
-  fee?: number;                   // platform fee (EUR units) -> application_fee_amount
-  meta?: Record<string, any>;     // metadata to attach to the capture
+  fee?: number;
+  meta?: Record<string, any>;
 }
 export interface ReleaseResult {
   provider: 'stripe' | 'mock';
-  ref: string;                    // capture id / PaymentIntent id
+  ref: string;
 }
 
 export async function holdPayment(args: HoldArgs): Promise<HoldResult> {
@@ -129,6 +163,7 @@ export async function holdPayment(args: HoldArgs): Promise<HoldResult> {
     };
   }
 
+  const stripe = ensureStripe();
   const intent = await stripe.paymentIntents.create({
     customer: args.customerId,
     amount: Math.round(args.amount * 100),
@@ -157,6 +192,7 @@ export async function releasePayment(args: ReleaseArgs): Promise<ReleaseResult> 
     return { provider: 'mock', ref: `mock_release_${Date.now()}` };
   }
 
+  const stripe = ensureStripe();
   const captured = await stripe.paymentIntents.capture(args.ref, {
     amount_to_capture: Math.round(args.amount * 100),
     application_fee_amount: args.fee ? Math.round(args.fee * 100) : undefined,

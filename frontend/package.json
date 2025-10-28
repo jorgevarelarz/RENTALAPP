@@ -4,7 +4,8 @@
   "private": true,
   "dependencies": {
     "@headlessui/react": "^2.2.8",
-    "@hookform/resolvers": "^5.2.2",
+    "@hookform/resolvers": "3.3.4",
+    "@reduxjs/toolkit": "^2.9.0",
     "@stripe/stripe-js": "^1.54.0",
     "@tanstack/react-query": "^5.89.0",
     "@testing-library/dom": "^10.4.1",
@@ -24,12 +25,13 @@
     "react-dom": "^19.1.1",
     "react-hook-form": "^7.62.0",
     "react-hot-toast": "^2.6.0",
+    "react-redux": "^9.2.0",
     "react-router-dom": "^7.8.1",
     "react-scripts": "^5.0.1",
     "tailwindcss": "^3.4.17",
     "typescript": "^4.9.5",
     "web-vitals": "^2.1.4",
-    "zod": "^3.23.8"
+    "zod": "3.23.8"
   },
   "scripts": {
     "start": "react-scripts start",
@@ -42,7 +44,7 @@
     "eject": "react-scripts eject"
   },
   "overrides": {
-    "zod": "^3.23.8"
+    "zod": "3.23.8"
   },
   "eslintConfig": {
     "extends": [
@@ -61,6 +63,5 @@
       "last 1 firefox version",
       "last 1 safari version"
     ]
-  },
-  "devDependencies": {}
+  }
 }

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { stripe } from '../utils/stripe';
+import { getStripeClient, isStripeConfigured } from '../utils/stripe';
 import { Contract } from '../models/contract.model';
 import { User } from '../models/user.model';
 import { calcPlatformFeeOnRent, calcSurchargeCents, calcSignFeeOnRent } from '../utils/rentFees';
@@ -22,6 +22,10 @@ r.post('/contracts/:id/pay-rent', async (req, res) => {
   if (!owner?.stripeAccountId) return res.status(409).json({ error: 'owner_not_connected' });
   if (!tenant?.stripeCustomerId) return res.status(409).json({ error: 'tenant_no_customer' });
 
+  if (!isStripeConfigured()) {
+    return res.status(503).json({ error: 'payments_unavailable' });
+  }
+  const stripe = getStripeClient();
   const acct = await stripe.accounts.retrieve(owner.stripeAccountId);
   if (!acct.charges_enabled) return res.status(409).json({ error: 'charges_disabled' });
 

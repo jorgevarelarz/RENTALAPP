@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { getMyVerification, devVerifyMe } from '../../services/verification';
+import { getMyVerification, devVerifyMe } from '../../api/verification';
 import { useAuth } from '../../context/AuthContext';
 
 export default function TenantKyc() {

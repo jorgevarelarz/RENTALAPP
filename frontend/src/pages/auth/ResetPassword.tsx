@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { resetPassword as apiResetPassword } from "../../services/auth";
+import { resetPassword as apiResetPassword } from "../../api/auth";
 
 const containerStyle: React.CSSProperties = {
   maxWidth: 360,

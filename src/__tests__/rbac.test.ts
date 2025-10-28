@@ -1,5 +1,9 @@
 import request from 'supertest';
+import jwt from 'jsonwebtoken';
 import { app } from '../app';
+
+const signToken = (id: string, role: string) =>
+  jwt.sign({ id, role, isVerified: true }, process.env.JWT_SECRET || 'insecure', { expiresIn: '1h' });
 
 describe('RBAC basic matrix', () => {
   // 401 (use invalid token to bypass test fallback)
@@ -42,36 +46,34 @@ describe('RBAC basic matrix', () => {
 
   // 200 happy paths by role (endpoints that can return 200 without heavy setup)
   it('tenant can list own tickets', async () => {
+    const token = signToken('000000000000000000000010', 'tenant');
     const res = await request(app)
       .get('/api/tickets/my/tenant')
-      .set('x-user-id', '000000000000000000000010')
-      .set('x-user-role', 'tenant');
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
   });
 
   it('landlord can list own tickets', async () => {
+    const token = signToken('000000000000000000000011', 'landlord');
     const res = await request(app)
       .get('/api/tickets/my/owner')
-      .set('x-user-id', '000000000000000000000011')
-      .set('x-user-role', 'landlord');
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
   });
 
   it('pro can list own tickets', async () => {
+    const token = signToken('000000000000000000000012', 'pro');
     const res = await request(app)
       .get('/api/tickets/my/pro')
-      .set('x-user-id', '000000000000000000000012')
-      .set('x-user-role', 'pro');
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
   });
 
   it('admin can view admin page', async () => {
+    const token = signToken('000000000000000000000013', 'admin');
     const res = await request(app)
       .get('/api/admin/tenant-pro/pending')
-      .set('x-user-id', '000000000000000000000013')
-      .set('x-user-role', 'admin')
-      .set('x-admin', 'true');
+      .set('Authorization', `Bearer ${token}`);
     expect(res.status).toBe(200);
   });
 });
-

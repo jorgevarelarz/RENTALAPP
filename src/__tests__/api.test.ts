@@ -7,13 +7,34 @@ import { User } from '../models/user.model';
 let app: any;
 let mongo: MongoMemoryServer | undefined;
 
-jest.mock('../utils/stripe', () => ({
-  stripe: {
+jest.mock('../utils/stripe', () => {
+  const stripeMock = {
     paymentIntents: {
       create: jest.fn().mockResolvedValue({ client_secret: 'test_secret' }),
+      capture: jest.fn().mockResolvedValue({ id: 'pi_test_capture' }),
     },
-  },
-}));
+    customers: {
+      create: jest.fn().mockResolvedValue({ id: 'cus_test_1' }),
+      createSource: jest.fn().mockResolvedValue({ id: 'src_test_1' }),
+    },
+    accounts: {
+      create: jest.fn().mockResolvedValue({ id: 'acct_test_1' }),
+      retrieve: jest.fn().mockResolvedValue({ charges_enabled: true, payouts_enabled: true, requirements: {} }),
+    },
+    accountLinks: {
+      create: jest.fn().mockResolvedValue({ url: 'https://example.com/onboard' }),
+    },
+    webhooks: {
+      constructEvent: jest.fn(),
+    },
+  };
+  return {
+    getStripeClient: jest.fn(() => stripeMock),
+    isStripeConfigured: jest.fn(() => true),
+    __resetStripeClientForTests: jest.fn(),
+    __stripeMock: stripeMock,
+  };
+});
 
 beforeAll(async () => {
   // Pin a modern MongoDB version on CI runners (OpenSSL 3)

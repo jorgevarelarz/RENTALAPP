@@ -2,7 +2,7 @@ import { Router } from 'express';
 import { body } from 'express-validator';
 import { register, login, requestPasswordReset, resetPassword } from '../controllers/auth.controller';
 import { validate } from '../middleware/validate';
-import { asyncHandler } from '../utils/asyncHandler';
+import asyncHandler from '../utils/asyncHandler';
 
 const router = Router();
 router.post(

@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { buildClauseCatalog } from "../services/clauses.service";
+import { buildClauseCatalog } from "../core/clauses.service";
 
 export const listClauses = (req: Request, res: Response) => {
   try {

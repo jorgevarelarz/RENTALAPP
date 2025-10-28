@@ -1,7 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import "./index.css";
-import AppRoutes from "./AppRoutes";
+import App from "./App";
 import { ThemeProvider } from "./context/ThemeContext";
 import { ToastProvider } from "./context/ToastContext";
 import { NotificationsProvider } from "./utils/notify";
@@ -23,7 +23,7 @@ root.render(
         <NotificationsProvider>
           <QueryClientProvider client={queryClient}>
             <Toaster position="top-right" />
-            <AppRoutes />
+            <App />
           </QueryClientProvider>
         </NotificationsProvider>
       </ToastProvider>

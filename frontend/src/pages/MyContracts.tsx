@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { listContracts } from '../services/contracts';
+import { listContracts } from '../api/contracts';
 import { useAuth } from '../context/AuthContext';
 import Badge from '../components/ui/Badge';
 import { Link } from 'react-router-dom';
@@ -22,7 +22,14 @@ const MyContracts: React.FC = () => {
         );
         setItems(mine);
       } catch (e: any) {
-        setError(e?.message || 'Error cargando contratos');
+        const status = e?.response?.status;
+        if (status === 401) {
+          setError('Sesión expirada. Vuelve a iniciar sesión.');
+        } else if (status === 403 && e?.response?.data?.error === 'owner_not_verified') {
+          setError('Debes completar la verificación de identidad para acceder a los contratos.');
+        } else {
+          setError(e?.response?.data?.error || e?.message || 'Error cargando contratos');
+        }
       } finally {
         setLoading(false);
       }

@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { Contract } from "../models/contract.model";
-import { transitionContract } from "../services/contractState";
+import { transitionContract } from "../core/contractState";
 import { recordContractHistory } from "../utils/history";
 
 export async function activate(req: Request, res: Response) {

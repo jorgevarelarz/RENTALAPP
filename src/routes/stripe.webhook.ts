@@ -1,6 +1,6 @@
 import express, { Router } from 'express';
 import { Types } from 'mongoose';
-import { stripe } from '../utils/stripe';
+import { getStripeClient, isStripeConfigured } from '../utils/stripe';
 import { Contract } from '../models/contract.model';
 import Stripe from 'stripe';
 import ServiceOffer from '../models/serviceOffer.model';
@@ -11,6 +11,7 @@ import PlatformEarning from '../models/platformEarning.model';
 import ProcessedEvent from '../models/processedEvent.model';
 import { calcServiceFee } from '../utils/calcServiceFee';
 import { recordContractHistory } from '../utils/history';
+import logger from '../utils/logger';
 
 const r = Router();
 
@@ -35,6 +36,10 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
   if (process.env.NODE_ENV === 'production' && !secret) {
     return res.status(500).json({ error: 'stripe_webhook_secret_missing' });
   }
+  if (!isStripeConfigured()) {
+    return res.status(503).json({ error: 'stripe_not_configured' });
+  }
+  const stripe = getStripeClient();
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, secret);
@@ -66,8 +71,9 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
     if ((r as any).upsertedCount === 0 && (r as any).matchedCount > 0) {
       return res.json({ received: true, duplicate: true });
     }
-  } catch (_e: any) {
+  } catch (err: any) {
     // For DB errors, surface 500 to allow Stripe to retry later
+    logger.error({ err, eventId: event.id }, 'Error almacenando idempotencia de Stripe');
     return res.status(500).json({ error: 'idempotency_store_failed' });
   }
 

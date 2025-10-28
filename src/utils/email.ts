@@ -1,11 +1,31 @@
+import logger from './logger';
+import { sendEmail as deliverEmail } from './notification';
+import { User } from '../models/user.model';
+
+async function resolveRecipient(identifier: string) {
+  if (!identifier) return null;
+  if (identifier.includes('@')) return identifier;
+  try {
+    const user = await User.findById(identifier).select('email').lean();
+    return user?.email || null;
+  } catch (err) {
+    logger.warn({ err, identifier }, '[email] No se pudo resolver destinatario');
+    return null;
+  }
+}
+
 /**
- * Email utility functions used across the application. Right now this module
- * exposes a very simple console-based mock that simulates email delivery. When
- * a real provider (Sendgrid, SES, etc.) is integrated the implementation of
- * sendEmail can be replaced while keeping the rest of the app untouched.
+ * Wrapper around the notification email sender that accepts either a direct
+ * email address or a user identifier. If the recipient cannot be resolved, the
+ * send is skipped but no error is thrown to avoid breaking the main flow.
  */
-export async function sendEmail(userId: string, subject: string, body: string) {
-  console.log(`[EMAIL MOCK] To user=${userId} | ${subject}\n${body}`);
+export async function sendEmail(identifier: string, subject: string, body: string) {
+  const to = await resolveRecipient(identifier);
+  if (!to) {
+    logger.warn({ identifier, subject }, '[email] Destinatario desconocido, se omite envío');
+    return;
+  }
+  await deliverEmail(to, subject, body);
 }
 
 export async function sendPriceAlert(userId: string, property: any) {

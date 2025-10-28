@@ -20,7 +20,7 @@ jest.mock('../context/AuthContext', () => ({
   useAuth: () => ({ user: (global as any).__mockRole ? { role: (global as any).__mockRole } : null })
 }), { virtual: true });
 
-import Sidebar from '../components/Sidebar';
+import Sidebar from '../components/layout/Sidebar';
 
 function renderWithRole(role: any) {
   (global as any).__mockRole = role;

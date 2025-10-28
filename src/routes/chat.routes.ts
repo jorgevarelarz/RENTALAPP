@@ -4,6 +4,8 @@ import Message from '../models/message.model';
 import { Contract } from '../models/contract.model';
 import Ticket from '../models/ticket.model';
 import Appointment from '../models/appointment.model';
+import { Application } from '../models/application.model';
+import { Property } from '../models/property.model';
 import { getUserId } from '../utils/getUserId';
 import { User } from '../models/user.model';
 
@@ -56,6 +58,20 @@ async function ensureConversation(kind: string, refId: string, userId: string) {
     meta.tenantId = a.tenantId;
     meta.ownerId = a.ownerId;
     meta.ticketId = a.ticketId;
+  } else if (kind === 'application') {
+    const app = await Application.findById(refId).lean();
+    if (!app) throw Object.assign(new Error('Application not found'), { status: 404 });
+    const property = await Property.findById(app.propertyId).lean();
+    if (!property) throw Object.assign(new Error('Property not found'), { status: 404 });
+    const ownerId = String(property.owner);
+    if (![ownerId, app.tenantId].includes(userId)) {
+      throw Object.assign(new Error('Forbidden'), { status: 403 });
+    }
+    participants = [ownerId, app.tenantId];
+    meta.applicationId = refId;
+    meta.ownerId = ownerId;
+    meta.tenantId = app.tenantId;
+    meta.propertyId = app.propertyId;
   } else {
     throw Object.assign(new Error('Invalid kind'), { status: 400 });
   }

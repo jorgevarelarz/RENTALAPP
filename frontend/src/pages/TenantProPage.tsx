@@ -1,5 +1,5 @@
 import React from 'react';
-import TenantProPanel from '../components/TenantProPanel';
+import TenantProPanel from '../components/tenant-pro/TenantProPanel';
 
 export default function TenantProPage() {
   return (

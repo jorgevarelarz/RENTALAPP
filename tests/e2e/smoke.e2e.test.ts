@@ -59,6 +59,8 @@ jest.setTimeout(180_000);
   beforeAll(async () => {
     process.env.ESCROW_DRIVER = "mock";
     process.env.PLATFORM_MIN_FEE_CENTS = "0";
+    process.env.SIGN_PROVIDER = 'mock';
+    process.env.SIGNATURE_CALLBACK_SECRET = 'test-secret';
     await connectDb();
     await clearDb();
   });
@@ -185,12 +187,14 @@ jest.setTimeout(180_000);
     const evt = { eventId: "evt_e2e_1", provider: "mock", status: "signed" };
     const first = await request(app)
       .post(`/api/contracts/${contractId}/signature/callback`)
+      .set('x-signature-secret', 'test-secret')
       .send(evt)
       .expect(200);
     expect(first.body.status).toBe("signed");
 
     const second = await request(app)
       .post(`/api/contracts/${contractId}/signature/callback`)
+      .set('x-signature-secret', 'test-secret')
       .send(evt)
       .expect(200);
     expect(second.body.idempotent || second.body.alreadyFinalized).toBeTruthy();

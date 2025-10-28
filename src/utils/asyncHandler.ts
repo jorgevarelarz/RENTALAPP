@@ -1,7 +1,17 @@
-import { RequestHandler } from 'express';
+import { Request, Response, NextFunction, RequestHandler } from 'express';
 
-export const asyncHandler = (fn: (...args: any[]) => Promise<any>): RequestHandler => {
+export type AsyncRouteHandler<TReq extends Request = Request, TRes extends Response = Response> = (
+  req: TReq,
+  res: TRes,
+  next: NextFunction,
+) => Promise<unknown>;
+
+const asyncHandler = <TReq extends Request = Request, TRes extends Response = Response>(
+  fn: AsyncRouteHandler<TReq, TRes>,
+): RequestHandler => {
   return (req, res, next) => {
-    Promise.resolve(fn(req, res, next)).catch(next);
+    void Promise.resolve(fn(req as TReq, res as TRes, next)).catch(next);
   };
 };
+
+export default asyncHandler;

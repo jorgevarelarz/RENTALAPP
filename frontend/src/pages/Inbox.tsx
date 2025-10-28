@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { listConversations, type Conversation } from '../services/chat';
+import { listConversations, type Conversation } from '../api/chat';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import ProBadge from '../components/ProBadge';
+import ProBadge from '../components/ui/ProBadge';
 
 export default function Inbox() {
   const [items, setItems] = useState<Conversation[]>([]);

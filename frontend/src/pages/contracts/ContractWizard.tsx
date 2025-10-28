@@ -5,7 +5,7 @@ import WizardStep3Review from './WizardStep3Review';
 
 export default function ContractWizard() {
   const [step, setStep] = useState(1);
-  const [basics, setBasics] = useState<any>({});
+  const [basics, setBasics] = useState<any>({ landlordType: 'individual' });
   const [clauses, setClauses] = useState<Record<string, any>>({});
   const [created, setCreated] = useState<any>(null);
 
@@ -28,7 +28,7 @@ export default function ContractWizard() {
       {step === 1 && <WizardStep1Basics value={basics} onChange={setBasics} onNext={() => setStep(2)} />}
       {step === 2 && (
         <WizardStep2Clauses
-          region={basics.region}
+          landlordType={basics.landlordType || 'individual'}
           value={clauses}
           onChange={setClauses}
           onNext={() => setStep(3)}

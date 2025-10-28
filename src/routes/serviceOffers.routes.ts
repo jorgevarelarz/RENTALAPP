@@ -5,7 +5,7 @@ import Message from '../models/message.model';
 import Appointment from '../models/appointment.model';
 import { getUserId } from '../utils/getUserId';
 import { calcServiceFee } from '../utils/calcServiceFee';
-import { stripe } from '../utils/stripe';
+import { getStripeClient } from '../utils/stripe';
 import PlatformEarning from '../models/platformEarning.model';
 import { Contract } from '../models/contract.model';
 import { User } from '../models/user.model';
@@ -121,6 +121,7 @@ r.post('/service-offers/:offerId/accept-slot', async (req, res) => {
     const pro = await User.findById(offer.proId).lean();
     const destination = pro?.stripeAccountId;
     if (!destination) throw Object.assign(new Error('Pro missing stripe account'), { status: 400 });
+    const stripe = getStripeClient();
     const paymentIntent = await stripe.paymentIntents.create({
       amount: Math.round(offer.amount * 100),
       currency: offer.currency,

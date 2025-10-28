@@ -1,6 +1,7 @@
 import nodemailer from 'nodemailer';
 import twilio from 'twilio';
 import { isMock } from '../config/flags';
+import logger from './logger';
 
 const smtpConfigured = Boolean(process.env.SMTP_HOST);
 const twilioConfigured = Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN && process.env.TWILIO_PHONE_NUMBER);
@@ -34,11 +35,16 @@ const deliverEmail = async (
     try {
       await transporter.sendMail(mailOptions);
     } catch (error) {
-      console.error('Error enviando email de notificación:', error);
+      logger.error({ err: error, to: mailOptions.to }, 'Error enviando email de notificación');
     }
   } else {
-    console.log(
-      `[Mock email] To: ${mailOptions.to} | Subject: ${mailOptions.subject} | Body: ${mailOptions.text || ''}`
+    logger.info(
+      {
+        to: mailOptions.to,
+        subject: mailOptions.subject,
+        bodyPreview: String(mailOptions.text || '').slice(0, 200),
+      },
+      '[Mock email]',
     );
   }
 };
@@ -90,10 +96,10 @@ export const sendSms = async (phoneNumber: string, message: string) => {
         to: phoneNumber,
       });
     } catch (error) {
-      console.error('Error sending SMS:', error);
+      logger.error({ err: error, phoneNumber }, 'Error enviando SMS');
     }
   } else {
-    console.log(`[Mock SMS${forceMockSms ? ' (forced)' : ''}] To: ${phoneNumber} | Body: ${message}`);
+    logger.info({ phoneNumber, message }, `[Mock SMS${forceMockSms ? ' (forced)' : ''}]`);
   }
 };
 

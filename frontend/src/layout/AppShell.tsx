@@ -2,12 +2,13 @@ import React, { useEffect, useState } from 'react';
 import { Outlet, Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import navConfig from '../config/nav.config.json';
-import Breadcrumbs from '../components/Breadcrumbs';
-import { listConversations } from '../services/chat';
+import Breadcrumbs from '../components/ui/Breadcrumbs';
+import { listConversations } from '../api/chat';
 
 function Header() {
   const { user, logout } = useAuth();
   const [unread, setUnread] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
   useEffect(() => {
     let timer: any;
     const load = async () => {
@@ -28,10 +29,29 @@ function Header() {
     : user?.role === 'pro' ? '/pro'
     : user?.role === 'admin' ? '/admin'
     : '/login';
+  const role = user?.role as 'tenant' | 'landlord' | 'pro' | 'admin' | undefined;
+  const labelFor: Record<string, string> = {
+    tenant: 'Inquilino',
+    landlord: 'Propietario',
+    pro: 'Profesional',
+    admin: 'Administración',
+  };
+
   return (
     <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-3">
         <Link to={roleHome} className="font-semibold text-lg">RentalApp</Link>
+
+        {/* Menú compacto en móviles */}
+        <button
+          className="md:hidden px-2 py-1 rounded border border-gray-300 hover:bg-gray-50"
+          onClick={() => setMenuOpen(v => !v)}
+          aria-expanded={menuOpen}
+          aria-controls="mobile-menu"
+        >
+          Menú
+        </button>
+
         <nav className="hidden md:flex items-center gap-2 text-sm">
           {user && (
             <Link to="/inbox" className="px-2 py-1 rounded hover:bg-gray-100">
@@ -52,6 +72,48 @@ function Header() {
           )}
         </div>
       </div>
+
+      {/* Panel de menú móvil */}
+      {menuOpen && (
+        <div id="mobile-menu" className="md:hidden z-30 border-t border-gray-200 bg-white">
+          <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-3">
+            <div className="text-xs uppercase tracking-wide text-gray-500 mb-2">General</div>
+            <div className="flex flex-wrap gap-2">
+              {(navConfig as any).general?.map((item: any) => (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  className={({isActive})=>`px-3 py-1.5 rounded border ${isActive?'bg-gray-100 border-gray-300':'border-gray-200 hover:bg-gray-50'}`}
+                  onClick={() => setMenuOpen(false)}
+                >
+                  {item.label}
+                  {item.path === '/inbox' && user && unread > 0 && (
+                    <span className="ml-2 inline-flex items-center justify-center text-white bg-red-500 rounded-full text-[10px] px-1.5 py-0.5">{unread}</span>
+                  )}
+                </NavLink>
+              ))}
+            </div>
+
+            {role && (navConfig as any)[role] && (
+              <>
+                <div className="text-xs uppercase tracking-wide text-gray-500 mt-4 mb-2">{labelFor[role]}</div>
+                <div className="flex flex-wrap gap-2">
+                  {((navConfig as any)[role] as any[]).map((item) => (
+                    <NavLink
+                      key={item.path}
+                      to={item.path}
+                      className={({isActive})=>`px-3 py-1.5 rounded border ${isActive?'bg-gray-100 border-gray-300':'border-gray-200 hover:bg-gray-50'}`}
+                      onClick={() => setMenuOpen(false)}
+                    >
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
     </header>
   );
 }

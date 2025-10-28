@@ -15,6 +15,9 @@ export const requireVerified = async (
   if (user) {
     if (user.role === 'admin') return next();
     if (user.isVerified) return next();
+    if (process.env.ALLOW_UNVERIFIED === 'true' && process.env.NODE_ENV !== 'production') {
+      return next();
+    }
     return res.status(403).json({ error: 'owner_not_verified' });
   }
 

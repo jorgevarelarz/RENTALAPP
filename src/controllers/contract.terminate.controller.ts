@@ -1,5 +1,5 @@
 import { Request, Response } from "express";
-import { transitionContract } from "../services/contractState";
+import { transitionContract } from "../core/contractState";
 import { recordContractHistory } from "../utils/history";
 
 export async function terminate(req: Request, res: Response) {

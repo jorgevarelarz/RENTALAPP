@@ -11,14 +11,14 @@ import {
   completeWork,
   closeTicket,
   openDispute,
-} from "../../services/tickets";
-import { proposeAppointment as proposeAppt, acceptAppointment, rejectAppointment } from "../../services/appointments";
-import ChatPanel from "../../components/ChatPanel";
-import { searchPros } from "../../services/pros";
+} from "../../api/tickets";
+import { proposeAppointment as proposeAppt, acceptAppointment, rejectAppointment } from "../../api/appointments";
+import ChatPanel from "../../components/chat/ChatPanel";
+import { searchPros } from "../../api/pros";
 import { useAuth } from "../../context/AuthContext";
 import { useNotify } from "../../utils/notify";
-import CopyLinkButton from "../../components/CopyLinkButton";
-import { sendEmail, sendSms } from "../../services/notify";
+import CopyLinkButton from "../../components/ui/CopyLinkButton";
+import { sendEmail, sendSms } from "../../api/notify";
 
 export default function TicketDetail() {
   const { id } = useParams();

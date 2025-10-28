@@ -5,7 +5,7 @@ import { Contract } from '../../src/models/contract.model';
 import { User } from '../../src/models/user.model';
 import { Property } from '../../src/models/property.model';
 
-jest.mock('../../src/services/signature/docusign.provider', () => ({
+jest.mock('../../src/core/signature/docusign.provider', () => ({
   __esModule: true,
   createEnvelope: jest.fn(async () => ({ envelopeId: 'env_test_123', status: 'sent' })),
   fetchCompletedDocument: jest.fn(async () => Buffer.from('%PDF-signed%')),

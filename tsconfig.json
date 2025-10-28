@@ -6,7 +6,11 @@
     "outDir": "dist",
     "strict": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "baseUrl": ".",
+    "paths": {
+      "@rental-app/types": ["packages/types"]
+    }
   },
   "include": ["src/**/*"]
 }

@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../config/jwt';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
+const JWT_SECRET = getJwtSecret();
 
 /**
  * Authentication middleware. Verifies a JWT from the Authorization header

@@ -3,7 +3,6 @@ import mongoose from 'mongoose';
 import type { MongoMemoryServer } from 'mongodb-memory-server';
 import { startMongoMemoryServer } from './utils/mongoMemoryServer';
 import { User } from '../models/user.model';
-import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
 
 let app: any;

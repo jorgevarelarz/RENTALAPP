@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getFavorites, toggleFavorite, isFavorite } from '../utils/favorites';
 import { toAbsoluteUrl } from '../utils/media';
-import { listProperties } from '../services/properties';
+import { listProperties } from '../api/properties';
 import { Link } from 'react-router-dom';
 
 const Favorites: React.FC = () => {

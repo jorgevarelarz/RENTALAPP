@@ -15,8 +15,10 @@
    cp .env.example .env
    cp frontend/.env.example frontend/.env
    ```
-   Rellena `MONGO_URL`, `JWT_SECRET`, `STRIPE_SECRET_KEY`,
-   `STRIPE_WEBHOOK_SECRET` y `CORS_ORIGIN=http://localhost:3001`.
+   Rellena `MONGO_URL`, `JWT_SECRET`, `STRIPE_SECRET_KEY` (mínimo 16 caracteres),
+   `STRIPE_WEBHOOK_SECRET`, `IBAN_ENCRYPTION_KEY` (64 caracteres hex -> 32 bytes),
+   `REACT_APP_STRIPE_PUBLISHABLE_KEY`
+   y `CORS_ORIGIN=http://localhost:3001`.
 
 2. Instala dependencias y ejecuta el seed:
    ```bash
@@ -40,6 +42,14 @@
    - Puedes exportarlo temporalmente: `export STRIPE_WEBHOOK_SECRET=whsec_xxx`
    - O añadirlo a tu `.env`. En producción este valor es obligatorio; si falta, la API devolverá `500 stripe_webhook_secret_missing` para evitar aceptar webhooks sin firma.
 
+## Herramientas de desarrollo
+
+- **Linting & formato**: `npm run lint`, `npm run lint:fix`, `npm run format`. La configuración vive en `eslint.config.js` y `.prettierrc.json`.
+- **Logs estructurados**: toda petición genera un `requestId` accesible en la cabecera `X-Request-Id` y en los logs de Pino (`src/utils/logger.ts`). Usa ese ID para correlacionar trazas.
+- **Métricas Prometheus**: expuestas en `/metrics` (counter `http_requests_total` + histograma `http_request_duration_seconds`, además de métricas por defecto de `prom-client`).
+- **Rate limiting**: `/api/auth/*` y `/api/payments/*` cuentan con límites conservadores definidos en `src/app.ts`.
+- **Errores estructurados**: las rutas lanzan `AppError` (`src/utils/errors.ts`), lo que garantiza respuestas homogéneas `{ code, message, requestId }` desde el `errorHandler`.
+
 5. Flujo manual en el navegador:
    - Regístrate en `/login` y conserva el token.
    - Desde `/dashboard` crea una propiedad publicada.
@@ -53,8 +63,10 @@
 Configura las variables:
 - `MONGO_URL`
 - `JWT_SECRET`
-- `STRIPE_SECRET_KEY`
+- `STRIPE_SECRET_KEY` (mínimo 16 caracteres)
 - `STRIPE_WEBHOOK_SECRET`
+- `IBAN_ENCRYPTION_KEY` (64 caracteres hex)
+- `REACT_APP_STRIPE_PUBLISHABLE_KEY`
 - `CORS_ORIGIN=https://<vercel-front>`
 
 ### Frontend (Vercel)

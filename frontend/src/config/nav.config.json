@@ -1,6 +1,7 @@
 {
   "general": [
-    { "label": "Conversaciones", "path": "/inbox" }
+    { "label": "Conversaciones", "path": "/inbox" },
+    { "label": "Coliving", "path": "/coliving" }
   ],
   "tenant": [
     { "label": "Inicio", "path": "/tenant" },

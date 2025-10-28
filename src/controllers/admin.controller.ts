@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
+import getRequestLogger from '../utils/requestLogger';
 
 /**
  * Returns aggregate statistics about the platform: total number of users
@@ -9,7 +10,7 @@ import { Contract } from '../models/contract.model';
  * statuses. This endpoint is intended for administrators to monitor
  * overall usage.
  */
-export const getStats = async (_req: Request, res: Response) => {
+export const getStats = async (req: Request, res: Response) => {
   try {
     const totalUsers = await User.countDocuments();
     const tenants = await User.countDocuments({ role: 'tenant' });
@@ -33,7 +34,7 @@ export const getStats = async (_req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error(error);
+    getRequestLogger(req).error({ err: error }, 'Error obteniendo estadísticas administrativas');
     res.status(500).json({ error: 'Error obteniendo estadísticas', details: error.message });
   }
 };

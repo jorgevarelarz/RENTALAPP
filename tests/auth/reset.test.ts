@@ -90,6 +90,9 @@ describe('Password reset flow', () => {
       .post('/api/auth/reset')
       .send({ token: 'expiredtoken', password: 'newpass' });
     expect(res.status).toBe(400);
-    expect(res.body.error).toBeDefined();
+    expect(res.body).toMatchObject({
+      code: 'token_invalid',
+      message: 'Token inválido o expirado',
+    });
   });
 });

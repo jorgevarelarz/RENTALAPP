@@ -3,7 +3,7 @@ import { body } from 'express-validator';
 import PDFDocument from 'pdfkit';
 import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate';
-import { asyncHandler } from '../utils/asyncHandler';
+import asyncHandler from '../utils/asyncHandler';
 
 const router = Router();
 

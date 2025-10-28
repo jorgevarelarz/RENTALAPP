@@ -1,10 +1,9 @@
 import { Router } from 'express';
-import { body } from 'express-validator';
-import { stripe } from '../utils/stripe';
+import { getStripeClient, isStripeConfigured } from '../utils/stripe';
 import { User } from '../models/user.model';
 import { authenticate } from '../middleware/auth.middleware';
-import { validate } from '../middleware/validate';
-import { asyncHandler } from '../utils/asyncHandler';
+import asyncHandler from '../utils/asyncHandler';
+import { ensureStripeCustomerForUser } from '../core/stripeCustomer';
 
 const r = Router();
 
@@ -21,16 +20,23 @@ r.post(
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'user_not_found' });
 
-    if (!user.stripeCustomerId) {
-      const customer = await stripe.customers.create({
-        email: user.email,
-        metadata: { appUserId: user.id },
-      });
-      user.stripeCustomerId = customer.id;
-      await user.save();
+    if (!isStripeConfigured()) {
+      return res.status(503).json({ error: 'payments_unavailable' });
     }
 
-    res.json({ customerId: user.stripeCustomerId });
+    const result = await ensureStripeCustomerForUser(String(user._id), 'payments_endpoint', { allowRetry: false });
+
+    const freshUser = await User.findById(userId);
+    const customerId = freshUser?.stripeCustomerId;
+    if (!customerId) {
+      const expose = result.status === 'created' || result.status === 'already_exists';
+      if (!expose) {
+        return res.status(503).json({ error: 'payments_unavailable' });
+      }
+      return res.status(503).json({ error: 'customer_missing' });
+    }
+
+    res.json({ customerId });
   })
 );
 
@@ -57,6 +63,11 @@ r.post(
       }
     }
 
+    if (!isStripeConfigured()) {
+      return res.status(503).json({ error: 'payments_unavailable' });
+    }
+
+    const stripe = getStripeClient();
     const intent = await stripe.paymentIntents.create({
       amount: Math.round(amountEUR * 100),
       currency: 'eur',

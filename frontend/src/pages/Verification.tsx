@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../context/AuthContext';
-import { devVerifyMe, getMyVerification } from '../services/verification';
+import { devVerifyMe, getMyVerification } from '../api/verification';
 
 const Verification: React.FC = () => {
   const { user } = useAuth();

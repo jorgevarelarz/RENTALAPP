@@ -15,7 +15,7 @@ export interface IContract extends Document {
   endDate: Date;
   region: string;
   clausePolicyVersion?: string;
-  clauses: {
+  clauses: Record<string, any> | {
     id: string;
     label?: string;
     version: string;
@@ -78,6 +78,7 @@ export interface IContract extends Document {
     action: string;
     payload: Record<string, unknown>;
   }[];
+  metadata?: Record<string, unknown>;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -95,19 +96,7 @@ const contractSchema = new Schema<IContract>(
     endDate: { type: Date, required: true },
     region: { type: String, required: true, default: 'general' },
     clausePolicyVersion: { type: String },
-    clauses: {
-      type: [
-        {
-          id: { type: String, required: true },
-          label: { type: String },
-          version: { type: String, required: true },
-          params: { type: Schema.Types.Mixed, default: {} },
-          text: { type: String },
-          scope: { type: String, enum: ['base', 'regional'] },
-        },
-      ],
-      default: [],
-    },
+    clauses: { type: Schema.Types.Mixed, default: {} },
     pdfPath: { type: String },
     pdfHash: { type: String },
     // Digital signature fields
@@ -166,6 +155,7 @@ const contractSchema = new Schema<IContract>(
     depositPaidAt: { type: Date },
     signFeeCollected: { type: Boolean, default: false },
     signFeeCollectedAt: { type: Date },
+    metadata: { type: Schema.Types.Mixed },
     history: {
       type: [
         {

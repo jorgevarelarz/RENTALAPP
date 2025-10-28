@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { getPro } from '../services/pro';
+import { getPro } from '../api/pro';
 import Card from '../components/ui/Card';
 
 const ProDetail: React.FC = () => {

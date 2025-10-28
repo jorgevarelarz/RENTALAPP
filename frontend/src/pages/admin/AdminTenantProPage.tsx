@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import toast from 'react-hot-toast';
 import {
   decideTenantPro,
   listPendingTenantPro,
   purgeTenantPro,
-} from '../../services/tenantPro';
+} from '../../api/tenantPro';
 import Drawer from '../../components/ui/Drawer';
 
 export default function AdminTenantProPage() {
@@ -11,7 +12,6 @@ export default function AdminTenantProPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [maxRentDraft, setMaxRentDraft] = useState<Record<string, string>>({});
-  const [message, setMessage] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(true);
   const [q, setQ] = useState('');
   const [detail, setDetail] = useState<any | null>(null);
@@ -22,6 +22,15 @@ export default function AdminTenantProPage() {
     try {
       const data = await listPendingTenantPro();
       setPending(data);
+      setMaxRentDraft(
+        data.reduce(
+          (acc: Record<string, string>, user: any) => {
+            acc[user._id] = user?.tenantPro?.maxRent ? String(user.tenantPro.maxRent) : '';
+            return acc;
+          },
+          {},
+        ),
+      );
     } catch (err: any) {
       setError(err?.message || 'No se pudieron cargar las solicitudes');
     } finally {
@@ -42,20 +51,40 @@ export default function AdminTenantProPage() {
   const onDecision = async (userId: string, decision: 'approved' | 'rejected') => {
     try {
       const amount = Number(maxRentDraft[userId] || 0);
+      if (decision === 'approved' && (!Number.isFinite(amount) || amount <= 0)) {
+        toast.error('Introduce un max rent válido para aprobar.');
+        return;
+      }
       await decideTenantPro(userId, decision, amount);
-      setMessage(`Solicitud ${decision === 'approved' ? 'aprobada' : 'rechazada'}`);
+      toast.success(`Solicitud ${decision === 'approved' ? 'aprobada' : 'rechazada'}`);
       setMaxRentDraft(prev => ({ ...prev, [userId]: '' }));
       await load();
     } catch (err: any) {
-      setError(err?.message || 'No se pudo guardar la decisión');
+      toast.error(err?.response?.data?.error || err?.message || 'No se pudo guardar la decisión');
     }
   };
 
   const onPurge = async (userId: string) => {
     if (!window.confirm('¿Purgar todos los documentos de este usuario?')) return;
-    await purgeTenantPro(userId);
-    setMessage('Documentación eliminada');
-    await load();
+    try {
+      await purgeTenantPro(userId);
+      toast.success('Documentación eliminada');
+      await load();
+    } catch (err: any) {
+      toast.error(err?.response?.data?.error || err?.message || 'No se pudo purgar la documentación');
+    }
+  };
+
+  const totalDocs = useMemo(
+    () => pending.reduce((acc, user) => acc + ((user?.tenantPro?.docs || []).length || 0), 0),
+    [pending],
+  );
+
+  const formatDate = (value?: string) => {
+    if (!value) return '—';
+    const parsed = new Date(value);
+    if (Number.isNaN(parsed.getTime())) return '—';
+    return parsed.toLocaleDateString('es-ES');
   };
 
   return (
@@ -82,10 +111,21 @@ export default function AdminTenantProPage() {
           />
         </div>
       )}
-      {message && <div style={{ background: '#dcfce7', padding: 12, borderRadius: 8 }}>{message}</div>}
       {error && <div style={{ color: '#ef4444' }}>{error}</div>}
       {loading && <div>Cargando…</div>}
-      {!loading && filtered.length === 0 && <div>No hay solicitudes pendientes.</div>}
+      {!loading && pending.length > 0 && (
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={summaryCardStyle}>
+            <span style={summaryLabelStyle}>Solicitudes pendientes</span>
+            <strong style={summaryValueStyle}>{pending.length}</strong>
+          </div>
+          <div style={summaryCardStyle}>
+            <span style={summaryLabelStyle}>Documentos recibidos</span>
+            <strong style={summaryValueStyle}>{totalDocs}</strong>
+          </div>
+        </div>
+      )}
+      {!loading && filtered.length === 0 && <div>No hay solicitudes pendientes que coincidan con el filtro.</div>}
       {!loading && filtered.length > 0 && (
         <table style={{ width: '100%', borderCollapse: 'collapse' }}>
           <thead>
@@ -169,13 +209,15 @@ export default function AdminTenantProPage() {
               <div style={{ fontSize: 12, color: '#6b7280' }}>Estado: {detail.tenantPro?.status}</div>
               <div style={{ fontSize: 12, color: '#6b7280' }}>Max rent: {detail.tenantPro?.maxRent ?? 0} €/mes</div>
               <div style={{ fontSize: 12, color: '#6b7280' }}>Consentimiento: {detail.tenantPro?.consentAccepted ? 'Sí' : 'No'}</div>
+              <div style={{ fontSize: 12, color: '#6b7280' }}>Última decisión: {formatDate(detail.tenantPro?.lastDecisionAt)}</div>
             </div>
             <div>
               <strong>Documentos</strong>
               <ul style={{ marginTop: 8, paddingLeft: 16 }}>
                 {(detail.tenantPro?.docs || []).map((doc: any) => (
                   <li key={doc._id}>
-                    {doc.type} · {doc.status} · {doc.uploadedAt ? new Date(doc.uploadedAt).toLocaleDateString() : ''}
+                    {doc.type} · {doc.status}
+                    {doc.uploadedAt && ` · ${formatDate(doc.uploadedAt)}`}
                   </li>
                 ))}
               </ul>
@@ -201,3 +243,24 @@ export default function AdminTenantProPage() {
     </div>
   );
 }
+
+const summaryCardStyle: React.CSSProperties = {
+  border: '1px solid #e2e8f0',
+  borderRadius: 12,
+  padding: 16,
+  background: '#fff',
+  minWidth: 160,
+};
+
+const summaryLabelStyle: React.CSSProperties = {
+  fontSize: 12,
+  textTransform: 'uppercase',
+  letterSpacing: '.06em',
+  color: '#6b7280',
+};
+
+const summaryValueStyle: React.CSSProperties = {
+  marginTop: 6,
+  fontSize: 22,
+  fontWeight: 600,
+};

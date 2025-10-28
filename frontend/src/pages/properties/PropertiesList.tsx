@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import PropertyCard from '../../components/PropertyCard';
-import { favoriteProperty, unfavoriteProperty } from '../../services/properties';
-import FilterBar from '../../components/FilterBar';
+import PropertyCard from '../../components/properties/PropertyCard';
+import { favoriteProperty, unfavoriteProperty } from '../../api/properties';
+import FilterBar from '../../components/properties/FilterBar';
 import SkeletonGrid from '../../components/ui/SkeletonGrid';
 import { usePropertyFilters, usePropertiesQuery } from '../../hooks/useProperties';
 import Drawer from '../../components/ui/Drawer';
-import LoginPrompt from '../../components/LoginPrompt';
+import LoginPrompt from '../../components/ui/LoginPrompt';
 import { useAuth } from '../../context/AuthContext';
 import EmptyState from '../../components/ui/EmptyState';
 import ErrorCard from '../../components/ui/ErrorCard';

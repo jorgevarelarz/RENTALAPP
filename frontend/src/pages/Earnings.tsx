@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { earningsSummary, earningsList, earningsExportCsv } from '../services/admin';
+import { earningsSummary, earningsList, earningsExportCsv } from '../api/admin';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/ui/Card';
 

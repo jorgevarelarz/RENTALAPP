@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { downloadPdf, getContract, payDeposit, signContract, sendToSignature } from '../services/contracts';
+import { downloadPdf, getContract, payDeposit, signContract, sendToSignature } from '../api/contracts';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
-import ChatPanel from '../components/ChatPanel';
+import ChatPanel from '../components/chat/ChatPanel';
 import Card from '../components/ui/Card';
-import ProBadge from '../components/ProBadge';
-import CopyLinkButton from '../components/CopyLinkButton';
+import ProBadge from '../components/ui/ProBadge';
+import CopyLinkButton from '../components/ui/CopyLinkButton';
 import { useToast } from '../context/ToastContext';
 
 const ContractDetail: React.FC = () => {
@@ -83,7 +83,8 @@ const ContractDetail: React.FC = () => {
                   push({ title: 'Contrato enviado a firma', tone: 'success' });
                   await load();
                 } catch (e: any) {
-                  push({ title: 'No se pudo iniciar la firma', body: e?.response?.data?.error || e?.message, tone: 'danger' });
+                  const detail = e?.response?.data?.error || e?.message;
+                  push({ title: detail ? `No se pudo iniciar la firma: ${detail}` : 'No se pudo iniciar la firma', tone: 'error' });
                 } finally {
                   setSending(false);
                 }
@@ -115,7 +116,20 @@ const ContractDetail: React.FC = () => {
             </Button>
           )}
           {canPayDeposit && (
-            <Button onClick={async () => { await payDeposit(token!, c._id || c.id, 'escrow'); push({ title: 'Fianza pagada', tone: 'success' }); await load(); }}>
+            <Button
+              onClick={async () => {
+                const resp = await payDeposit(token!, c._id || c.id, {
+                  destination: 'escrow',
+                  successUrl: window.location.href,
+                  cancelUrl: window.location.href,
+                });
+                if (resp.sessionUrl) {
+                  window.open(resp.sessionUrl, '_blank');
+                }
+                push({ title: resp.message || 'Fianza iniciada', tone: 'success' });
+                await load();
+              }}
+            >
               Pagar fianza
             </Button>
           )}

@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { User } from '../models/user.model';
+import getRequestLogger from '../utils/requestLogger';
 
 /**
  * Retrieve a list of all users. The password hash is excluded for security.
@@ -46,7 +47,7 @@ export const updateUser = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     res.json(user);
   } catch (error: any) {
-    console.error(error);
+    getRequestLogger(req).error({ err: error, userId: req.params.id }, 'Error al actualizar el usuario');
     res.status(500).json({ error: 'Error al actualizar el usuario' });
   }
 };

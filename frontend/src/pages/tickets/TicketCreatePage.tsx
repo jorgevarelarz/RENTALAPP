@@ -1,7 +1,7 @@
 import React, { useState } from "react";
-import { createTicket } from "../../services/tickets";
+import { createTicket } from "../../api/tickets";
 import { useNotify } from "../../utils/notify";
-import { sendEmail } from "../../services/notify";
+import { sendEmail } from "../../api/notify";
 
 export default function TicketCreatePage() {
   const [form, setForm] = useState({

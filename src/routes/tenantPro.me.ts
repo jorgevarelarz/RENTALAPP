@@ -1,14 +1,16 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth.middleware';
-import { asyncHandler } from '../utils/asyncHandler';
+import asyncHandler from '../utils/asyncHandler';
 import { User } from '../models/user.model';
-import { deleteTP } from '../services/tenantProStorage';
+import { deleteTP } from '../utils/tenantProStorage';
 import { assertRole } from '../middleware/assertRole';
 
 const router = Router();
 
+const infoPaths = ['/me/tenant-pro', '/tenant-pro/me'];
+const deletePaths = ['/me/tenant-pro/delete', '/tenant-pro/me/delete'];
+
 router.get(
-  '/me/tenant-pro',
+  infoPaths,
   ...assertRole('tenant'),
   asyncHandler(async (req, res) => {
     const user = (await User.findById((req as any).user?.id || (req as any).user?._id)
@@ -20,7 +22,7 @@ router.get(
 );
 
 router.post(
-  '/me/tenant-pro/delete',
+  deletePaths,
   ...assertRole('tenant'),
   asyncHandler(async (req, res) => {
     const user = (await User.findById((req as any).user?.id || (req as any).user?._id)) as any;

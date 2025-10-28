@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { fetchClauses } from "../../services/clauses";
+import { fetchClauses } from "../../api/clauses";
 
 type Props = {
   region: string;

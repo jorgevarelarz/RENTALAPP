@@ -1,6 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
-import { normalizeRegion, resolveClauses } from '../services/clauses.service';
+import { normalizeRegion, resolveClauses } from '../core/clauses.service';
 
 /**
  * Middleware to validate incoming contract creation payloads. Ensures that

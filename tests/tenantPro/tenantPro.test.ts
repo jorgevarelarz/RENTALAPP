@@ -6,7 +6,7 @@ import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
 import { Property } from '../../src/models/property.model';
 import { User } from '../../src/models/user.model';
-import { ensureTenantProDir, encryptAndSaveTP, TENANT_PRO_DIR } from '../../src/services/tenantProStorage';
+import { ensureTenantProDir, encryptAndSaveTP, TENANT_PRO_DIR } from '../../src/utils/tenantProStorage';
 import { purgeOldTenantProDocs } from '../../src/jobs/tenantProRetention';
 
 const storageDir = TENANT_PRO_DIR;

@@ -7,6 +7,13 @@ export default function WizardStep1Basics({ value, onChange, onNext }: Props) {
     <div style={{ display: 'grid', gap: 12, maxWidth: 560 }}>
       <h2>Datos del contrato</h2>
       <input placeholder="ID Arrendador" value={value.landlord || ''} onChange={(e) => set('landlord', e.target.value)} />
+      <label style={{ display: 'grid', gap: 4 }}>
+        Tipo de arrendador
+        <select value={value.landlordType || 'individual'} onChange={(e) => set('landlordType', e.target.value)}>
+          <option value="individual">Persona física</option>
+          <option value="company">Persona jurídica</option>
+        </select>
+      </label>
       <input placeholder="ID Inquilino" value={value.tenant || ''} onChange={(e) => set('tenant', e.target.value)} />
       <input placeholder="ID Propiedad" value={value.property || ''} onChange={(e) => set('property', e.target.value)} />
       <select value={value.region || ''} onChange={(e) => set('region', e.target.value)}>

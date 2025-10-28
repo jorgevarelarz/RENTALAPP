@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
-import { searchProperties, type SearchParams } from '../services/properties';
+import { searchProperties, type SearchParams } from '../api/properties';
 
 function toNum(v: string | null | undefined): number | undefined {
   if (!v) return undefined;

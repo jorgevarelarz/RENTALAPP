@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { stripe } from '../utils/stripe';
+import { getStripeClient, isStripeConfigured } from '../utils/stripe';
 import { User } from '../models/user.model';
 
 const r = Router();
@@ -11,6 +11,12 @@ r.post('/connect/owner/link', async (req, res) => {
 
   const owner = await User.findById(ownerId);
   if (!owner) return res.status(404).json({ error: 'owner_not_found' });
+
+  if (!isStripeConfigured()) {
+    return res.status(503).json({ error: 'payments_unavailable' });
+  }
+
+  const stripe = getStripeClient();
 
   if (!owner.stripeAccountId) {
     const account = await stripe.accounts.create({
@@ -46,6 +52,10 @@ r.get('/connect/owner/status', async (req, res) => {
   const owner = await User.findById(ownerId).lean();
   if (!owner?.stripeAccountId) return res.json({ connected: false });
 
+  if (!isStripeConfigured()) {
+    return res.status(503).json({ error: 'payments_unavailable' });
+  }
+  const stripe = getStripeClient();
   const acct = await stripe.accounts.retrieve(owner.stripeAccountId);
   res.json({
     connected: true,

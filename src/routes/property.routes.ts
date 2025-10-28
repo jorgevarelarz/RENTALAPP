@@ -5,8 +5,7 @@ import { assertRole } from '../middleware/assertRole';
 import { validate } from '../middleware/validate';
 import * as ctrl from '../controllers/property.controller';
 import { propertyCreateSchema, propertyUpdateSchema } from '../validators/property.schema';
-import { asyncHandler } from '../utils/asyncHandler';
-import { requireVerified } from '../middleware/requireVerified';
+import asyncHandler from '../utils/asyncHandler';
 
 const r = Router();
 
@@ -15,6 +14,12 @@ r.put('/properties/:id', ...assertRole('landlord', 'admin'), validate(propertyUp
 r.post('/properties/:id/publish', ...assertRole('landlord', 'admin'), asyncHandler(ctrl.publish));
 r.post('/properties/:id/archive', ...assertRole('landlord', 'admin'), asyncHandler(ctrl.archive));
 
+r.get(
+  '/properties/favorites',
+  authenticate,
+  authorizeRoles('tenant', 'landlord', 'admin'),
+  asyncHandler(ctrl.listFavorites),
+);
 r.get('/properties/:id', asyncHandler(ctrl.getById));
 r.get('/properties', asyncHandler(ctrl.search));
 

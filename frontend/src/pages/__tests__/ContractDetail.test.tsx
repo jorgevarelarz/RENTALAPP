@@ -25,10 +25,10 @@ jest.mock('axios', () => {
 }, { virtual: true });
 
 // Stub ChatPanel to avoid deep imports
-jest.mock('../../components/ChatPanel', () => () => <div data-testid="chat" />);
+jest.mock('../../components/chat/ChatPanel', () => () => <div data-testid="chat" />);
 
 // Mock services used by the page
-jest.mock('../../services/contracts', () => ({
+jest.mock('../../api/contracts', () => ({
   __esModule: true,
   getContract: jest.fn(),
   sendToSignature: jest.fn(),
@@ -38,7 +38,7 @@ jest.mock('../../services/contracts', () => ({
 }));
 
 import ContractDetail from '../ContractDetail';
-import * as contracts from '../../services/contracts';
+import * as contracts from '../../api/contracts';
 
 function setAuth(user: any) {
   (global as any).__mockAuth = { token: 't', user };

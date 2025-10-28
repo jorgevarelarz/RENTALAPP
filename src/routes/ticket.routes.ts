@@ -11,6 +11,7 @@ import { holdPayment, releasePayment } from '../utils/payment';
 import { calcPlatformFee } from '../utils/calcFee';
 import PlatformEarning from '../models/platformEarning.model';
 import { assertRole } from '../middleware/assertRole';
+import { ensureStripeCustomerForUser } from '../core/stripeCustomer';
 
 const r = Router();
 
@@ -27,9 +28,20 @@ async function publishSystem(conversationId: string, senderId: string, systemCod
 
 r.get('/ping', (_req, res) => res.json({ ok: true }));
 
+async function ensureStripeCustomer(req: any, trigger: string) {
+  const userId = getUserId(req);
+  if (!userId) return;
+  try {
+    await ensureStripeCustomerForUser(String(userId), trigger);
+  } catch (err) {
+    // No bloqueamos la UX; el servicio ya registra logs y reintentos.
+  }
+}
+
 /** 1) Inquilino abre incidencia */
 r.post('/', ...assertRole('tenant'), async (req, res) => {
   try {
+    await ensureStripeCustomer(req, 'ticket_open');
     const userId = getUserId(req);
     const { contractId, ownerId, propertyId, service, title, description } = req.body || {};
     const t = await Ticket.create({
@@ -71,6 +83,7 @@ r.post('/:id/quote', ...assertRole('pro'), async (req, res) => {
 /** 3) Propietario aprueba → hold (escrow) */
 r.post('/:id/approve', ...assertRole('landlord'), async (req, res) => {
   try {
+    await ensureStripeCustomer(req, 'ticket_approve_quote');
     const userId = getUserId(req);
     const t = await Ticket.findById(req.params.id);
     if (!t?.quote) return res.status(400).json({ error: 'quote required', code: 400 });
@@ -144,6 +157,7 @@ r.post('/:id/extra/decide', ...assertRole('landlord'), async (req, res) => {
 /** 6) Profesional completa + factura */
 r.post('/:id/complete', ...assertRole('pro'), async (req, res) => {
   try {
+    await ensureStripeCustomer(req, 'ticket_complete');
     const userId = getUserId(req);
     const { invoiceUrl } = req.body || {};
     const t = await Ticket.findById(req.params.id);
@@ -181,6 +195,7 @@ r.post('/:id/request-close', ...assertRole('landlord'), async (req, res) => {
 // Tenant confirma solucionado → release
 r.post('/:id/resolve', ...assertRole('tenant'), async (req, res) => {
   try {
+    await ensureStripeCustomer(req, 'ticket_resolve');
     const userId = getUserId(req);
     const t = await Ticket.findById(req.params.id);
     if (!t?.escrowId) return res.status(400).json({ error: 'no escrow', code: 400 });
@@ -205,6 +220,7 @@ r.post('/:id/resolve', ...assertRole('tenant'), async (req, res) => {
 /** 7) Propietario valida → release (escrow + earnings + breakdown) */
 r.post('/:id/validate', async (req, res) => {
   try {
+    await ensureStripeCustomer(req, 'ticket_validate');
     const userId = getUserId(req);
     const t = await Ticket.findById(req.params.id);
     if (!t?.escrowId) return res.status(400).json({ error: 'no escrow', code: 400 });
@@ -257,6 +273,7 @@ r.post('/:id/validate', async (req, res) => {
 /** 8) Asignar profesional a un ticket */
 r.post('/:id/assign', async (req, res) => {
   try {
+    await ensureStripeCustomer(req, 'ticket_assign');
     const userId = getUserId(req);
     const { proId } = req.body || {};
     if (!proId) return res.status(400).json({ error: 'proId required', code: 400 });
@@ -284,6 +301,7 @@ r.post('/:id/assign', async (req, res) => {
 /** 9) Desasignar profesional */
 r.post('/:id/unassign', async (req, res) => {
   try {
+    await ensureStripeCustomer(req, 'ticket_unassign');
     const userId = getUserId(req);
     const ticket = await Ticket.findById(req.params.id);
     if (!ticket) return res.status(404).json({ error: 'ticket not found', code: 404 });
@@ -302,6 +320,7 @@ r.post('/:id/unassign', async (req, res) => {
 /** Listados por rol con hidratado de reputación */
 r.get('/my/tenant', ...assertRole('tenant'), async (req, res) => {
   try {
+    await ensureStripeCustomer(req, 'tickets_my_tenant');
     const userId = getUserId(req);
     const { status } = req.query as any;
     const { page, limit } = parsePagination(req.query);
@@ -357,6 +376,7 @@ r.get('/my/tenant', ...assertRole('tenant'), async (req, res) => {
 
 r.get('/my/owner', ...assertRole('landlord'), async (req, res) => {
   try {
+    await ensureStripeCustomer(req, 'tickets_my_landlord');
     const userId = getUserId(req);
     const { status } = req.query as any;
     const { page, limit } = parsePagination(req.query);
@@ -412,6 +432,7 @@ r.get('/my/owner', ...assertRole('landlord'), async (req, res) => {
 
 r.get('/my/pro', ...assertRole('pro'), async (req, res) => {
   try {
+    await ensureStripeCustomer(req, 'tickets_my_pro');
     const userId = getUserId(req);
     const { status } = req.query as any;
     const { page, limit } = parsePagination(req.query);
@@ -463,11 +484,6 @@ r.get('/my/pro', ...assertRole('pro'), async (req, res) => {
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
-async function publishSystem(conversationId: string, senderId: string, systemCode: string, payload?: any) {
-  await Message.create({ conversationId, senderId, type: 'system', systemCode, payload, readBy: [] });
-  await Conversation.findByIdAndUpdate(conversationId, { lastMessageAt: new Date() });
-}
-
 });
 
 /** Detalle con hidratado */

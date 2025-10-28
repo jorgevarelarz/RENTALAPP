@@ -1,6 +1,6 @@
 import { addDays, isAfter } from 'date-fns';
 import { User } from '../models/user.model';
-import { deleteTP } from '../services/tenantProStorage';
+import { deleteTP } from '../utils/tenantProStorage';
 
 const TTL = Number(process.env.TENANT_PRO_DOCS_TTL_DAYS || 365);
 

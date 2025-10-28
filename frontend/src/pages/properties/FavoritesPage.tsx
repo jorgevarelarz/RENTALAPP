@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import PropertyCard from '../../components/PropertyCard';
+import PropertyCard from '../../components/properties/PropertyCard';
 
 export default function FavoritesPage() {
   const [items, setItems] = useState<any[]>([]);

@@ -4,6 +4,7 @@ import { Contract } from '../models/contract.model';
 import { SignatureRequest } from '../models/signatureRequest.model';
 import { User } from '../models/user.model';
 import { isMock, isProd } from '../config/flags';
+import getRequestLogger from '../utils/requestLogger';
 
 const router = Router();
 
@@ -54,6 +55,7 @@ router.post('/signature/webhook', async (req, res) => {
     if (sig) {
       const pdfBuffer = await signaturitProvider.downloadFinalPdf(event.requestId);
       // In a real app, upload buffer to storage and compute sha256
+      getRequestLogger(req).info({ requestId: event.requestId, bytes: pdfBuffer.length }, 'PDF de firma descargado');
       await Contract.findByIdAndUpdate(sig.contractId, { $set: { status: 'signed' } });
     }
   }

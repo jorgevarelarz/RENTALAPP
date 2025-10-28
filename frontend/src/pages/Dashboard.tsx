@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { createProperty } from '../services/properties';
+import { createProperty } from '../api/properties';
 
 const Dashboard: React.FC = () => {
   const [title, setTitle] = useState('');

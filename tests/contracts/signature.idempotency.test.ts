@@ -7,6 +7,7 @@ describe("Signature callback idempotency", () => {
 
   beforeAll(async () => {
     process.env.SIGN_PROVIDER = 'mock';
+    process.env.SIGNATURE_CALLBACK_SECRET = 'test-secret';
     await connectDb();
   });
   afterAll(disconnectDb);
@@ -32,12 +33,14 @@ describe("Signature callback idempotency", () => {
 
     const first = await request(app)
       .post(`/api/contracts/${id}/signature/callback`)
+      .set('x-signature-secret', 'test-secret')
       .send(payload)
       .expect(200);
     expect(first.body.status).toBe("signed");
 
     const second = await request(app)
       .post(`/api/contracts/${id}/signature/callback`)
+      .set('x-signature-secret', 'test-secret')
       .send(payload)
       .expect(200);
     expect(second.body.idempotent || second.body.alreadyFinalized).toBeTruthy();

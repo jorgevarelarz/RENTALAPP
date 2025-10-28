@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { applyToProperty, favoriteProperty, getProperty, incrementView, unfavoriteProperty } from '../../services/properties';
-import TenantProPanel from '../../components/TenantProPanel';
+import { applyToProperty, favoriteProperty, getProperty, incrementView, unfavoriteProperty } from '../../api/properties';
+import TenantProPanel from '../../components/tenant-pro/TenantProPanel';
 import { useAuth } from '../../context/AuthContext';
-import { getTenantProInfo, type TenantProInfo } from '../../services/tenantPro';
-import LoginPrompt from '../../components/LoginPrompt';
+import { getTenantProInfo, type TenantProInfo } from '../../api/tenantPro';
+import LoginPrompt from '../../components/ui/LoginPrompt';
 import toast from 'react-hot-toast';
 import SkeletonDetail from '../../components/ui/SkeletonDetail';
 

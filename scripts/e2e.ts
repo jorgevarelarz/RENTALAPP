@@ -1,9 +1,13 @@
-/* eslint-disable no-console */
 import jwt from 'jsonwebtoken';
 
 const base = 'http://127.0.0.1:3000';
 
 type Token = string;
+
+const signAdminToken = () =>
+  jwt.sign({ id: 'admin-e2e', role: 'admin', isVerified: true }, process.env.JWT_SECRET || 'insecure', {
+    expiresIn: '1h',
+  });
 
 function decodeUserId(token: Token): string {
   try {
@@ -50,16 +54,16 @@ async function main() {
   console.log('Tenant registered', tenantId);
 
   // 2.1) Verify identities (owner, tenant, pro) to pass requireVerified
-  const verify = async (uid: string) => {
+  const verify = async (uid: string, token: Token) => {
     let vr = await req('/api/verification/submit', {
       method: 'POST',
-      headers: { 'x-user-id': uid },
+      headers: { Authorization: `Bearer ${token}` },
       body: JSON.stringify({ method: 'dni', files: { idFrontUrl: 'https://ex/id-front', selfieUrl: 'https://ex/selfie' } }),
     });
     if (vr.status !== 201) throw new Error('verification submit failed ' + JSON.stringify(vr.body));
     vr = await req(`/api/verification/${uid}/approve`, {
       method: 'POST',
-      headers: { 'x-admin': 'true' },
+      headers: { Authorization: `Bearer ${signAdminToken()}` },
     });
     if (vr.status !== 200) throw new Error('verification approve failed ' + JSON.stringify(vr.body));
   };
@@ -75,9 +79,9 @@ async function main() {
   console.log('Pro registered', proId);
 
   // Verify all users
-  await verify(ownerId);
-  await verify(tenantId);
-  await verify(proId);
+  await verify(ownerId, ownerToken);
+  await verify(tenantId, tenantToken);
+  await verify(proId, proToken);
 
   // 4) Create property (owner)
   r = await req('/api/properties', {
@@ -109,7 +113,7 @@ async function main() {
   // 5) Create PRO profile
   r = await req('/api/pros', {
     method: 'POST',
-    headers: { 'x-user-id': proId },
+    headers: { Authorization: `Bearer ${proToken}` },
     body: JSON.stringify({ displayName: 'Super Pro', city: 'Madrid', services: [{ key: 'plumbing' }] }),
   });
   if (r.status !== 201) throw new Error('create pro failed ' + JSON.stringify(r.body));
@@ -120,7 +124,7 @@ async function main() {
   const endDate = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
   r = await req('/api/contracts', {
     method: 'POST',
-    headers: { 'x-user-id': ownerId, Authorization: `Bearer ${ownerToken}` },
+    headers: { Authorization: `Bearer ${ownerToken}` },
     body: JSON.stringify({ tenantId, propertyId, rent: 1000, deposit: 1000, startDate, endDate }),
   });
   if (r.status !== 201) throw new Error('create contract failed ' + JSON.stringify(r.body));
@@ -131,7 +135,7 @@ async function main() {
   // 7) Tenant opens a ticket
   r = await req('/api/tickets', {
     method: 'POST',
-    headers: { 'x-user-id': tenantId },
+    headers: { Authorization: `Bearer ${tenantToken}` },
     body: JSON.stringify({ contractId, ownerId, propertyId, service: 'plumbing', title: 'Leak', description: 'Kitchen leak' }),
   });
   if (r.status !== 201) throw new Error('open ticket failed ' + JSON.stringify(r.body));
@@ -141,7 +145,7 @@ async function main() {
   // 8) Pro sends quote
   r = await req(`/api/tickets/${ticketId}/quote`, {
     method: 'POST',
-    headers: { 'x-user-id': proId },
+    headers: { Authorization: `Bearer ${proToken}` },
     body: JSON.stringify({ amount: 50 }),
   });
   if (r.status !== 200) throw new Error('quote failed ' + JSON.stringify(r.body));
@@ -150,7 +154,7 @@ async function main() {
   // 9) Owner approves (hold mock escrow)
   r = await req(`/api/tickets/${ticketId}/approve`, {
     method: 'POST',
-    headers: { 'x-user-id': ownerId },
+    headers: { Authorization: `Bearer ${ownerToken}` },
     body: JSON.stringify({ customerId: 'cus_test' }),
   });
   if (r.status !== 200) throw new Error('approve failed ' + JSON.stringify(r.body));
@@ -161,7 +165,7 @@ async function main() {
   const end1 = new Date(Date.now() + 26 * 60 * 60 * 1000);
   r = await req(`/api/appointments/${ticketId}/propose`, {
     method: 'POST',
-    headers: { 'x-user-id': proId },
+    headers: { Authorization: `Bearer ${proToken}` },
     body: JSON.stringify({ start: start1, end: end1, timezone: 'Europe/Madrid' }),
   });
   if (r.status !== 200) throw new Error('propose failed ' + JSON.stringify(r.body));
@@ -169,7 +173,7 @@ async function main() {
   // 9.2) Tenant rechaza con motivo
   r = await req(`/api/appointments/${ticketId}/reject`, {
     method: 'POST',
-    headers: { 'x-user-id': tenantId },
+    headers: { Authorization: `Bearer ${tenantToken}` },
     body: JSON.stringify({ reason: 'No puedo a esa hora' }),
   });
   if (r.status !== 200) throw new Error('reject failed ' + JSON.stringify(r.body));
@@ -179,7 +183,7 @@ async function main() {
   const end2 = new Date(Date.now() + 50 * 60 * 60 * 1000);
   r = await req(`/api/appointments/${ticketId}/propose`, {
     method: 'POST',
-    headers: { 'x-user-id': proId },
+    headers: { Authorization: `Bearer ${proToken}` },
     body: JSON.stringify({ start: start2, end: end2, timezone: 'Europe/Madrid' }),
   });
   if (r.status !== 200) throw new Error('repropose failed ' + JSON.stringify(r.body));
@@ -187,14 +191,14 @@ async function main() {
   // 9.4) Tenant acepta
   r = await req(`/api/appointments/${ticketId}/accept`, {
     method: 'POST',
-    headers: { 'x-user-id': tenantId },
+    headers: { Authorization: `Bearer ${tenantToken}` },
   });
   if (r.status !== 200) throw new Error('accept failed ' + JSON.stringify(r.body));
 
   // 10) Pro completes
   r = await req(`/api/tickets/${ticketId}/complete`, {
     method: 'POST',
-    headers: { 'x-user-id': proId },
+    headers: { Authorization: `Bearer ${proToken}` },
     body: JSON.stringify({ invoiceUrl: 'https://example.com/invoice.pdf' }),
   });
   if (r.status !== 200) throw new Error('complete failed ' + JSON.stringify(r.body));
@@ -203,7 +207,7 @@ async function main() {
   // 11) Owner validates (release)
   r = await req(`/api/tickets/${ticketId}/validate`, {
     method: 'POST',
-    headers: { 'x-user-id': ownerId },
+    headers: { Authorization: `Bearer ${ownerToken}` },
   });
   if (r.status !== 200) throw new Error('validate failed ' + JSON.stringify(r.body));
   console.log('Released');
@@ -211,7 +215,7 @@ async function main() {
   // 12) Ensure chat conversation and send a message
   r = await req('/api/chat/conversations/ensure', {
     method: 'POST',
-    headers: { 'x-user-id': ownerId },
+    headers: { Authorization: `Bearer ${ownerToken}` },
     body: JSON.stringify({ kind: 'ticket', refId: ticketId }),
   });
   if (r.status !== 200) throw new Error('ensure conversation failed ' + JSON.stringify(r.body));
@@ -219,7 +223,7 @@ async function main() {
   // Send message as owner (participants are owner + pro for ticket conversations)
   r = await req(`/api/chat/${convId}/messages`, {
     method: 'POST',
-    headers: { 'x-user-id': ownerId },
+    headers: { Authorization: `Bearer ${ownerToken}` },
     body: JSON.stringify({ body: 'Hola, ¿cuándo vienen?' }),
   });
   if (r.status !== 201) throw new Error('send message failed ' + JSON.stringify(r.body));

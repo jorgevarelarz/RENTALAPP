@@ -1,6 +1,7 @@
-import { Types } from "mongoose";
-import { Contract } from "../models/contract.model";
-import { ContractHistory } from "../models/history.model";
+import { Types } from 'mongoose';
+import { Contract } from '../models/contract.model';
+import { ContractHistory } from '../models/history.model';
+import logger from './logger';
 
 type ActorLike = string | Types.ObjectId | null | undefined;
 
@@ -59,7 +60,7 @@ export async function recordContractHistory(
       { new: false },
     );
   } catch (error) {
-    console.error("Error actualizando historial embebido del contrato:", error);
+    logger.error({ err: error, contractId }, 'Error actualizando historial embebido del contrato');
   }
 
   try {
@@ -71,6 +72,6 @@ export async function recordContractHistory(
           : undefined;
     await new ContractHistory({ contract: contractId, action, description }).save();
   } catch (error) {
-    console.error("Error al registrar historial del contrato:", error);
+    logger.error({ err: error, contractId }, 'Error al registrar historial del contrato');
   }
 }

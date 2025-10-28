@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
-import { listMyTickets } from "../../services/tickets";
+import { listMyTickets } from "../../api/tickets";
 import { useAuth } from "../../context/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 

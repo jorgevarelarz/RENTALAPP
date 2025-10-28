@@ -2,8 +2,12 @@ import { Router } from 'express';
 import { Verification } from '../models/verification.model';
 import { getUserId } from '../utils/getUserId';
 import { requireAdmin } from '../middleware/requireAdmin';
+import { authenticate } from '../middleware/auth.middleware';
 
 const router = Router();
+
+// All verification routes (except potential public webhooks) require an authenticated user.
+router.use(authenticate as any);
 
 // Retrieve current verification status for the authenticated user
 router.get('/me', async (req, res) => {

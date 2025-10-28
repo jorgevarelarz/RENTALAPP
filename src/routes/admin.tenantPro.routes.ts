@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { authenticate } from '../middleware/auth.middleware';
 import { authorizeRoles } from '../middleware/role.middleware';
-import { asyncHandler } from '../utils/asyncHandler';
+import asyncHandler from '../utils/asyncHandler';
 import { User } from '../models/user.model';
-import { deleteTP } from '../services/tenantProStorage';
+import { deleteTP } from '../utils/tenantProStorage';
 import { notifyTenantProDecision } from '../utils/notification';
+import getRequestLogger from '../utils/requestLogger';
 
 const router = Router();
 
@@ -53,7 +54,7 @@ router.post(
     user.tenantPro.lastDecisionAt = now;
     await user.save();
     notifyTenantProDecision(user.email, decision).catch(err => {
-      console.error('No se pudo enviar la notificación Tenant PRO:', err);
+      getRequestLogger(req).error({ err, userId }, 'No se pudo enviar la notificación Tenant PRO');
     });
     res.json({ ok: true });
   }),

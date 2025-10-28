@@ -1,6 +1,6 @@
 import React from 'react';
 import { useAuth } from '../../context/AuthContext';
-import ProBadge from '../../components/ProBadge';
+import ProBadge from '../../components/ui/ProBadge';
 
 export default function TenantApplications() {
   const { user } = useAuth();

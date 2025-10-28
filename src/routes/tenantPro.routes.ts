@@ -2,10 +2,9 @@ import { Router } from 'express';
 import crypto from 'crypto';
 import multer from 'multer';
 import { z } from 'zod';
-import { authenticate } from '../middleware/auth.middleware';
-import { asyncHandler } from '../utils/asyncHandler';
+import asyncHandler from '../utils/asyncHandler';
 import { User } from '../models/user.model';
-import { ensureTenantProDir, encryptAndSaveTP } from '../services/tenantProStorage';
+import { ensureTenantProDir, encryptAndSaveTP } from '../utils/tenantProStorage';
 import { assertRole } from '../middleware/assertRole';
 
 const router = Router();

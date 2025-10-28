@@ -1,5 +1,6 @@
-import { stripe } from './stripe';
+import { getStripeClient, isStripeConfigured } from './stripe';
 import { isProd, isMock } from '../config/flags';
+import logger from './logger';
 
 /**
  * Creates a Stripe Checkout Session to collect the deposit.
@@ -22,6 +23,11 @@ export const depositToEscrow = async (
     }
     return `https://mock.checkout/${contractId}-${Date.now()}`;
   }
+  if (!isStripeConfigured()) {
+    const err = Object.assign(new Error('payments_unavailable'), { status: 503 });
+    throw err;
+  }
+  const stripe = getStripeClient();
   const session = await stripe.checkout.sessions.create({
     payment_method_types: ['card'],
     line_items: [
@@ -64,8 +70,6 @@ export const depositToEscrow = async (
  */
 export const depositToAuthority = async (contractId: string, amount: number): Promise<void> => {
   // TODO: integrate with the public authority's API here
-  console.log(
-    `Simulating deposit of €${amount} for contract ${contractId} to the public authority.`,
-  );
+  logger.info({ contractId, amount }, 'Simulating deposit to public authority');
   await new Promise(resolve => setTimeout(resolve, 500));
 };

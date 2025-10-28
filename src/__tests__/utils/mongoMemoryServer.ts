@@ -22,7 +22,7 @@ function ensureMongoBinaryDistro(): void {
         process.env.MONGOMS_DISTRO = 'ubuntu-22.04';
       }
     }
-  } catch (error) {
+  } catch {
     // Swallow errors: in constrained CI environments /etc/os-release may be missing.
   }
 }
@@ -32,6 +32,6 @@ export async function startMongoMemoryServer(): Promise<MongoMemoryServer> {
   const version = process.env.MONGOMS_VERSION || '7.0.5';
   return MongoMemoryServer.create({
     binary: { version },
-    instance: { storageEngine: 'wiredTiger' },
+    instance: { storageEngine: 'wiredTiger', launchTimeout: 60000 },
   });
 }

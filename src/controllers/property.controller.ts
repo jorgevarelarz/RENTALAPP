@@ -2,8 +2,12 @@ import { Request, Response } from 'express';
 import { Property } from '../models/property.model';
 import { UserFavorite } from '../models/userFavorite.model';
 import { AlertSubscription } from '../models/alertSubscription.model';
+import { Application } from '../models/application.model';
 import { sendAvailabilityAlert, sendPriceAlert } from '../utils/email';
 import { User } from '../models/user.model';
+import mongoose from 'mongoose';
+import { ensureStripeCustomerForUser } from '../core/stripeCustomer';
+import getRequestLogger from '../utils/requestLogger';
 
 export async function create(req: Request, res: Response) {
   const b: any = req.body;
@@ -72,6 +76,11 @@ export async function publish(req: Request, res: Response) {
     return res.status(403).json({ error: 'owner_not_verified' });
   }
   if ((p.images?.length || 0) < 3) return res.status(400).json({ error: 'min_images_3' });
+  const ownerId = String(p.owner);
+  const otherActiveCount = await Property.countDocuments({ owner: p.owner, status: 'active', _id: { $ne: p._id } });
+  if (otherActiveCount === 0) {
+    await ensureStripeCustomerForUser(ownerId, 'property_publish');
+  }
   p.status = 'active';
   await p.save();
   res.json({ _id: p._id, status: p.status });
@@ -209,13 +218,46 @@ export async function countView(req: Request, res: Response) {
   res.json({ ok: true });
 }
 
+export async function listFavorites(req: Request, res: Response) {
+  const userId = (req as any).user?._id || (req as any).user?.id;
+  if (!userId) return res.status(401).json({ error: 'unauthorized' });
+
+  const favorites = await UserFavorite.find({ userId: new mongoose.Types.ObjectId(String(userId)) })
+    .select('propertyId -_id')
+    .lean();
+  const propertyIds = favorites.map(fav => fav.propertyId);
+  if (propertyIds.length === 0) {
+    return res.json({ items: [] });
+  }
+
+  const properties = await Property.find({ _id: { $in: propertyIds } })
+    .sort({ updatedAt: -1 })
+    .lean();
+
+  const serialized = properties.map(p => ({
+    id: String(p._id),
+    title: p.title,
+    city: p.city,
+    price: p.price,
+    status: p.status,
+    onlyTenantPro: p.onlyTenantPro,
+    requiredTenantProMaxRent: p.requiredTenantProMaxRent,
+    coverImage: Array.isArray(p.images) ? p.images[0] : null,
+  }));
+
+  res.json({ items: serialized });
+}
+
 export async function apply(req: Request, res: Response) {
+  const log = getRequestLogger(req);
   const property = await Property.findById(req.params.id);
   if (!property) return res.status(404).json({ error: 'not_found' });
 
+  const userId = (req as any).user?._id || (req as any).user?.id;
+  if (!userId) return res.status(401).json({ error: 'unauthorized' });
+
   if (property.onlyTenantPro) {
     const required = property.requiredTenantProMaxRent || property.price;
-    const userId = (req as any).user?._id || (req as any).user?.id;
     const userDoc: any = userId ? await User.findById(userId) : null;
     const userMax = userDoc?.tenantPro?.maxRent || 0;
     if (!userDoc?.tenantPro || userDoc.tenantPro.status !== 'verified' || userMax < required) {
@@ -226,5 +268,29 @@ export async function apply(req: Request, res: Response) {
     }
   }
 
-  res.json({ ok: true, propertyId: property._id });
+  const existing = await Application.findOne({ propertyId: String(property._id), tenantId: String(userId) });
+  if (existing) {
+    log.info(
+      { tenantId: String(userId), propertyId: String(property._id), status: existing.status },
+      '[applications] apply already exists',
+    );
+    return res.json({ ok: true, propertyId: property._id, status: existing.status });
+  }
+
+  const created = await Application.create({
+    propertyId: String(property._id),
+    tenantId: String(userId),
+    status: 'pending',
+  });
+
+  log.info(
+    {
+      tenantId: String(userId),
+      propertyId: String(property._id),
+      applicationId: String(created._id),
+    },
+    '[applications] apply created',
+  );
+
+  res.json({ ok: true, propertyId: property._id, status: 'pending' });
 }
