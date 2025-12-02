@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, RequestHandler } from 'express';
 import { Verification } from '../models/verification.model';
 import { getUserId } from '../utils/getUserId';
 
@@ -6,12 +6,12 @@ import { getUserId } from '../utils/getUserId';
  * Middleware that ensures the requesting user has a verified status.
  * The user ID is expected in the `x-user-id` header.
  */
-export const requireVerified = async (
+export const requireVerified: RequestHandler = async (
   req: Request,
   res: Response,
   next: NextFunction,
 ) => {
-  const user: any = (req as any).user;
+  const user = req.user;
   if (user) {
     if (user.role === 'admin') return next();
     if (user.isVerified) return next();

@@ -10,7 +10,7 @@ export default function RedirectHome() {
       : user?.role === 'landlord' ? '/landlord'
       : user?.role === 'pro' ? '/pro'
       : user?.role === 'admin' ? '/admin'
-      : '/login';
+      : '/properties';
     nav(path, { replace: true });
   }, [user, nav]);
   return null;

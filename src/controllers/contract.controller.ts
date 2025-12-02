@@ -109,7 +109,7 @@ export async function create(req: Request, res: Response) {
 
     await Contract.findByIdAndUpdate(contract._id, { pdfPath: publicPath, pdfHash });
 
-    const actorId = (req as any).user?.id;
+    const actorId = req.user?._id || req.user?.id;
     await recordContractHistory(contract._id, 'CREATED', actorId, {
       region: data.region,
       clausePolicyVersion: CLAUSE_POLICY_VERSION,
@@ -139,7 +139,7 @@ export const createContract = async (req: Request, res: Response) => {
     endDate,
     iban,
   } = req.body;
-  const resolvedClauses = (req as any).resolvedClauses as ResolvedClause[] | undefined;
+  const resolvedClauses = req.resolvedClauses;
   try {
     const contract = await createContractAction({
       landlordId: landlord ?? landlordId,
@@ -235,7 +235,8 @@ export const getContractPDF = async (req: Request, res: Response) => {
 
 export const signContract = async (req: Request, res: Response) => {
   try {
-    const user = (req as any).user;
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: 'auth_required' });
     const contract = await signContractAction(req.params.id, user);
     res.json({ message: 'Contrato firmado', contract });
   } catch (err: any) {
@@ -259,7 +260,8 @@ export const initiatePayment = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const { amount } = req.body;
-    const user = (req as any).user;
+    const user = req.user;
+    if (!user) return res.status(401).json({ error: 'auth_required' });
     const clientSecret = await initiatePaymentAction(id, amount, user);
     res.json({ message: 'Pago iniciado', clientSecret });
   } catch (error: any) {
@@ -277,8 +279,9 @@ export const payDeposit = async (req: Request, res: Response) => {
     const { destination, successUrl, cancelUrl } = req.body;
     const contract = await Contract.findById(id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
-    const user = (req as any).user;
-    if (user.role !== 'tenant' || String(contract.tenant) !== user.id) {
+    const user = req.user;
+    const uid = user?._id || user?.id;
+    if (!user || user.role !== 'tenant' || String(contract.tenant) !== String(uid)) {
       return res.status(403).json({ error: 'Solo el inquilino puede pagar la fianza' });
     }
     if (contract.depositPaid) {
@@ -425,12 +428,13 @@ export const listContracts = async (req: Request, res: Response) => {
     const q: any = {};
     if (req.query.status) q.status = req.query.status;
 
-    const user = (req as any).user;
+    const user = req.user;
     if (!user) {
       return res.status(403).json({ error: 'No autorizado' });
     }
     if (user.role !== 'admin') {
-      q.$or = [{ landlord: user.id }, { tenant: user.id }];
+      const uid = user._id || user.id;
+      q.$or = [{ landlord: uid }, { tenant: uid }];
     }
 
     const [items, total] = await Promise.all([
@@ -482,11 +486,12 @@ export const getContract = async (req: Request, res: Response) => {
     const c = await Contract.findById(req.params.id).lean();
     if (!c) return res.status(404).json({ error: 'Contrato no encontrado' });
 
-    const user = (req as any).user;
+    const user = req.user;
     if (!user) {
       return res.status(403).json({ error: 'No autorizado' });
     }
-    if (user.role !== 'admin' && String(c.landlord) !== user.id && String(c.tenant) !== user.id) {
+    const uid = user._id || user.id;
+    if (user.role !== 'admin' && String(c.landlord) !== String(uid) && String(c.tenant) !== String(uid)) {
       return res.status(404).json({ error: 'Contrato no encontrado' });
     }
 

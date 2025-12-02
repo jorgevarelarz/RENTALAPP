@@ -39,9 +39,25 @@ export const getAllUsers = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    const actor = req.user;
+    if (!actor) return res.status(401).json({ error: 'auth_required' });
+
+    // Only self-service or admin can update
+    const isSelf = actor.id === id || actor._id === id;
+    const isAdmin = actor.role === 'admin';
+    if (!isSelf && !isAdmin) {
+      return res.status(403).json({ error: 'forbidden' });
+    }
+
     const updates: any = { ...req.body };
     // Prevent changing passwordHash directly via this endpoint
     delete updates.passwordHash;
+
+    // Non-admins cannot escalate roles
+    if (!isAdmin) {
+      delete updates.role;
+    }
+
     const user = await User.findByIdAndUpdate(id, updates, { new: true }).select('-passwordHash');
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     res.json(user);
