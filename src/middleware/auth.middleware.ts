@@ -1,7 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
+import { verifyToken } from '../config/jwt';
 
 /**
  * Authentication middleware. Verifies a JWT from the Authorization header
@@ -9,7 +7,9 @@ const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
  * the request object as req.user.
  */
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {
-  const token = req.headers.authorization?.split(' ')[1];
+  const authHeader = req.headers.authorization;
+  const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : undefined;
+
   if (!token) {
     if (process.env.NODE_ENV === 'test') {
       const idHeader = (req.headers['x-user-id'] as string) || '000000000000000000000001';
@@ -20,29 +20,24 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
           ? ['true', '1', 'yes'].includes(String(verifiedHeader).toLowerCase())
           : true;
 
-      const fallbackUser = {
+      req.user = {
         id: idHeader,
         _id: idHeader,
-        role: roleHeader,
+        role: roleHeader as any,
         isVerified,
       };
-      (req as any).user = fallbackUser;
       return next();
     }
     return res.status(401).json({ error: 'Token requerido' });
   }
-  try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
-    const resolvedId = decoded._id || decoded.id;
 
-    // Resolver isVerified del token si existe; no asumir false por defecto todavía
-    let tokenVerified: boolean | undefined =
-      decoded.isVerified ?? decoded.verified ?? decoded.is_verified ??
-      (decoded.status ? decoded.status === 'verified' : undefined);
+  try {
+    const decoded = verifyToken(token);
+    const resolvedId = decoded._id || decoded.id;
+    let tokenVerified = decoded.isVerified;
 
     // En entorno de test, permitir bypass cuando ALLOW_UNVERIFIED=true
     if (process.env.NODE_ENV === 'test' && process.env.ALLOW_UNVERIFIED === 'true') {
-      // Permitir forzar vía cabecera si se proporciona (útil en tests negativos)
       const verifiedHeader = req.headers['x-user-verified'];
       if (verifiedHeader !== undefined) {
         tokenVerified = ['true', '1', 'yes'].includes(String(verifiedHeader).toLowerCase());
@@ -51,14 +46,14 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
       }
     }
 
-    (req as any).user = {
+    req.user = {
       ...decoded,
       id: resolvedId,
       _id: resolvedId,
       isVerified: typeof tokenVerified === 'boolean' ? tokenVerified : false,
     };
-    next();
+    return next();
   } catch {
-    res.status(401).json({ error: 'Token inválido' });
+    return res.status(401).json({ error: 'Token inválido' });
   }
 };

@@ -93,7 +93,7 @@ export async function signatureCallback(req: Request, res: Response) {
     }
     try {
       const updated = await transitionContract(id, "signed");
-      await recordContractHistory(id, "SIGNED", (req as any).user?.id, { provider, eventId });
+      await recordContractHistory(id, "SIGNED", req.user?._id || req.user?.id, { provider, eventId });
       return res.json({ ok: true, status: updated.status });
     } catch (error: any) {
       const httpStatus = error?.status ?? 500;

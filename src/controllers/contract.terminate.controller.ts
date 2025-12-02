@@ -8,7 +8,7 @@ export async function terminate(req: Request, res: Response) {
 
   try {
     const c = await transitionContract(id, "terminated");
-    await recordContractHistory(id, "TERMINATED", (req as any).user?.id, { reason });
+    await recordContractHistory(id, "TERMINATED", req.user?._id || req.user?.id, { reason });
     return res.json({ ok: true, status: c.status });
   } catch (error: any) {
     const status = error?.status ?? 500;

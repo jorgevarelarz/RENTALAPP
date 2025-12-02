@@ -23,7 +23,7 @@ export async function activate(req: Request, res: Response) {
 
     const updated = await transitionContract(id, "active");
 
-    await recordContractHistory(id, "ACTIVATED", (req as any).user?.id, {
+    await recordContractHistory(id, "ACTIVATED", req.user?._id || req.user?.id, {
       startDate: c.startDate,
     });
 

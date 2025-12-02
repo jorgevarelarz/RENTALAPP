@@ -8,7 +8,7 @@ import { Request } from 'express';
  * If neither is present, throws a 400 error.
  */
 export function getUserId(req: Request): string {
-  const u: any = (req as any).user;
+  const u = req.user;
   if (u?.id || u?._id) return String(u.id || u._id);
   const uid = req.header('x-user-id');
   if (uid) return String(uid);

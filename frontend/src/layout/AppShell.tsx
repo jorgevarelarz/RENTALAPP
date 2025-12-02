@@ -27,7 +27,7 @@ function Header() {
     : user?.role === 'landlord' ? '/landlord'
     : user?.role === 'pro' ? '/pro'
     : user?.role === 'admin' ? '/admin'
-    : '/login';
+    : '/properties';
   return (
     <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-3">
@@ -43,12 +43,12 @@ function Header() {
         </nav>
         <div className="ml-auto flex items-center gap-2 text-sm">
           {!user ? (
-            <Link to="/login" className="px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50">Entrar</Link>
-          ) : (
             <>
-              <span className="text-gray-600 hidden sm:inline">{user.email} · {user.role}</span>
-              <button onClick={logout} className="px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50">Salir</button>
+              <Link to="/login" className="px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50">Login</Link>
+              <Link to="/register" className="px-3 py-1.5 rounded border border-gray-900 bg-gray-900 text-white hover:bg-black">Sign up</Link>
             </>
+          ) : (
+            <button onClick={logout} className="px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50">Salir</button>
           )}
         </div>
       </div>

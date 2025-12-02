@@ -2,6 +2,7 @@ import { api as axios } from "../api/client";
 
 export type User = {
   _id: string;
+  name?: string;
   email: string;
   role: "tenant" | "landlord" | "pro" | "admin";
   isVerified?: boolean;
