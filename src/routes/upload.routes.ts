@@ -30,16 +30,16 @@ const upload = multer({ storage, fileFilter, limits: { fileSize: 10 * 1024 * 102
 
 // POST /api/uploads/images
 router.post('/uploads/images', authenticate as any, (req, res) => {
-  upload.array('files', 6)(req as any, res as any, (err: any) => {
+  upload.array('files', 6)(req, res, (err: any) => {
     if (err) {
       const code = err?.message === 'invalid_file_type' ? 400 : 400;
       return res.status(code).json({ error: err.message || 'upload_error' });
     }
-  const files = ((req as any).files as Express.Multer.File[]) || [];
-  const base = process.env.APP_URL?.replace(/\/$/, '') || '';
-  const urls = files.map(f => `${base}/uploads/${path.basename(f.path)}`);
-  res.json({ urls });
-});
+    const files = (req.files as Express.Multer.File[]) || [];
+    const base = process.env.APP_URL?.replace(/\/$/, '') || '';
+    const urls = files.map(f => `${base}/uploads/${path.basename(f.path)}`);
+    res.json({ urls });
+  });
 });
 
 export default router;

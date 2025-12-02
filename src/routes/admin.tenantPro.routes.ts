@@ -28,7 +28,7 @@ router.post(
     const user = (await User.findById(userId)) as any;
     if (!user) return res.sendStatus(404);
 
-    const reviewerId = (req as any).user?.id || (req as any).user?._id;
+    const reviewerId = req.user?._id || req.user?.id;
     const now = new Date();
 
     if (decision === 'approved') {

@@ -109,7 +109,7 @@ app.use(cors({
   origin: allowedOrigins.length > 0 ? allowedOrigins : false,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: [
-    'Content-Type', 'Authorization', 'X-Requested-With', 'x-admin', 'x-user-id'
+    'Content-Type', 'Authorization', 'X-Requested-With', 'x-user-id'
   ],
   exposedHeaders: ['Content-Disposition'],
   credentials:true

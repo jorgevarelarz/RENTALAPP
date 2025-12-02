@@ -52,7 +52,7 @@ export const validateContract = (req: Request, res: Response, next: NextFunction
 
     try {
       const resolvedClauses = resolveClauses(region!, body.clauses as any[]);
-      (req as any).resolvedClauses = resolvedClauses;
+      req.resolvedClauses = resolvedClauses;
       req.body.region = normalizeRegion(region!);
     } catch (error: any) {
       return res.status(400).json({ error: error?.message || 'Cláusulas inválidas' });

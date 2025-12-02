@@ -64,7 +64,7 @@ export async function publish(req: Request, res: Response) {
   const { id } = req.params;
   const p = await Property.findById(id);
   if (!p) return res.status(404).json({ error: 'not_found' });
-  const user: any = (req as any).user;
+  const user = req.user;
   const userId = user?._id ?? user?.id;
   const isOwner = userId ? String(userId) === String(p.owner) : false;
   const isAdmin = user?.role === 'admin';
@@ -173,7 +173,8 @@ export async function search(req: Request, res: Response) {
 }
 
 export async function favorite(req: Request, res: Response) {
-  const userId = (req as any).user.id;
+  const userId = req.user?.id || req.user?._id;
+  if (!userId) return res.status(401).json({ error: 'auth_required' });
   const { id: propertyId } = req.params;
   const result = await UserFavorite.updateOne({ userId, propertyId }, {}, { upsert: true });
   if (result.upsertedCount) {
@@ -183,7 +184,8 @@ export async function favorite(req: Request, res: Response) {
 }
 
 export async function unfavorite(req: Request, res: Response) {
-  const userId = (req as any).user.id;
+  const userId = req.user?.id || req.user?._id;
+  if (!userId) return res.status(401).json({ error: 'auth_required' });
   const { id: propertyId } = req.params;
   const del = await UserFavorite.deleteOne({ userId, propertyId });
   if (del.deletedCount) await Property.findByIdAndUpdate(propertyId, { $inc: { favoritesCount: -1 } });
@@ -191,14 +193,16 @@ export async function unfavorite(req: Request, res: Response) {
 }
 
 export async function subscribePriceAlert(req: Request, res: Response) {
-  const userId = (req as any).user.id;
+  const userId = req.user?.id || req.user?._id;
+  if (!userId) return res.status(401).json({ error: 'auth_required' });
   const { id: propertyId } = req.params;
   await AlertSubscription.updateOne({ userId, propertyId, type: 'price' }, {}, { upsert: true });
   res.json({ ok: true });
 }
 
 export async function unsubscribePriceAlert(req: Request, res: Response) {
-  const userId = (req as any).user.id;
+  const userId = req.user?.id || req.user?._id;
+  if (!userId) return res.status(401).json({ error: 'auth_required' });
   const { id: propertyId } = req.params;
   await AlertSubscription.deleteOne({ userId, propertyId, type: 'price' });
   res.json({ ok: true });
@@ -215,7 +219,7 @@ export async function apply(req: Request, res: Response) {
 
   if (property.onlyTenantPro) {
     const required = property.requiredTenantProMaxRent || property.price;
-    const userId = (req as any).user?._id || (req as any).user?.id;
+    const userId = req.user?._id || req.user?.id;
     const userDoc: any = userId ? await User.findById(userId) : null;
     const userMax = userDoc?.tenantPro?.maxRent || 0;
     if (!userDoc?.tenantPro || userDoc.tenantPro.status !== 'verified' || userMax < required) {
