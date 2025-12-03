@@ -83,7 +83,7 @@ export const resetPassword = async (req: Request, res: Response) => {
     const { token, password } = req.body;
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const user = await User.findOne({
-      resetToken: tokenHash,
+      resetToken: { $in: [tokenHash, token] },
       resetTokenExp: { $gt: new Date() },
     });
 

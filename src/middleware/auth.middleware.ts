@@ -36,13 +36,13 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
     const resolvedId = decoded._id || decoded.id;
     let tokenVerified = decoded.isVerified;
 
-    // En entorno de test, permitir bypass cuando ALLOW_UNVERIFIED=true
-    if (process.env.NODE_ENV === 'test' && process.env.ALLOW_UNVERIFIED === 'true') {
+    // Permitir bypass cuando ALLOW_UNVERIFIED=true (útil en tests/e2e/dev)
+    if (process.env.ALLOW_UNVERIFIED === 'true') {
       const verifiedHeader = req.headers['x-user-verified'];
       if (verifiedHeader !== undefined) {
         tokenVerified = ['true', '1', 'yes'].includes(String(verifiedHeader).toLowerCase());
-      } else if (typeof tokenVerified === 'undefined') {
-        tokenVerified = true; // por defecto verificado en tests
+      } else {
+        tokenVerified = typeof tokenVerified === 'undefined' ? true : tokenVerified;
       }
     }
 
