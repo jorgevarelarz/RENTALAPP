@@ -30,7 +30,9 @@ router.post(
   asyncHandler(async (req, res) => {
     const parsed = ConsentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
-    const u = (await User.findById((req as any).user?.id || (req as any).user?._id)) as any;
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'auth_required' });
+    const u = (await User.findById(userId)) as any;
     if (!u) return res.sendStatus(404);
     u.tenantPro = u.tenantPro || ({} as any);
     u.tenantPro.consentAccepted = true;
@@ -58,13 +60,15 @@ router.post(
     });
   },
   asyncHandler(async (req, res) => {
-    const fileUpload = (req as any).file as { originalname: string; buffer: Buffer } | undefined;
+    const fileUpload = req.file as { originalname: string; buffer: Buffer } | undefined;
     if (!fileUpload) return res.status(400).json({ code: 'file_required', message: 'Archivo requerido' });
-    const type = ((req as any).body?.type) as string | undefined;
+    const type = req.body?.type as string | undefined;
     if (!type || !['nomina', 'contrato', 'renta', 'autonomo', 'otros'].includes(type)) {
       return res.status(400).json({ code: 'bad_type', message: 'Tipo de documento inválido' });
     }
-    const u = (await User.findById((req as any).user?.id || (req as any).user?._id)) as any;
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'auth_required' });
+    const u = (await User.findById(userId)) as any;
     if (!u) return res.sendStatus(404);
     if (!u.tenantPro?.consentAccepted) {
       return res.status(409).json({ error: 'consent required' });
@@ -89,7 +93,9 @@ router.get(
   '/tenant-pro/me',
   ...assertRole('tenant'),
   asyncHandler(async (req, res) => {
-    const u: any = await User.findById((req as any).user?.id || (req as any).user?._id)
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'auth_required' });
+    const u: any = await User.findById(userId)
       .select('email tenantPro')
       .lean();
     if (!u) return res.sendStatus(404);

@@ -1,11 +1,9 @@
 import { Request, Response } from 'express';
 import { User } from '../models/user.model';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { sendEmail } from '../utils/email';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
+import { signToken } from '../config/jwt';
 
 /**
  * Register a new user.
@@ -20,7 +18,8 @@ export const register = async (req: Request, res: Response) => {
     // Save new user with hashed password
     const user = new User({ name, email, passwordHash, role });
     await user.save();
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const userId = String(user._id);
+    const token = signToken({ id: userId, _id: userId, role: user.role });
     res.status(201).json({
       token,
       user: { _id: user._id, email: user.email, role: user.role },
@@ -36,10 +35,8 @@ export const register = async (req: Request, res: Response) => {
  * Expects: email and password in the request body.
  */
 export const login = async (req: Request, res: Response) => {
-  console.log('Login  request recibido:', req.body);
   try {
     const { email, password } = req.body;
-    console.log('Email:', email);
     // Find the user by email
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
@@ -47,7 +44,8 @@ export const login = async (req: Request, res: Response) => {
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
     // Generate and return JWT
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const userId = String(user._id);
+    const token = signToken({ id: userId, _id: userId, role: user.role });
     res.json({
       token,
       user: { _id: user._id, email: user.email, role: user.role },
@@ -62,8 +60,9 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
   try {
     const user = await User.findOne({ email });
     if (user) {
-      const token = crypto.randomBytes(20).toString('hex');
-      user.resetToken = token;
+      const token = crypto.randomBytes(32).toString('hex');
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      user.resetToken = tokenHash;
       user.resetTokenExp = new Date(Date.now() + 60 * 60 * 1000);
       await user.save();
       await sendEmail(
@@ -82,8 +81,9 @@ export const requestPasswordReset = async (req: Request, res: Response) => {
 export const resetPassword = async (req: Request, res: Response) => {
   try {
     const { token, password } = req.body;
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
     const user = await User.findOne({
-      resetToken: token,
+      resetToken: { $in: [tokenHash, token] },
       resetTokenExp: { $gt: new Date() },
     });
 

@@ -56,8 +56,8 @@ router.get('/:id/pdf/signed', authenticate, async (req, res) => {
   try {
     const c = await Contract.findById(req.params.id).lean();
     if (!c) return res.status(404).json({ error: 'not_found' });
-    const u: any = (req as any).user;
-    const isParty = u?.role === 'admin' || String(c.landlord) === u?.id || String(c.tenant) === u?.id;
+    const u = req.user;
+    const isParty = u?.role === 'admin' || String(c.landlord) === u?.id || String(c.tenant) === u?.id || String(c.landlord) === u?._id || String(c.tenant) === u?._id;
     if (!isParty) return res.status(403).json({ error: 'forbidden' });
     const fs = require('fs');
     const path = require('path');

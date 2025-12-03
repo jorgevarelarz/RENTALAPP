@@ -11,7 +11,9 @@ router.get(
   '/me/tenant-pro',
   ...assertRole('tenant'),
   asyncHandler(async (req, res) => {
-    const user = (await User.findById((req as any).user?.id || (req as any).user?._id)
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'auth_required' });
+    const user = (await User.findById(userId)
       .select('tenantPro email')
       .lean()) as any;
     if (!user) return res.sendStatus(404);
@@ -23,7 +25,9 @@ router.post(
   '/me/tenant-pro/delete',
   ...assertRole('tenant'),
   asyncHandler(async (req, res) => {
-    const user = (await User.findById((req as any).user?.id || (req as any).user?._id)) as any;
+    const userId = req.user?._id || req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'auth_required' });
+    const user = (await User.findById(userId)) as any;
     if (!user) return res.sendStatus(404);
 
     for (const doc of user.tenantPro?.docs || []) {
