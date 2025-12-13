@@ -203,7 +203,7 @@ if (mongoUrl) {
     .connect(mongoUrl)
     .then(() => {
       if (process.env.NODE_ENV !== 'test') {
-        server = app.listen(PORT, () => console.log(`Servidor en http://localhost:${PORT}`));
+        server = app.listen(PORT, '0.0.0.0', () => console.log(`Servidor en http://0.0.0.0:${PORT}`));
         setInterval(() => purgeOldTenantProDocs().catch(() => {}), 6 * 60 * 60 * 1000);
       }
     })
