@@ -190,6 +190,17 @@ app.use(
   adminTenantProRoutes,
 );
 
+// Serve frontend static files in production
+if (process.env.NODE_ENV === 'production') {
+  // Serve static files from frontend/dist
+  app.use(express.static(path.join(__dirname, '../frontend/dist')));
+  
+  // Serve index.html for all non-API routes
+  app.get('*', (_req, res) => {
+    res.sendFile(path.join(__dirname, '../frontend/dist/index.html'));
+  });
+}
+
 // Error handler
 app.use(errorHandler);
 
