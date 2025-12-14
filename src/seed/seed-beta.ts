@@ -139,7 +139,7 @@ async function main() {
   );
 
 
-     if !landlordResult || !landlordResult.value) {
+     if (!landlordResult || !landlordResult.value) {
             throw new Error("❌ No se pudo crear/encontrar el landlord demo");
           }
   const landlord = landlordResult.value!;
