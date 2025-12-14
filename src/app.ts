@@ -201,8 +201,7 @@ if (require.main === module) {
   mongoose.connect(process.env.MONGO_URL || '')
     .then(() => {
       console.log('MongoDB connected');
-      app.listen(PORT, () => {
-        console.log(`Server running on port ${PORT}`);
+      app.listen(PORT, '0.0.0.0', () => {        console.log(`Server running on port ${PORT}`);
       });
     })
     .catch((error) => {
