@@ -220,7 +220,10 @@ if (require.main === module) {
 
     // Seed condicional
     async function runSeedIfNeeded() {
-      if (process.env.RUN_SEED !== "true") return;
+      if (process.env.RUN_SEED !== "tru
+              
+    // SEED CHECK: verificar si RUN_SEED está entrando
+    console.log('SEED CHECK → RUN_SEED =', process.env.RUN_SEED);e") return;
       
       console.log("🌱 RUN_SEED=true → ejecutando seed-beta");
       
@@ -232,8 +235,12 @@ if (require.main === module) {
     }
     
     // Ejecutar seed si es necesario
-    await runSeedIfNeeded();
-      app.listen(PORT, '0.0.0.0', () => {                console.log(`Server running on port ${PORT}`);
+    // Ejecutar seed si es necesario
+    try {
+      await runSeedIfNeeded();
+    } catch (err) {
+      console.error('ERROR al ejecutar seed:', err);
+    }      app.listen(PORT, '0.0.0.0', () => {                console.log(`Server running on port ${PORT}`);
       });
     })
     .catch((error) => {
