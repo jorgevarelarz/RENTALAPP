@@ -190,6 +190,23 @@ app.use(
   adminTenantProRoutes,
 );
 
+// Root route for health check
+app.get('/', (_req, res) => {
+  res.json({ 
+    status: 'ok', 
+    message: 'RENTALAPP API is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
+// 404 handler for undefined routes
+app.use((_req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
+// Global error handler
+app.use(errorHandler);
+
 export { app };
 export default app;
 
