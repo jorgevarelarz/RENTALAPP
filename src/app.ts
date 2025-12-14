@@ -215,8 +215,24 @@ if (require.main === module) {
   const PORT = Number(process.env.PORT) || 3000;  
   // Connect to MongoDB
   mongoose.connect(process.env.MONGO_URL || '')
-    .then(() => {
+    .then(async () => {
       console.log('MongoDB connected');
+
+    // Seed condicional
+    async function runSeedIfNeeded() {
+      if (process.env.RUN_SEED !== "true") return;
+      
+      console.log("🌱 RUN_SEED=true → ejecutando seed-beta");
+      
+      const { default: runSeed } = await import("./seed/seed-beta");
+      await runSeed();
+      
+      console.log("✅ Seed completado. Desactivando RUN_SEED.");
+      process.env.RUN_SEED = "false";
+    }
+    
+    // Ejecutar seed si es necesario
+    await runSeedIfNeeded();
       app.listen(PORT, '0.0.0.0', () => {                console.log(`Server running on port ${PORT}`);
       });
     })
