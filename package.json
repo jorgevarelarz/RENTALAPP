@@ -4,8 +4,7 @@
   "main": "dist/app.js",
   "scripts": {
     "dev": "ts-node-dev src/app.ts",
-    "build": "tsc",
-    "start": "node dist/app.js",
+    "build": "npm install --prefix frontend && npm run build --prefix frontend && tsc",    "start": "node dist/app.js",
     "start:prod": "node dist/app.js",
     "test": "jest",
     "test:backend": "jest --config jest.config.js",
