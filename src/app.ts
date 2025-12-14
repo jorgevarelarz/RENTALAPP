@@ -189,3 +189,5 @@ app.use(
   adminEarningsRoutes,
   adminTenantProRoutes,
 );
+
+export { app };
