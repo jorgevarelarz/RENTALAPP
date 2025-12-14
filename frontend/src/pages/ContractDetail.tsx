@@ -83,8 +83,7 @@ const ContractDetail: React.FC = () => {
                   push({ title: 'Contrato enviado a firma', tone: 'success' });
                   await load();
                 } catch (e: any) {
-                  push({ title: 'No se pudo iniciar la firma', body: e?.response?.data?.error || e?.message, tone: 'error' });
-                } finally {
+          push({ title: 'No se pudo iniciar la firma', tone: 'error' });                } finally {
                   setSending(false);
                 }
               }}
