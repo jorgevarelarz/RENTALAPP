@@ -286,7 +286,4 @@ async function main() {
    RUN
 ========================= */
 
-main().catch((err) => {
-  console.error("❌ Error ejecutando seed-beta:", err);
-  process.exit(1);
-});
+export default main;
