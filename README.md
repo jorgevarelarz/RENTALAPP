@@ -49,6 +49,38 @@
 
 ## Deploy rápido
 
+### Problemas conocidos con Railway (resueltos)
+
+**Contexto:** Este proyecto está dividido en dos servicios independientes en Railway:
+- Backend (API): Servicio RENTALAPP que expone solo rutas `/api/*`
+- Frontend (SPA): Servicio separado que apunta al directorio `frontend/`
+
+**Problemas que se presentaron:**
+
+1. **Error 502 Bad Gateway en el backend:**
+   - El servicio estaba corriendo pero el dominio público apuntaba a un puerto incorrecto
+   - La aplicación escuchaba en un puerto diferente al configurado en Railway
+   - **Solución:** Se configuró correctamente el puerto 8080 y se eliminó el dominio mal configurado, creando uno nuevo que detectó automáticamente el puerto correcto
+
+2. **Intento fallido de servir el frontend desde el backend:**
+   - Inicialmente se intentó que Express sirviera también el frontend estático
+   - Esto generaba errores `ENOENT` buscando `frontend/dist/index.html` que no existía en el contenedor del backend
+   - **Solución:** Se separó en dos servicios limpios: backend solo como API (sin servir HTML) y frontend como servicio independiente
+
+3. **Errores de TypeScript en el build del frontend:**
+   - El despliegue del frontend fallaba por tipos incompatibles (por ejemplo `tone: 'danger'` donde solo se aceptaba `success | error | info`)
+   - Props que no existían en los tipos de componentes
+   - **Solución:** Se corrigieron todos los errores de tipos en el código fuente y ahora el build completa correctamente
+
+**Estado actual:**
+- Backend: Servicio ACTIVE en Railway, funciona como API pura (puerto 8080)
+- Frontend: Servicio ACTIVE en Railway, build exitoso
+- **Importante:** Para que funcione correctamente end-to-end:
+  - El frontend debe tener `VITE_API_URL` apuntando a la URL pública del backend
+  - El backend debe tener `CORS_ORIGIN` configurado para permitir el dominio del frontend
+
+
+
 ### API (Render/Railway)
 Configura las variables:
 - `MONGO_URL`
