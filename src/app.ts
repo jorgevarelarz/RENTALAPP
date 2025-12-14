@@ -218,30 +218,25 @@ if (require.main === module) {
     .then(async () => {
       console.log('MongoDB connected');
 
-    // Seed condicional
-    async function runSeedIfNeeded() {
-      if (process.env.RUN_SEED !== "tru
-              
-    // SEED CHECK: verificar si RUN_SEED está entrando
-    console.log('SEED CHECK → RUN_SEED =', process.env.RUN_SEED);e") return;
-      
-      console.log("🌱 RUN_SEED=true → ejecutando seed-beta");
-      
-      const { default: runSeed } = await import("./seed/seed-beta");
-      await runSeed();
-      
-      console.log("✅ Seed completado. Desactivando RUN_SEED.");
-      process.env.RUN_SEED = "false";
-    }
-    
-    // Ejecutar seed si es necesario
-    // Ejecutar seed si es necesario
-    try {
-      await runSeedIfNeeded();
-    } catch (err) {
-      console.error('ERROR al ejecutar seed:', err);
-    }      app.listen(PORT, '0.0.0.0', () => {                console.log(`Server running on port ${PORT}`);
-      });
+async function runSeedIfNeeded() {
+  console.log('SEED CHECK RUN_SEED:', process.env.RUN_SEED);
+
+  if (process.env.RUN_SEED !== 'true') {
+    return;
+  }
+
+  try {
+    console.log('RUN_SEED is true. Executing seed.');
+    const { default: runSeed } = await import('./seed/seed-beta');
+    await runSeed();
+    console.log('Seed execution finished.');
+  } catch (err) {
+    console.error('Seed execution failed:', err);
+    throw err;
+  }
+}
+
+          await runSeedIfNeeded();
     })
     .catch((error) => {
       console.error('MongoDB connection error:', error);
