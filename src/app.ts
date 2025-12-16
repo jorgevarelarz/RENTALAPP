@@ -143,6 +143,17 @@ app.get('/api/legal/tenant-pro-consent', (_req, res) => {
   }
 });
 
+app.get('/api/legal/privacy-policy', (_req, res) => {
+  const privacyPolicyPath = path.resolve(process.cwd(), 'legal/privacy-policy.md');
+  try {
+    const content = fs.readFileSync(privacyPolicyPath, 'utf-8');
+    res.json({ content });
+  } catch (error) {
+    console.error('No se pudo servir la política de privacidad:', error);
+    res.status(500).json({ error: 'privacy-policy-unavailable' });
+  }
+});
+
 app.get('/health', (_req, res) =>
   res.json({ ok: true, env: process.env.NODE_ENV, mongo: { state: mongoose.connection.readyState } }),
 );
