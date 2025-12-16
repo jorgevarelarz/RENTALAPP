@@ -14,7 +14,8 @@
     "test:e2e": "jest --config jest.config.e2e.js --runInBand",
     "seed": "ts-node src/seed.ts",
     "seed:services": "ts-node scripts/seed_services.ts",
-    "seed:tenantpro-demo": "ts-node scripts/seed_tenantpro_demo.ts"
+    "seed:tenantpro-demo": "ts-node scripts/seed_tenantpro_demo.ts",
+    "test:policies": "jest tests/policies/policies.routes.test.ts --runInBand"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.650.0",
