@@ -13,6 +13,7 @@ ENV NODE_ENV=production
 COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/legal ./legal
 
 ENV PORT=3000
 EXPOSE 3000
