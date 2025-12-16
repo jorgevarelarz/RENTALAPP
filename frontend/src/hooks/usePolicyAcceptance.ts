@@ -4,12 +4,15 @@ import axios from "axios";
 
 const POLICY_VERSION = "v1.0"; // sincronizado con backend
 
-export const usePolicyAcceptance = (token: string | null) => {
+export const usePolicyAcceptance = (token: string | null = localStorage.getItem("token")) => {
   const [loading, setLoading] = useState(true);
   const [needsAcceptance, setNeedsAcceptance] = useState(false);
 
   useEffect(() => {
-    if (!token) return;
+    if (!token) {
+      setLoading(false);
+      return;
+    }
 
     const checkPolicy = async () => {
       try {
@@ -35,6 +38,8 @@ export const usePolicyAcceptance = (token: string | null) => {
   }, [token]);
 
   const acceptPolicy = async () => {
+    if (!token) return;
+
     try {
       await axios.post(
         "/api/policies/accept",
@@ -53,5 +58,7 @@ export const usePolicyAcceptance = (token: string | null) => {
     }
   };
 
-  return { loading, needsAcceptance, acceptPolicy };
+  const hasAccepted = !needsAcceptance;
+
+  return { loading, needsAcceptance, hasAccepted, acceptPolicy };
 };
