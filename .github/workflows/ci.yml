@@ -1,10 +1,10 @@
-name: CI
+name: RENTALAPP CI
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [main]
   pull_request:
-    branches: [ main, develop ]
+    branches: [main]
 
 jobs:
   backend:
@@ -15,45 +15,16 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - name: Install dependencies (robust)
-        run: |
-          npm config set fetch-retries 5
-          npm config set fetch-retry-maxtimeout 120000
-          npm config set prefer-offline true
-          npm ci --no-audit --no-fund || npm install --no-audit --no-fund --legacy-peer-deps
-      - name: Run e2e tests
-        env:
-          NODE_ENV: test
-        run: npm run test:e2e
-#  frontend:
-#    runs-on: ubuntu-latest
-#    steps:
-#      - uses: actions/checkout@v4
-#      - uses: actions/setup-node@v4
-#        with:
-#          node-version: 20
-#          cache: npm
-#      - name: Install frontend deps
-#        working-directory: frontend
-#        run: npm ci
-#      - name: Frontend tests
-#        working-directory: frontend
-#        env:
-#          CI: true
-#        run: npm test -- --watchAll=false
-#
-#  e2e:
-#    name: E2E tests
-#    runs-on: ubuntu-latest
-#    needs: backend
-#    steps:
-#      - uses: actions/checkout@v4
-#      - uses: actions/setup-node@v4
-#        with:
-#          node-version: 20
-#          cache: npm
-#      - run: npm ci
-#      - name: Run E2E in-band
-#        env:
-#          NODE_ENV: test
-#        run: npm run test:e2e
+      - run: npm ci
+      - run: npm run test:policies -- --runInBand
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm --prefix frontend ci
+      - run: npm --prefix frontend test -- --watchAll=false --testPathPattern=policy
