@@ -242,4 +242,5 @@ async function runSeedIfNeeded() {
       console.error('MongoDB connection error:', error);
       process.exit(1);
     });
+  // Trigger Railway deployment
 }
