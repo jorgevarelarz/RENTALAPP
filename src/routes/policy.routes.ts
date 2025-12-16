@@ -5,6 +5,8 @@ import { requireAuth } from '../middleware/auth';
 
 const router = Router();
 
+router.get('/active', requireAuth, PolicyController.getActive);
+router.post('/version', requireAuth, PolicyController.createVersion);
 router.post('/accept', requireAuth, PolicyController.accept);
 router.get('/', requireAuth, PolicyController.list);
 

@@ -6,6 +6,8 @@ export interface IUserPolicyAcceptance extends Document {
   policyType: 'privacy_policy' | 'terms_of_service' | 'cookies_policy';
   policyVersion: string;
   acceptedAt: Date;
+  ip?: string;
+  userAgent?: string;
 }
 
 const UserPolicyAcceptanceSchema = new Schema<IUserPolicyAcceptance>(
@@ -29,6 +31,12 @@ const UserPolicyAcceptanceSchema = new Schema<IUserPolicyAcceptance>(
     acceptedAt: {
       type: Date,
       default: Date.now,
+    },
+    ip: {
+      type: String,
+    },
+    userAgent: {
+      type: String,
     },
   },
   { timestamps: false }
