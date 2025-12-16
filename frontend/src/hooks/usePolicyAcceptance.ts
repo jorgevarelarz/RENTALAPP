@@ -1,12 +1,20 @@
 // src/hooks/usePolicyAcceptance.ts
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 
-const POLICY_VERSION = "v1.0"; // sincronizado con backend
+const POLICY_KEY = "policy_version";
 
-export const usePolicyAcceptance = (token: string | null = localStorage.getItem("token")) => {
+export const usePolicyAcceptance = (
+  token: string | null = localStorage.getItem("token")
+) => {
   const [loading, setLoading] = useState(true);
   const [needsAcceptance, setNeedsAcceptance] = useState(false);
+  const [activeVersion, setActiveVersion] = useState<string | null>(null);
+
+  const acceptedVersion = useMemo(
+    () => localStorage.getItem(POLICY_KEY),
+    []
+  );
 
   useEffect(() => {
     if (!token) {
@@ -16,17 +24,22 @@ export const usePolicyAcceptance = (token: string | null = localStorage.getItem(
 
     const checkPolicy = async () => {
       try {
-        const res = await axios.get("/api/policies", {
+        const res = await axios.get("/api/policies/active", {
           headers: { Authorization: `Bearer ${token}` },
         });
 
-        const hasAccepted = res.data.data?.some(
-          (p: any) =>
-            p.policyType === "privacy_policy" &&
-            p.policyVersion === POLICY_VERSION
+        const active = res.data?.data?.find(
+          (p: any) => p.policyType === "privacy_policy"
         );
 
-        setNeedsAcceptance(!hasAccepted);
+        const activeVersionValue = active?.version ?? null;
+        setActiveVersion(activeVersionValue);
+        if (!activeVersionValue) {
+          setNeedsAcceptance(false);
+          return;
+        }
+
+        setNeedsAcceptance(activeVersionValue !== acceptedVersion);
       } catch (err) {
         console.error("Error checking policies:", err);
       } finally {
@@ -35,23 +48,24 @@ export const usePolicyAcceptance = (token: string | null = localStorage.getItem(
     };
 
     checkPolicy();
-  }, [token]);
+  }, [token, acceptedVersion]);
 
   const acceptPolicy = async () => {
-    if (!token) return;
+    if (!token || !activeVersion) return;
 
     try {
       await axios.post(
         "/api/policies/accept",
         {
           policyType: "privacy_policy",
-          policyVersion: POLICY_VERSION,
+          policyVersion: activeVersion,
         },
         {
           headers: { Authorization: `Bearer ${token}` },
         }
       );
 
+      localStorage.setItem(POLICY_KEY, activeVersion);
       setNeedsAcceptance(false);
     } catch (err) {
       console.error("Error accepting policy:", err);
@@ -60,5 +74,5 @@ export const usePolicyAcceptance = (token: string | null = localStorage.getItem(
 
   const hasAccepted = !needsAcceptance;
 
-  return { loading, needsAcceptance, hasAccepted, acceptPolicy };
+  return { loading, needsAcceptance, hasAccepted, activeVersion, acceptPolicy };
 };
