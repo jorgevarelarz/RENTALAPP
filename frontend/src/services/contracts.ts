@@ -15,9 +15,10 @@ export const listContracts = async (token: string) => {
   return res.data as { items: any[] };
 };
 
-export const getContract = async (token: string, id: string) => {
+export const getContract = async (token: string, id: string, signal?: AbortSignal) => {
   const res = await axios.get(`/api/contracts/${id}`, {
     headers: { Authorization: `Bearer ${token}` },
+    signal,
   });
   return res.data as any;
 };

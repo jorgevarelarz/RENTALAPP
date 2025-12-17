@@ -74,7 +74,7 @@ describe('ContractDetail', () => {
     const sendBtn = await screen.findByRole('button', { name: /enviar a firma/i });
     await userEvent.click(sendBtn);
 
-    await waitFor(() => expect(screen.getByLabelText(/estado de firma: enviado a firma/i)).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByLabelText(/estado de la firma: enviado a firma/i)).toBeInTheDocument());
     expect(screen.queryByRole('button', { name: /enviar a firma/i })).toBeNull();
   });
 
@@ -94,7 +94,7 @@ describe('ContractDetail', () => {
     render(<ContractDetail />);
 
     // Chip de estado "No iniciado" visible y botón disponible
-    expect(await screen.findByLabelText(/estado de firma: no iniciado/i)).toBeInTheDocument();
+    expect(await screen.findByLabelText(/estado de la firma: no iniciado/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /enviar a firma/i })).toBeInTheDocument();
   });
 });

@@ -37,6 +37,12 @@ const STATUS_ICONS: Record<string, React.ReactNode> = {
   error: <XCircle size={14} className="text-red-600" />,
 };
 
+const OUTLINE_BUTTON_STYLE: React.CSSProperties = {
+  padding: '6px 10px',
+  borderRadius: 6,
+  border: '1px solid #111827',
+};
+
 const ContractDetail: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const { token, user } = useAuth();
@@ -48,16 +54,19 @@ const ContractDetail: React.FC = () => {
   const [embeddedUrls, setEmbeddedUrls] = useState<{ landlordUrl?: string; tenantUrl?: string } | null>(null);
   const prevSignatureStatusRef = useRef<string | undefined>(undefined);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (signal?: AbortSignal) => {
     if (!token || !id) return;
     try {
       setLoading(true);
       setError(null);
-      const data = await getContract(token, id);
+      const data = await getContract(token, id, signal);
       setC(data);
     } catch (e: any) {
+      if (signal?.aborted) return;
+      if (e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
       setError(e?.message || 'Error al cargar el contrato');
     } finally {
+      if (signal?.aborted) return;
       setLoading(false);
     }
   }, [token, id]);
@@ -66,12 +75,22 @@ const ContractDetail: React.FC = () => {
     load();
   }, [load]);
 
+  const currentSignatureStatus = c?.signature?.status as string | undefined;
+  const currentContractStatus = c?.status as string | undefined;
+
   useEffect(() => {
-    const isInProcess = c?.signature?.status === 'sent' || c?.status === 'signing';
-    if (!isInProcess) return;
-    const interval = setInterval(() => load(), 5000);
-    return () => clearInterval(interval);
-  }, [c?.signature?.status, c?.status, load]);
+    const isTerminal =
+      currentSignatureStatus && ['completed', 'declined', 'error'].includes(currentSignatureStatus);
+    const isInProcess = currentSignatureStatus === 'sent' || currentContractStatus === 'signing';
+    if (isTerminal || !isInProcess) return;
+
+    const controller = new AbortController();
+    const interval = setInterval(() => load(controller.signal), 5000);
+    return () => {
+      controller.abort();
+      clearInterval(interval);
+    };
+  }, [currentSignatureStatus, currentContractStatus, load]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -108,7 +127,7 @@ const ContractDetail: React.FC = () => {
     <div>
       <h1 className="page-title">Detalle del Contrato</h1>
       {user?.role === 'tenant' && user?.tenantPro?.status === 'verified' && (
-        <div style={{ marginBottom: 8 }}>
+        <div className="mb-2">
           <ProBadge maxRent={user?.tenantPro?.maxRent} />
         </div>
       )}
@@ -119,11 +138,12 @@ const ContractDetail: React.FC = () => {
         <p>Firmado por inquilino: {c.signedByTenant ? 'Sí' : 'No'}</p>
         <p>Firmado por propietario: {c.signedByLandlord ? 'Sí' : 'No'}</p>
         <p>Fianza pagada: {c.depositPaid ? 'Sí' : 'No'}</p>
-        <div style={{ marginTop: 8, display: 'flex', gap: 8, alignItems: 'center' }}>
+        <div className="mt-2 flex gap-2 items-center">
           <strong>Firma:</strong>
           <span
             title={badgeLabel}
-            aria-label={`Estado de firma: ${badgeLabel}`}
+            role="status"
+            aria-label={`Estado de la firma: ${badgeLabel}`}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -154,7 +174,7 @@ const ContractDetail: React.FC = () => {
                   setSending(false);
                 }
               }}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #111827' }}
+              style={OUTLINE_BUTTON_STYLE}
             >
               {sending ? 'Enviando…' : 'Enviar a firma'}
             </button>
@@ -162,25 +182,25 @@ const ContractDetail: React.FC = () => {
           {c.signature?.pdfUrl && (
             <button
               onClick={() => window.open(c.signature.pdfUrl, '_blank')}
-              style={{ padding: '6px 10px', borderRadius: 6, border: '1px solid #111827' }}
+              style={OUTLINE_BUTTON_STYLE}
             >
               Ver PDF firmado
             </button>
           )}
         </div>
         {(c?.status === 'signing' || c?.status === 'pending_signature') && (
-          <div style={{ marginTop: 8, fontSize: 14 }}>
+          <div className="mt-2 text-sm">
             {(!c.signedByTenant && 'Esperando firma del inquilino') ||
               (!c.signedByLandlord && 'Esperando firma del propietario')}
           </div>
         )}
         {embeddedUrls && (
-          <div style={{ marginTop: 8, display: 'flex', gap: 8 }}>
+          <div className="mt-2 flex gap-2">
             {embeddedUrls.landlordUrl && <a href={embeddedUrls.landlordUrl} target="_blank" rel="noreferrer">Firmar como propietario</a>}
             {embeddedUrls.tenantUrl && <a href={embeddedUrls.tenantUrl} target="_blank" rel="noreferrer">Firmar como inquilino</a>}
           </div>
         )}
-        <div style={{ marginTop: 16, display: 'flex', gap: 8 }}>
+        <div className="mt-4 flex gap-2">
           {canSign && (
             <Button onClick={async () => { await signContract(token!, c._id || c.id); push({ title: 'Contrato firmado', tone: 'success' }); await load(); }}>
               Firmar contrato
@@ -196,10 +216,10 @@ const ContractDetail: React.FC = () => {
           </Button>
         </div>
       </Card>
-      <div style={{ marginTop: 12 }}>
+      <div className="mt-3">
         <CopyLinkButton />
       </div>
-      <div style={{ marginTop: 16 }}>
+      <div className="mt-4">
         <ChatPanel kind="contract" refId={c._id || c.id} />
       </div>
     </div>
