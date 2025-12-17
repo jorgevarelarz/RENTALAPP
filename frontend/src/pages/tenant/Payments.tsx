@@ -35,6 +35,7 @@ export default function TenantPayments() {
         isOpen={showModal}
         onClose={() => setShowModal(false)}
         policyTypes={['terms_of_service', 'data_processing']}
+        pendingType={pendingPolicy?.policyType}
       />
     </div>
   );

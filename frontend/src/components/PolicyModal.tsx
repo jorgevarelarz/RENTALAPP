@@ -6,12 +6,24 @@ interface PolicyModalProps {
   isOpen: boolean;
   onClose: () => void;
   policyTypes?: string[];
+  pendingType?: string;
+  title?: string;
 }
 
-export default function PolicyModal({ isOpen, onClose, policyTypes }: PolicyModalProps) {
+const typeLabels: Record<string, string> = {
+  privacy_policy: 'Política de Privacidad',
+  terms_of_service: 'Términos de Servicio',
+  data_processing: 'Política de Datos',
+};
+
+export default function PolicyModal({ isOpen, onClose, policyTypes, pendingType, title }: PolicyModalProps) {
   const { acceptPolicy } = usePolicyAcceptance(undefined, policyTypes as any);
 
   if (!isOpen) return null;
+
+  const label = typeLabels[pendingType ?? 'privacy_policy'] || 'Política';
+  const policyTitle = title || `Debes aceptar ${label}`;
+  const legalHref = pendingType ? `/api/legal/${pendingType.replace('_', '-')}` : undefined;
 
   const handleAccept = () => {
     acceptPolicy();
@@ -29,9 +41,21 @@ export default function PolicyModal({ isOpen, onClose, policyTypes }: PolicyModa
           <X size={24} />
         </button>
 
-        <h2 className="text-2xl font-bold mb-4">Política de Privacidad</h2>
+        <h2 className="text-2xl font-bold mb-4">{policyTitle}</h2>
 
         <div className="space-y-4 text-gray-700">
+          {legalHref && (
+            <div className="mb-2">
+              <a
+                href={legalHref}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-blue-600 underline text-sm"
+              >
+                Leer {label}
+              </a>
+            </div>
+          )}
           <section>
             <h3 className="text-xl font-semibold mb-2">1. Introducción</h3>
             <p>
@@ -128,7 +152,7 @@ export default function PolicyModal({ isOpen, onClose, policyTypes }: PolicyModa
             onClick={handleAccept}
             className="flex-1 bg-blue-600 text-white px-6 py-3 rounded-lg hover:bg-blue-700 font-semibold transition-colors"
           >
-            Aceptar y Continuar
+            Aceptar {label}
           </button>
           <button
             onClick={onClose}

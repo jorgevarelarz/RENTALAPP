@@ -26,9 +26,10 @@ describe('PolicyModal', () => {
 
   it('renders content when open and handles cancel', () => {
     const onClose = jest.fn();
-    render(<PolicyModal isOpen={true} onClose={onClose} />);
+    render(<PolicyModal isOpen={true} onClose={onClose} pendingType="data_processing" />);
 
-    expect(screen.getByRole('heading', { name: /Política de Privacidad/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /Política de Datos/i })).toBeInTheDocument();
+    expect(screen.getByText(/Leer Política de Datos/i)).toBeInTheDocument();
 
     fireEvent.click(screen.getByText(/Cancelar/i));
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -44,9 +45,11 @@ describe('PolicyModal', () => {
       acceptPolicy,
     });
 
-    render(<PolicyModal isOpen={true} onClose={onClose} />);
+    render(<PolicyModal isOpen={true} onClose={onClose} pendingType="privacy_policy" />);
 
-    fireEvent.click(screen.getByText(/Aceptar y Continuar/i));
+    const buttons = screen.getAllByText(/Política de Privacidad/i);
+    const cta = buttons.find(el => el.tagName === 'BUTTON')!;
+    fireEvent.click(cta);
     expect(acceptPolicy).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
   });

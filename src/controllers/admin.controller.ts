@@ -2,6 +2,8 @@ import { Request, Response } from 'express';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
+import { UserPolicyAcceptance } from '../models/userPolicyAcceptance.model';
+import { PolicyVersion } from '../models/policy.model';
 
 /**
  * Returns aggregate statistics about the platform: total number of users
@@ -35,5 +37,51 @@ export const getStats = async (_req: Request, res: Response) => {
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: 'Error obteniendo estadísticas', details: error.message });
+  }
+};
+
+export const listPolicyAcceptances = async (req: Request, res: Response) => {
+  try {
+    const { userId, policyType, activeOnly } = req.query as {
+      userId?: string;
+      policyType?: string;
+      activeOnly?: string;
+    };
+
+    const match: any = {};
+    if (userId) match.userId = userId;
+    if (policyType) match.policyType = policyType;
+
+    let acceptances = await UserPolicyAcceptance.find(match).sort({ acceptedAt: -1 }).lean();
+
+    if (activeOnly === 'true') {
+      const now = new Date();
+      const active = await PolicyVersion.find({
+        isActive: true,
+        $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
+      }).lean();
+      const activeMap = new Map<string, string>();
+      active.forEach(p => activeMap.set(p.policyType, p.version));
+      acceptances = acceptances.filter(a => activeMap.get(a.policyType) === a.policyVersion);
+    }
+
+    const users = await User.find({ _id: { $in: acceptances.map(a => a.userId) } })
+      .select(['email'])
+      .lean();
+    const userMap = new Map<string, any>();
+    users.forEach(u => userMap.set(String(u._id), u));
+
+    const data = acceptances.map(a => ({
+      user: { id: String(a.userId), email: userMap.get(String(a.userId))?.email ?? '' },
+      policyType: a.policyType,
+      policyVersion: a.policyVersion,
+      acceptedAt: a.acceptedAt,
+      ip: a.ip,
+      userAgent: a.userAgent,
+    }));
+
+    res.json({ data });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'compliance_list_failed' });
   }
 };
