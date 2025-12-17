@@ -24,6 +24,7 @@ import AdminReports from "./pages/admin/Reports";
 import AdminIncidents from "./pages/admin/Incidents";
 import AdminSettings from "./pages/admin/Settings";
 import AdminPayments from "./pages/admin/Payments";
+import AdminCompliancePage from "./pages/admin/AdminCompliancePage";
 import RedirectHome from "./pages/RedirectHome";
 import MyContracts from "./pages/MyContracts";
 import LandlordDashboard from "./pages/LandlordDashboard";
@@ -209,6 +210,7 @@ export default function AppRoutes() {
             <Route path="/admin/incidents" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminIncidents /></RoleGuard></ProtectedRoute>} />
             <Route path="/admin/settings" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminSettings /></RoleGuard></ProtectedRoute>} />
             <Route path="/admin/payments" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminPayments /></RoleGuard></ProtectedRoute>} />
+            <Route path="/admin/compliance" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminCompliancePage /></RoleGuard></ProtectedRoute>} />
 
             {/* Public catalog for pros */}
             <Route path="/pros" element={<ProList />} />

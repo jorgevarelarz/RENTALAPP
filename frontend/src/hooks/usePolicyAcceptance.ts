@@ -13,20 +13,13 @@ const storageKey = (type: string) => `policy_version_${type}`;
 
 export const usePolicyAcceptance = (
   token: string | null = localStorage.getItem("token"),
-  requiredTypes: PolicyType[] = REQUIRED_TYPES
+  requiredTypes: PolicyType[] = [...REQUIRED_TYPES]
 ) => {
   const [loading, setLoading] = useState(true);
   const [needsAcceptance, setNeedsAcceptance] = useState(false);
   const [pending, setPending] = useState<
     { policyType: PolicyType; version: string }[]
   >([]);
-  const [activeVersions, setActiveVersions] = useState<
-    Record<PolicyType, string | null>
-  >({
-    privacy_policy: null,
-    terms_of_service: null,
-    data_processing: null,
-  });
 
   const acceptedVersions = useMemo(() => {
     const map: Record<string, string | null> = {};
@@ -51,24 +44,17 @@ export const usePolicyAcceptance = (
         });
 
         const activeList: any[] = res.data?.data || [];
-        const nextActive: Record<PolicyType, string | null> = {
-          privacy_policy: null,
-          terms_of_service: null,
-          data_processing: null,
-        };
         const nextPending: { policyType: PolicyType; version: string }[] = [];
 
         requiredTypes.forEach((type) => {
           const active = activeList.find((p) => p.policyType === type);
           const version = active?.version ?? null;
-          nextActive[type] = version;
           const accepted = acceptedVersions[type];
           if (version && version !== accepted) {
             nextPending.push({ policyType: type, version });
           }
         });
 
-        setActiveVersions(nextActive);
         setPending(nextPending);
         setNeedsAcceptance(nextPending.length > 0);
       } catch (err) {

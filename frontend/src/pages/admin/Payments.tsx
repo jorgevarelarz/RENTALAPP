@@ -1,13 +1,13 @@
 import React, { useState } from 'react';
-import { usePolicyAcceptance } from '../hooks/usePolicyAcceptance';
-import PolicyModal from '../components/PolicyModal';
+import { usePolicyAcceptance } from '../../hooks/usePolicyAcceptance';
+import PolicyModal from '../../components/PolicyModal';
 
 export default function AdminPayments() {
   const [showModal, setShowModal] = useState(false);
-  const { needsAcceptance, pendingPolicy, acceptPolicy } = usePolicyAcceptance([
-    'terms_of_service',
-    'data_processing',
-  ]);
+  const { needsAcceptance, pendingPolicy, acceptPolicy } = usePolicyAcceptance(
+    undefined,
+    ['terms_of_service', 'data_processing']
+  );
 
   const handleAccept = async () => {
     await acceptPolicy();
