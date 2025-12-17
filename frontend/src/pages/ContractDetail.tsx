@@ -187,6 +187,14 @@ const ContractDetail: React.FC = () => {
               Ver PDF firmado
             </button>
           )}
+          {c.signature?.auditPdfUrl && (
+            <button
+              onClick={() => window.open(c.signature.auditPdfUrl, '_blank')}
+              style={OUTLINE_BUTTON_STYLE}
+            >
+              Ver registro de auditoría
+            </button>
+          )}
         </div>
         {(c?.status === 'signing' || c?.status === 'pending_signature') && (
           <div className="mt-2 text-sm">

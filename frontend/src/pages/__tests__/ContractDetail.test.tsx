@@ -87,6 +87,24 @@ describe('ContractDetail', () => {
     expect(await screen.findByRole('button', { name: /ver pdf firmado/i })).toBeInTheDocument();
   });
 
+  test('Muestra “Ver registro de auditoría” cuando auditPdfUrl está presente y abre nueva pestaña', async () => {
+    const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null as any);
+    setAuth({ _id: 'u2', role: 'tenant' });
+    (contracts.getContract as jest.Mock).mockResolvedValue({
+      id: 'c1',
+      tenant: 'u2',
+      signature: { status: 'completed', auditPdfUrl: '/api/contracts/c1/audit-trail?format=pdf' },
+    });
+
+    render(<ContractDetail />);
+
+    const btn = await screen.findByRole('button', { name: /ver registro de auditoría/i });
+    expect(btn).toBeInTheDocument();
+    await userEvent.click(btn);
+    expect(openSpy).toHaveBeenCalledWith('/api/contracts/c1/audit-trail?format=pdf', '_blank');
+    openSpy.mockRestore();
+  });
+
   test('Render defensivo: sin signature trata como none y no crashea', async () => {
     setAuth({ _id: 'u1', role: 'landlord' });
     (contracts.getContract as jest.Mock).mockResolvedValue({ id: 'c1', owner: { id: 'u1' } });
