@@ -5,8 +5,11 @@ import { User } from '../models/user.model';
 import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
+import { requirePolicies } from '../middleware/requirePolicies';
+import type { PolicyType } from '../models/policy.model';
 
 const r = Router();
+const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
 
 /**
  * Crea (si no existe) o devuelve el Stripe Customer del usuario autenticado.
@@ -14,6 +17,7 @@ const r = Router();
 r.post(
   '/payments/customer',
   authenticate,
+  requirePolicies(REQUIRED_POLICIES),
   asyncHandler(async (req: any, res) => {
     const userId = req.user?.id ?? req.header('x-user-id');
     if (!userId) return res.status(400).json({ error: 'missing_user' });
@@ -46,6 +50,7 @@ const maybeAuth: any = (req: any, res: any, next: any) =>
 r.post(
   '/payments/intent',
   maybeAuth,
+  requirePolicies(REQUIRED_POLICIES),
   asyncHandler(async (req, res) => {
     const raw = (req.body as any)?.amountEUR;
     let amountEUR = Number(raw);

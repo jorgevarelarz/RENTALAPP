@@ -11,8 +11,11 @@ import { holdPayment, releasePayment } from '../utils/payment';
 import { calcPlatformFee } from '../utils/calcFee';
 import PlatformEarning from '../models/platformEarning.model';
 import { assertRole } from '../middleware/assertRole';
+import { requirePolicies } from '../middleware/requirePolicies';
+import type { PolicyType } from '../models/policy.model';
 
 const r = Router();
+const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
 
 function parsePagination(query: any) {
   const page = Math.max(1, parseInt(query.page as string) || 1);
@@ -69,7 +72,7 @@ r.post('/:id/quote', ...assertRole('pro'), async (req, res) => {
 });
 
 /** 3) Propietario aprueba → hold (escrow) */
-r.post('/:id/approve', ...assertRole('landlord'), async (req, res) => {
+r.post('/:id/approve', ...assertRole('landlord'), requirePolicies(REQUIRED_POLICIES), async (req, res) => {
   try {
     const userId = getUserId(req);
     const t = await Ticket.findById(req.params.id);
@@ -179,7 +182,7 @@ r.post('/:id/request-close', ...assertRole('landlord'), async (req, res) => {
 });
 
 // Tenant confirma solucionado → release
-r.post('/:id/resolve', ...assertRole('tenant'), async (req, res) => {
+r.post('/:id/resolve', ...assertRole('tenant'), requirePolicies(REQUIRED_POLICIES), async (req, res) => {
   try {
     const userId = getUserId(req);
     const t = await Ticket.findById(req.params.id);
