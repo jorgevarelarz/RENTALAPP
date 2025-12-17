@@ -102,7 +102,6 @@ if (process.env.NODE_ENV !== 'test') {
 
 // Stripe webhook BEFORE JSON parser (uses express.raw)
 app.use('/api', stripeWebhookRoutes);
-app.post('/api/contracts/signature/callback', signatureWebhook);
 
 // CORS: configurar orígenes desde CORS_ORIGIN (coma-separado). En producción, sin fallback amplio.
 const allowedOrigins = (process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000,http://localhost:3001'))
@@ -118,6 +117,19 @@ app.use(cors({
   exposedHeaders: ['Content-Disposition'],
   credentials:true
 }));
+
+// Webhook de firma (público): necesita body parseado + rawBody para HMAC
+app.post(
+  '/api/contracts/signature/callback',
+  express.json({
+    limit: '20mb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  }),
+  signatureWebhook,
+);
+
 app.use(express.json({
   limit: '20mb',
   verify: (req: any, _res, buf) => {

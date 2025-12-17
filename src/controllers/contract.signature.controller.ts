@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { isMock, isProd } from "../config/flags";
+import { ContractSignatureEvent } from "../models/contractSignatureEvent.model";
 
 type KnownStatuses = "signed" | "active" | "terminated" | "completed";
 
@@ -25,6 +26,60 @@ const verifyGenericHmac = (raw: string | undefined, signatureHeader: string | st
   const computed = crypto.createHmac('sha256', secret).update(raw || '').digest('hex');
   return signature === computed;
 };
+
+const stableStringify = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return `{${keys.map(k => `${JSON.stringify(k)}:${stableStringify(record[k])}`).join(',')}}`;
+};
+
+const getClientIp = (req: Request): string | undefined => {
+  const xf = req.header('x-forwarded-for');
+  if (xf) return xf.split(',')[0]?.trim();
+  const direct = (req as any).ip || (req as any).connection?.remoteAddress;
+  return direct;
+};
+
+async function recordSignatureEvent(params: {
+  contractId: string;
+  userId?: string;
+  envelopeId?: string;
+  provider?: string;
+  eventType: string;
+  timestamp: Date;
+  ip?: string;
+  userAgent?: string;
+}) {
+  const previous = await ContractSignatureEvent.findOne({ contractId: params.contractId })
+    .sort({ timestamp: -1, _id: -1 })
+    .lean();
+  const previousHash = previous?.currentHash || 'GENESIS';
+  const payload = {
+    contractId: params.contractId,
+    userId: params.userId || null,
+    envelopeId: params.envelopeId || null,
+    provider: params.provider || null,
+    eventType: params.eventType,
+    timestamp: params.timestamp.toISOString(),
+    ip: params.ip || null,
+    userAgent: params.userAgent || null,
+  };
+  const payloadStr = stableStringify(payload);
+  const currentHash = crypto.createHash('sha256').update(`${previousHash}|${payloadStr}`).digest('hex');
+  await ContractSignatureEvent.create({
+    contractId: params.contractId,
+    userId: params.userId,
+    eventType: params.eventType,
+    timestamp: params.timestamp,
+    ip: params.ip,
+    userAgent: params.userAgent,
+    previousHash,
+    currentHash,
+  });
+  return { previousHash, currentHash };
+}
 
 /**
  * Payload esperado (mock / proveedores reales):
@@ -159,6 +214,17 @@ export async function signatureWebhook(req: Request, res: Response) {
   const contract = await Contract.findOne({ 'signature.envelopeId': envelopeId });
   if (!contract) return res.status(404).json({ error: 'contract_not_found' });
 
+  const now = new Date();
+  await recordSignatureEvent({
+    contractId: String(contract._id),
+    envelopeId,
+    provider: (process.env.SIGN_PROVIDER || 'mock').toLowerCase(),
+    eventType: status,
+    timestamp: now,
+    ip: getClientIp(req),
+    userAgent: req.header('user-agent') || undefined,
+  });
+
   if (eventId) {
     try {
       await ProcessedEvent.create({ provider: 'webhook', eventId, contractId: contract._id });
@@ -170,7 +236,6 @@ export async function signatureWebhook(req: Request, res: Response) {
     }
   }
 
-  const now = new Date();
   const updates: any = {
     'signature.updatedAt': now,
     'signature.status': status,
@@ -185,7 +250,7 @@ export async function signatureWebhook(req: Request, res: Response) {
       const updated = await transitionContract(String(contract._id), 'signed');
       await recordContractHistory(String(contract._id), 'SIGNED', null, { provider: 'webhook', envelopeId });
       await Contract.findByIdAndUpdate(contract._id, { $set: updates });
-      return res.json({ ok: true, status: updated.status });
+      return res.sendStatus(200);
     } catch (error: any) {
       const httpStatus = error?.status ?? 500;
       return res.status(httpStatus).json({
