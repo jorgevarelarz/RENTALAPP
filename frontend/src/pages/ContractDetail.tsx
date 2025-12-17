@@ -37,6 +37,14 @@ const ContractDetail: React.FC = () => {
     load();
   }, [load]);
 
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('signed') === 'true') {
+      push({ title: 'Contrato firmado correctamente', tone: 'success' });
+      load();
+    }
+  }, [load, push]);
+
   if (loading) return <div>Cargando contrato...</div>;
   if (error) return <div style={{ color: 'red' }}>{error}</div>;
   if (!c) return <div>Contrato no encontrado.</div>;
@@ -83,7 +91,8 @@ const ContractDetail: React.FC = () => {
                   push({ title: 'Contrato enviado a firma', tone: 'success' });
                   await load();
                 } catch (e: any) {
-          push({ title: 'No se pudo iniciar la firma', tone: 'error' });                } finally {
+                  push({ title: 'No se pudo iniciar la firma', tone: 'error' });
+                } finally {
                   setSending(false);
                 }
               }}

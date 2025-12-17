@@ -23,10 +23,21 @@ export const getContract = async (token: string, id: string) => {
 };
 
 export const sendToSignature = async (token: string, id: string) => {
-  const res = await axios.post(`/api/contracts/${id}/signature`, {}, {
+  const res = await axios.post(`/api/contracts/${id}/signature/init`, {}, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  return res.data as { status: string; envelopeId?: string; recipientUrls?: { landlordUrl?: string; tenantUrl?: string } };
+  return res.data as {
+    status: string;
+    envelopeId?: string;
+    recipientUrls?: { landlordUrl?: string; tenantUrl?: string };
+  };
+};
+
+export const getSignatureStatus = async (token: string, id: string) => {
+  const res = await axios.get(`/api/contracts/${id}/signature/status`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data as any;
 };
 
 export const signContract = async (token: string, id: string) => {

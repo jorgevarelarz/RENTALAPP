@@ -3,9 +3,10 @@ import { recordContractHistory } from '../utils/history';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface SignatureInitResult {
-  signUrl: string;
   envelopeId: string;
   provider: string;
+  recipientUrls: { landlordUrl?: string; tenantUrl?: string };
+  status: string;
 }
 
 export const initSignature = async (contractId: string, userId?: string): Promise<SignatureInitResult> => {
@@ -15,23 +16,26 @@ export const initSignature = async (contractId: string, userId?: string): Promis
     throw Object.assign(new Error('contract_not_found'), { status: 404 });
   }
 
+  // En un entorno real, aquí iría la llamada al proveedor (Docusign/Signaturit)
+  // para generar los URLs personalizados para cada parte.
   const envelopeId = contract.signature?.envelopeId || uuidv4();
-  const signUrl = provider === 'mock'
-    ? `https://example.com/sign/${envelopeId}`
-    : `https://sign-provider/${envelopeId}`;
+  const recipientUrls = {
+    landlordUrl: `https://sign.example.com/${envelopeId}?role=landlord`,
+    tenantUrl: `https://sign.example.com/${envelopeId}?role=tenant`,
+  };
 
   contract.signature = {
     ...(contract.signature || {}),
     provider: provider as any,
     envelopeId,
-    status: 'created',
+    status: 'sent',
     updatedAt: new Date(),
   };
   await contract.save();
   if (userId) {
     await recordContractHistory(contractId, 'SIGNATURE_INITIATED', userId, { provider, envelopeId });
   }
-  return { signUrl, envelopeId, provider };
+  return { envelopeId, provider, recipientUrls, status: 'sent' };
 };
 
 export const getSignatureStatus = async (contractId: string) => {
