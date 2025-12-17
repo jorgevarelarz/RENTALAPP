@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 
 type Acceptance = {
   user: { id: string; email: string };
@@ -73,6 +74,12 @@ export default function AdminCompliancePage() {
 
   return (
     <div style={{ padding: 16, display: 'grid', gap: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+        <h2 style={{ margin: 0 }}>Compliance</h2>
+        <Link to="/admin/compliance/audit-trails" className="px-3 py-1.5 rounded border border-gray-300">
+          Ver Audit Trails (firma)
+        </Link>
+      </div>
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
         <div>
           <label>Política:</label>

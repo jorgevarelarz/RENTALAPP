@@ -4,6 +4,7 @@ import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
 import { UserPolicyAcceptance } from '../models/userPolicyAcceptance.model';
 import { PolicyVersion } from '../models/policy.model';
+import { getAuditSummary } from '../services/compliance.service';
 
 /**
  * Returns aggregate statistics about the platform: total number of users
@@ -83,5 +84,32 @@ export const listPolicyAcceptances = async (req: Request, res: Response) => {
     res.json({ data });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'compliance_list_failed' });
+  }
+};
+
+export const listAuditTrails = async (req: Request, res: Response) => {
+  try {
+    const { userId, dateFrom, dateTo, status } = req.query as {
+      userId?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      status?: string;
+    };
+
+    const parseDate = (v?: string) => {
+      if (!v) return undefined;
+      const d = new Date(v);
+      return Number.isNaN(d.getTime()) ? undefined : d;
+    };
+
+    const data = await getAuditSummary({
+      userId,
+      status,
+      dateFrom: parseDate(dateFrom),
+      dateTo: parseDate(dateTo),
+    });
+    res.json({ data });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'audit_trails_failed' });
   }
 };

@@ -87,6 +87,7 @@ export default function AppLayout() {
                   <div style={{ fontSize: 12, opacity: .6, padding: '8px 8px 4px' }}>Administración</div>
                   <NavItem to="/admin">Panel admin</NavItem>
                   <NavItem to="/earnings">Ingresos</NavItem>
+                  <NavItem to="/admin/compliance">Compliance</NavItem>
                 </>
               )}
             </nav>
