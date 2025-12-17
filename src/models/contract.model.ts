@@ -190,4 +190,9 @@ const contractSchema = new Schema<IContract>(
   { timestamps: true },
 );
 
+contractSchema.index({ updatedAt: -1 });
+contractSchema.index({ 'signature.status': 1 });
+contractSchema.index({ landlord: 1 });
+contractSchema.index({ tenant: 1 });
+
 export const Contract = model<IContract>('Contract', contractSchema);

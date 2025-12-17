@@ -95,19 +95,7 @@ export const listAuditTrails = async (req: Request, res: Response) => {
       dateTo?: string;
       status?: string;
     };
-
-    const parseDate = (v?: string) => {
-      if (!v) return undefined;
-      const d = new Date(v);
-      return Number.isNaN(d.getTime()) ? undefined : d;
-    };
-
-    const data = await getAuditSummary({
-      userId,
-      status,
-      dateFrom: parseDate(dateFrom),
-      dateTo: parseDate(dateTo),
-    });
+    const data = await getAuditSummary({ userId, status, dateFrom, dateTo });
     res.json({ data });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'audit_trails_failed' });

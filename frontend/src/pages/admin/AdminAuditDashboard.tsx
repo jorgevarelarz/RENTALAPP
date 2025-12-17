@@ -3,15 +3,12 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 
 type AuditItem = {
-  contract: { id: string; status?: string };
-  landlord?: { id: string; email?: string };
-  tenant?: { id: string; email?: string };
-  type: string;
+  contractId: string;
+  user: { name?: string; email?: string } | null;
   status: string;
-  date?: string;
-  hash?: string | null;
+  lastEvent?: string;
+  auditHash?: string | null;
   auditPdfUrl?: string;
-  envelopeId?: string;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -118,8 +115,7 @@ export default function AdminAuditDashboard() {
             <thead>
               <tr>
                 <th style={cell}>Contrato</th>
-                <th style={cell}>Propietario</th>
-                <th style={cell}>Inquilino</th>
+                <th style={cell}>Usuario</th>
                 <th style={cell}>Estado firma</th>
                 <th style={cell}>Fecha</th>
                 <th style={cell}>Hash</th>
@@ -131,18 +127,17 @@ export default function AdminAuditDashboard() {
                 const badge = STATUS_BADGE[row.status] || { bg: '#f3f4f6', color: '#374151' };
                 const label = STATUS_LABELS[row.status] || row.status;
                 return (
-                  <tr key={`${row.contract.id}-${idx}`} style={{ background: idx % 2 ? '#f9fafb' : 'white' }}>
-                    <td style={cell}>{row.contract.id}</td>
-                    <td style={cell}>{row.landlord?.email || row.landlord?.id || '-'}</td>
-                    <td style={cell}>{row.tenant?.email || row.tenant?.id || '-'}</td>
+                  <tr key={`${row.contractId}-${idx}`} style={{ background: idx % 2 ? '#f9fafb' : 'white' }}>
+                    <td style={cell}>{row.contractId}</td>
+                    <td style={cell}>{row.user?.email || row.user?.name || '-'}</td>
                     <td style={cell}>
                       <span style={{ padding: '2px 8px', borderRadius: 999, fontSize: 12, fontWeight: 700, background: badge.bg, color: badge.color }}>
                         {label}
                       </span>
                     </td>
-                    <td style={cell}>{row.date ? new Date(row.date).toLocaleString() : '-'}</td>
+                    <td style={cell}>{row.lastEvent ? new Date(row.lastEvent).toLocaleString() : '-'}</td>
                     <td style={cell}>
-                      <code style={{ fontSize: 12 }}>{row.hash ? String(row.hash).slice(0, 12) + '…' : '-'}</code>
+                      <code style={{ fontSize: 12 }}>{row.auditHash ? String(row.auditHash).slice(0, 12) + '…' : '-'}</code>
                     </td>
                     <td style={cell}>
                       {row.auditPdfUrl ? (
@@ -168,4 +163,3 @@ const cell: React.CSSProperties = {
   textAlign: 'left',
   fontSize: 14,
 };
-

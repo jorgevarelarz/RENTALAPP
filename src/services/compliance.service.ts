@@ -1,31 +1,61 @@
-/**
- * @file Compliance service
- * @author Codex
- *
- * @description
- * This service handles business logic related to compliance,
- * including audit trails and contract status.
- */
+import { Contract } from '../models/contract.model';
+import { User } from '../models/user.model';
 
-/**
- * Retrieves a summary of audit trail data based on provided filters.
- *
- * @param filters - Filtering criteria (userId, dateFrom, dateTo, status)
- * @returns A list of audit trail summary records.
- */
-export const getAuditSummary = async (filters: any): Promise<any[]> => {
-  // TODO: Implement database query to fetch audit summary
-  console.log('Fetching audit summary with filters:', filters);
-  return [];
+type AuditSummaryFilters = {
+  userId?: string;
+  dateFrom?: string | Date;
+  dateTo?: string | Date;
+  status?: string;
 };
 
-/**
- * Retrieves a list of contracts that are pending signature or action.
- *
- * @returns A list of contracts with pending status.
- */
-export const getPendingContracts = async (): Promise<any[]> => {
-  // TODO: Implement database query to fetch pending contracts
-  console.log('Fetching pending contracts...');
-  return [];
+const toDate = (v?: string | Date) => {
+  if (!v) return undefined;
+  if (v instanceof Date) return v;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? undefined : d;
 };
+
+export async function getAuditSummary({ userId, dateFrom, dateTo, status }: AuditSummaryFilters) {
+  const query: any = {};
+
+  if (status) query['signature.status'] = status;
+
+  const from = toDate(dateFrom);
+  const to = toDate(dateTo);
+  if (from || to) {
+    query.updatedAt = {
+      ...(from && { $gte: from }),
+      ...(to && { $lte: to }),
+    };
+  }
+
+  if (userId) query.$or = [{ landlord: userId }, { tenant: userId }];
+
+  const contracts = await Contract.find(query)
+    .populate('landlord', 'name email')
+    .populate('tenant', 'name email')
+    .select('_id landlord tenant signature.status updatedAt signature.auditPdfHash signature.auditPdfUrl')
+    .sort({ updatedAt: -1 })
+    .limit(100)
+    .lean();
+
+  return contracts.map((c: any) => ({
+    contractId: String(c._id),
+    user:
+      c.landlord || c.tenant
+        ? { name: c.landlord?.name || c.tenant?.name, email: c.landlord?.email || c.tenant?.email }
+        : null,
+    status: c.signature?.status || 'none',
+    lastEvent: c.updatedAt,
+    auditHash: c.signature?.auditPdfHash || null,
+    auditPdfUrl: c.signature?.auditPdfUrl,
+  }));
+}
+
+export async function getPendingContracts() {
+  return Contract.find({ 'signature.status': { $ne: 'completed' } })
+    .select('_id updatedAt signature.status')
+    .sort({ updatedAt: -1 })
+    .limit(50)
+    .lean();
+}
