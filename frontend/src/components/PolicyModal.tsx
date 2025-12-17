@@ -5,10 +5,11 @@ import { usePolicyAcceptance } from '../hooks/usePolicyAcceptance';
 interface PolicyModalProps {
   isOpen: boolean;
   onClose: () => void;
+  policyTypes?: string[];
 }
 
-export default function PolicyModal({ isOpen, onClose }: PolicyModalProps) {
-  const { acceptPolicy } = usePolicyAcceptance();
+export default function PolicyModal({ isOpen, onClose, policyTypes }: PolicyModalProps) {
+  const { acceptPolicy } = usePolicyAcceptance(undefined, policyTypes as any);
 
   if (!isOpen) return null;
 
