@@ -6,14 +6,22 @@ import * as termCtrl from '../controllers/contract.terminate.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { Contract } from '../models/contract.model';
 import { assertRole } from '../middleware/assertRole';
+import { requirePolicies } from '../middleware/requirePolicies';
+import type { PolicyType } from '../models/policy.model';
 
 const router = Router();
+const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
 
 // List contracts
 router.get('/', authenticate, contractController.listContracts);
 
 // Crear contrato
-router.post('/', ...assertRole('landlord', 'admin'), contractController.create);
+router.post(
+  '/',
+  ...assertRole('landlord', 'admin'),
+  requirePolicies(REQUIRED_POLICIES),
+  contractController.create
+);
 
 // Descargar contrato en PDF
 router.get('/:id/pdf', authenticate, contractController.getContractPDF);
@@ -22,13 +30,18 @@ router.get('/:id/pdf', authenticate, contractController.getContractPDF);
 router.get('/:id/history', authenticate, contractController.getContractHistory);
 
 // Firmar contrato
-router.patch('/:id/sign', authenticate, contractController.signContract);
+router.patch('/:id/sign', authenticate, requirePolicies(REQUIRED_POLICIES), contractController.signContract);
 
 // Iniciar pago por SEPA con Stripe
 router.post('/:id/pay', ...assertRole('tenant'), contractController.initiatePayment);
 
 // Iniciar firma electrónica de contrato
-router.post('/:id/signature', ...assertRole('landlord', 'admin'), contractController.requestSignature);
+router.post(
+  '/:id/signature',
+  ...assertRole('landlord', 'admin'),
+  requirePolicies(REQUIRED_POLICIES),
+  contractController.requestSignature
+);
 
 // Callback de firma (mock)
 router.post('/:id/signature/callback', signCtrl.signatureCallback);
