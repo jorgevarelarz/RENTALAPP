@@ -96,7 +96,9 @@ if (compressionFn) {
 }
 app.use(metricsMiddleware);
 
-app.use(morgan('dev'));
+if (process.env.NODE_ENV !== 'test') {
+  app.use(morgan('dev'));
+}
 
 // Stripe webhook BEFORE JSON parser (uses express.raw)
 app.use('/api', stripeWebhookRoutes);

@@ -62,5 +62,7 @@
       "last 1 safari version"
     ]
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "baseline-browser-mapping": "^2.9.8"
+  }
 }
