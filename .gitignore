@@ -3,3 +3,5 @@ dist
 .env
 .env.staging
 .DS_Store
+storage/contracts-audit/*.pdf
+storage/contracts-signed/*.pdf

@@ -10,6 +10,7 @@ import path from 'path';
 import crypto from 'crypto';
 import { isMock, isProd } from "../config/flags";
 import { ContractSignatureEvent } from "../models/contractSignatureEvent.model";
+import { generateAuditTrailPdf } from "../services/auditTrailPdf";
 
 type KnownStatuses = "signed" | "active" | "terminated" | "completed";
 
@@ -196,6 +197,32 @@ export async function getSignature(req: Request, res: Response) {
   }
 }
 
+export async function getAuditTrail(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const format = String(req.query.format || 'json').toLowerCase();
+
+    const contract = await Contract.findById(id).lean();
+    if (!contract) return res.status(404).json({ error: 'contract_not_found' });
+
+    const u: any = (req as any).user;
+    const isParty = u?.role === 'admin' || String(contract.landlord) === u?.id || String(contract.tenant) === u?.id || String(contract.landlord) === u?._id || String(contract.tenant) === u?._id;
+    if (!isParty) return res.status(403).json({ error: 'forbidden' });
+
+    const events = await ContractSignatureEvent.find({ contractId: id }).sort({ timestamp: 1, _id: 1 }).lean();
+
+    if (format === 'pdf') {
+      const { absPath } = await generateAuditTrailPdf(id);
+      res.setHeader('Content-Type', 'application/pdf');
+      return fs.createReadStream(absPath).pipe(res);
+    }
+
+    return res.json({ contractId: id, events });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'audit_trail_failed' });
+  }
+}
+
 export async function signatureWebhook(req: Request, res: Response) {
   if (isProd() && isMock(process.env.SIGN_PROVIDER)) {
     return res.status(403).json({ error: 'signature_mock_not_allowed_in_prod' });
@@ -249,6 +276,9 @@ export async function signatureWebhook(req: Request, res: Response) {
     try {
       const updated = await transitionContract(String(contract._id), 'signed');
       await recordContractHistory(String(contract._id), 'SIGNED', null, { provider: 'webhook', envelopeId });
+      const pdf = await generateAuditTrailPdf(String(contract._id));
+      updates['signature.auditPdfUrl'] = `/api/contracts/${String(contract._id)}/audit-trail?format=pdf`;
+      updates['signature.auditPdfHash'] = pdf.sha256;
       await Contract.findByIdAndUpdate(contract._id, { $set: updates });
       return res.sendStatus(200);
     } catch (error: any) {

@@ -33,6 +33,9 @@ router.get('/:id/pdf', authenticate, contractController.getContractPDF);
 // Obtener historial de cambios de un contrato
 router.get('/:id/history', authenticate, contractController.getContractHistory);
 
+// Audit trail (JSON/PDF)
+router.get('/:id/audit-trail', authenticate, signCtrl.getAuditTrail);
+
 // Firmar contrato
 router.patch('/:id/sign', authenticate, requirePolicies(REQUIRED_POLICIES), contractController.signContract);
 

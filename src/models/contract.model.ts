@@ -45,6 +45,8 @@ export interface IContract extends Document {
     providerEventId?: string;
     pdfUrl?: string;
     pdfHash?: string;
+    auditPdfUrl?: string;
+    auditPdfHash?: string;
     recipientUrls?: { landlordUrl?: string; tenantUrl?: string };
   };
   /**
@@ -143,6 +145,8 @@ const contractSchema = new Schema<IContract>(
       providerEventId: { type: String },
       pdfUrl: { type: String },
       pdfHash: { type: String },
+      auditPdfUrl: { type: String },
+      auditPdfHash: { type: String },
     },
     // Encrypted IBAN for automatic payments (if provided)
     ibanEncrypted: { type: String },
