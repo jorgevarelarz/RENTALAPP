@@ -42,6 +42,14 @@ router.post(
   requirePolicies(REQUIRED_POLICIES),
   contractController.requestSignature
 );
+router.post(
+  '/:id/signature/init',
+  ...assertRole('landlord', 'admin'),
+  requirePolicies(REQUIRED_POLICIES),
+  signCtrl.initiateSignature
+);
+router.get('/:id/signature/status', authenticate, signCtrl.getSignature);
+router.post('/signature/webhook', signCtrl.signatureWebhook);
 
 // Callback de firma (mock)
 router.post('/:id/signature/callback', signCtrl.signatureCallback);

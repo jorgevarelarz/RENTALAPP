@@ -4,6 +4,7 @@ import { ProcessedEvent } from "../models/processedEvent.model";
 import { transitionContract } from "../services/contractState";
 import { recordContractHistory } from "../utils/history";
 import * as docusignProvider from "../services/signature/docusign.provider";
+import { initSignature, getSignatureStatus } from "../services/signature.service";
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
@@ -68,7 +69,8 @@ export async function signatureCallback(req: Request, res: Response) {
     return res.status(400).json({ error: "missing_eventId" });
   }
 
-  const contract = await Contract.findById(id);
+  const contractId = id || (req.body as any)?.contractId;
+  const contract = contractId ? await Contract.findById(contractId) : null;
   if (!contract) {
     return res.status(404).json({ error: "contract_not_found" });
   }
@@ -106,4 +108,34 @@ export async function signatureCallback(req: Request, res: Response) {
   }
 
   return res.json({ ok: true, status: contract.status, ignored: true });
+}
+
+export async function initiateSignature(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const userId = (req as any).user?._id || (req as any).user?.id;
+    const result = await initSignature(id, userId);
+    res.status(201).json(result);
+  } catch (error: any) {
+    const code = error?.status || 500;
+    res.status(code).json({ error: error?.message || 'init_signature_failed' });
+  }
+}
+
+export async function getSignature(req: Request, res: Response) {
+  try {
+    const { id } = req.params;
+    const status = await getSignatureStatus(id);
+    res.json(status);
+  } catch (error: any) {
+    const code = error?.status || 500;
+    res.status(code).json({ error: error?.message || 'signature_status_failed' });
+  }
+}
+
+export async function signatureWebhook(req: Request, res: Response) {
+  // Reutiliza signatureCallback permitiendo contractId en body
+  (req as any).params = (req as any).params || {};
+  (req as any).params.id = (req as any).params.id || (req.body as any)?.contractId;
+  return signatureCallback(req, res);
 }
