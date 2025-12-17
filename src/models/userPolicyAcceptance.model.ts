@@ -3,7 +3,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IUserPolicyAcceptance extends Document {
   userId: mongoose.Types.ObjectId;
-  policyType: 'privacy_policy' | 'terms_of_service' | 'cookies_policy';
+  policyType: 'privacy_policy' | 'terms_of_service' | 'cookies_policy' | 'data_processing';
   policyVersion: string;
   acceptedAt: Date;
   ip?: string;
@@ -21,7 +21,7 @@ const UserPolicyAcceptanceSchema = new Schema<IUserPolicyAcceptance>(
     policyType: {
       type: String,
       required: true,
-      enum: ['privacy_policy', 'terms_of_service', 'cookies_policy'],
+      enum: ['privacy_policy', 'terms_of_service', 'cookies_policy', 'data_processing'],
     },
     policyVersion: {
       type: String,

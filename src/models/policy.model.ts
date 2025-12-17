@@ -1,6 +1,10 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type PolicyType = 'privacy_policy' | 'terms_of_service' | 'cookies_policy';
+export type PolicyType =
+  | 'privacy_policy'
+  | 'terms_of_service'
+  | 'cookies_policy'
+  | 'data_processing';
 
 export interface IPolicyVersion extends Document {
   policyType: PolicyType;
@@ -16,7 +20,7 @@ const PolicyVersionSchema = new Schema<IPolicyVersion>(
     policyType: {
       type: String,
       required: true,
-      enum: ['privacy_policy', 'terms_of_service', 'cookies_policy'],
+      enum: ['privacy_policy', 'terms_of_service', 'cookies_policy', 'data_processing'],
       index: true,
     },
     version: {
