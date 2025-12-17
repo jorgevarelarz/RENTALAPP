@@ -11,6 +11,9 @@ export interface SignatureInitResult {
 
 export const initSignature = async (contractId: string, userId?: string): Promise<SignatureInitResult> => {
   const provider = (process.env.SIGN_PROVIDER || 'mock').toLowerCase();
+  if (process.env.NODE_ENV === 'production' && provider === 'mock') {
+    throw Object.assign(new Error('signature_mock_not_allowed_in_prod'), { status: 403 });
+  }
   const contract = await Contract.findById(contractId);
   if (!contract) {
     throw Object.assign(new Error('contract_not_found'), { status: 404 });
@@ -28,6 +31,7 @@ export const initSignature = async (contractId: string, userId?: string): Promis
     ...(contract.signature || {}),
     provider: provider as any,
     envelopeId,
+    recipientUrls,
     status: 'sent',
     updatedAt: new Date(),
   };
@@ -43,5 +47,9 @@ export const getSignatureStatus = async (contractId: string) => {
   if (!contract) {
     throw Object.assign(new Error('contract_not_found'), { status: 404 });
   }
-  return contract.signature || { status: 'none' };
+  if (!contract.signature) return { status: 'none' };
+  if (contract.signature.status !== 'completed') {
+    return contract.signature;
+  }
+  return { status: contract.signature.status, pdfUrl: contract.signature.pdfUrl };
 };

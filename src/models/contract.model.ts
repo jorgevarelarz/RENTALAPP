@@ -45,6 +45,7 @@ export interface IContract extends Document {
     providerEventId?: string;
     pdfUrl?: string;
     pdfHash?: string;
+    recipientUrls?: { landlordUrl?: string; tenantUrl?: string };
   };
   /**
    * The current status of the contract. Contracts begin in a 'draft' state
@@ -125,6 +126,10 @@ const contractSchema = new Schema<IContract>(
       envelopeId: { type: String },
       status: { type: String, enum: ['none', 'created', 'sent', 'completed', 'declined', 'error'], default: 'none' },
       updatedAt: { type: Date },
+      recipientUrls: {
+        landlordUrl: { type: String },
+        tenantUrl: { type: String },
+      },
       events: {
         type: [
           {

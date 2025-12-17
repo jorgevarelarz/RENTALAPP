@@ -23,6 +23,10 @@ router.post(
   contractController.create
 );
 
+// Webhooks de firma (globales, antes de rutas con :id)
+router.post('/signature/callback', signCtrl.signatureCallback);
+router.post('/signature/webhook', signCtrl.signatureWebhook);
+
 // Descargar contrato en PDF
 router.get('/:id/pdf', authenticate, contractController.getContractPDF);
 
@@ -49,10 +53,6 @@ router.post(
   signCtrl.initiateSignature
 );
 router.get('/:id/signature/status', authenticate, signCtrl.getSignature);
-router.post('/signature/webhook', signCtrl.signatureWebhook);
-
-// Callback de firma (mock)
-router.post('/:id/signature/callback', signCtrl.signatureCallback);
 
 // Activar contrato
 router.post('/:id/activate', authenticate, lifeCtrl.activate);

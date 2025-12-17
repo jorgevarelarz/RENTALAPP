@@ -18,6 +18,14 @@ const isDuplicateKeyError = (error: unknown) => {
   return typeof error === "object" && error !== null && (error as any).code === 11000;
 };
 
+const verifyGenericHmac = (raw: string | undefined, signatureHeader: string | string[] | undefined, secret?: string) => {
+  if (!secret) return true;
+  const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
+  if (!signature) return false;
+  const computed = crypto.createHmac('sha256', secret).update(raw || '').digest('hex');
+  return signature === computed;
+};
+
 /**
  * Payload esperado (mock / proveedores reales):
  * { eventId: string, provider?: 'mock'|'signaturit'|..., status?: 'signed' }
@@ -28,7 +36,7 @@ export async function signatureCallback(req: Request, res: Response) {
   // DocuSign branch
   if (providerFlag === 'docusign') {
     try {
-      const raw = typeof req.body === 'string' || Buffer.isBuffer(req.body) ? (req.body as any) : JSON.stringify(req.body || {});
+      const raw = (req as any).rawBody ? (req as any).rawBody.toString('utf8') : typeof req.body === 'string' || Buffer.isBuffer(req.body) ? (req.body as any) : JSON.stringify(req.body || {});
       const ok = docusignProvider.verifyConnectHmac(raw, req.header('X-DocuSign-Signature-1') || req.header('x-docusign-signature-1'));
       if (!ok) return res.status(400).json({ error: 'invalid_hmac' });
       const body: any = typeof req.body === 'object' ? req.body : JSON.parse(String(raw || '{}'));
@@ -134,8 +142,60 @@ export async function getSignature(req: Request, res: Response) {
 }
 
 export async function signatureWebhook(req: Request, res: Response) {
-  // Reutiliza signatureCallback permitiendo contractId en body
-  (req as any).params = (req as any).params || {};
-  (req as any).params.id = (req as any).params.id || (req.body as any)?.contractId;
-  return signatureCallback(req, res);
+  if (isProd() && isMock(process.env.SIGN_PROVIDER)) {
+    return res.status(403).json({ error: 'signature_mock_not_allowed_in_prod' });
+  }
+  const secret = process.env.SIGN_WEBHOOK_SECRET;
+  const raw = (req as any).rawBody ? (req as any).rawBody.toString('utf8') : JSON.stringify(req.body || {});
+  if (!verifyGenericHmac(raw, req.headers['x-signature'], secret)) {
+    return res.status(401).json({ error: 'Invalid HMAC signature' });
+  }
+
+  const { envelopeId, event, status: bodyStatus, eventId } = (req.body || {}) as any;
+  const status: string = bodyStatus || event || 'unknown';
+
+  if (!envelopeId) return res.status(400).json({ error: 'missing_envelopeId' });
+
+  const contract = await Contract.findOne({ 'signature.envelopeId': envelopeId });
+  if (!contract) return res.status(404).json({ error: 'contract_not_found' });
+
+  if (eventId) {
+    try {
+      await ProcessedEvent.create({ provider: 'webhook', eventId, contractId: contract._id });
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        console.error('signature webhook event store failed', error);
+        return res.status(500).json({ error: 'event_store_failed' });
+      }
+    }
+  }
+
+  const now = new Date();
+  const updates: any = {
+    'signature.updatedAt': now,
+    'signature.status': status,
+    'signature.events': [...(contract.signature?.events || []), { at: now, type: status }],
+  };
+
+  if (status === 'completed' || status === 'signed') {
+    if (isProd() && isMock(process.env.SIGN_PROVIDER)) {
+      return res.status(503).json({ error: 'signature_mock_not_allowed_in_prod' });
+    }
+    try {
+      const updated = await transitionContract(String(contract._id), 'signed');
+      await recordContractHistory(String(contract._id), 'SIGNED', null, { provider: 'webhook', envelopeId });
+      await Contract.findByIdAndUpdate(contract._id, { $set: updates });
+      return res.json({ ok: true, status: updated.status });
+    } catch (error: any) {
+      const httpStatus = error?.status ?? 500;
+      return res.status(httpStatus).json({
+        error: error?.message || 'signature_callback_failed',
+        from: error?.from,
+        to: error?.to,
+      });
+    }
+  }
+
+  await Contract.findByIdAndUpdate(contract._id, { $set: updates });
+  return res.sendStatus(200);
 }

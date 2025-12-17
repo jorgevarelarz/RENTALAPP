@@ -27,7 +27,6 @@ import paymentsRoutes from './routes/payments.routes';
 import contractPaymentsRoutes from './routes/contract.payments.routes';
 import stripeWebhookRoutes from './routes/stripe.webhook';
 import identityRoutes from './routes/identity.routes';
-import signatureRoutes from './routes/signature.routes';
 import chatRoutes from './routes/chat.routes';
 import serviceOfferRoutes from './routes/serviceOffers.routes';
 import demoContractRoutes from './routes/demoContract.routes';
@@ -49,6 +48,7 @@ import rateLimit from 'express-rate-limit';
 import { requestId } from './middleware/requestId';
 import { loadEnv } from './config/env';
 import { metricsMiddleware, metricsHandler } from './metrics';
+import { signatureWebhook } from './controllers/contract.signature.controller';
 
 // Load environment variables
 dotenv.config();
@@ -102,6 +102,7 @@ if (process.env.NODE_ENV !== 'test') {
 
 // Stripe webhook BEFORE JSON parser (uses express.raw)
 app.use('/api', stripeWebhookRoutes);
+app.post('/api/contracts/signature/callback', signatureWebhook);
 
 // CORS: configurar orígenes desde CORS_ORIGIN (coma-separado). En producción, sin fallback amplio.
 const allowedOrigins = (process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000,http://localhost:3001'))
@@ -117,7 +118,12 @@ app.use(cors({
   exposedHeaders: ['Content-Disposition'],
   credentials:true
 }));
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({
+  limit: '20mb',
+  verify: (req: any, _res, buf) => {
+    req.rawBody = buf;
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 // Proteger contra HTTP Parameter Pollution en query; no tocar body JSON para evitar falsos positivos
 app.use(hpp({ checkBody: false, checkQuery: true }));
@@ -191,7 +197,6 @@ app.use('/api/chat', requireVerified, chatRoutes);
 app.use('/api/contracts', requireVerified, contractPaymentsRoutes);
 app.use('/api', paymentsRoutes);
 app.use('/api', requireVerified, connectRoutes);
-app.use('/api', requireVerified, signatureRoutes);
 app.use('/api', requireVerified, serviceOfferRoutes);
 
 // Admin

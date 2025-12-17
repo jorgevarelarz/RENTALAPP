@@ -1,6 +1,7 @@
 import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
+import crypto from 'crypto';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
 import { Contract } from '../../src/models/contract.model';
 
@@ -16,6 +17,7 @@ describe('Contract signature flow', () => {
   afterEach(clearDb);
 
   it('initializes signature and updates status on webhook', async () => {
+    process.env.SIGN_WEBHOOK_SECRET = 'secret';
     const landlordToken = signToken({ _id: '507f1f77bcf86cd799439011', role: 'landlord', isVerified: true });
     // create contract
     const contract = await Contract.create({
@@ -39,12 +41,18 @@ describe('Contract signature flow', () => {
       .set('Authorization', `Bearer ${landlordToken}`)
       .expect(201);
 
-    expect(initRes.body).toHaveProperty('signUrl');
+    expect(initRes.body).toHaveProperty('recipientUrls.landlordUrl');
+    expect(initRes.body).toHaveProperty('recipientUrls.tenantUrl');
     const envelopeId = initRes.body.envelopeId;
+
+    const webhookPayload = { envelopeId, status: 'signed', provider: 'mock' };
+    const bodyString = JSON.stringify(webhookPayload);
+    const signature = crypto.createHmac('sha256', process.env.SIGN_WEBHOOK_SECRET).update(bodyString).digest('hex');
 
     await request(app)
       .post(`/api/contracts/signature/webhook`)
-      .send({ contractId: String(contract._id), eventId: 'evt_123', status: 'signed', provider: 'mock' })
+      .set('x-signature', signature)
+      .send(webhookPayload)
       .expect(200);
 
     const status = await request(app)
@@ -53,5 +61,6 @@ describe('Contract signature flow', () => {
       .expect(200);
 
     expect(status.body.status).toBeDefined();
+    expect(status.body.status).toBe('signed');
   });
 });
