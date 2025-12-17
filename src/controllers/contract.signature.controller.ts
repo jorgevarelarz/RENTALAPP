@@ -11,6 +11,7 @@ import crypto from 'crypto';
 import { isMock, isProd } from "../config/flags";
 import { ContractSignatureEvent } from "../models/contractSignatureEvent.model";
 import { generateAuditTrailPdf } from "../services/auditTrailPdf";
+import { emitAuditTrailUpdate } from "../events/auditTrail.events";
 
 type KnownStatuses = "signed" | "active" | "terminated" | "completed";
 
@@ -280,6 +281,7 @@ export async function signatureWebhook(req: Request, res: Response) {
       updates['signature.auditPdfUrl'] = `/api/contracts/${String(contract._id)}/audit-trail?format=pdf`;
       updates['signature.auditPdfHash'] = pdf.sha256;
       await Contract.findByIdAndUpdate(contract._id, { $set: updates });
+      emitAuditTrailUpdate({ contractId: String(contract._id), status, at: now.toISOString() });
       return res.sendStatus(200);
     } catch (error: any) {
       const httpStatus = error?.status ?? 500;
@@ -292,5 +294,6 @@ export async function signatureWebhook(req: Request, res: Response) {
   }
 
   await Contract.findByIdAndUpdate(contract._id, { $set: updates });
+  emitAuditTrailUpdate({ contractId: String(contract._id), status, at: now.toISOString() });
   return res.sendStatus(200);
 }

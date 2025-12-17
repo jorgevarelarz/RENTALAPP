@@ -4,7 +4,9 @@ import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
 import { UserPolicyAcceptance } from '../models/userPolicyAcceptance.model';
 import { PolicyVersion } from '../models/policy.model';
-import { getAuditSummary } from '../services/compliance.service';
+import { getAuditStatusStats, getAuditSummary } from '../services/compliance.service';
+import jwt from 'jsonwebtoken';
+import { auditTrailEvents } from '../events/auditTrail.events';
 
 /**
  * Returns aggregate statistics about the platform: total number of users
@@ -89,15 +91,71 @@ export const listPolicyAcceptances = async (req: Request, res: Response) => {
 
 export const listAuditTrails = async (req: Request, res: Response) => {
   try {
-    const { userId, dateFrom, dateTo, status } = req.query as {
+    const { userId, dateFrom, dateTo, status, page, pageSize, format } = req.query as {
       userId?: string;
       dateFrom?: string;
       dateTo?: string;
       status?: string;
+      page?: string;
+      pageSize?: string;
+      format?: string;
     };
-    const data = await getAuditSummary({ userId, status, dateFrom, dateTo });
-    res.json({ data });
+    const filters = { userId, status, dateFrom, dateTo, page, pageSize };
+
+    if (String(format || '').toLowerCase() === 'csv') {
+      const { items } = await getAuditSummary({ ...filters, page: 1, pageSize: 5000 });
+      const header = ['contractId', 'userEmail', 'status', 'lastEvent', 'auditHash', 'auditPdfUrl'];
+      const rows = items.map(i => [
+        i.contractId,
+        i.user?.email || '',
+        String(i.status || ''),
+        i.lastEvent ? new Date(i.lastEvent).toISOString() : '',
+        i.auditHash || '',
+        i.auditPdfUrl || '',
+      ]);
+      const csv = [header, ...rows]
+        .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+
+      res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+      res.setHeader('Content-Disposition', 'attachment; filename="audit-trails.csv"');
+      return res.send(csv);
+    }
+
+    const [{ items, total, page: p, pageSize: ps }, stats] = await Promise.all([
+      getAuditSummary(filters),
+      getAuditStatusStats({ userId, dateFrom, dateTo }),
+    ]);
+    res.json({ data: items, meta: { total, page: p, pageSize: ps }, stats });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'audit_trails_failed' });
+  }
+};
+
+export const streamAuditTrails = async (req: Request, res: Response) => {
+  try {
+    const token = String((req.query as any).token || '');
+    if (!token) return res.status(401).json({ error: 'token_required' });
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'insecure') as any;
+    if (decoded?.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
+
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    (res as any).flushHeaders?.();
+
+    res.write(`event: ready\ndata: ${JSON.stringify({ ok: true })}\n\n`);
+
+    const onUpdate = (payload: any) => {
+      res.write(`event: auditTrailUpdated\ndata: ${JSON.stringify(payload)}\n\n`);
+    };
+    auditTrailEvents.on('auditTrailUpdated', onUpdate);
+
+    req.on('close', () => {
+      auditTrailEvents.off('auditTrailUpdated', onUpdate);
+      res.end();
+    });
+  } catch (e: any) {
+    return res.status(401).json({ error: 'invalid_token' });
   }
 };

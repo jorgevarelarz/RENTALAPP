@@ -67,6 +67,8 @@ describe('Admin compliance audit trails', () => {
     expect(res.body.data[0].auditPdfUrl).toBe('/api/contracts/x/audit-trail?format=pdf');
     expect(res.body.data[0].auditHash).toMatch(/^[a]{64}$/);
     expect(res.body.data[0].user?.email).toBe('landlord@test.local');
+    expect(res.body.meta.total).toBe(1);
+    expect(res.body.stats.completed).toBe(1);
   });
 
   it('should filter by date range', async () => {
