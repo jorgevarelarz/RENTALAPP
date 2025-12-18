@@ -4,7 +4,7 @@ import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
 import { UserPolicyAcceptance } from '../models/userPolicyAcceptance.model';
 import { PolicyVersion } from '../models/policy.model';
-import { getAuditStatusStats, getAuditSummary } from '../services/compliance.service';
+import { getAuditStatusStats, getAuditSummary, getWeeklyStats } from '../services/compliance.service';
 import jwt from 'jsonwebtoken';
 import { auditTrailEvents } from '../events/auditTrail.events';
 import archiver from 'archiver';
@@ -210,5 +210,15 @@ export const exportAuditTrails = async (req: Request, res: Response) => {
     await archive.finalize();
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'zip_export_failed' });
+  }
+};
+
+export const listWeeklyStats = async (req: Request, res: Response) => {
+  try {
+    const weeks = Number(req.query.weeks || 12);
+    const data = await getWeeklyStats(Number.isNaN(weeks) ? 12 : weeks);
+    res.json({ data });
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'weekly_stats_failed' });
   }
 };

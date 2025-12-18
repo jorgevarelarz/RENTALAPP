@@ -5,3 +5,4 @@ dist
 .DS_Store
 storage/contracts-audit/*.pdf
 storage/contracts-signed/*.pdf
+uploads/contracts/*.pdf

@@ -28,6 +28,7 @@ export type AuditStatusStats = {
   created: number;
   other: number;
 };
+export type WeeklyStat = { week: string; completed: number; pending: number; declined: number };
 
 const toDate = (v?: string | Date) => {
   if (!v) return undefined;
@@ -113,4 +114,62 @@ export async function getPendingContracts() {
     .sort({ updatedAt: -1 })
     .limit(50)
     .lean();
+}
+
+export async function getWeeklyStats(weeks = 12): Promise<WeeklyStat[]> {
+  const since = new Date();
+  since.setDate(since.getDate() - weeks * 7);
+  const pipeline: any[] = [
+    { $match: { updatedAt: { $gte: since }, 'signature.status': { $nin: [null, 'none'] } } },
+    {
+      $project: {
+        status: '$signature.status',
+        updatedAt: 1,
+        year: { $isoWeekYear: '$updatedAt' },
+        week: { $isoWeek: '$updatedAt' },
+      },
+    },
+    {
+      $group: {
+        _id: { year: '$year', week: '$week' },
+        completed: { $sum: { $cond: [{ $eq: ['$status', 'completed'] }, 1, 0] } },
+        declined: { $sum: { $cond: [{ $eq: ['$status', 'declined'] }, 1, 0] } },
+        pending: {
+          $sum: {
+            $cond: [
+              { $in: ['$status', ['created', 'sent', 'pending_signature', 'signing']] },
+              1,
+              0,
+            ],
+          },
+        },
+      },
+    },
+    { $sort: { '_id.year': -1 as 1 | -1, '_id.week': -1 as 1 | -1 } },
+    { $limit: weeks },
+    {
+      $project: {
+        _id: 0,
+        week: {
+          $concat: [
+            { $toString: '$_id.year' },
+            '-W',
+            {
+              $cond: [
+                { $lt: ['$_id.week', 10] },
+                { $concat: ['0', { $toString: '$_id.week' }] },
+                { $toString: '$_id.week' },
+              ],
+            },
+          ],
+        },
+        completed: 1,
+        pending: 1,
+        declined: 1,
+      },
+    },
+    { $sort: { week: 1 as 1 | -1 } },
+  ];
+
+  return Contract.aggregate(pipeline) as any;
 }

@@ -4,6 +4,16 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
 import toast from 'react-hot-toast';
+import {
+  ResponsiveContainer,
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as ReTooltip,
+  Legend,
+} from 'recharts';
 
 type AuditItem = {
   contractId: string;
@@ -16,6 +26,7 @@ type AuditItem = {
 
 type AuditMeta = { total: number; page: number; pageSize: number };
 type AuditStats = { completed: number; sent: number; declined: number; error: number; created: number; other: number };
+type WeeklyPoint = { week: string; completed: number; pending: number; declined: number; total: number };
 
 const STATUS_LABELS: Record<string, string> = {
   created: 'Pendiente',
@@ -46,6 +57,8 @@ export default function AdminAuditDashboard() {
   const [status, setStatus] = useState('');
   const [selected, setSelected] = useState<Record<string, boolean>>({});
   const lastSseRefreshAtRef = useRef<number>(0);
+  const [weekly, setWeekly] = useState<WeeklyPoint[]>([]);
+  const [weeksRange, setWeeksRange] = useState(8);
 
   const debouncedUserId = useDebouncedValue(userId, 400);
   const debouncedDateFrom = useDebouncedValue(dateFrom, 400);
@@ -86,9 +99,29 @@ export default function AdminAuditDashboard() {
     }
   }, [debouncedUserId, debouncedDateFrom, debouncedDateTo, debouncedStatus, meta.page, meta.pageSize]);
 
+  const fetchWeekly = useCallback(async () => {
+    try {
+      const res = await axios.get('/api/admin/compliance/stats/weekly', { params: { weeks: weeksRange } });
+      const arr: WeeklyPoint[] = (res.data?.data || []).map((d: any) => ({
+        week: d.week,
+        completed: d.completed || 0,
+        pending: d.pending || 0,
+        declined: d.declined || 0,
+        total: (d.completed || 0) + (d.pending || 0) + (d.declined || 0),
+      }));
+      setWeekly(arr);
+    } catch (e) {
+      // silent fail
+    }
+  }, [weeksRange]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  useEffect(() => {
+    fetchWeekly();
+  }, [fetchWeekly]);
 
   useEffect(() => {
     setMeta(m => ({ ...m, page: 1 }));
@@ -245,6 +278,49 @@ export default function AdminAuditDashboard() {
         <StatCard label="Firmados" value={stats.completed} color="#166534" />
         <StatCard label="Pendientes" value={stats.sent + stats.created} color="#1d4ed8" />
         <StatCard label="Rechazados/Error" value={stats.declined + stats.error} color="#991b1b" />
+      </div>
+
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 12 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <h3 style={{ margin: 0 }}>Evolución semanal de firmas</h3>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            Rango:
+            <select value={weeksRange} onChange={e => setWeeksRange(Number(e.target.value))}>
+              {[4, 8, 12].map(n => (
+                <option key={n} value={n}>
+                  Últimas {n} semanas
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        {weekly.length === 0 ? (
+          <p style={{ marginTop: 8 }}>Sin datos.</p>
+        ) : (
+          <div style={{ height: 260, marginTop: 12 }}>
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={weekly}>
+                <CartesianGrid strokeDasharray="3 3" />
+                <XAxis dataKey="week" />
+                <YAxis allowDecimals={false} />
+                <ReTooltip
+                  formatter={(value: any, name: any, props: any) => {
+                    if (props && props.payload) {
+                      const total = props.payload.total || 1;
+                      const pct = Math.round(((value || 0) / total) * 100);
+                      return [`${value} (${pct}%)`, name];
+                    }
+                    return value;
+                  }}
+                />
+                <Legend />
+                <Line type="monotone" dataKey="completed" stroke="#166534" name="Firmados" />
+                <Line type="monotone" dataKey="pending" stroke="#1d4ed8" name="Pendientes" />
+                <Line type="monotone" dataKey="declined" stroke="#991b1b" name="Rechazados" />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
