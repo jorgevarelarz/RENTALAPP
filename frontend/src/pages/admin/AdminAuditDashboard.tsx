@@ -3,6 +3,7 @@ import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
+import toast from 'react-hot-toast';
 
 type AuditItem = {
   contractId: string;
@@ -78,7 +79,6 @@ export default function AdminAuditDashboard() {
       setData(res.data?.data || []);
       setMeta(res.data?.meta || { total: 0, page: meta.page, pageSize: meta.pageSize });
       setStats(res.data?.stats || { completed: 0, sent: 0, declined: 0, error: 0, created: 0, other: 0 });
-      setSelected({});
     } catch (err: any) {
       setError(err?.message || 'Error al cargar audit trails');
     } finally {
@@ -136,7 +136,7 @@ export default function AdminAuditDashboard() {
   const selectAllOnPage = () => {
     const next: Record<string, boolean> = {};
     for (const row of data) next[row.contractId] = true;
-    setSelected(next);
+    setSelected(prev => ({ ...prev, ...next }));
   };
 
   const clearSelection = () => setSelected({});
@@ -145,6 +145,56 @@ export default function AdminAuditDashboard() {
     const selectedIds = Object.keys(selected).filter(k => selected[k]);
     const urls = data.filter(d => selectedIds.includes(d.contractId)).map(d => d.auditPdfUrl).filter(Boolean) as string[];
     for (const u of urls) window.open(u, '_blank');
+  };
+
+  const exportZip = async () => {
+    const selectedIds = Object.keys(selected).filter(k => selected[k]);
+    if (selectedIds.length === 0) {
+      toast.error('Selecciona al menos un contrato');
+      return;
+    }
+
+    const toastId = 'zip-export';
+    let progressValue = 0;
+    const renderToast = () =>
+      toast.custom(
+        () => (
+          <div style={{ background: 'white', border: '1px solid #e5e7eb', padding: 12, borderRadius: 12, width: 320 }}>
+            <div style={{ fontWeight: 700 }}>Exportando ZIP…</div>
+            <div style={{ marginTop: 8, height: 8, background: '#f3f4f6', borderRadius: 999 }}>
+              <div style={{ height: 8, width: `${progressValue}%`, background: '#1d4ed8', borderRadius: 999 }} />
+            </div>
+            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>{progressValue}%</div>
+          </div>
+        ),
+        { id: toastId, duration: Infinity },
+      );
+
+    renderToast();
+    try {
+      const res = await axios.get('/api/admin/compliance/audit-trails/export', {
+        params: { format: 'zip', contractIds: selectedIds.join(',') },
+        responseType: 'blob',
+        onDownloadProgress: (evt: any) => {
+          if (evt.total) {
+            progressValue = Math.min(100, Math.round((evt.loaded / evt.total) * 100));
+            renderToast();
+          }
+        },
+      });
+      toast.dismiss(toastId);
+      toast.success('ZIP descargado');
+      const blob = new Blob([res.data], { type: 'application/zip' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'audit-trails.zip';
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      toast.dismiss(toastId);
+      toast.error(e?.message || 'Error exportando ZIP');
+    }
   };
 
   return (
@@ -181,6 +231,9 @@ export default function AdminAuditDashboard() {
         </div>
         <button onClick={fetchData}>Refrescar</button>
         <button onClick={exportCsv}>Exportar CSV</button>
+        <button onClick={exportZip} disabled={Object.keys(selected).filter(k => selected[k]).length === 0}>
+          Exportar ZIP
+        </button>
         <button onClick={selectAllOnPage} disabled={data.length === 0}>Seleccionar página</button>
         <button onClick={clearSelection} disabled={Object.keys(selected).length === 0}>Limpiar selección</button>
         <button onClick={openSelectedPdfs} disabled={Object.keys(selected).filter(k => selected[k]).length === 0}>

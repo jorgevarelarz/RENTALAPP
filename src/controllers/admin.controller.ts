@@ -7,6 +7,10 @@ import { PolicyVersion } from '../models/policy.model';
 import { getAuditStatusStats, getAuditSummary } from '../services/compliance.service';
 import jwt from 'jsonwebtoken';
 import { auditTrailEvents } from '../events/auditTrail.events';
+import archiver from 'archiver';
+import fs from 'fs';
+import path from 'path';
+import { generateAuditTrailPdf } from '../services/auditTrailPdf';
 
 /**
  * Returns aggregate statistics about the platform: total number of users
@@ -134,7 +138,7 @@ export const listAuditTrails = async (req: Request, res: Response) => {
 
 export const streamAuditTrails = async (req: Request, res: Response) => {
   try {
-    const token = String((req.query as any).token || '');
+    const token = req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'token_required' });
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'insecure') as any;
     if (decoded?.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
@@ -157,5 +161,54 @@ export const streamAuditTrails = async (req: Request, res: Response) => {
     });
   } catch (e: any) {
     return res.status(401).json({ error: 'invalid_token' });
+  }
+};
+
+export const exportAuditTrails = async (req: Request, res: Response) => {
+  try {
+    const format = String((req.query as any).format || '').toLowerCase();
+    if (format !== 'zip') return res.status(400).json({ error: 'unsupported_format' });
+
+    const idsRaw = (req.query as any).contractIds;
+    const ids: string[] = Array.isArray(idsRaw)
+      ? idsRaw.flatMap((v: any) => String(v).split(',').map((s: string) => s.trim()).filter(Boolean))
+      : String(idsRaw || '')
+          .split(',')
+          .map(s => s.trim())
+          .filter(Boolean);
+
+    if (ids.length === 0) return res.status(400).json({ error: 'contractIds_required' });
+
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="audit-trails.zip"');
+
+    const archive = archiver('zip', { zlib: { level: 9 } });
+    archive.on('error', err => {
+      console.error('zip export error', err);
+      try {
+        res.status(500).end();
+      } catch {}
+    });
+    archive.pipe(res);
+
+    for (const contractId of ids.slice(0, 200)) {
+      const dir = path.resolve(process.cwd(), 'storage/contracts-audit');
+      const abs = path.join(dir, `contract_${contractId}.pdf`);
+      if (!fs.existsSync(abs)) {
+        try {
+          await generateAuditTrailPdf(contractId);
+        } catch (e) {
+          // Skip if can't generate (missing contract/events)
+          continue;
+        }
+      }
+      if (fs.existsSync(abs)) {
+        archive.file(abs, { name: `contract_${contractId}.pdf` });
+      }
+    }
+
+    await archive.finalize();
+  } catch (e: any) {
+    res.status(500).json({ error: e?.message || 'zip_export_failed' });
   }
 };
