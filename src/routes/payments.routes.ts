@@ -72,4 +72,30 @@ r.post(
   })
 );
 
+// Crea un PaymentIntent flexible (amount + currency) para frontend Stripe Elements
+r.post(
+  '/payments/create-intent',
+  maybeAuth,
+  requirePolicies(REQUIRED_POLICIES),
+  asyncHandler(async (req, res) => {
+    const { amount, currency = 'eur' } = req.body as any;
+    const parsed = Number(amount);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      return res.status(400).json({ error: 'invalid_amount' });
+    }
+
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(500).json({ error: 'stripe_key_missing' });
+    }
+
+    const intent = await stripe.paymentIntents.create({
+      amount: Math.round(parsed),
+      currency: String(currency || 'eur').toLowerCase(),
+      automatic_payment_methods: { enabled: true },
+    });
+
+    res.json({ clientSecret: intent.client_secret });
+  })
+);
+
 export default r;
