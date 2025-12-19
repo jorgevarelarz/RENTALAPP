@@ -48,8 +48,16 @@ export const signContract = async (token: string, id: string) => {
   return res.data as any;
 };
 
-export const payDeposit = async (token: string, id: string, destination: 'escrow'|'authority'='escrow') => {
-  const res = await axios.post(`/api/contracts/${id}/deposit`, { destination }, {
+export const payDeposit = async (token: string, id: string) => {
+  const res = await axios.post(`/api/contracts/${id}/deposit`, { }, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  return res.data as any;
+};
+
+// Cobrar renta usando método guardado (off-session)
+export const payRentWithSavedMethod = async (token: string, id: string) => {
+  const res = await axios.post(`/api/contracts/${id}/pay-rent-saved`, {}, {
     headers: { Authorization: `Bearer ${token}` },
   });
   return res.data as any;

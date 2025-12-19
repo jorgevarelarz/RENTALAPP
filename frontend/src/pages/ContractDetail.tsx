@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { downloadPdf, getContract, payDeposit, signContract, sendToSignature } from '../services/contracts';
+import { downloadPdf, getContract, payDeposit, payRentWithSavedMethod, signContract, sendToSignature } from '../services/contracts';
 import { useAuth } from '../context/AuthContext';
 import Button from '../components/ui/Button';
 import ChatPanel from '../components/ChatPanel';
@@ -51,6 +51,7 @@ const ContractDetail: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const { push } = useToast();
   const [sending, setSending] = useState(false);
+  const [payingRent, setPayingRent] = useState(false);
   const [embeddedUrls, setEmbeddedUrls] = useState<{ landlordUrl?: string; tenantUrl?: string } | null>(null);
   const prevSignatureStatusRef = useRef<string | undefined>(undefined);
 
@@ -117,6 +118,7 @@ const ContractDetail: React.FC = () => {
   const amLandlord = user?._id === c.owner?.id || user?._id === c.landlord;
   const canSign = (amTenant && !c.signedByTenant) || (amLandlord && !c.signedByLandlord);
   const canPayDeposit = amTenant && !c.depositPaid;
+  const canPayRent = amTenant;
   const canSendToSignature = (amLandlord || user?.role === 'admin') && ((!c.signature?.status) || ['none','error'].includes(String(c.signature?.status)));
   const statusKey = (c?.signature?.status as string) || 'none';
   const badgeStyle = STATUS_COLORS[statusKey] || STATUS_COLORS.default;
@@ -215,8 +217,34 @@ const ContractDetail: React.FC = () => {
             </Button>
           )}
           {canPayDeposit && (
-            <Button onClick={async () => { await payDeposit(token!, c._id || c.id, 'escrow'); push({ title: 'Fianza pagada', tone: 'success' }); await load(); }}>
+            <Button onClick={async () => { await payDeposit(token!, c._id || c.id); push({ title: 'Fianza pagada', tone: 'success' }); await load(); }}>
               Pagar fianza
+            </Button>
+          )}
+          {canPayRent && (
+            <Button
+              onClick={async () => {
+                try {
+                  setPayingRent(true);
+                  await payRentWithSavedMethod(token!, c._id || c.id);
+                  push({ title: 'Renta pagada con método guardado', tone: 'success' });
+                  await load();
+                } catch (err: any) {
+                  const code = err?.response?.data?.error;
+                  if (code === 'authentication_required') {
+                    push({ title: 'Se requiere autenticación adicional en tu banco', tone: 'info' });
+                  } else if (code === 'no_saved_method') {
+                    push({ title: 'Añade un método en Mis Pagos antes de pagar', tone: 'info' });
+                  } else {
+                    push({ title: 'Error procesando el pago', tone: 'error' });
+                  }
+                } finally {
+                  setPayingRent(false);
+                }
+              }}
+              disabled={payingRent}
+            >
+              {payingRent ? 'Pagando…' : 'Pagar renta con tarjeta guardada'}
             </Button>
           )}
           <Button onClick={async () => { const blob = await downloadPdf(token!, c._id || c.id); const url = URL.createObjectURL(blob); window.open(url, '_blank'); }}>

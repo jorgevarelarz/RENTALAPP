@@ -3,8 +3,12 @@ import { stripe } from '../utils/stripe';
 import { Contract } from '../models/contract.model';
 import { User } from '../models/user.model';
 import { calcPlatformFeeOnRent, calcSurchargeCents, calcSignFeeOnRent } from '../utils/rentFees';
+import { authenticate } from '../middleware/auth.middleware';
+import { requirePolicies } from '../middleware/requirePolicies';
+import type { PolicyType } from '../models/policy.model';
 
 const r = Router();
+const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
 
 r.post('/contracts/:id/pay-rent', async (req, res) => {
   const tenantId = req.header('x-user-id');
@@ -73,6 +77,72 @@ r.post('/contracts/:id/pay-rent', async (req, res) => {
     signFee: signFeeCents / 100,
     totalToTenant: amountCents / 100,
   });
+});
+
+// Cobro con método guardado (off-session)
+r.post('/contracts/:id/pay-rent-saved', authenticate, requirePolicies(REQUIRED_POLICIES), async (req, res) => {
+  const tenantId = (req as any).user?.id;
+  if (!tenantId) return res.status(401).json({ error: 'unauthorized' });
+
+  const contract = await Contract.findById(req.params.id).populate(['landlord', 'tenant']);
+  if (!contract) return res.status(404).json({ error: 'contract_not_found' });
+  if (String((contract as any).tenant?._id || contract.tenant) !== String(tenantId)) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  const landlord: any = (contract as any).landlord;
+  const tenant: any = (contract as any).tenant;
+  if (!landlord?.stripeAccountId) return res.status(400).json({ error: 'owner_not_connected' });
+  if (!tenant?.stripeCustomerId) return res.status(400).json({ error: 'no_saved_method' });
+
+  const rentBase = contract.rentAmount ?? contract.rent;
+  const rentCents = Math.round((rentBase || 0) * 100);
+  const platformFeeCents = calcPlatformFeeOnRent(rentCents);
+  const totalChargeCents = rentCents + platformFeeCents;
+
+  const paymentMethods = await stripe.paymentMethods.list({
+    customer: tenant.stripeCustomerId,
+    type: 'card',
+  });
+  if (!paymentMethods.data.length) {
+    return res.status(400).json({ error: 'no_saved_method' });
+  }
+  const defaultPaymentMethod = paymentMethods.data[0].id;
+
+  try {
+    const intent = await stripe.paymentIntents.create({
+      amount: totalChargeCents,
+      currency: 'eur',
+      customer: tenant.stripeCustomerId,
+      payment_method: defaultPaymentMethod,
+      off_session: true,
+      confirm: true,
+      transfer_data: {
+        destination: landlord.stripeAccountId,
+        amount: rentCents,
+      },
+      metadata: {
+        contractId: String(contract._id),
+        landlordId: String(landlord._id),
+        tenantId: String(tenant._id),
+        period: new Date().toISOString(),
+      },
+    });
+
+    contract.paymentRef = intent.id;
+    contract.lastPaidAt = new Date();
+    await contract.save();
+
+    return res.json({ success: true, status: intent.status });
+  } catch (err: any) {
+    if (err?.code === 'authentication_required' && err?.raw?.payment_intent?.client_secret) {
+      return res.status(402).json({
+        error: 'authentication_required',
+        clientSecret: err.raw.payment_intent.client_secret,
+      });
+    }
+    return res.status(500).json({ error: err?.message || 'payment_failed' });
+  }
 });
 
 export default r;
