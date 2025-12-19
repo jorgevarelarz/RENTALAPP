@@ -98,4 +98,20 @@ r.post(
   })
 );
 
+// SetupIntent para guardar métodos de pago (tarjeta/SEPA) sin cobrar
+r.post(
+  '/payments/setup-intent',
+  maybeAuth,
+  requirePolicies(REQUIRED_POLICIES),
+  asyncHandler(async (_req, res) => {
+    if (!process.env.STRIPE_SECRET_KEY) {
+      return res.status(500).json({ error: 'stripe_key_missing' });
+    }
+    const setupIntent = await stripe.setupIntents.create({
+      automatic_payment_methods: { enabled: true },
+    });
+    res.json({ clientSecret: setupIntent.client_secret });
+  })
+);
+
 export default r;
