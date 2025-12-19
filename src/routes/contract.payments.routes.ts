@@ -10,7 +10,7 @@ import type { PolicyType } from '../models/policy.model';
 const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
 
-r.post('/contracts/:id/pay-rent', async (req, res) => {
+r.post('/:id/pay-rent', async (req, res) => {
   const tenantId = req.header('x-user-id');
   if (!tenantId) return res.status(400).json({ error: 'Missing x-user-id' });
 
@@ -80,7 +80,7 @@ r.post('/contracts/:id/pay-rent', async (req, res) => {
 });
 
 // Cobro con método guardado (off-session)
-r.post('/contracts/:id/pay-rent-saved', authenticate, requirePolicies(REQUIRED_POLICIES), async (req, res) => {
+r.post('/:id/pay-rent-saved', authenticate, requirePolicies(REQUIRED_POLICIES), async (req, res) => {
   const tenantId = (req as any).user?.id;
   if (!tenantId) return res.status(401).json({ error: 'unauthorized' });
 
