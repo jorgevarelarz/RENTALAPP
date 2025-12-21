@@ -2,14 +2,15 @@ import React from 'react';
 
 type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
-  size?: 'sm' | 'md';
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
 };
 
-const Button: React.FC<Props> = ({ variant = 'primary', size = 'md', children, ...rest }) => {
+const Button: React.FC<Props> = ({ variant = 'primary', size = 'md', children, className, style, ...rest }) => {
   const base: React.CSSProperties = {
     border: '1px solid var(--border)',
     borderRadius: 8,
-    padding: size === 'sm' ? '6px 10px' : '10px 14px',
+    padding: size === 'sm' ? '6px 10px' : size === 'lg' ? '12px 16px' : '10px 14px',
     cursor: 'pointer',
     fontWeight: 600,
   };
@@ -21,7 +22,7 @@ const Button: React.FC<Props> = ({ variant = 'primary', size = 'md', children, .
     outline: { background: 'transparent', color: 'var(--fg)' },
   };
   return (
-    <button style={{ ...base, ...variants[variant] }} {...rest}>
+    <button className={className} style={{ ...base, ...variants[variant], ...style }} {...rest}>
       {children}
     </button>
   );

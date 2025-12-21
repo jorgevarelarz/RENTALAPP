@@ -1,13 +1,14 @@
 import React from 'react';
 
-type Props = React.InputHTMLAttributes<HTMLInputElement> & { label?: string };
+type Props = React.InputHTMLAttributes<HTMLInputElement> & { label?: string; className?: string };
 
-const Input: React.FC<Props> = ({ label, style, ...rest }) => {
+const Input: React.FC<Props> = ({ label, style, className, ...rest }) => {
   return (
     <label style={{ display: 'grid', gap: 6 }}>
       {label && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{label}</span>}
       <input
         {...rest}
+        className={className}
         style={{
           border: '1px solid var(--border)',
           background: 'var(--card)',
@@ -22,4 +23,3 @@ const Input: React.FC<Props> = ({ label, style, ...rest }) => {
 };
 
 export default Input;
-
