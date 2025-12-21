@@ -124,7 +124,7 @@ const contractSchema = new Schema<IContract>(
       generatedAt: { type: Date },
     },
     signature: {
-      provider: { type: String, enum: ['mock', 'docusign'] },
+      provider: { type: String, enum: ['mock', 'docusign', 'signaturit'] },
       envelopeId: { type: String },
       status: { type: String, enum: ['none', 'created', 'sent', 'completed', 'declined', 'error'], default: 'none' },
       updatedAt: { type: Date },

@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { getContract } from '../services/contracts';
+import { getContract, createSignSession } from '../services/contracts';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import Card from '../components/ui/Card';
@@ -40,10 +40,12 @@ export default function ContractDetail() {
     if (!contract) return;
     setIsSigning(true);
     try {
-      await new Promise(r => setTimeout(r, 1000));
-      setSigningUrl("https://app.sandbox.signaturit.com/sign/widget/token_de_prueba_inventado");
-    } catch {
-      push({ title: 'Error al conectar con Signaturit', tone: 'error' });
+      const { signingUrl } = await createSignSession(contract._id);
+      if (!signingUrl) throw new Error('No se recibió URL de firma');
+      setSigningUrl(signingUrl);
+    } catch (error) {
+      console.error(error);
+      push({ title: 'Error al iniciar firma segura', tone: 'error' });
       setIsSigning(false);
     }
   };

@@ -49,6 +49,13 @@ router.post(
   requirePolicies(REQUIRED_POLICIES),
   contractController.requestSignature
 );
+
+// Iniciar sesión de firma con Signaturit (tenant)
+router.post(
+  '/:id/sign-session',
+  ...assertRole('tenant'),
+  contractController.createSigningSession
+);
 router.post(
   '/:id/signature/init',
   ...assertRole('landlord', 'admin'),

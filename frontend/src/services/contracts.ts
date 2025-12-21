@@ -80,3 +80,8 @@ export async function createContract(payload: any) {
   const { data } = await axios.post(`/api/contracts`, payload);
   return data.contract as any;
 }
+
+export async function createSignSession(id: string) {
+  const { data } = await axios.post(`/api/contracts/${id}/sign-session`);
+  return data as { signingUrl?: string };
+}

@@ -13,13 +13,17 @@ import { encryptIBAN } from '../utils/payment';
 import { recordContractHistory } from '../utils/history';
 import { ContractHistory } from '../models/history.model';
 import { decryptIBAN, createCustomerAndMandate, createPaymentIntent } from '../utils/payment';
-import { depositToEscrow, depositToAuthority } from '../utils/deposit';
+import { depositToEscrow } from '../utils/deposit';
 import { signaturitProvider } from '../signature/signaturit';
 import * as docusignProvider from '../services/signature/docusign.provider';
 import { sendRentReminderEmail, sendContractRenewalNotification } from '../utils/notification';
 import PDFDocument from 'pdfkit';
 import { createContractAction, signContractAction, initiatePaymentAction } from '../services/contract.actions';
 import type { ResolvedClause } from '../services/clauses.service';
+import { generateContractPdfFile } from '../services/pdfGenerator';
+import fs from 'fs/promises';
+// @ts-ignore
+import SignaturitClient from 'signaturit-sdk';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i);
 
@@ -274,7 +278,7 @@ export const initiatePayment = async (req: Request, res: Response) => {
 export const payDeposit = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const { destination, successUrl, cancelUrl } = req.body;
+    const { successUrl, cancelUrl } = req.body;
     const contract = await Contract.findById(id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
     const user = (req as any).user;
@@ -285,23 +289,13 @@ export const payDeposit = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'La fianza ya ha sido pagada' });
     }
     const depositAmount = contract.deposit;
-    const dest = destination === 'authority' ? 'authority' : 'escrow';
-    if (dest === 'escrow') {
-      const sessionUrl = await depositToEscrow(
-        contract.id,
-        depositAmount,
-        successUrl || process.env.DEPOSIT_SUCCESS_URL || 'https://example.com/deposit/success',
-        cancelUrl || process.env.DEPOSIT_CANCEL_URL || 'https://example.com/deposit/cancel'
-      );
-      res.json({ message: 'Iniciando pago de fianza', sessionUrl });
-    } else {
-      await depositToAuthority(contract.id, depositAmount);
-      contract.depositPaid = true;
-      contract.depositPaidAt = new Date();
-      await contract.save();
-      await recordContractHistory(contract.id, 'depositPaid', `Fianza pagada a ${dest}`);
-      res.json({ message: 'Fianza pagada', contract });
-    }
+    const sessionUrl = await depositToEscrow(
+      contract.id,
+      depositAmount,
+      successUrl || process.env.DEPOSIT_SUCCESS_URL || 'https://example.com/deposit/success',
+      cancelUrl || process.env.DEPOSIT_CANCEL_URL || 'https://example.com/deposit/cancel'
+    );
+    res.json({ message: 'Iniciando pago de fianza', sessionUrl });
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: 'Error al pagar la fianza', details: error.message });
@@ -376,6 +370,73 @@ export const requestSignature = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: 'Error iniciando la firma', details: error.message });
+  }
+};
+
+export const createSigningSession = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params;
+    const user = (req as any).user;
+    if (!process.env.SIGNATURIT_TOKEN) {
+      return res.status(500).json({ error: 'SIGNATURIT_TOKEN no configurado' });
+    }
+
+    const contract = await Contract.findById(id);
+    if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
+    if (String(contract.tenant) !== user?.id) {
+      return res.status(403).json({ error: 'Solo el inquilino puede firmar este contrato' });
+    }
+
+    const tenant = await User.findById(contract.tenant);
+    const landlord = await User.findById(contract.landlord);
+    const property = await Property.findById(contract.property);
+
+    const pdfPath = await generateContractPdfFile({
+      ...contract.toObject(),
+      tenantName: tenant?.name || (contract as any).tenantName,
+      tenantIdDoc: (tenant as any)?.dni || (contract as any).tenantIdDoc,
+      tenantEmail: tenant?.email || (contract as any).tenantEmail,
+      landlordName: landlord?.name || (contract as any).landlordName,
+      landlordIdDoc: (landlord as any)?.dni || (contract as any).landlordIdDoc,
+      propertyAddress: property?.address || (contract as any).propertyAddress,
+      rentAmount: contract.rent ?? (contract as any).rentAmount,
+      depositAmount: contract.deposit ?? (contract as any).depositAmount,
+    });
+
+    const client = new SignaturitClient(process.env.SIGNATURIT_TOKEN, true);
+    const response = await client.createSignature(pdfPath, {
+      recipients: [
+        {
+          name: tenant?.name || (contract as any).tenantName || 'Inquilino',
+          email: tenant?.email || (contract as any).tenantEmail || 'email@test.com',
+        },
+      ],
+      delivery_type: 'url',
+    });
+
+    await fs.unlink(pdfPath).catch(() => {});
+
+    const signingUrl =
+      (response as any)?.url ||
+      (response as any)?.signing_url ||
+      (response as any)?.signingUrl ||
+      (response as any)?.processed_documents?.[0]?.url;
+
+    contract.signature = {
+      ...(contract.signature || {}),
+      provider: 'signaturit',
+      envelopeId: (response as any)?.id || (response as any)?.signature_id,
+      status: 'sent',
+      updatedAt: new Date(),
+      recipientUrls: { tenantUrl: signingUrl },
+    };
+    contract.status = 'signing';
+    await contract.save();
+
+    res.json({ signingUrl });
+  } catch (error: any) {
+    console.error('Error Signaturit:', error);
+    res.status(500).json({ error: 'Error al conectar con proveedor de firma' });
   }
 };
 
