@@ -1,28 +1,21 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { createProperty, listProperties } from '../services/properties';
 import axios from 'axios';
+import { createProperty, listProperties } from '../services/properties';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
-import Dropzone from '../components/ui/Dropzone';
-import PropertyFormRHF from '../components/PropertyFormRHF';
-import { Building2, Plus, Home, BarChart3 } from 'lucide-react';
+import PropertyFormRHF, { PropertyFormData } from '../components/PropertyFormRHF';
+import { Building2, Plus, Home, BarChart3, Image as ImageIcon } from 'lucide-react';
 
 const API_BASE = process.env.REACT_APP_API_URL || (process.env as any).VITE_API_URL || 'http://localhost:3000';
 
 const LandlordDashboard: React.FC = () => {
   const { token, user } = useAuth();
   const [mine, setMine] = useState<any[]>([]);
-
-  const [isCreating, setIsCreating] = useState(false);
-  const [photosText, setPhotosText] = useState('');
-  const [photoUrls, setPhotoUrls] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-
-  const [editing, setEditing] = useState<any | null>(null);
-
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingProperty, setEditingProperty] = useState<any | null>(null);
   const { push } = useToast();
 
   const refresh = useCallback(async () => {
@@ -37,78 +30,120 @@ const LandlordDashboard: React.FC = () => {
 
   useEffect(() => { refresh(); }, [refresh]);
 
+  const handleUpload = async (files: File[]): Promise<string[]> => {
+    if (!token || !files.length) return [];
+    const form = new FormData();
+    files.forEach(f => form.append('files', f));
+    const res = await axios.post(`${API_BASE}/api/uploads/images`, form, { headers: { Authorization: `Bearer ${token}` } });
+    return res.data.urls || [];
+  };
+
+  const handleSubmit = async (data: PropertyFormData) => {
+    if (!token) return;
+    try {
+      const payload: any = { ...data, owner: user?._id };
+      if (editingProperty) {
+        await axios.patch(`${API_BASE}/api/properties/${editingProperty._id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+        push({ title: 'Propiedad actualizada', tone: 'success' });
+      } else {
+        await createProperty(token, payload);
+        push({ title: 'Propiedad creada correctamente', tone: 'success' });
+      }
+      setIsModalOpen(false);
+      setEditingProperty(null);
+      await refresh();
+    } catch (e: any) {
+      push({ title: e.response?.data?.message || 'Error al guardar', tone: 'error' });
+    }
+  };
+
+  const openCreate = () => {
+    setEditingProperty(null);
+    setIsModalOpen(true);
+  };
+
+  const openEdit = (p: any) => {
+    setEditingProperty(p);
+    setIsModalOpen(true);
+  };
+
   const activeProps = mine.filter(p => p.status === 'active').length;
   const draftProps = mine.filter(p => p.status !== 'active').length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-gray-900">Panel de Propietario</h2>
-          <p className="text-gray-500">Gestiona tu cartera inmobiliaria.</p>
+          <h1 className="text-3xl font-bold text-gray-900">Mi Cartera</h1>
+          <p className="text-gray-500 mt-1">Gestiona tus inmuebles y anuncios desde aquí.</p>
         </div>
-        <Button onClick={() => setIsCreating(true)} className="flex items-center gap-2">
-          <Plus size={18} /> Nueva Propiedad
+        <Button onClick={openCreate} className="shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
+          <Plus size={20} className="mr-2" /> Nueva Propiedad
         </Button>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
-          <div className="bg-blue-100 p-3 rounded-lg"><Home className="text-blue-600" /></div>
-          <div><p className="text-sm text-gray-500">Total Inmuebles</p><p className="text-2xl font-bold">{mine.length}</p></div>
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
+          <div className="bg-blue-50 p-3 rounded-lg"><Home className="text-blue-600" size={24}/></div>
+          <div><p className="text-sm text-gray-500 font-medium">Total Inmuebles</p><p className="text-2xl font-bold">{mine.length}</p></div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
-          <div className="bg-green-100 p-3 rounded-lg"><Building2 className="text-green-600" /></div>
-          <div><p className="text-sm text-gray-500">Publicados</p><p className="text-2xl font-bold">{activeProps}</p></div>
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
+          <div className="bg-green-50 p-3 rounded-lg"><Building2 className="text-green-600" size={24}/></div>
+          <div><p className="text-sm text-gray-500 font-medium">Publicados</p><p className="text-2xl font-bold">{activeProps}</p></div>
         </div>
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
-          <div className="bg-gray-100 p-3 rounded-lg"><BarChart3 className="text-gray-600" /></div>
-          <div><p className="text-sm text-gray-500">Borradores</p><p className="text-2xl font-bold">{draftProps}</p></div>
+        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
+          <div className="bg-gray-50 p-3 rounded-lg"><BarChart3 className="text-gray-600" size={24}/></div>
+          <div><p className="text-sm text-gray-500 font-medium">Borradores</p><p className="text-2xl font-bold">{draftProps}</p></div>
         </div>
       </div>
 
-      <Card style={{ padding: 0, overflow: 'hidden' }}>
-        <div className="p-4 border-b border-gray-100 bg-gray-50">
-          <h3 className="font-semibold text-gray-700">Mis Propiedades</h3>
+      <Card className="overflow-hidden border border-gray-200 shadow-sm">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
+          <h3 className="font-semibold text-gray-800">Mis Propiedades</h3>
         </div>
 
         {mine.length === 0 ? (
-          <div className="p-12 text-center text-gray-500">
-            <p>Aún no has añadido ninguna propiedad.</p>
-            <Button variant="secondary" className="mt-4" onClick={() => setIsCreating(true)}>Empezar ahora</Button>
+          <div className="p-16 text-center">
+            <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
+              <Home size={32} />
+            </div>
+            <h4 className="text-lg font-medium text-gray-900">Aún no tienes propiedades</h4>
+            <p className="text-gray-500 mb-6">Crea tu primer anuncio en menos de 2 minutos.</p>
+            <Button variant="secondary" onClick={openCreate}>Empezar ahora</Button>
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
             {mine.map((p: any) => (
-              <div key={p._id} className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-gray-50 transition-colors">
+              <div key={p._id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-gray-50 transition-colors group">
                 <div className="flex items-start gap-4">
-                  <div className="w-16 h-16 bg-gray-200 rounded-lg overflow-hidden flex-shrink-0">
+                  <div className="w-24 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200 relative">
                     {(p.images?.[0] || p.photos?.[0]) ? (
                       <img src={p.images?.[0] || p.photos?.[0]} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-gray-400"><Home size={20} /></div>
+                      <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon size={24} /></div>
+                    )}
+                    {p.onlyTenantPro && (
+                      <div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[10px] font-bold text-center py-0.5">PRO</div>
                     )}
                   </div>
 
                   <div>
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <h4 className="font-bold text-gray-900">{p.title}</h4>
+                    <div className="flex items-center gap-2 flex-wrap mb-1">
+                      <h4 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{p.title}</h4>
                       <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${
-                        p.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' : 'bg-gray-100 text-gray-600 border-gray-200'
+                        p.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' :
+                        p.status === 'rented' ? 'bg-gray-100 text-gray-600 border-gray-300' :
+                        'bg-yellow-50 text-yellow-700 border-yellow-200'
                       }`}>
-                        {p.status || 'borrador'}
+                        {p.status === 'active' ? 'Publicado' : p.status === 'rented' ? 'Alquilado' : 'Borrador'}
                       </span>
-                      {p.onlyTenantPro && (
-                        <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-                          Solo PRO
-                        </span>
-                      )}
                     </div>
-                    <p className="text-sm text-gray-500 mt-1">{p.address} · {p.price}€/mes</p>
+                    <p className="text-sm text-gray-600">{p.address}, {p.city}</p>
+                    <p className="text-sm font-medium text-gray-900 mt-1">{p.price} €/mes</p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 self-end sm:self-center">
+                <div className="flex items-center gap-2 self-end md:self-center">
                   {p.status !== 'active' && (
                     <Button
                       variant="primary" size="sm"
@@ -119,20 +154,22 @@ const LandlordDashboard: React.FC = () => {
                           await refresh();
                           push({ title: 'Propiedad publicada', tone: 'success' });
                         } catch (e: any) {
-                          const code = e?.response?.data?.error;
-                          const msg = code === 'min_images_3' ? 'Necesitas al menos 3 imágenes.' : 'Error al publicar';
+                          const msg = e?.response?.data?.error === 'min_images_3'
+                            ? 'Sube al menos 3 fotos para publicar.'
+                            : 'Error al publicar';
                           push({ title: msg, tone: 'error' });
                         }
                       }}
                       disabled={((p.images?.length || p.photos?.length || 0) < 3)}
+                      className={((p.images?.length || 0) < 3) ? "opacity-50 cursor-not-allowed" : ""}
+                      title={((p.images?.length || 0) < 3) ? "Faltan fotos" : "Publicar ahora"}
                     >
                       Publicar
                     </Button>
                   )}
-                  <Button variant="secondary" size="sm" onClick={() => setEditing(p)}>Editar</Button>
-                  <Button variant="ghost" size="sm" className="text-red-600 hover:bg-red-50 hover:text-red-700" onClick={async () => {
-                    if (!token) return;
-                    if (!window.confirm('¿Eliminar propiedad?')) return;
+                  <Button variant="secondary" size="sm" onClick={() => openEdit(p)}>Editar</Button>
+                  <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={async () => {
+                    if (!window.confirm('¿Estás seguro de eliminar este borrador?')) return;
                     await axios.delete(`${API_BASE}/api/properties/${p._id}`, { headers: { Authorization: `Bearer ${token}` } });
                     await refresh();
                     push({ title: 'Eliminada', tone: 'success' });
@@ -144,95 +181,22 @@ const LandlordDashboard: React.FC = () => {
         )}
       </Card>
 
-      <Modal open={isCreating} onClose={() => setIsCreating(false)} title="Nueva Propiedad">
-        <div className="space-y-6">
-          <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-            <h4 className="font-semibold text-sm mb-2">1. Sube fotos primero (Mínimo 3)</h4>
-            <Dropzone onFiles={async (files) => {
-              if (!token || !files.length) return;
-              const form = new FormData(); files.forEach(f => form.append('files', f));
-              try {
-                setUploading(true);
-                const res = await axios.post(`${API_BASE}/api/uploads/images`, form, { headers: { Authorization: `Bearer ${token}` } });
-                setPhotoUrls(prev => [...prev, ...res.data.urls]);
-              } finally { setUploading(false); }
-            }} />
-            {uploading && <p className="text-xs text-blue-600 mt-2">Subiendo imágenes...</p>}
-            <div className="flex gap-2 flex-wrap mt-3">
-              {photoUrls.map((u) => (
-                <div key={u} className="relative w-16 h-16">
-                  <img src={u} className="w-full h-full object-cover rounded border" alt="preview" />
-                  <button onClick={() => setPhotoUrls(l => l.filter(x => x !== u))} className="absolute -top-1 -right-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center text-[10px]">x</button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <PropertyFormRHF onSubmit={async (data) => {
-            if (!token) return;
-            const textUrls = photosText.split(',').map(s => s.trim()).filter(Boolean);
-            const payload: any = { owner: user?._id, ...data, images: [...photoUrls, ...textUrls] };
-            if (payload.onlyTenantPro) payload.requiredTenantProMaxRent = 0;
-            await createProperty(token, payload);
-            setPhotosText(''); setPhotoUrls([]); setIsCreating(false);
-            await refresh();
-            push({ title: 'Propiedad creada', tone: 'success' });
-          }} uploading={uploading} />
+      <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingProperty ? "Editar Propiedad" : "Nueva Propiedad"}>
+        <div className="pt-2">
+          <PropertyFormRHF
+            onSubmit={handleSubmit}
+            onUploadPhotos={handleUpload}
+            defaultValues={editingProperty ? {
+              ...editingProperty,
+              location: {
+                lat: editingProperty.location?.coordinates?.[1] || 40.4168,
+                lng: editingProperty.location?.coordinates?.[0] || -3.7038,
+              },
+              availableFrom: editingProperty.availableFrom ? String(editingProperty.availableFrom).slice(0,10) : undefined,
+              images: editingProperty.images || editingProperty.photos || [],
+            } : undefined}
+          />
         </div>
-      </Modal>
-
-      <Modal open={!!editing} onClose={() => setEditing(null)} title="Editar Propiedad">
-        {editing && (
-          <div className="space-y-4">
-             <div className="mb-4">
-                <label className="text-sm font-semibold">Imágenes actuales</label>
-                <div className="flex gap-2 flex-wrap mt-2 mb-4">
-                  {(editing.images || editing.photos || []).map((u:string) => (
-                    <div key={u} className="relative w-16 h-16 group">
-                      <img src={u} className="w-full h-full object-cover rounded border" alt="" />
-                      <button
-                        type="button"
-                        onClick={() => setEditing((ed:any) => ({ ...ed, images: (ed.images || ed.photos).filter((x:string) => x !== u) }))}
-                        className="absolute top-0 right-0 bg-red-500 text-white p-1 rounded-bl text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                      >Borrar</button>
-                    </div>
-                  ))}
-                </div>
-                <Dropzone onFiles={async (files) => {
-                   const form = new FormData(); files.forEach(f => form.append('files', f));
-                   const res = await axios.post(`${API_BASE}/api/uploads/images`, form, { headers: { Authorization: `Bearer ${token}` } });
-                   setEditing((ed:any) => ({ ...ed, images: [...(ed.images || ed.photos || []), ...res.data.urls] }));
-                }} />
-             </div>
-
-             <PropertyFormRHF
-              defaultValues={{
-                title: editing.title,
-                address: editing.address,
-                region: editing.region || '',
-                city: editing.city || '',
-                location: { lat: editing.location?.coordinates?.[1] || 40, lng: editing.location?.coordinates?.[0] || -3 },
-                price: editing.price,
-                deposit: editing.deposit ?? 0,
-                sizeM2: editing.sizeM2 ?? 50,
-                rooms: editing.rooms ?? 1,
-                bathrooms: editing.bathrooms ?? 1,
-                furnished: !!editing.furnished,
-                petsAllowed: !!editing.petsAllowed,
-                availableFrom: editing.availableFrom ? String(editing.availableFrom).slice(0,10) : '',
-                onlyTenantPro: !!editing.onlyTenantPro,
-              }}
-              onSubmit={async (data) => {
-                const payload: any = { ...data, images: editing.images || editing.photos };
-                if (payload.onlyTenantPro) payload.requiredTenantProMaxRent = 0;
-                await axios.patch(`${API_BASE}/api/properties/${editing._id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
-                setEditing(null);
-                await refresh();
-                push({ title: 'Actualizado', tone: 'success' });
-              }}
-            />
-          </div>
-        )}
       </Modal>
     </div>
   );

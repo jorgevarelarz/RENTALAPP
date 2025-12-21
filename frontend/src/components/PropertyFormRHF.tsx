@@ -1,10 +1,15 @@
-import React, { useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
+import {
+  MapPin, Home, Image as ImageIcon, Euro, ArrowLeft, ArrowRight, Check, Trash2, UploadCloud,
+} from 'lucide-react';
+import Dropzone from './ui/Dropzone';
+import Button from './ui/Button';
 
 const schema = z.object({
-  title: z.string().min(3, 'Título obligatorio'),
+  title: z.string().min(5, 'El título debe ser descriptivo (min 5 letras)'),
   address: z.string().min(5, 'Dirección obligatoria'),
   region: z.string().min(2, 'Región obligatoria'),
   city: z.string().min(2, 'Ciudad obligatoria'),
@@ -12,31 +17,46 @@ const schema = z.object({
     lat: z.coerce.number().min(-90).max(90),
     lng: z.coerce.number().min(-180).max(180),
   }),
-  price: z.coerce.number().min(1, 'Renta inválida'),
-  deposit: z.coerce.number().min(0, 'Depósito inválido'),
-  sizeM2: z.coerce.number().min(1, 'Tamaño inválido'),
+  sizeM2: z.coerce.number().min(10, 'Tamaño inválido (min 10m²)'),
   rooms: z.coerce.number().min(0, 'Habitaciones inválidas'),
   bathrooms: z.coerce.number().min(0, 'Baños inválidos'),
   furnished: z.boolean().default(false),
   petsAllowed: z.boolean().default(false),
+  images: z.array(z.string().url()).min(3, 'Sube al menos 3 fotos para publicar').max(20),
+  price: z.coerce.number().min(100, 'Renta mínima 100€'),
+  deposit: z.coerce.number().min(0, 'Depósito inválido'),
   availableFrom: z.string().min(2, 'Fecha requerida'),
-  images: z.array(z.string().url()).max(20).optional().default([]),
   onlyTenantPro: z.boolean().optional().default(false),
   requiredTenantProMaxRent: z.coerce.number().min(0).optional().default(0),
 });
 
 export type PropertyFormData = z.infer<typeof schema>;
 
-export default function PropertyFormRHF({
-  onSubmit,
-  defaultValues,
-  uploading,
-}: {
+const STEPS = [
+  { id: 'location', label: 'Ubicación', icon: <MapPin size={18} />, fields: ['title', 'address', 'city', 'region'] },
+  { id: 'details', label: 'Detalles', icon: <Home size={18} />, fields: ['sizeM2', 'rooms', 'bathrooms'] },
+  { id: 'photos', label: 'Galería', icon: <ImageIcon size={18} />, fields: ['images'] },
+  { id: 'price', label: 'Condiciones', icon: <Euro size={18} />, fields: ['price', 'deposit', 'availableFrom'] },
+];
+
+type Props = {
   onSubmit: (data: PropertyFormData) => Promise<void> | void;
   defaultValues?: Partial<PropertyFormData>;
-  uploading?: boolean;
-}) {
-  const { register, handleSubmit, watch, setValue, formState: { errors } } = useForm<any>({
+  onUploadPhotos: (files: File[]) => Promise<string[]>;
+};
+
+export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhotos }: Props) {
+  const [step, setStep] = useState(0);
+  const [uploading, setUploading] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    trigger,
+    formState: { errors },
+  } = useForm<PropertyFormData>({
     mode: 'onChange',
     resolver: zodResolver(schema) as any,
     defaultValues: {
@@ -47,12 +67,12 @@ export default function PropertyFormRHF({
       location: { lat: 40.4168, lng: -3.7038 },
       price: 0,
       deposit: 0,
-      sizeM2: 50,
+      sizeM2: 60,
       rooms: 1,
       bathrooms: 1,
       furnished: false,
       petsAllowed: false,
-      availableFrom: new Date().toISOString().slice(0,10),
+      availableFrom: new Date().toISOString().slice(0, 10),
       images: [],
       onlyTenantPro: false,
       requiredTenantProMaxRent: 0,
@@ -60,119 +80,241 @@ export default function PropertyFormRHF({
     },
   });
 
+  const images = watch('images') || [];
   const onlyPro = watch('onlyTenantPro');
   const price = watch('price');
 
   useEffect(() => {
-    const p = Number(price || 0);
-    if (onlyPro) setValue('requiredTenantProMaxRent', p || 0, { shouldValidate: false });
-    else setValue('requiredTenantProMaxRent', 0, { shouldValidate: false });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    if (onlyPro) setValue('requiredTenantProMaxRent', Number(price) || 0);
+    else setValue('requiredTenantProMaxRent', 0);
   }, [onlyPro, price, setValue]);
 
+  const nextStep = async () => {
+    const fieldsToValidate = STEPS[step].fields as any[];
+    const isValid = await trigger(fieldsToValidate);
+    if (isValid) setStep((s) => Math.min(s + 1, STEPS.length - 1));
+  };
+
+  const prevStep = () => setStep((s) => Math.max(s - 1, 0));
+
+  const handleDrop = async (files: File[]) => {
+    if (!files.length) return;
+    setUploading(true);
+    try {
+      const urls = await onUploadPhotos(files);
+      setValue('images', [...images, ...urls], { shouldValidate: true });
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setUploading(false);
+    }
+  };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit as any)} style={{ display: 'grid', gap: 12, maxWidth: 420 }}>
-      <label>
-        <div style={{ fontSize: 12, color: '#6b7280' }}>Título</div>
-        <input className="auth-input" placeholder="Piso céntrico" {...register('title')} />
-        {errors.title && (
-          <div style={{ color: 'red', fontSize: 12 }}>{String((errors.title as any).message || '')}</div>
-        )}
-      </label>
-      <label>
-        <div style={{ fontSize: 12, color: '#6b7280' }}>Dirección</div>
-        <input className="auth-input" placeholder="Calle…" {...register('address')} />
-        {errors.address && (
-          <div style={{ color: 'red', fontSize: 12 }}>{String((errors.address as any).message || '')}</div>
-        )}
-      </label>
-      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
-        <label>
-          <div style={{ fontSize: 12, color: '#6b7280' }}>Región</div>
-          <input className="auth-input" placeholder="madrid" {...register('region')} />
-        </label>
-        <label>
-          <div style={{ fontSize: 12, color: '#6b7280' }}>Ciudad</div>
-          <input className="auth-input" placeholder="Madrid" {...register('city')} />
-        </label>
-      </div>
-      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
-        <label>
-          <div style={{ fontSize: 12, color: '#6b7280' }}>Latitud</div>
-          <input className="auth-input" type="number" step="any" {...register('location.lat', { valueAsNumber: true })} />
-        </label>
-        <label>
-          <div style={{ fontSize: 12, color: '#6b7280' }}>Longitud</div>
-          <input className="auth-input" type="number" step="any" {...register('location.lng', { valueAsNumber: true })} />
-        </label>
-      </div>
-      <label>
-        <div style={{ fontSize: 12, color: '#6b7280' }}>Renta (EUR)</div>
-        <input className="auth-input" type="number" step="1" min="0" {...register('price', { valueAsNumber: true })} />
-        {errors.price && (
-          <div style={{ color: 'red', fontSize: 12 }}>{String((errors.price as any).message || '')}</div>
-        )}
-      </label>
-      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
-        <label>
-          <div style={{ fontSize: 12, color: '#6b7280' }}>Depósito (EUR)</div>
-          <input className="auth-input" type="number" step="1" min="0" {...register('deposit', { valueAsNumber: true })} />
-        </label>
-        <label>
-          <div style={{ fontSize: 12, color: '#6b7280' }}>Tamaño (m²)</div>
-          <input className="auth-input" type="number" step="1" min="1" {...register('sizeM2', { valueAsNumber: true })} />
-        </label>
-      </div>
-      <div style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr' }}>
-        <label>
-          <div style={{ fontSize: 12, color: '#6b7280' }}>Habitaciones</div>
-          <input className="auth-input" type="number" step="1" min="0" {...register('rooms', { valueAsNumber: true })} />
-        </label>
-        <label>
-          <div style={{ fontSize: 12, color: '#6b7280' }}>Baños</div>
-          <input className="auth-input" type="number" step="1" min="0" {...register('bathrooms', { valueAsNumber: true })} />
-        </label>
-      </div>
-      <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="checkbox" {...register('furnished')} /> Amueblado
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <input type="checkbox" {...register('petsAllowed')} /> Mascotas
-        </label>
-      </div>
-      <label>
-        <div style={{ fontSize: 12, color: '#6b7280' }}>Disponible desde</div>
-        <input className="auth-input" type="date" {...register('availableFrom')} />
-      </label>
-      <label style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <input type="checkbox" {...register('onlyTenantPro')} /> Solo inquilinos PRO
-      </label>
-      {/* Validación mínima se fija automáticamente al precio en el backend; no editable aquí */}
-      {onlyPro && (
-        <div style={{ fontSize: 12, color: '#374151', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: 8, padding: 12 }}>
-          <div style={{ fontWeight: 600, marginBottom: 6 }}>Requisito orientativo de ingresos (seguro de impago)</div>
-          {(() => {
-            const p = Number(watch('price') ?? 0);
-            if (!p || isNaN(p)) return <div>Introduce la renta para calcular.</div>;
-            const inc35 = Math.ceil(p / 0.35);
-            const inc30 = Math.ceil(p / 0.30);
-            const inc40 = Math.ceil(p / 0.40);
+    <div className="flex flex-col h-full max-h-[80vh]">
+      <div className="mb-6 px-1">
+        <div className="flex items-center justify-between relative">
+          <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-100 -z-10 rounded"></div>
+          {STEPS.map((s, i) => {
+            const isActive = i === step;
+            const isDone = i < step;
             return (
-              <div>
-                <div style={{ marginBottom: 6 }}>Mínimo recomendado (35%): <strong>{inc35.toLocaleString()} € / mes</strong></div>
-                <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.6 }}>
-                  <li>Estricto 30%: ≈ {inc30.toLocaleString()} € / mes</li>
-                  <li>Flexible 40%: ≈ {inc40.toLocaleString()} € / mes</li>
-                </ul>
+              <div key={s.id} className="flex flex-col items-center gap-2 bg-white px-2">
+                <div
+                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border-2 ${
+                    isActive
+                      ? 'border-blue-600 bg-blue-50 text-blue-600 scale-110'
+                      : isDone
+                      ? 'border-green-500 bg-green-500 text-white'
+                      : 'border-gray-200 text-gray-400'
+                  }`}
+                >
+                  {isDone ? <Check size={20} /> : s.icon}
+                </div>
+                <span className={`text-xs font-medium ${isActive ? 'text-blue-600' : 'text-gray-500'}`}>{s.label}</span>
               </div>
             );
-          })()}
-          <div style={{ marginTop: 6, color: '#6B7280' }}>El candidato PRO debe tener una validación (maxRent) ≥ la renta de este anuncio. Estos importes son orientativos para estimar ingresos necesarios.</div>
+          })}
         </div>
-      )}
-      {uploading && <div style={{ fontSize: 12 }}>Subiendo imágenes…</div>}
-      <button type="submit" className="auth-button">Guardar</button>
-    </form>
+      </div>
+
+      <form onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-y-auto px-1 py-2 space-y-6">
+        {step === 0 && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Título del anuncio</label>
+              <input className="auth-input w-full" placeholder="Ej. Ático luminoso en el centro" {...register('title')} autoFocus />
+              {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title.message}</p>}
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Dirección completa</label>
+              <input className="auth-input w-full" placeholder="Ej. Calle Mayor, 10, 3A" {...register('address')} />
+              {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address.message}</p>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Ciudad</label>
+                <input className="auth-input w-full" placeholder="Ej. Madrid" {...register('city')} />
+                {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city.message}</p>}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Región / Provincia</label>
+                <input className="auth-input w-full" placeholder="Ej. Comunidad de Madrid" {...register('region')} />
+                {errors.region && <p className="text-red-500 text-xs mt-1">{errors.region.message}</p>}
+              </div>
+            </div>
+
+            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+              <p className="text-sm text-blue-800 mb-3 font-medium">Coordenadas aproximadas (para el mapa)</p>
+              <div className="grid grid-cols-2 gap-4">
+                <input className="auth-input bg-white" type="number" step="any" placeholder="Latitud" {...register('location.lat', { valueAsNumber: true })} />
+                <input className="auth-input bg-white" type="number" step="any" placeholder="Longitud" {...register('location.lng', { valueAsNumber: true })} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {step === 1 && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Tamaño</label>
+                <div className="relative">
+                  <input className="auth-input w-full pr-8" type="number" {...register('sizeM2', { valueAsNumber: true })} />
+                  <span className="absolute right-3 top-2.5 text-gray-400 text-sm">m²</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Habitaciones</label>
+                <input className="auth-input w-full" type="number" {...register('rooms', { valueAsNumber: true })} />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Baños</label>
+                <input className="auth-input w-full" type="number" {...register('bathrooms', { valueAsNumber: true })} />
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <label className="flex items-center justify-between p-4 border rounded-xl hover:bg-gray-50 cursor-pointer transition-colors">
+                <span className="font-medium text-gray-700">¿Está amueblado?</span>
+                <input type="checkbox" className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500" {...register('furnished')} />
+              </label>
+              <label className="flex items-center justify-between p-4 border rounded-xl hover:bg-gray-50 cursor-pointer transition-colors">
+                <span className="font-medium text-gray-700">¿Admite mascotas?</span>
+                <input type="checkbox" className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500" {...register('petsAllowed')} />
+              </label>
+            </div>
+          </div>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className="bg-gray-50 p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-400 transition-colors">
+              <Dropzone onFiles={handleDrop} label="" />
+              <div className="text-center pointer-events-none">
+                <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                  <UploadCloud size={24} />
+                </div>
+                <p className="font-medium text-gray-900">Haz clic o arrastra fotos aquí</p>
+                <p className="text-sm text-gray-500 mt-1">Sube al menos 3 imágenes de buena calidad</p>
+              </div>
+            </div>
+
+            {uploading && (
+              <div className="text-center py-2 text-blue-600 animate-pulse text-sm font-medium">Subiendo imágenes...</div>
+            )}
+
+            {errors.images && <p className="text-red-500 text-sm text-center">{errors.images.message}</p>}
+
+            {images.length > 0 && (
+              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-4">
+                {images.map((url, idx) => (
+                  <div key={url} className="relative group aspect-square rounded-lg overflow-hidden border border-gray-200">
+                    <img src={url} alt={`Foto ${idx}`} className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setValue('images', images.filter((_, i) => i !== idx))}
+                      className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                    {idx === 0 && <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-1">Portada</span>}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Precio Mensual</label>
+              <div className="relative">
+                <input className="auth-input w-full pl-8 text-lg font-bold" type="number" {...register('price', { valueAsNumber: true })} placeholder="0" />
+                <span className="absolute left-3 top-3 text-gray-500">€</span>
+              </div>
+              {errors.price && <p className="text-red-500 text-xs mt-1">{errors.price.message}</p>}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Fianza / Depósito</label>
+                <div className="relative">
+                  <input className="auth-input w-full pl-8" type="number" {...register('deposit', { valueAsNumber: true })} />
+                  <span className="absolute left-3 top-2.5 text-gray-500">€</span>
+                </div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Disponible desde</label>
+                <input className="auth-input w-full" type="date" {...register('availableFrom')} />
+              </div>
+            </div>
+
+            <div className="border border-blue-100 rounded-xl overflow-hidden">
+              <label className={`flex items-start gap-4 p-4 cursor-pointer transition-colors ${onlyPro ? 'bg-blue-50' : 'bg-white hover:bg-gray-50'}`}>
+                <input type="checkbox" className="mt-1 w-5 h-5 text-blue-600 rounded" {...register('onlyTenantPro')} />
+                <div>
+                  <span className="block font-bold text-gray-900">Solo Inquilinos Tenant PRO</span>
+                  <span className="text-sm text-gray-500">Exige perfil verificado y análisis de solvencia automático.</span>
+                </div>
+              </label>
+
+              {onlyPro && (
+                <div className="bg-blue-50/50 px-4 pb-4 pt-0 text-sm text-blue-800">
+                  <div className="pl-9 space-y-1">
+                    <p>ℹ️ Requisito de solvencia calculado: <strong>{Number(price || 0).toLocaleString()} €/mes</strong> (capacidad de pago).</p>
+                    <p className="text-xs opacity-80">El inquilino deberá tener un límite de renta aprobado igual o superior a este precio.</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </form>
+
+      <div className="pt-4 border-t border-gray-100 flex justify-between items-center mt-auto">
+        <Button
+          variant="ghost"
+          onClick={prevStep}
+          disabled={step === 0}
+          className="text-gray-500 hover:text-gray-900"
+        >
+          <ArrowLeft size={18} className="mr-2" /> Atrás
+        </Button>
+
+        {step < STEPS.length - 1 ? (
+          <Button onClick={nextStep} className="px-6">
+            Siguiente <ArrowRight size={18} className="ml-2" />
+          </Button>
+        ) : (
+          <Button onClick={handleSubmit(onSubmit)} className="px-8 bg-green-600 hover:bg-green-700 text-white">
+            {(defaultValues as any)?._id ? 'Guardar Cambios' : 'Crear Propiedad'}
+          </Button>
+        )}
+      </div>
+    </div>
   );
 }
