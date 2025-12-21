@@ -67,3 +67,22 @@ export async function applyToProperty(id: string) {
   const { data } = await client.post(`/api/properties/${id}/apply`);
   return data as { ok: boolean };
 }
+
+export interface Application {
+  _id: string;
+  tenant: {
+    _id: string;
+    name: string;
+    email: string;
+    avatar?: string;
+    tenantPro?: { status: string };
+  };
+  status: 'pending' | 'accepted' | 'rejected';
+  createdAt: string;
+  message?: string;
+}
+
+export async function getPropertyApplications(propertyId: string) {
+  const res = await client.get(`/api/properties/${propertyId}/applications`);
+  return res.data as { items?: Application[] } | Application[];
+}

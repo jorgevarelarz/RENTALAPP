@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import WizardStep1Basics from './WizardStep1Basics';
 import WizardStep2Clauses from './WizardStep2Clauses';
 import WizardStep3Review from './WizardStep3Review';
@@ -8,6 +9,23 @@ export default function ContractWizard() {
   const [basics, setBasics] = useState<any>({});
   const [clauses, setClauses] = useState<Record<string, any>>({});
   const [created, setCreated] = useState<any>(null);
+  const { state } = useLocation();
+
+  useEffect(() => {
+    if (state && (state as any).propertyId && (state as any).tenantId) {
+      const s: any = state;
+      setBasics((prev: any) => ({
+        ...prev,
+        propertyId: s.propertyId,
+        tenantId: s.tenantId,
+        rentAmount: s.initialData?.rentAmount ?? prev.rentAmount,
+        deposit: s.initialData?.depositAmount ?? prev.deposit,
+        address: s.initialData?.address ?? prev.address,
+        city: s.initialData?.city ?? prev.city,
+      }));
+      setStep(1);
+    }
+  }, [state]);
 
   if (created) {
     return (

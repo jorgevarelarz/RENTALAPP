@@ -7,7 +7,8 @@ import Modal from '../components/ui/Modal';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import PropertyFormRHF, { PropertyFormData } from '../components/PropertyFormRHF';
-import { Building2, Plus, Home, BarChart3, Image as ImageIcon } from 'lucide-react';
+import ApplicantsModal from '../components/ApplicantsModal';
+import { Building2, Plus, Home, BarChart3, Image as ImageIcon, Users } from 'lucide-react';
 
 const API_BASE = process.env.REACT_APP_API_URL || (process.env as any).VITE_API_URL || 'http://localhost:3000';
 
@@ -16,6 +17,7 @@ const LandlordDashboard: React.FC = () => {
   const [mine, setMine] = useState<any[]>([]);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<any | null>(null);
+  const [showApplicantsFor, setShowApplicantsFor] = useState<any>(null);
   const { push } = useToast();
 
   const refresh = useCallback(async () => {
@@ -144,6 +146,16 @@ const LandlordDashboard: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2 self-end md:self-center">
+                  {(p.status === 'active' || p.status === 'rented') && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setShowApplicantsFor(p)}
+                      className="flex items-center gap-1"
+                    >
+                      <Users size={16} /> Solicitudes
+                    </Button>
+                  )}
                   {p.status !== 'active' && (
                     <Button
                       variant="primary" size="sm"
@@ -198,6 +210,12 @@ const LandlordDashboard: React.FC = () => {
           />
         </div>
       </Modal>
+
+      <ApplicantsModal
+        isOpen={!!showApplicantsFor}
+        onClose={() => setShowApplicantsFor(null)}
+        property={showApplicantsFor}
+      />
     </div>
   );
 };
