@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { MapPin, BedDouble, Bath, Ruler, Heart } from 'lucide-react';
 
 type Props = {
   p: any;
@@ -7,41 +8,72 @@ type Props = {
 };
 
 export default function PropertyCard({ p, onFavToggle }: Props) {
-  const image = p.images?.[0] || 'https://via.placeholder.com/1000x600?text=Property';
+  const image = p.images?.[0] || 'https://via.placeholder.com/1000x600?text=Sin+Foto';
   const liked = !!p._liked;
-  const onlyPro = !!p.onlyTenantPro;
+
   return (
-    <article className="rounded-lg border border-gray-200 overflow-hidden shadow-sm bg-white" aria-label={p.title}>
-      <Link to={`/properties/${p._id}`} className="block aspect-video bg-gray-100">
-        <img src={image} alt={p.title} className="w-full h-full object-cover" loading="lazy" />
-      </Link>
-      <div className="p-3 flex flex-col gap-2">
-        <div className="flex items-start justify-between gap-2">
-          <div>
-            <div className="text-2xl font-semibold text-gray-900">{(p.price || 0).toLocaleString()} €</div>
-            {onlyPro && (
-              <span className="inline-flex items-center rounded-full border border-gray-900 px-2 py-0.5 text-xs font-medium" title="Esta propiedad requiere Tenant PRO (solvencia verificada)">
-                Solo inquilinos PRO
-              </span>
-            )}
-          </div>
-          {onFavToggle && (
-            <button
-              onClick={() => onFavToggle(p._id, !liked)}
-              aria-label="Favorito"
-              className="text-xl"
-              title={liked ? 'Quitar de favoritos' : 'Añadir a favoritos'}
-            >
-              {liked ? '❤️' : '🤍'}
-            </button>
+    <article className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col h-full">
+      <div className="relative aspect-[4/3] overflow-hidden">
+        <Link to={`/properties/${p._id}`}>
+          <img
+            src={image}
+            alt={p.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+            loading="lazy"
+          />
+        </Link>
+
+        <div className="absolute top-3 left-3 flex flex-col gap-1">
+          {p.onlyTenantPro && (
+            <span className="bg-blue-600/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide shadow-sm">
+              PRO
+            </span>
+          )}
+          {p.status === 'rented' && (
+            <span className="bg-gray-800/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide shadow-sm">
+              Alquilado
+            </span>
           )}
         </div>
-        <h3 className="text-gray-900 font-medium line-clamp-1">{p.title}</h3>
-        <p className="text-sm text-gray-600">{p.city} · {p.rooms} hab · {p.sizeM2 || '—'} m²</p>
-        <div className="mt-1">
-          <Link to={`/properties/${p._id}`} className="inline-flex items-center rounded-md border border-gray-300 px-3 py-1.5 text-sm hover:bg-gray-50">
-            Ver detalle
-          </Link>
+
+        {onFavToggle && (
+          <button
+            onClick={(e) => { e.preventDefault(); onFavToggle(p._id, liked); }}
+            className="absolute top-3 right-3 p-2 rounded-full bg-white/80 hover:bg-white text-gray-600 hover:text-red-500 transition-all shadow-sm backdrop-blur-sm"
+          >
+            <Heart size={18} className={liked ? "fill-red-500 text-red-500" : ""} />
+          </button>
+        )}
+      </div>
+
+      <div className="p-4 flex flex-col flex-1">
+        <div className="flex justify-between items-start mb-2">
+          <h3 className="font-bold text-lg text-gray-900 leading-tight group-hover:text-blue-600 transition-colors line-clamp-1">
+            {p.title}
+          </h3>
+          <span className="font-bold text-lg text-blue-600 whitespace-nowrap">
+            {p.price?.toLocaleString()} €
+          </span>
+        </div>
+
+        <div className="flex items-center gap-1 text-gray-500 text-sm mb-4">
+          <MapPin size={14} />
+          <span className="truncate">{p.city} {p.region ? `, ${p.region}` : ''}</span>
+        </div>
+
+        <div className="flex items-center gap-4 text-sm text-gray-600 mt-auto pt-3 border-t border-gray-100">
+          <div className="flex items-center gap-1.5" title="Habitaciones">
+            <BedDouble size={16} className="text-gray-400" />
+            <span>{p.rooms}</span>
+          </div>
+          <div className="flex items-center gap-1.5" title="Baños">
+            <Bath size={16} className="text-gray-400" />
+            <span>{p.bathrooms}</span>
+          </div>
+          <div className="flex items-center gap-1.5" title="Metros cuadrados">
+            <Ruler size={16} className="text-gray-400" />
+            <span>{p.sizeM2} m²</span>
+          </div>
         </div>
       </div>
     </article>
