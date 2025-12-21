@@ -2,6 +2,7 @@ import React from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
 import AppShell from "./layout/AppShell";
+import PublicLayout from "./layout/PublicLayout";
 import LoginPage from "./pages/auth/LoginPage";
 import ForgotPassword from "./pages/auth/ForgotPassword";
 import ResetPassword from "./pages/auth/ResetPassword";
@@ -56,8 +57,11 @@ export default function AppRoutes() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route element={<AppShell />}>
+          <Route element={<PublicLayout />}>
             <Route path="/" element={<RedirectHome />} />
+          </Route>
+
+          <Route element={<AppShell />}>
             <Route path="/properties" element={<PropertiesList />} />
             <Route path="/properties/:id" element={<PropertyDetail />} />
             <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />

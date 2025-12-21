@@ -118,7 +118,7 @@ const ContractDetail: React.FC = () => {
   const amLandlord = user?._id === c.owner?.id || user?._id === c.landlord;
   const canSign = (amTenant && !c.signedByTenant) || (amLandlord && !c.signedByLandlord);
   const canPayDeposit = amTenant && !c.depositPaid;
-  const canPayRent = amTenant;
+  const canPayRent = amTenant && ['active', 'signed'].includes(String(c.status || ''));
   const canSendToSignature = (amLandlord || user?.role === 'admin') && ((!c.signature?.status) || ['none','error'].includes(String(c.signature?.status)));
   const statusKey = (c?.signature?.status as string) || 'none';
   const badgeStyle = STATUS_COLORS[statusKey] || STATUS_COLORS.default;
@@ -232,7 +232,7 @@ const ContractDetail: React.FC = () => {
                 } catch (err: any) {
                   const code = err?.response?.data?.error;
                   if (code === 'authentication_required') {
-                    push({ title: 'Se requiere autenticación adicional en tu banco', tone: 'info' });
+                    push({ title: 'Tu banco requiere autorización, ve a Mis Pagos', tone: 'info' });
                   } else if (code === 'no_saved_method') {
                     push({ title: 'Añade un método en Mis Pagos antes de pagar', tone: 'info' });
                   } else {
@@ -244,7 +244,7 @@ const ContractDetail: React.FC = () => {
               }}
               disabled={payingRent}
             >
-              {payingRent ? 'Pagando…' : 'Pagar renta con tarjeta guardada'}
+              {payingRent ? 'Pagando…' : 'Pagar Renta con tarjeta guardada'}
             </Button>
           )}
           <Button onClick={async () => { const blob = await downloadPdf(token!, c._id || c.id); const url = URL.createObjectURL(blob); window.open(url, '_blank'); }}>
