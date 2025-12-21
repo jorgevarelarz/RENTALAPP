@@ -15,6 +15,10 @@ const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
 // List contracts
 router.get('/', authenticate, contractController.listContracts);
 
+// Estadísticas de ingresos landlord
+router.get('/earnings/stats', ...assertRole('landlord'), contractController.getLandlordEarnings);
+router.get('/earnings/export', ...assertRole('landlord'), contractController.exportEarningsReport);
+
 // Crear contrato
 router.post(
   '/',
@@ -38,6 +42,10 @@ router.get('/:id/audit-trail', authenticate, signCtrl.getAuditTrail);
 
 // Firmar contrato
 router.patch('/:id/sign', authenticate, requirePolicies(REQUIRED_POLICIES), contractController.signContract);
+
+// Pagos de renta (Stripe Card)
+router.get('/:id/payments', authenticate, contractController.getContractPayments);
+router.post('/:id/pay-rent', ...assertRole('tenant'), contractController.createRentPaymentIntent);
 
 // Iniciar pago por SEPA con Stripe
 router.post('/:id/pay', ...assertRole('tenant'), contractController.initiatePayment);

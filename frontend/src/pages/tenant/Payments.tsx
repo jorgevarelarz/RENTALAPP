@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { listContracts } from '../../services/contracts';
+import { getPaymentHistory, initiateRentPayment, listContracts } from '../../services/contracts';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import PaymentModal from '../../components/payments/PaymentModal';
@@ -8,7 +8,7 @@ import { useToast } from '../../context/ToastContext';
 import { DollarSign, Calendar, Clock, CheckCircle2, History, AlertCircle } from 'lucide-react';
 
 type PaymentHistoryItem = {
-  id: number;
+  _id: string;
   date: string;
   amount: number;
   status: 'paid' | 'pending';
@@ -22,10 +22,8 @@ export default function Payments() {
   const [loading, setLoading] = useState(true);
   const [activeContract, setActiveContract] = useState<any>(null);
   const [showPayModal, setShowPayModal] = useState(false);
-  const [history, setHistory] = useState<PaymentHistoryItem[]>([
-    { id: 1, date: '2023-10-01', amount: 850, status: 'paid', concept: 'Renta Octubre' },
-    { id: 2, date: '2023-09-01', amount: 850, status: 'paid', concept: 'Renta Septiembre' },
-  ]);
+  const [history, setHistory] = useState<PaymentHistoryItem[]>([]);
+  const [payData, setPayData] = useState<{ clientSecret: string; amount: number } | null>(null);
 
   useEffect(() => {
     const loadContract = async () => {
@@ -34,6 +32,20 @@ export default function Payments() {
         const res = await listContracts(token, { status: 'active', limit: 5 });
         const current = (res.items || []).find((c: any) => c.status === 'active' || c.status === 'signed');
         setActiveContract(current || null);
+        if (current) {
+          const payments = await getPaymentHistory(current._id);
+          setHistory(
+            payments.map(p => ({
+              _id: p._id,
+              date: p.paidAt || p.createdAt || new Date().toISOString(),
+              amount: p.amount,
+              status: p.status === 'succeeded' ? 'paid' : 'pending',
+              concept: p.concept,
+            })),
+          );
+        } else {
+          setHistory([]);
+        }
       } catch (e) {
         console.error(e);
       } finally {
@@ -43,18 +55,35 @@ export default function Payments() {
     loadContract();
   }, [token]);
 
-  const handlePaymentSuccess = () => {
+  const handlePaymentSuccess = async () => {
     setShowPayModal(false);
     push({ title: '¡Renta pagada correctamente!', tone: 'success' });
+    if (activeContract) {
+      const payments = await getPaymentHistory(activeContract._id);
+      setHistory(
+        payments.map(p => ({
+          _id: p._id,
+          date: p.paidAt || p.createdAt || new Date().toISOString(),
+          amount: p.amount,
+          status: p.status === 'succeeded' ? 'paid' : 'pending',
+          concept: p.concept,
+        })),
+      );
+    }
+  };
+
+  const handlePayNow = async () => {
     if (!activeContract) return;
-    const newPayment = {
-      id: Date.now(),
-      date: new Date().toISOString().slice(0, 10),
-      amount: activeContract.rentAmount || activeContract.rent,
-      status: 'paid' as const,
-      concept: `Renta ${new Date().toLocaleString('es-ES', { month: 'long' })}`,
-    };
-    setHistory(prev => [newPayment, ...prev]);
+    try {
+      const resp = await initiateRentPayment(activeContract._id);
+      if (!resp.clientSecret) {
+        throw new Error('No se pudo iniciar el pago');
+      }
+      setPayData({ clientSecret: resp.clientSecret, amount: resp.amount || activeContract.rentAmount || activeContract.rent || 0 });
+      setShowPayModal(true);
+    } catch (e: any) {
+      push({ title: e?.message || 'No se pudo iniciar el pago', tone: 'error' });
+    }
   };
 
   if (!token || !user) return <div className="p-6">Inicia sesión</div>;
@@ -121,7 +150,7 @@ export default function Payments() {
                   <span>Pendiente de pago</span>
                 </div>
                 <Button
-                  onClick={() => setShowPayModal(true)}
+                  onClick={handlePayNow}
                   className="w-full sm:w-auto py-3 px-8 text-lg shadow-lg hover:shadow-xl bg-blue-600 hover:bg-blue-700 text-white transform hover:-translate-y-0.5 transition-all"
                 >
                   Pagar Ahora
@@ -171,16 +200,16 @@ export default function Payments() {
             </thead>
             <tbody className="divide-y divide-gray-100">
               {history.map((item) => (
-                <tr key={item.id} className="hover:bg-gray-50 transition-colors">
+                <tr key={item._id} className="hover:bg-gray-50 transition-colors">
                   <td className="px-6 py-4 font-medium text-gray-900">{item.concept}</td>
                   <td className="px-6 py-4 text-gray-500">{new Date(item.date).toLocaleDateString()}</td>
-                  <td className="px-6 py-4 text-gray-500 flex items-center gap-1">
-                    <span className="bg-gray-200 text-xs px-1.5 py-0.5 rounded text-gray-600">VISA</span> **** 4242
+                  <td className="px-6 py-4 text-gray-500">
+                    <span className="bg-gray-200 text-xs px-1.5 py-0.5 rounded text-gray-600">Tarjeta</span>
                   </td>
                   <td className="px-6 py-4 text-right font-bold">{item.amount} €</td>
                   <td className="px-6 py-4 text-center">
                     <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full font-medium">
-                      Completado
+                      {item.status === 'paid' ? 'Completado' : 'Pendiente'}
                     </span>
                   </td>
                 </tr>
@@ -190,14 +219,15 @@ export default function Payments() {
         </div>
       </Card>
 
-      {showPayModal && activeContract && (
+      {showPayModal && activeContract && payData && (
         <PaymentModal
           open={showPayModal}
           onClose={() => setShowPayModal(false)}
-          amountEUR={rentAmount}
+          amountEUR={payData.amount || rentAmount}
           title={`Pagar Renta - ${new Date().toLocaleString('es-ES', { month: 'long' })}`}
           description={`Pago mensual del alquiler para: ${activeContract.propertyAddress || ''}`}
           onSuccess={handlePaymentSuccess}
+          clientSecret={payData.clientSecret}
         />
       )}
     </div>

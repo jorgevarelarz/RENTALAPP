@@ -9,6 +9,9 @@ import Conversation from '../models/conversation.model';
 import Message from '../models/message.model';
 import PlatformEarning from '../models/platformEarning.model';
 import ProcessedEvent from '../models/processedEvent.model';
+import { Payment } from '../models/payment.model';
+import { User } from '../models/user.model';
+import { sendPaymentReceiptEmail } from '../utils/email';
 import { calcServiceFee } from '../utils/calcServiceFee';
 import { recordContractHistory } from '../utils/history';
 
@@ -76,6 +79,36 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
       const intent = event.data.object as Stripe.PaymentIntent;
       const contractId = intent.metadata?.contractId as string | undefined;
       const offerId = intent.metadata?.offerId as string | undefined;
+       const paymentType = intent.metadata?.type as string | undefined;
+
+      if (paymentType === 'rent') {
+        const receiptUrl = (intent as any)?.charges?.data?.[0]?.receipt_url;
+        const payment = await Payment.findOneAndUpdate(
+          { stripePaymentIntentId: intent.id },
+          {
+            status: 'succeeded',
+            paidAt: new Date(),
+            receiptUrl,
+          },
+          { new: true },
+        );
+
+        // Enviar recibo por email al pagador
+        if (payment?.payer) {
+          const payer = await User.findById(payment.payer).lean();
+          if (payer?.email) {
+            const amountEur = payment.amount;
+            sendPaymentReceiptEmail(
+              payer.email,
+              payer.name || 'Usuario',
+              amountEur,
+              payment.concept,
+              new Date(),
+            ).catch(console.error);
+          }
+        }
+      }
+
       if (contractId) {
         await Contract.findByIdAndUpdate(contractId, { lastPaidAt: new Date(), paymentRef: intent.id });
       }

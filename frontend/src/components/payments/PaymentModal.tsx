@@ -14,9 +14,10 @@ interface Props {
   onSuccess: () => void;
   title?: string;
   description?: string;
+  clientSecret?: string;
 }
 
-export default function PaymentModal({ open, onClose, amountEUR, onSuccess, title, description }: Props) {
+export default function PaymentModal({ open, onClose, amountEUR, onSuccess, title, description, clientSecret }: Props) {
   if (!stripeKey) {
     return (
       <Modal open={open} onClose={onClose} title="Error de Configuración">
@@ -41,6 +42,7 @@ export default function PaymentModal({ open, onClose, amountEUR, onSuccess, titl
             amount={Math.round(amountEUR * 100)}
             currency="eur"
             onSuccess={onSuccess}
+            clientSecret={clientSecret}
           />
         </Elements>
       </div>

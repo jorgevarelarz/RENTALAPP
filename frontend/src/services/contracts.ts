@@ -91,3 +91,21 @@ export async function initiatePayment(contractId: string, amount: number) {
   const res = await axios.post(`/api/contracts/${contractId}/pay`, { amount });
   return res.data as { clientSecret?: string };
 }
+
+export async function initiateRentPayment(contractId: string) {
+  const res = await axios.post(`/api/contracts/${contractId}/pay-rent`);
+  return res.data as { clientSecret?: string; amount?: number };
+}
+
+export async function getPaymentHistory(contractId: string) {
+  const res = await axios.get(`/api/contracts/${contractId}/payments`);
+  return res.data as Array<{
+    _id: string;
+    amount: number;
+    currency: string;
+    status: string;
+    concept: string;
+    paidAt?: string;
+    createdAt?: string;
+  }>;
+}

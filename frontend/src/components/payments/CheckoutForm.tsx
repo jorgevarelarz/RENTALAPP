@@ -8,6 +8,7 @@ type Props = {
   amount: number; // céntimos
   currency?: string;
   onSuccess: () => void;
+  clientSecret?: string;
 };
 
 const CARD_STYLE = {
@@ -28,7 +29,7 @@ const CARD_STYLE = {
   }
 };
 
-const CheckoutForm: React.FC<Props> = ({ amount, currency = 'eur', onSuccess }) => {
+const CheckoutForm: React.FC<Props> = ({ amount, currency = 'eur', onSuccess, clientSecret }) => {
   const stripe = useStripe();
   const elements = useElements();
   const [loading, setLoading] = useState(false);
@@ -42,12 +43,15 @@ const CheckoutForm: React.FC<Props> = ({ amount, currency = 'eur', onSuccess }) 
 
     try {
       setLoading(true);
-      const { data } = await axios.post('/api/payments/create-intent', { amount, currency });
-      const clientSecret = data.clientSecret;
+      let secret = clientSecret;
+      if (!secret) {
+        const { data } = await axios.post('/api/payments/create-intent', { amount, currency });
+        secret = data.clientSecret;
+      }
       const card = elements.getElement(CardElement);
-      if (!clientSecret || !card) throw new Error('No se pudo iniciar el pago');
+      if (!secret || !card) throw new Error('No se pudo iniciar el pago');
 
-      const result = await stripe.confirmCardPayment(clientSecret, {
+      const result = await stripe.confirmCardPayment(secret, {
         payment_method: {
           card,
         },
