@@ -1,16 +1,80 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../../context/AuthContext';
+import Card from '../../components/ui/Card';
+import { Search, ShieldCheck, FileSignature, CreditCard } from 'lucide-react';
 
 export default function TenantHome() {
+  const { user } = useAuth();
+
   return (
-    <div style={{ display: 'grid', gap: 12 }}>
-      <h2>Inicio (Inquilino)</h2>
-      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-        <Link to="/properties" className="px-3 py-1.5 rounded border border-gray-300">Buscar pisos</Link>
-        <Link to="/tenant-pro" className="px-3 py-1.5 rounded border border-gray-300">Hazte PRO</Link>
-        <Link to="/contracts" className="px-3 py-1.5 rounded border border-gray-300">Mis contratos</Link>
+    <div className="space-y-8">
+      <div className="bg-blue-50 border border-blue-100 rounded-2xl p-8">
+        <h1 className="text-3xl font-bold text-gray-900">
+          Hola, {user?.name?.split(' ')[0] || 'Inquilino'} 👋
+        </h1>
+        <p className="text-gray-600 mt-2 text-lg">
+          ¿En qué podemos ayudarte hoy? Gestiona tu hogar desde aquí.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+        <Link to="/properties" className="block group">
+          <Card
+            style={{ height: '100%', padding: '24px', transition: 'all 0.2s', borderColor: 'transparent' }}
+            className="hover:shadow-lg hover:border-blue-200 border bg-white"
+          >
+            <div className="bg-blue-100 w-12 h-12 rounded-full flex items-center justify-center mb-4 group-hover:bg-blue-600 transition-colors">
+              <Search className="text-blue-600 group-hover:text-white" size={24} />
+            </div>
+            <h3 className="font-bold text-lg mb-2">Buscar nuevo hogar</h3>
+            <p className="text-sm text-gray-500">Explora propiedades verificadas y filtra por tus preferencias.</p>
+          </Card>
+        </Link>
+
+        <Link to="/tenant-pro" className="block group">
+          <Card
+            style={{ height: '100%', padding: '24px', transition: 'all 0.2s', borderColor: 'transparent' }}
+            className="hover:shadow-lg hover:border-emerald-200 border bg-white"
+          >
+            <div className="bg-emerald-100 w-12 h-12 rounded-full flex items-center justify-center mb-4 group-hover:bg-emerald-600 transition-colors">
+              <ShieldCheck className="text-emerald-600 group-hover:text-white" size={24} />
+            </div>
+            <h3 className="font-bold text-lg mb-2">Perfil TenantPro</h3>
+            <p className="text-sm text-gray-500">
+              {user?.tenantPro?.status === 'verified'
+                ? '¡Tu perfil está verificado! Tienes prioridad.'
+                : 'Verifica tu identidad y destaca ante los propietarios.'}
+            </p>
+          </Card>
+        </Link>
+
+        <Link to="/contracts" className="block group">
+          <Card
+            style={{ height: '100%', padding: '24px', transition: 'all 0.2s', borderColor: 'transparent' }}
+            className="hover:shadow-lg hover:border-purple-200 border bg-white"
+          >
+            <div className="bg-purple-100 w-12 h-12 rounded-full flex items-center justify-center mb-4 group-hover:bg-purple-600 transition-colors">
+              <FileSignature className="text-purple-600 group-hover:text-white" size={24} />
+            </div>
+            <h3 className="font-bold text-lg mb-2">Mis Contratos</h3>
+            <p className="text-sm text-gray-500">Accede a tus contratos de alquiler firmados y documentos.</p>
+          </Card>
+        </Link>
+
+        <Link to="/tenant/payments" className="block group">
+          <Card
+            style={{ height: '100%', padding: '24px', transition: 'all 0.2s', borderColor: 'transparent' }}
+            className="hover:shadow-lg hover:border-orange-200 border bg-white"
+          >
+            <div className="bg-orange-100 w-12 h-12 rounded-full flex items-center justify-center mb-4 group-hover:bg-orange-600 transition-colors">
+              <CreditCard className="text-orange-600 group-hover:text-white" size={24} />
+            </div>
+            <h3 className="font-bold text-lg mb-2">Pagos y Recibos</h3>
+            <p className="text-sm text-gray-500">Consulta tu historial de pagos o configura el pago automático.</p>
+          </Card>
+        </Link>
       </div>
     </div>
   );
 }
-
