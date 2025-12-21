@@ -20,6 +20,7 @@ import CopyLinkButton from "../../components/CopyLinkButton";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
+import PaymentModal from "../../components/payments/PaymentModal";
 import {
   ArrowLeft, CheckCircle, AlertCircle, Wrench,
   User, MapPin, Calendar, MessageSquare
@@ -39,6 +40,7 @@ export default function TicketDetail() {
   const [extraReason, setExtraReason] = useState("");
   const [when, setWhen] = useState<string>("");
   const [showProSearch, setShowProSearch] = useState(false);
+  const [showPayment, setShowPayment] = useState(false);
 
   const role = user?.role;
   const { push } = useNotify();
@@ -199,7 +201,7 @@ export default function TicketDetail() {
               <div className="space-y-3 bg-yellow-50 p-3 rounded-lg border border-yellow-100">
                 <p className="text-sm text-yellow-800">Presupuesto recibido: <strong>{ticket.quote.amount}€</strong></p>
                 {ticket.quote.note && <p className="text-xs text-yellow-700 italic">"{ticket.quote.note}"</p>}
-                <Button onClick={() => handleAction(() => approveQuote(ticket._id), "Presupuesto aprobado")} className="w-full">Aprobar y Pagar</Button>
+                <Button onClick={() => setShowPayment(true)} className="w-full">Aprobar y Pagar</Button>
               </div>
             )}
 
@@ -276,6 +278,25 @@ export default function TicketDetail() {
 
         </div>
       </div>
+      {ticket && ticket.quote && (
+        <PaymentModal
+          open={showPayment}
+          onClose={() => setShowPayment(false)}
+          amountEUR={ticket.quote.amount}
+          title="Aprobar Presupuesto"
+          description={`Vas a pagar la reparación de: ${ticket.title}`}
+          onSuccess={async () => {
+            try {
+              await approveQuote(ticket._id);
+              setShowPayment(false);
+              push("success", "Pago realizado y presupuesto aprobado con éxito");
+              reload();
+            } catch {
+              push("error", "El pago pasó, pero hubo un error al actualizar el ticket");
+            }
+          }}
+        />
+      )}
     </div>
   );
 }
