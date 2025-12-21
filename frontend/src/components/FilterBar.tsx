@@ -8,14 +8,19 @@ type Props = {
 };
 
 export default function FilterBar({ initial, onApply }: Props) {
-  const [state, setState] = useState({
+  type FilterState = Partial<SearchParams & { onlyTenantPro?: boolean }> & {
+    sort?: SearchParams['sort'];
+    dir?: SearchParams['dir'];
+  };
+
+  const [state, setState] = useState<FilterState>({
     limit: 12,
     sort: 'createdAt',
     dir: 'desc',
     ...initial,
   });
 
-  const update = (k: string, v: any) => setState(s => ({ ...s, [k]: v }));
+  const update = (k: keyof FilterState, v: any) => setState(s => ({ ...s, [k]: v }));
 
   const TogglePill = ({ label, active, onClick }: { label: string, active: boolean, onClick: () => void }) => (
     <button
@@ -102,8 +107,8 @@ export default function FilterBar({ initial, onApply }: Props) {
               className="h-9 text-sm border-none focus:ring-0 bg-transparent text-gray-600 cursor-pointer"
               value={`${state.sort}-${state.dir}`}
               onChange={e => {
-                const [sort, dir] = e.target.value.split('-');
-                setState(s => ({ ...s, sort, dir: dir as any }));
+                const [sort, dir] = e.target.value.split('-') as [SearchParams['sort'], SearchParams['dir']];
+                setState(s => ({ ...s, sort, dir }));
               }}
             >
               <option value="createdAt-desc">Nuevos primero</option>
