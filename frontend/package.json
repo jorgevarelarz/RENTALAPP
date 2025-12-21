@@ -43,6 +43,11 @@
     "typecheck": "tsc --noEmit",
     "eject": "react-scripts eject"
   },
+  "jest": {
+    "moduleNameMapper": {
+      "^react-router-dom$": "<rootDir>/__mocks__/react-router-dom.tsx"
+    }
+  },
   "overrides": {
     "zod": "^3.23.8"
   },
