@@ -6,12 +6,16 @@ import { Search, ShieldCheck, FileSignature, CreditCard } from 'lucide-react';
 
 export default function TenantHome() {
   const { user } = useAuth();
+  const firstName =
+    (user as any)?.name?.split?.(' ')?.[0] ||
+    user?.email?.split?.('@')?.[0] ||
+    'Inquilino';
 
   return (
     <div className="space-y-8">
       <div className="bg-blue-50 border border-blue-100 rounded-2xl p-8">
         <h1 className="text-3xl font-bold text-gray-900">
-          Hola, {user?.name?.split(' ')[0] || 'Inquilino'} 👋
+          Hola, {firstName} 👋
         </h1>
         <p className="text-gray-600 mt-2 text-lg">
           ¿En qué podemos ayudarte hoy? Gestiona tu hogar desde aquí.
