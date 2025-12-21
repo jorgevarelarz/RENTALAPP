@@ -8,9 +8,10 @@ export const downloadDemoContract = async (token: string, payload: any) => {
   return res.data as Blob;
 };
 
-export const listContracts = async (token: string) => {
+export const listContracts = async (token: string, params?: Record<string, any>) => {
   const res = await axios.get(`/api/contracts`, {
     headers: { Authorization: `Bearer ${token}` },
+    params,
   });
   return res.data as { items: any[] };
 };
@@ -84,4 +85,9 @@ export async function createContract(payload: any) {
 export async function createSignSession(id: string) {
   const { data } = await axios.post(`/api/contracts/${id}/sign-session`);
   return data as { signingUrl?: string };
+}
+
+export async function initiatePayment(contractId: string, amount: number) {
+  const res = await axios.post(`/api/contracts/${contractId}/pay`, { amount });
+  return res.data as { clientSecret?: string };
 }
