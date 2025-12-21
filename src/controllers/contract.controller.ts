@@ -21,7 +21,6 @@ import PDFDocument from 'pdfkit';
 import { createContractAction, signContractAction, initiatePaymentAction } from '../services/contract.actions';
 import type { ResolvedClause } from '../services/clauses.service';
 import { generateContractPdfFile } from '../services/pdfGenerator';
-import fs from 'fs/promises';
 // @ts-ignore
 import SignaturitClient from 'signaturit-sdk';
 
@@ -424,7 +423,7 @@ export const createSigningSession = async (req: Request, res: Response) => {
 
     contract.signature = {
       ...(contract.signature || {}),
-      provider: 'signaturit',
+      provider: 'signaturit' as any,
       envelopeId: (response as any)?.id || (response as any)?.signature_id,
       status: 'sent',
       updatedAt: new Date(),
