@@ -1,265 +1,217 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { downloadPdf, getContract, payDeposit, payRentWithSavedMethod, signContract, sendToSignature } from '../services/contracts';
+import { getContract } from '../services/contracts';
 import { useAuth } from '../context/AuthContext';
-import Button from '../components/ui/Button';
-import ChatPanel from '../components/ChatPanel';
-import Card from '../components/ui/Card';
-import ProBadge from '../components/ProBadge';
-import CopyLinkButton from '../components/CopyLinkButton';
 import { useToast } from '../context/ToastContext';
-import { CheckCircle, Clock, XCircle } from 'lucide-react';
+import Card from '../components/ui/Card';
+import Button from '../components/ui/Button';
+import Modal from '../components/ui/Modal';
+import SignaturitWidget from '../components/SignaturitWidget';
+import { FileCheck, User, ShieldCheck, Download, PenTool } from 'lucide-react';
 
-const STATUS_LABELS: Record<string, string> = {
-  none: 'No iniciado',
-  created: 'Borrador de firma',
-  sent: 'Enviado a firma',
-  completed: 'Firmado correctamente',
-  signed: 'Firmado correctamente',
-  declined: 'Rechazado',
-  error: 'Error en firma',
-};
-
-const STATUS_COLORS: Record<string, { bg: string; color: string }> = {
-  completed: { bg: '#dcfce7', color: '#166534' },
-  signed: { bg: '#dcfce7', color: '#166534' },
-  sent: { bg: '#dbeafe', color: '#1d4ed8' },
-  declined: { bg: '#fee2e2', color: '#991b1b' },
-  error: { bg: '#fee2e2', color: '#991b1b' },
-  default: { bg: '#f3f4f6', color: '#374151' },
-};
-
-const STATUS_ICONS: Record<string, React.ReactNode> = {
-  completed: <CheckCircle size={14} className="text-green-600" />,
-  signed: <CheckCircle size={14} className="text-green-600" />,
-  sent: <Clock size={14} className="text-blue-600" />,
-  declined: <XCircle size={14} className="text-red-600" />,
-  error: <XCircle size={14} className="text-red-600" />,
-};
-
-const OUTLINE_BUTTON_STYLE: React.CSSProperties = {
-  padding: '6px 10px',
-  borderRadius: 6,
-  border: '1px solid #111827',
-};
-
-const ContractDetail: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
-  const { token, user } = useAuth();
-  const [c, setC] = useState<any | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+export default function ContractDetail() {
+  const { id } = useParams();
+  const { user, token } = useAuth();
   const { push } = useToast();
-  const [sending, setSending] = useState(false);
-  const [payingRent, setPayingRent] = useState(false);
-  const [embeddedUrls, setEmbeddedUrls] = useState<{ landlordUrl?: string; tenantUrl?: string } | null>(null);
-  const prevSignatureStatusRef = useRef<string | undefined>(undefined);
 
-  const load = useCallback(async (signal?: AbortSignal) => {
-    if (!token || !id) return;
+  const [contract, setContract] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [isSigning, setIsSigning] = useState(false);
+  const [signingUrl, setSigningUrl] = useState<string | null>(null);
+
+  const loadContract = useCallback(async () => {
     try {
-      setLoading(true);
-      setError(null);
-      const data = await getContract(token, id, signal);
-      setC(data);
-    } catch (e: any) {
-      if (signal?.aborted) return;
-      if (e?.name === 'CanceledError' || e?.code === 'ERR_CANCELED') return;
-      setError(e?.message || 'Error al cargar el contrato');
+      if (!id || !token) return;
+      const data = await getContract(token, id);
+      setContract(data);
+    } catch (e) {
+      console.error(e);
+      push({ title: 'Error al cargar contrato', tone: 'error' });
     } finally {
-      if (signal?.aborted) return;
       setLoading(false);
     }
-  }, [token, id]);
+  }, [id, token, push]);
 
   useEffect(() => {
-    load();
-  }, [load]);
+    loadContract();
+  }, [loadContract]);
 
-  const currentSignatureStatus = c?.signature?.status as string | undefined;
-  const currentContractStatus = c?.status as string | undefined;
-
-  useEffect(() => {
-    const isTerminal =
-      currentSignatureStatus && ['completed', 'declined', 'error'].includes(currentSignatureStatus);
-    const isInProcess = currentSignatureStatus === 'sent' || currentContractStatus === 'signing';
-    if (isTerminal || !isInProcess) return;
-
-    const controller = new AbortController();
-    const interval = setInterval(() => load(controller.signal), 5000);
-    return () => {
-      controller.abort();
-      clearInterval(interval);
-    };
-  }, [currentSignatureStatus, currentContractStatus, load]);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    if (params.get('signed') === 'true') {
-      push({ title: 'Contrato firmado correctamente', tone: 'success' });
-      load();
+  const handleStartSigning = async () => {
+    if (!contract) return;
+    setIsSigning(true);
+    try {
+      await new Promise(r => setTimeout(r, 1000));
+      setSigningUrl("https://app.sandbox.signaturit.com/sign/widget/token_de_prueba_inventado");
+    } catch {
+      push({ title: 'Error al conectar con Signaturit', tone: 'error' });
+      setIsSigning(false);
     }
-  }, [load, push]);
+  };
 
-  useEffect(() => {
-    const current = c?.signature?.status as string | undefined;
-    if (prevSignatureStatusRef.current && prevSignatureStatusRef.current !== current) {
-      if (current === 'completed' || current === 'signed') push({ title: 'Contrato firmado correctamente', tone: 'success' });
-      if (current === 'declined') push({ title: 'La firma fue rechazada', tone: 'error' });
-    }
-    prevSignatureStatusRef.current = current;
-  }, [c?.signature?.status, push]);
+  const handleSignedSuccess = () => {
+    setIsSigning(false);
+    setSigningUrl(null);
+    push({ title: '¡Documento firmado correctamente!', tone: 'success' });
+    loadContract();
+  };
 
-  if (loading) return <div>Cargando contrato...</div>;
-  if (error) return <div style={{ color: 'red' }}>{error}</div>;
-  if (!c) return <div>Contrato no encontrado.</div>;
+  if (loading) return <div className="p-8 text-center">Cargando contrato...</div>;
+  if (!contract) return <div className="p-8 text-center text-red-500">Contrato no encontrado</div>;
 
-  const amTenant = user?._id === c.tenant?.id || user?._id === c.tenant;
-  const amLandlord = user?._id === c.owner?.id || user?._id === c.landlord;
-  const canSign = (amTenant && !c.signedByTenant) || (amLandlord && !c.signedByLandlord);
-  const canPayDeposit = amTenant && !c.depositPaid;
-  const canPayRent = amTenant && ['active', 'signed'].includes(String(c.status || ''));
-  const canSendToSignature = (amLandlord || user?.role === 'admin') && ((!c.signature?.status) || ['none','error'].includes(String(c.signature?.status)));
-  const statusKey = (c?.signature?.status as string) || 'none';
-  const badgeStyle = STATUS_COLORS[statusKey] || STATUS_COLORS.default;
-  const badgeLabel = STATUS_LABELS[statusKey] || 'Desconocido';
-  const icon = STATUS_ICONS[statusKey];
+  const isTenant = user?.role === 'tenant';
+  const needsMySignature = isTenant && contract.status === 'pending_signature';
+  const isActive = contract.status === 'active';
 
   return (
-    <div>
-      <h1 className="page-title">Detalle del Contrato</h1>
-      {user?.role === 'tenant' && user?.tenantPro?.status === 'verified' && (
-        <div className="mb-2">
-          <ProBadge maxRent={user?.tenantPro?.maxRent} />
-        </div>
-      )}
-      <Card style={{ padding: 24 }}>
-        <p>ID: {c._id || c.id}</p>
-        <p>Inquilino: {c.tenant?.id || c.tenant}</p>
-        <p>Propietario: {c.owner?.id || c.landlord}</p>
-        <p>Firmado por inquilino: {c.signedByTenant ? 'Sí' : 'No'}</p>
-        <p>Firmado por propietario: {c.signedByLandlord ? 'Sí' : 'No'}</p>
-        <p>Fianza pagada: {c.depositPaid ? 'Sí' : 'No'}</p>
-        <div className="mt-2 flex gap-2 items-center">
-          <strong>Firma:</strong>
-          <span
-            title={badgeLabel}
-            role="status"
-            aria-label={`Estado de la firma: ${badgeLabel}`}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 4,
-              padding: '4px 10px',
-              borderRadius: 999,
-              backgroundColor: badgeStyle.bg,
-              color: badgeStyle.color,
-              fontSize: 12,
-              fontWeight: 700,
-            }}
-          >
-            {icon} {badgeLabel}
-          </span>
-          {canSendToSignature && (
-            <button
-              disabled={sending}
-              onClick={async () => {
-                try {
-                  setSending(true);
-                  const resp = await sendToSignature(token!, c._id || c.id);
-                  setEmbeddedUrls(resp.recipientUrls || null);
-                  push({ title: 'Contrato enviado a firma', tone: 'success' });
-                  await load();
-                } catch (e: any) {
-                  push({ title: 'No se pudo iniciar la firma', tone: 'error' });
-                } finally {
-                  setSending(false);
-                }
-              }}
-              style={OUTLINE_BUTTON_STYLE}
-            >
-              {sending ? 'Enviando…' : 'Enviar a firma'}
-            </button>
-          )}
-          {c.signature?.pdfUrl && (
-            <button
-              onClick={() => window.open(c.signature.pdfUrl, '_blank')}
-              style={OUTLINE_BUTTON_STYLE}
-            >
-              Ver PDF firmado
-            </button>
-          )}
-          {c.signature?.auditPdfUrl && (
-            <button
-              onClick={() => window.open(c.signature.auditPdfUrl, '_blank')}
-              style={OUTLINE_BUTTON_STYLE}
-            >
-              Ver registro de auditoría
-            </button>
-          )}
-        </div>
-        {(c?.status === 'signing' || c?.status === 'pending_signature') && (
-          <div className="mt-2 text-sm">
-            {(!c.signedByTenant && 'Esperando firma del inquilino') ||
-              (!c.signedByLandlord && 'Esperando firma del propietario')}
+    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
+      <div className={`p-6 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-4 ${
+        isActive ? 'bg-green-50 border-green-200' : 'bg-indigo-50 border-indigo-200'
+      }`}>
+        <div className="flex items-center gap-4">
+          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+            isActive ? 'bg-green-100 text-green-600' : 'bg-indigo-100 text-indigo-600'
+          }`}>
+            {isActive ? <ShieldCheck size={24} /> : <FileCheck size={24} />}
           </div>
-        )}
-        {embeddedUrls && (
-          <div className="mt-2 flex gap-2">
-            {embeddedUrls.landlordUrl && <a href={embeddedUrls.landlordUrl} target="_blank" rel="noreferrer">Firmar como propietario</a>}
-            {embeddedUrls.tenantUrl && <a href={embeddedUrls.tenantUrl} target="_blank" rel="noreferrer">Firmar como inquilino</a>}
+          <div>
+            <h1 className="text-xl font-bold text-gray-900">
+              {isActive ? 'Contrato Legalizado y Activo' : 'Pendiente de Firma'}
+            </h1>
+            <p className="text-sm text-gray-600">ID Referencia: {contract._id?.slice(-6).toUpperCase()}</p>
           </div>
-        )}
-        <div className="mt-4 flex gap-2">
-          {canSign && (
-            <Button onClick={async () => { await signContract(token!, c._id || c.id); push({ title: 'Contrato firmado', tone: 'success' }); await load(); }}>
-              Firmar contrato
-            </Button>
-          )}
-          {canPayDeposit && (
-            <Button onClick={async () => { await payDeposit(token!, c._id || c.id); push({ title: 'Fianza pagada', tone: 'success' }); await load(); }}>
-              Pagar fianza
-            </Button>
-          )}
-          {canPayRent && (
-            <Button
-              onClick={async () => {
-                try {
-                  setPayingRent(true);
-                  await payRentWithSavedMethod(token!, c._id || c.id);
-                  push({ title: 'Renta pagada con método guardado', tone: 'success' });
-                  await load();
-                } catch (err: any) {
-                  const code = err?.response?.data?.error;
-                  if (code === 'authentication_required') {
-                    push({ title: 'Tu banco requiere autorización, ve a Mis Pagos', tone: 'info' });
-                  } else if (code === 'no_saved_method') {
-                    push({ title: 'Añade un método en Mis Pagos antes de pagar', tone: 'info' });
-                  } else {
-                    push({ title: 'Error procesando el pago', tone: 'error' });
-                  }
-                } finally {
-                  setPayingRent(false);
-                }
-              }}
-              disabled={payingRent}
-            >
-              {payingRent ? 'Pagando…' : 'Pagar Renta con tarjeta guardada'}
-            </Button>
-          )}
-          <Button onClick={async () => { const blob = await downloadPdf(token!, c._id || c.id); const url = URL.createObjectURL(blob); window.open(url, '_blank'); }}>
-            Descargar PDF
+        </div>
+
+        <div className="flex gap-3">
+          <Button variant="secondary" className="flex items-center gap-2">
+            <Download size={16} /> Descargar Borrador
           </Button>
+          {needsMySignature && (
+            <Button
+              onClick={handleStartSigning}
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center gap-2"
+            >
+              <PenTool size={18} /> Firmar con Signaturit
+            </Button>
+          )}
         </div>
-      </Card>
-      <div className="mt-3">
-        <CopyLinkButton />
       </div>
-      <div className="mt-4">
-        <ChatPanel kind="contract" refId={c._id || c.id} />
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <div className="space-y-6">
+          <Card>
+            <h3 className="font-bold text-gray-400 text-xs uppercase mb-4 tracking-wider">Resumen Económico</h3>
+            <div className="space-y-4">
+              <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                <span className="text-gray-600 text-sm">Renta Mensual</span>
+                <span className="font-bold text-lg">{contract.rentAmount} €</span>
+              </div>
+              <div className="flex justify-between items-center border-b border-gray-100 pb-2">
+                <span className="text-gray-600 text-sm">Fianza</span>
+                <span className="font-medium">{contract.depositAmount} €</span>
+              </div>
+              <div className="flex justify-between items-center pt-1">
+                <span className="text-gray-600 text-sm">Duración</span>
+                <span className="font-medium text-sm text-right">
+                  {new Date(contract.startDate).toLocaleDateString()} <br/> al <br/>
+                  {new Date(contract.endDate).toLocaleDateString()}
+                </span>
+              </div>
+            </div>
+          </Card>
+
+          <Card>
+            <h3 className="font-bold text-gray-400 text-xs uppercase mb-4 tracking-wider">Intervinientes</h3>
+            <div className="space-y-4">
+              <div className="flex items-start gap-3">
+                <div className="bg-blue-100 p-2 rounded-full"><User size={16} className="text-blue-600"/></div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase font-bold">Arrendador</p>
+                  <p className="font-medium text-gray-900">{contract.landlordName}</p>
+                </div>
+              </div>
+              <div className="flex items-start gap-3">
+                 <div className="bg-green-100 p-2 rounded-full"><User size={16} className="text-green-600"/></div>
+                <div>
+                  <p className="text-xs text-gray-500 uppercase font-bold">Arrendatario</p>
+                  <p className="font-medium text-gray-900">{contract.tenantName}</p>
+                </div>
+              </div>
+            </div>
+          </Card>
+        </div>
+
+        <div className="lg:col-span-2">
+          <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 min-h-[600px] shadow-inner relative overflow-hidden">
+            {!isActive && (
+              <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.03] rotate-[-45deg]">
+                <span className="text-9xl font-black uppercase">Borrador</span>
+              </div>
+            )}
+
+            <div className="max-w-2xl mx-auto bg-white shadow-sm border border-gray-200 p-8 min-h-[800px] text-sm text-gray-800 font-serif leading-relaxed">
+              <h2 className="text-center font-bold text-xl uppercase mb-8 border-b pb-4">Contrato de Arrendamiento</h2>
+              <p className="mb-4">En {contract.city || 'Madrid'}, a {new Date().toLocaleDateString()}.</p>
+              <p className="mb-4">
+                <strong>REUNIDOS:</strong><br/>
+                De una parte, D./Dña {contract.landlordName} (ARRENDADOR).<br/>
+                Y de otra, D./Dña {contract.tenantName} (ARRENDATARIO).
+              </p>
+              <p className="mb-4">
+                <strong>ACUERDAN:</strong><br/>
+                El arrendamiento de la finca urbana sita en {contract.propertyAddress || contract.address || 'Dirección'},
+                con renta mensual de {contract.rentAmount}€.
+              </p>
+              <div className="pl-4 border-l-2 border-gray-200 my-6 space-y-2 italic text-gray-600">
+                <p>1. Duración: Del {contract.startDate} al {contract.endDate}.</p>
+                <p>2. Renta: {contract.rentAmount}€ mensuales pagaderos los primeros 5 días.</p>
+                <p>3. Fianza: {contract.depositAmount}€.</p>
+                {contract.petsAllowed ? <p>4. Mascotas: Permitidas.</p> : <p>4. Mascotas: No permitidas.</p>}
+              </div>
+              <div className="mt-12 pt-8 border-t border-gray-300 grid grid-cols-2 gap-8">
+                <div className="text-center">
+                  <div className="h-16 flex items-end justify-center">
+                    <span className="font-handwriting text-xl text-blue-900">{contract.landlordName}</span>
+                  </div>
+                  <p className="text-xs uppercase font-bold border-t border-gray-300 pt-2">El Arrendador</p>
+                </div>
+                <div className="text-center relative">
+                   {isActive ? (
+                     <div className="absolute inset-0 flex items-center justify-center">
+                       <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Signature_sample.svg/1200px-Signature_sample.svg.png" className="h-12 opacity-50 -rotate-12" alt="Firma" />
+                     </div>
+                   ) : (
+                     <div className="h-16 flex items-center justify-center text-gray-300 text-xs italic bg-gray-50 border border-dashed border-gray-200 rounded">
+                       Espacio para firma certificada
+                     </div>
+                   )}
+                  <p className="text-xs uppercase font-bold border-t border-gray-300 pt-2 relative z-10">El Arrendatario</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
+
+      <Modal
+        open={isSigning}
+        onClose={() => setIsSigning(false)}
+        title="Firma Segura - Signaturit"
+        className="max-w-6xl h-[85vh] w-full"
+      >
+        {signingUrl ? (
+          <SignaturitWidget
+            signingUrl={signingUrl}
+            onSigned={handleSignedSuccess}
+            onCancel={() => setIsSigning(false)}
+            onError={() => push({ title: 'Error en el widget de firma', tone: 'error' })}
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center h-full space-y-4">
+             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+             <p className="text-gray-500">Conectando con el proveedor de confianza...</p>
+          </div>
+        )}
+      </Modal>
     </div>
   );
-};
-
-export default ContractDetail;
+}

@@ -1,7 +1,15 @@
 import React, { useEffect, useRef } from 'react';
 
-const Modal: React.FC<{ open: boolean; onClose: () => void; title?: string; children: React.ReactNode }>
-  = ({ open, onClose, title, children }) => {
+type ModalProps = {
+  open: boolean;
+  onClose: () => void;
+  title?: string;
+  children: React.ReactNode;
+  className?: string;
+};
+
+const Modal: React.FC<ModalProps>
+  = ({ open, onClose, title, children, className }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -32,8 +40,19 @@ const Modal: React.FC<{ open: boolean; onClose: () => void; title?: string; chil
 
   if (!open) return null;
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'grid', placeItems: 'center', zIndex: 50 }} onClick={onClose} role="dialog" aria-modal="true" aria-label={title || 'Modal'}>
-      <div ref={containerRef} onClick={e => e.stopPropagation()} style={{ background: 'var(--card)', color: 'var(--fg)', width: 520, maxWidth: '90vw', border: '1px solid var(--border)', borderRadius: 12 }}>
+    <div
+      style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', display: 'grid', placeItems: 'center', zIndex: 50 }}
+      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      aria-label={title || 'Modal'}
+    >
+      <div
+        ref={containerRef}
+        onClick={e => e.stopPropagation()}
+        style={{ background: 'var(--card)', color: 'var(--fg)', width: 520, maxWidth: '90vw', border: '1px solid var(--border)', borderRadius: 12 }}
+        className={className}
+      >
         <div style={{ padding: 14, borderBottom: '1px solid var(--border)', fontWeight: 700 }}>{title}</div>
         <div style={{ padding: 16 }}>{children}</div>
       </div>
