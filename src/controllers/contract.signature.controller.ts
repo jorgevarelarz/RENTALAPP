@@ -175,6 +175,85 @@ export async function signatureCallback(req: Request, res: Response) {
   return res.json({ ok: true, status: contract.status, ignored: true });
 }
 
+export async function signatureWebhook(req: Request, res: Response) {
+  if (isProd() && isMock(process.env.SIGN_PROVIDER)) {
+    return res.status(403).json({ error: 'signature_mock_not_allowed_in_prod' });
+  }
+
+  const body = req.body || {};
+  const incomingId = (body as any).envelopeId || (body as any).id;
+  let status = (body as any).status || (body as any).event || 'unknown';
+  const eventType = (body as any).type;
+  if (eventType === 'sending_completed') status = 'sent';
+  if (eventType === 'signing_completed') status = 'completed';
+
+  if (!incomingId) {
+    console.error('Webhook Error: Falta ID de documento/sobre', body);
+    return res.status(400).json({ error: 'missing_id' });
+  }
+
+  const contract = await Contract.findOne({ 'signature.envelopeId': incomingId });
+  if (!contract) {
+    console.error(`Webhook Error: Contrato no encontrado para ID ${incomingId}`);
+    return res.status(200).json({ error: 'contract_not_found_but_ack' });
+  }
+
+  console.log(`Webhook recibido para contrato ${contract._id}. Estado: ${status}`);
+  const now = new Date();
+
+  await recordSignatureEvent({
+    contractId: String(contract._id),
+    envelopeId: incomingId,
+    provider: (process.env.SIGN_PROVIDER || 'signaturit').toLowerCase(),
+    eventType: status,
+    timestamp: now,
+    ip: getClientIp(req),
+    userAgent: req.header('user-agent') || undefined,
+  });
+
+  const eventUniqueId = (body as any).eventId || `${incomingId}_${status}`;
+  if (eventUniqueId) {
+    try {
+      await ProcessedEvent.create({ provider: 'webhook', eventId: eventUniqueId, contractId: contract._id });
+    } catch (error) {
+      if (!isDuplicateKeyError(error)) {
+        console.error('signature webhook event store failed', error);
+      } else {
+        return res.sendStatus(200);
+      }
+    }
+  }
+
+  const updates: any = {
+    'signature.updatedAt': now,
+    'signature.status': status,
+    'signature.events': [...(contract.signature?.events || []), { at: now, type: status }],
+  };
+
+  if (status === 'completed' || status === 'signed') {
+    try {
+      const updated = await transitionContract(String(contract._id), 'signed');
+      await recordContractHistory(String(contract._id), 'SIGNED', null, { provider: 'signaturit', externalId: incomingId });
+      try {
+        const pdf = await generateAuditTrailPdf(String(contract._id));
+        updates['signature.auditPdfUrl'] = `/api/contracts/${String(contract._id)}/audit-trail?format=pdf`;
+        updates['signature.auditPdfHash'] = pdf.sha256;
+      } catch (pdfErr) {
+        console.error("Error generando audit trail interno:", pdfErr);
+      }
+      await Contract.findByIdAndUpdate(contract._id, { $set: updates });
+      emitAuditTrailUpdate({ contractId: String(contract._id), status, at: now.toISOString() });
+      return res.sendStatus(200);
+    } catch (error: any) {
+      console.error("Error en transición de estado:", error);
+      return res.status(500).json({ error: 'transition_failed' });
+    }
+  }
+
+  await Contract.findByIdAndUpdate(contract._id, { $set: updates });
+  return res.sendStatus(200);
+}
+
 export async function initiateSignature(req: Request, res: Response) {
   try {
     const { id } = req.params;
@@ -222,78 +301,4 @@ export async function getAuditTrail(req: Request, res: Response) {
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || 'audit_trail_failed' });
   }
-}
-
-export async function signatureWebhook(req: Request, res: Response) {
-  if (isProd() && isMock(process.env.SIGN_PROVIDER)) {
-    return res.status(403).json({ error: 'signature_mock_not_allowed_in_prod' });
-  }
-  const secret = process.env.SIGN_WEBHOOK_SECRET;
-  const raw = (req as any).rawBody ? (req as any).rawBody.toString('utf8') : JSON.stringify(req.body || {});
-  if (!verifyGenericHmac(raw, req.headers['x-signature'], secret)) {
-    return res.status(401).json({ error: 'Invalid HMAC signature' });
-  }
-
-  const { envelopeId, event, status: bodyStatus, eventId } = (req.body || {}) as any;
-  const status: string = bodyStatus || event || 'unknown';
-
-  if (!envelopeId) return res.status(400).json({ error: 'missing_envelopeId' });
-
-  const contract = await Contract.findOne({ 'signature.envelopeId': envelopeId });
-  if (!contract) return res.status(404).json({ error: 'contract_not_found' });
-
-  const now = new Date();
-  await recordSignatureEvent({
-    contractId: String(contract._id),
-    envelopeId,
-    provider: (process.env.SIGN_PROVIDER || 'mock').toLowerCase(),
-    eventType: status,
-    timestamp: now,
-    ip: getClientIp(req),
-    userAgent: req.header('user-agent') || undefined,
-  });
-
-  if (eventId) {
-    try {
-      await ProcessedEvent.create({ provider: 'webhook', eventId, contractId: contract._id });
-    } catch (error) {
-      if (!isDuplicateKeyError(error)) {
-        console.error('signature webhook event store failed', error);
-        return res.status(500).json({ error: 'event_store_failed' });
-      }
-    }
-  }
-
-  const updates: any = {
-    'signature.updatedAt': now,
-    'signature.status': status,
-    'signature.events': [...(contract.signature?.events || []), { at: now, type: status }],
-  };
-
-  if (status === 'completed' || status === 'signed') {
-    if (isProd() && isMock(process.env.SIGN_PROVIDER)) {
-      return res.status(503).json({ error: 'signature_mock_not_allowed_in_prod' });
-    }
-    try {
-      const updated = await transitionContract(String(contract._id), 'signed');
-      await recordContractHistory(String(contract._id), 'SIGNED', null, { provider: 'webhook', envelopeId });
-      const pdf = await generateAuditTrailPdf(String(contract._id));
-      updates['signature.auditPdfUrl'] = `/api/contracts/${String(contract._id)}/audit-trail?format=pdf`;
-      updates['signature.auditPdfHash'] = pdf.sha256;
-      await Contract.findByIdAndUpdate(contract._id, { $set: updates });
-      emitAuditTrailUpdate({ contractId: String(contract._id), status, at: now.toISOString() });
-      return res.sendStatus(200);
-    } catch (error: any) {
-      const httpStatus = error?.status ?? 500;
-      return res.status(httpStatus).json({
-        error: error?.message || 'signature_callback_failed',
-        from: error?.from,
-        to: error?.to,
-      });
-    }
-  }
-
-  await Contract.findByIdAndUpdate(contract._id, { $set: updates });
-  emitAuditTrailUpdate({ contractId: String(contract._id), status, at: now.toISOString() });
-  return res.sendStatus(200);
 }
