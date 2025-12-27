@@ -77,7 +77,10 @@ export interface Application {
     avatar?: string;
     tenantPro?: { status: string };
   };
-  status: 'pending' | 'accepted' | 'rejected';
+  status: 'pending' | 'proposed' | 'scheduled' | 'rejected';
+  proposedBy?: 'tenant' | 'landlord';
+  proposedDate?: string;
+  visitDate?: string;
   createdAt: string;
   message?: string;
 }

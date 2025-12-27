@@ -41,6 +41,8 @@ import tenantProRoutes from './routes/tenantPro.routes';
 import tenantProMeRoutes from './routes/tenantPro.me';
 import adminTenantProRoutes from './routes/admin.tenantPro.routes';
 import { purgeOldTenantProDocs } from './jobs/tenantProRetention';
+import { startContractActivationJob } from './jobs/contractActivation.job';
+import applicationsRoutes from './routes/applications.routes';
 
 import helmet from 'helmet';
 import hpp from 'hpp';
@@ -95,6 +97,10 @@ if (compressionFn) {
   app.use(compressionFn());
 }
 app.use(metricsMiddleware);
+
+if (process.env.NODE_ENV !== 'test') {
+  startContractActivationJob();
+}
 
 if (process.env.NODE_ENV !== 'test') {
   app.use(morgan('dev'));
@@ -196,6 +202,7 @@ app.use('/api', authenticate, postsignRouter);
 app.use('/api', tenantProRoutes);
 app.use('/api', tenantProMeRoutes);
 app.use('/api', requireVerified, appointmentsFlowRoutes);
+app.use('/api', applicationsRoutes);
 
 // Protected routes (verified users)
 app.use('/api/contracts', requireVerified, contractRoutes);

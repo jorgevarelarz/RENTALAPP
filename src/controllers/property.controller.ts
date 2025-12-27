@@ -4,6 +4,7 @@ import { UserFavorite } from '../models/userFavorite.model';
 import { AlertSubscription } from '../models/alertSubscription.model';
 import { sendAvailabilityAlert, sendPriceAlert } from '../utils/email';
 import { User } from '../models/user.model';
+import { Application } from '../models/application.model';
 
 export async function create(req: Request, res: Response) {
   const b: any = req.body;
@@ -226,5 +227,54 @@ export async function apply(req: Request, res: Response) {
     }
   }
 
-  res.json({ ok: true, propertyId: property._id });
+  const userId = (req as any).user?._id || (req as any).user?.id;
+  if (!userId) return res.status(401).json({ error: 'unauthorized' });
+
+  const existing = await Application.findOne({ propertyId: property._id, tenantId: userId });
+  if (existing) {
+    return res.json({ ok: true, applicationId: existing._id });
+  }
+
+  const app = await Application.create({
+    propertyId: property._id,
+    tenantId: userId,
+    status: 'pending',
+  });
+
+  res.json({ ok: true, propertyId: property._id, applicationId: app._id });
+}
+
+export async function listApplications(req: Request, res: Response) {
+  const { id } = req.params;
+  const property = await Property.findById(id);
+  if (!property) return res.status(404).json({ error: 'not_found' });
+
+  const user: any = (req as any).user;
+  const userId = user?._id || user?.id;
+  const isOwner = userId && String(userId) === String(property.owner);
+  const isAdmin = user?.role === 'admin';
+  if (!isOwner && !isAdmin) return res.status(403).json({ error: 'forbidden' });
+
+  const apps = await Application.find({ propertyId: property._id })
+    .sort({ createdAt: -1 })
+    .populate('tenantId', 'name email tenantPro')
+    .lean();
+
+  const items = apps.map((a: any) => ({
+    _id: a._id,
+    status: a.status,
+    createdAt: a.createdAt,
+    message: a.message,
+    proposedDate: a.proposedDate,
+    proposedBy: a.proposedBy,
+    visitDate: a.visitDate,
+    tenant: a.tenantId ? {
+      _id: a.tenantId._id,
+      name: a.tenantId.name,
+      email: a.tenantId.email,
+      tenantPro: a.tenantId.tenantPro,
+    } : undefined,
+  }));
+
+  res.json({ items });
 }

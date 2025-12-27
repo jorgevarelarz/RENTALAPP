@@ -32,6 +32,7 @@ r.delete(
 );
 
 r.post('/properties/:id/apply', ...assertRole('tenant', 'admin'), asyncHandler(ctrl.apply));
+r.get('/properties/:id/applications', authenticate, authorizeRoles('landlord', 'admin'), asyncHandler(ctrl.listApplications));
 
 r.post('/properties/:id/subscribe-price', authenticate, asyncHandler(ctrl.subscribePriceAlert));
 r.delete('/properties/:id/subscribe-price', authenticate, asyncHandler(ctrl.unsubscribePriceAlert));

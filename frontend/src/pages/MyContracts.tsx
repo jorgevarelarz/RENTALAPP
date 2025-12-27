@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { listContracts } from '../services/contracts';
 import { useAuth } from '../context/AuthContext';
-import Badge from '../components/ui/Badge';
+import { ContractStatusBadge } from '../components/ContractStatusBadge';
 import { Link } from 'react-router-dom';
 
 const MyContracts: React.FC = () => {
@@ -60,7 +60,7 @@ const MyContracts: React.FC = () => {
                 <Link to={`/contracts/${c._id}`} style={{ fontWeight: 700 }}>{String(c.property)}</Link>
                 <div style={{ fontSize: 12, opacity: .8 }}>Arrendador: {String(c.ownerId)} — Inquilino: {String(c.tenantId)}</div>
               </div>
-              <Badge tone={(c.status || 'draft') as any}>{c.status}</Badge>
+              <ContractStatusBadge status={c.status || 'draft'} />
             </div>
           ))}
         </div>

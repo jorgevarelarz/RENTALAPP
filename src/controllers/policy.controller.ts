@@ -32,7 +32,7 @@ export class PolicyController {
 
   static async accept(req: Request, res: Response) {
     try {
-      const userId = req.user?._id; // asumimos que identity middleware añade req.user
+      const userId = (req as any).user?._id; // asumimos que identity middleware añade req.user
       if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
       const { policyType, policyVersion } = req.body;
@@ -63,7 +63,7 @@ export class PolicyController {
 
   static async list(req: Request, res: Response) {
     try {
-      const userId = req.user?._id;
+      const userId = (req as any).user?._id;
       if (!userId) return res.status(401).json({ error: 'Unauthorized' });
 
       const acceptances = await PolicyService.getUserAcceptances(userId);

@@ -14,6 +14,7 @@ import { User } from '../models/user.model';
 import { sendPaymentReceiptEmail } from '../utils/email';
 import { calcServiceFee } from '../utils/calcServiceFee';
 import { recordContractHistory } from '../utils/history';
+import { transitionContract } from '../services/contractState';
 
 const r = Router();
 
@@ -177,6 +178,29 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
             contract.depositPaidAt = new Date();
             await contract.save();
             await recordContractHistory(contract.id, 'depositPaid', 'Fianza pagada a través de la plataforma');
+
+            const now = new Date();
+            if (contract.status === 'signed') {
+              if (contract.startDate && now >= contract.startDate) {
+                try {
+                  await transitionContract(contract.id, 'active');
+                  await recordContractHistory(
+                    contract.id,
+                    'activated',
+                    'Contrato activado automáticamente tras pago de fianza',
+                  );
+                  console.log(`Contrato ${contract.id} activado automáticamente.`);
+                } catch (actErr) {
+                  console.error(`Error activando contrato ${contract.id}:`, actErr);
+                }
+              } else if (contract.startDate) {
+                await recordContractHistory(
+                  contract.id,
+                  'pending_activation',
+                  `Fianza recibida. Activación programada para ${contract.startDate.toISOString()}`,
+                );
+              }
+            }
           }
         }
       }

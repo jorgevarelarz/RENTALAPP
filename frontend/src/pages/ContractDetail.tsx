@@ -7,6 +7,7 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import SignaturitWidget from '../components/SignaturitWidget';
+import { ContractStatusBadge } from '../components/ContractStatusBadge';
 import { FileCheck, User, ShieldCheck, Download, PenTool } from 'lucide-react';
 
 export default function ContractDetail() {
@@ -83,7 +84,15 @@ export default function ContractDetail() {
           </div>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex items-center gap-4">
+          <div className="flex flex-col items-end">
+            <span className="text-xs text-gray-400 uppercase tracking-wide">Estado actual</span>
+            <ContractStatusBadge
+              status={contract.status}
+              className="mt-1"
+              style={{ fontSize: 12, padding: '4px 10px' }}
+            />
+          </div>
           <Button variant="secondary" className="flex items-center gap-2">
             <Download size={16} /> Descargar Borrador
           </Button>

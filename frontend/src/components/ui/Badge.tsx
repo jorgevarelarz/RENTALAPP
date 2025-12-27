@@ -1,7 +1,11 @@
 import React from 'react';
 
-const Badge: React.FC<{ children: React.ReactNode; tone?: 'default'|'new'|'highlight'; style?: React.CSSProperties }>
-  = ({ children, tone='default', style }) => {
+const Badge: React.FC<{
+  children: React.ReactNode;
+  tone?: 'default'|'new'|'highlight';
+  className?: string;
+  style?: React.CSSProperties;
+}> = ({ children, tone='default', className, style }) => {
   const base: React.CSSProperties = {
     display: 'inline-block',
     padding: '2px 6px',
@@ -17,8 +21,7 @@ const Badge: React.FC<{ children: React.ReactNode; tone?: 'default'|'new'|'highl
     new: { background: '#ecfeff', borderColor: '#a5f3fc' },
     highlight: { background: '#eef2ff', borderColor: '#c7d2fe' },
   };
-  return <span style={{ ...base, ...tones[tone], ...style }}>{children}</span>;
+  return <span className={className} style={{ ...base, ...tones[tone], ...style }}>{children}</span>;
 };
 
 export default Badge;
-

@@ -211,16 +211,20 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
 
         {step === 2 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="bg-gray-50 p-6 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-400 transition-colors">
-              <Dropzone onFiles={handleDrop} label="" />
-              <div className="text-center pointer-events-none">
-                <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                  <UploadCloud size={24} />
+            <Dropzone
+              onFiles={handleDrop}
+              className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-400 transition-colors"
+              style={{ padding: 24 }}
+              label={
+                <div className="text-center">
+                  <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
+                    <UploadCloud size={24} />
+                  </div>
+                  <p className="font-medium text-gray-900">Haz clic o arrastra fotos aquí</p>
+                  <p className="text-sm text-gray-500 mt-1">Sube al menos 3 imágenes de buena calidad</p>
                 </div>
-                <p className="font-medium text-gray-900">Haz clic o arrastra fotos aquí</p>
-                <p className="text-sm text-gray-500 mt-1">Sube al menos 3 imágenes de buena calidad</p>
-              </div>
-            </div>
+              }
+            />
 
             {uploading && (
               <div className="text-center py-2 text-blue-600 animate-pulse text-sm font-medium">Subiendo imágenes...</div>

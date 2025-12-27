@@ -15,6 +15,19 @@ export const requireVerified = async (
   if (user) {
     if (user.role === 'admin') return next();
     if (user.isVerified) return next();
+    // If token doesn't include verification, fall back to DB status
+    try {
+      const userId = String(user.id || user._id || '');
+      if (userId) {
+        const verification = await Verification.findOne({ userId }).lean();
+        if (verification?.status === 'verified') {
+          user.isVerified = true;
+          return next();
+        }
+      }
+    } catch (err: any) {
+      return res.status(500).json({ error: err.message || 'verification_check_failed' });
+    }
     return res.status(403).json({ error: 'owner_not_verified' });
   }
 

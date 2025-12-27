@@ -2,10 +2,12 @@ import React, { useCallback, useRef, useState } from 'react';
 
 type Props = {
   onFiles: (files: File[]) => void;
-  label?: string;
+  label?: React.ReactNode;
+  className?: string;
+  style?: React.CSSProperties;
 };
 
-const Dropzone: React.FC<Props> = ({ onFiles, label = 'Arrastra y suelta imágenes o haz clic' }) => {
+const Dropzone: React.FC<Props> = ({ onFiles, label = 'Arrastra y suelta imágenes o haz clic', className, style }) => {
   const [over, setOver] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -32,14 +34,15 @@ const Dropzone: React.FC<Props> = ({ onFiles, label = 'Arrastra y suelta imágen
       aria-label="Subir imágenes"
       tabIndex={0}
       onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click(); }}
+      className={className}
       style={{
-        border: '2px dashed var(--border)',
-        background: over ? 'rgba(79,70,229,0.08)' : 'transparent',
         padding: 16,
         borderRadius: 12,
         cursor: 'pointer',
         textAlign: 'center',
-        color: 'var(--muted)'
+        color: 'var(--muted)',
+        ...style,
+        background: over ? 'rgba(79,70,229,0.08)' : style?.background,
       }}
     >
       <input ref={inputRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={onChoose} />
@@ -49,4 +52,3 @@ const Dropzone: React.FC<Props> = ({ onFiles, label = 'Arrastra y suelta imágen
 };
 
 export default Dropzone;
-

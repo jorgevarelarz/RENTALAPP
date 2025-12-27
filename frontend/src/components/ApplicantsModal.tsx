@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import Modal from './ui/Modal';
 import Button from './ui/Button';
 import { getPropertyApplications, type Application } from '../services/properties';
-import { proposeAppointment } from '../services/appointments';
+import { acceptApplicationVisit, proposeApplicationVisit } from '../services/appointments';
 import { useToast } from '../context/ToastContext';
 import { CheckCircle2, FileSignature, MessageSquare, User, Calendar, Clock } from 'lucide-react';
 
@@ -21,6 +21,12 @@ export default function ApplicantsModal({ property, isOpen, onClose }: Props) {
 
   const nav = useNavigate();
   const { push } = useToast();
+  const fmtDate = (value?: string) => {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return '';
+    return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  };
 
   useEffect(() => {
     if (isOpen && property?._id) {
@@ -54,7 +60,7 @@ export default function ApplicantsModal({ property, isOpen, onClose }: Props) {
     try {
       // Si el backend soporta citas para propiedad, llamamos. En caso contrario se queda como mock visual.
       try {
-        await proposeAppointment(schedulingApp, visitDate);
+        await proposeApplicationVisit(schedulingApp, visitDate);
       } catch {
         // silencioso, mantenemos feedback local
       }
@@ -62,7 +68,7 @@ export default function ApplicantsModal({ property, isOpen, onClose }: Props) {
       push({ title: `Visita propuesta para el ${new Date(visitDate).toLocaleString()}`, tone: 'success' });
       setApplicants(prev =>
         prev.map(a =>
-          a._id === schedulingApp ? { ...a, status: 'accepted', message: 'Visita Agendada' } : a
+          a._id === schedulingApp ? { ...a, status: 'proposed', message: 'Visita propuesta' } : a
         )
       );
       setSchedulingApp(null);
@@ -118,13 +124,27 @@ export default function ApplicantsModal({ property, isOpen, onClose }: Props) {
                         )}
                       </div>
                       <p className="text-sm text-gray-500">{app.tenant.email}</p>
+                      {app.proposedDate && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Propuesta {app.proposedBy ? `(${app.proposedBy === 'tenant' ? 'inquilino' : 'propietario'})` : ''}: {fmtDate(app.proposedDate)}
+                        </p>
+                      )}
+                      {app.visitDate && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Visita agendada: {fmtDate(app.visitDate)}
+                        </p>
+                      )}
                     </div>
                   </div>
 
                   <div className="text-right">
-                    {app.status === 'accepted' ? (
+                    {app.status === 'scheduled' ? (
                       <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
                         <Calendar size={12} /> Visita Agendada
+                      </span>
+                    ) : app.status === 'proposed' ? (
+                      <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium">
+                        <Clock size={12} /> Visita Propuesta
                       </span>
                     ) : (
                       <span className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-gray-100 text-gray-600 text-xs font-medium">
@@ -142,6 +162,20 @@ export default function ApplicantsModal({ property, isOpen, onClose }: Props) {
                 )}
 
                 <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100">
+                  {app.status === 'proposed' && app.proposedBy === 'tenant' && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={async () => {
+                        await acceptApplicationVisit(app._id);
+                        await loadApplicants();
+                        push({ title: 'Visita aceptada', tone: 'success' });
+                      }}
+                      className="flex items-center gap-2"
+                    >
+                      <CheckCircle2 size={16} /> Aceptar visita
+                    </Button>
+                  )}
                   {schedulingApp === app._id ? (
                     <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2">
                       <input
@@ -161,15 +195,15 @@ export default function ApplicantsModal({ property, isOpen, onClose }: Props) {
                         onClick={() => setSchedulingApp(app._id)}
                         className="flex items-center gap-2"
                       >
-                        <Calendar size={16} /> {app.status === 'accepted' ? 'Reprogramar Visita' : 'Agendar Visita'}
+                        <Calendar size={16} /> {app.status === 'scheduled' ? 'Reprogramar Visita' : 'Proponer Visita'}
                       </Button>
 
                       <Button
                         variant="primary"
                         size="sm"
                         onClick={() => handleCreateContract(app)}
-                        className={`flex items-center gap-2 ${app.status !== 'accepted' ? 'opacity-50 hover:opacity-100' : ''}`}
-                        title={app.status !== 'accepted' ? "Normalmente se hace una visita primero" : "Iniciar borrador de contrato"}
+                        className={`flex items-center gap-2 ${app.status !== 'scheduled' ? 'opacity-50 hover:opacity-100' : ''}`}
+                        title={app.status !== 'scheduled' ? "Normalmente se hace una visita primero" : "Iniciar borrador de contrato"}
                       >
                         <FileSignature size={16} /> Crear Contrato
                       </Button>

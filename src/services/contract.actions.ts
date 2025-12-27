@@ -80,7 +80,7 @@ export const createContractAction = async (params: CreateContractParams) => {
   const startAt = startDate instanceof Date ? startDate : new Date(startDate);
   const endAt = endDate instanceof Date ? endDate : new Date(endDate);
 
-  // Compose a new contract document. Optionally encrypt and store the IBAN
+  // Compose a new contract document.
   const newContractData: any = {
     landlord: landlordObjectId,
     tenant: tenantObjectId,
@@ -90,6 +90,7 @@ export const createContractAction = async (params: CreateContractParams) => {
     startDate: startAt,
     endDate: endAt,
     region: normalizedRegion,
+    status: 'draft',
     clauses: parsedClauses.map(clause => ({
       id: clause.id,
       label: clause.label,
@@ -99,6 +100,7 @@ export const createContractAction = async (params: CreateContractParams) => {
       scope: clause.scope,
     })),
   };
+
   if (iban) {
     try {
       newContractData.ibanEncrypted = encryptIBAN(iban);
@@ -107,7 +109,10 @@ export const createContractAction = async (params: CreateContractParams) => {
       throw new Error(`Error al encriptar el IBAN: ${message}`);
     }
   }
+
   const contract = new Contract(newContractData);
+
+  // Generate hash for PDF consistency check
   const pdfPayload = {
     landlord: String(contract.landlord),
     tenant: String(contract.tenant),
@@ -119,6 +124,7 @@ export const createContractAction = async (params: CreateContractParams) => {
     endDate: contract.endDate.toISOString(),
     clauses: contract.clauses.map(c => ({ id: c.id, text: c.text, params: c.params })),
   };
+
   const pdfHash = crypto.createHash('sha256').update(JSON.stringify(pdfPayload)).digest('hex');
   contract.pdfHash = pdfHash;
   contract.pdf = {
@@ -126,12 +132,13 @@ export const createContractAction = async (params: CreateContractParams) => {
     sha256: pdfHash,
     generatedAt: new Date(),
   };
+
   await contract.save();
 
   // Record history entry for creation
   await recordContractHistory(contract.id, 'created', 'Contrato creado');
 
-  // After saving the contract we can send notification emails to landlord and tenant.
+  // Send notifications
   try {
     const landlord = await User.findById(contract.landlord);
     const tenant = await User.findById(contract.tenant);
@@ -142,7 +149,6 @@ export const createContractAction = async (params: CreateContractParams) => {
       await sendContractCreatedEmail(tenant.email, contract.id);
     }
   } catch (notifyErr) {
-    // Log and proceed; email errors should not block the response
     console.error('Error enviando notificaciones:', notifyErr);
   }
 
@@ -153,6 +159,11 @@ export const signContractAction = async (contractId: string, user: { id: string;
   const contract = await Contract.findById(contractId);
   if (!contract) {
     throw new Error('Contrato no encontrado');
+  }
+
+  // Validar que el contrato se pueda firmar
+  if (['active', 'completed', 'cancelled', 'terminated'].includes(contract.status)) {
+    throw new Error(`No se puede firmar un contrato en estado ${contract.status}`);
   }
 
   if (!user) {
@@ -177,22 +188,23 @@ export const signContractAction = async (contractId: string, user: { id: string;
     throw new Error('Rol no autorizado para firmar');
   }
 
-  // If both parties have signed, set or update signedAt to now and activate
+  // Actualización de Estado
   if (contract.signedByTenant && contract.signedByLandlord) {
     contract.signedAt = new Date();
-    // When both have signed, mark the contract as active
-    contract.status = 'active';
+    contract.status = 'signed';
+  } else {
+    contract.status = 'signing';
   }
+
   await contract.save();
 
   // Record history entry
   await recordContractHistory(contract.id, actionLabel, `Contrato firmado por ${user.role}`);
 
-  // Notify the other party that the contract has been signed
+  // Notify the other party
   try {
     const landlord = await User.findById(contract.landlord);
     const tenant = await User.findById(contract.tenant);
-    // Determine which party should be notified
     if (user.role === 'tenant' && landlord?.email) {
       await sendContractCreatedEmail(landlord.email, contract.id);
     } else if (user.role === 'landlord' && tenant?.email) {
@@ -205,7 +217,11 @@ export const signContractAction = async (contractId: string, user: { id: string;
   return contract;
 };
 
-export const initiatePaymentAction = async (contractId: string, amount: number | undefined, user: { id: string; role: string }) => {
+export const initiatePaymentAction = async (
+  contractId: string,
+  amount: number | undefined,
+  user: { id: string; role: string },
+) => {
   const contract = await Contract.findById(contractId);
   if (!contract) {
     throw new Error('Contrato no encontrado');
@@ -216,9 +232,11 @@ export const initiatePaymentAction = async (contractId: string, amount: number |
   }
 
   let customerId = contract.stripeCustomerId;
+
+  // Si no hay cliente de Stripe, intentar crearlo con el IBAN encriptado
   if (!customerId) {
     if (!contract.ibanEncrypted) {
-      throw new Error('El contrato no tiene un IBAN asociado');
+      throw new Error('El contrato no tiene un IBAN asociado y no existe cliente de pago');
     }
     let iban: string;
     try {
@@ -227,18 +245,23 @@ export const initiatePaymentAction = async (contractId: string, amount: number |
       const message = (decErr as any)?.message || String(decErr);
       throw new Error(`No se pudo descifrar el IBAN: ${message}`);
     }
+
     const tenant = await User.findById(contract.tenant);
     if (!tenant) {
-      throw new Error('Inquilino no encontrado');
+      throw new Error('Inquilino no encontrado para procesar pago');
     }
-    customerId = await createCustomerAndMandate(tenant.name, tenant.email, iban);
+
+    customerId = await createCustomerAndMandate(tenant.name || 'Inquilino', tenant.email, iban);
     contract.stripeCustomerId = customerId;
     await contract.save();
   }
 
   const payAmount = typeof amount === 'number' && amount > 0 ? amount : contract.rent;
+
+  // Crear el intento de pago
   const paymentIntent = await createPaymentIntent(customerId, payAmount, 'eur');
-  await recordContractHistory(contract.id, 'paymentInitiated', `Pago iniciado por €${payAmount / 1}`);
+
+  await recordContractHistory(contract.id, 'paymentInitiated', `Pago iniciado por €${payAmount}`);
 
   return paymentIntent.client_secret;
 };

@@ -3,10 +3,10 @@ import crypto from 'crypto';
 import multer from 'multer';
 import { z } from 'zod';
 import { authenticate } from '../middleware/auth.middleware';
+import { authorizeRoles } from '../middleware/role.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { User } from '../models/user.model';
 import { ensureTenantProDir, encryptAndSaveTP } from '../services/tenantProStorage';
-import { assertRole } from '../middleware/assertRole';
 
 const router = Router();
 const upload = multer({
@@ -26,7 +26,8 @@ const ConsentSchema = z.object({ consent: z.literal(true), version: z.string().m
 
 router.post(
   '/tenant-pro/consent',
-  ...assertRole('tenant'),
+  authenticate,
+  authorizeRoles('tenant'),
   asyncHandler(async (req, res) => {
     const parsed = ConsentSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json(parsed.error);
@@ -43,7 +44,8 @@ router.post(
 
 router.post(
   '/tenant-pro/docs',
-  ...assertRole('tenant'),
+  authenticate,
+  authorizeRoles('tenant'),
   // Wrap multer to normalize errors
   (req, res, next) => {
     (upload.single('file') as any)(req, res, (err: any) => {
@@ -87,7 +89,8 @@ router.post(
 
 router.get(
   '/tenant-pro/me',
-  ...assertRole('tenant'),
+  authenticate,
+  authorizeRoles('tenant'),
   asyncHandler(async (req, res) => {
     const u: any = await User.findById((req as any).user?.id || (req as any).user?._id)
       .select('email tenantPro')
