@@ -77,13 +77,19 @@ export const createPaymentIntent = async (
   customerId: string,
   amount: number,
   currency = 'eur',
+  options?: {
+    paymentMethodTypes?: string[];
+    confirm?: boolean;
+    metadata?: Record<string, any>;
+  },
 ) => {
   return stripe.paymentIntents.create({
     customer: customerId,
     amount: Math.round(amount * 100), // convert to cents
     currency,
-    payment_method_types: ['sepa_debit'],
-    confirm: true,
+    payment_method_types: options?.paymentMethodTypes || ['sepa_debit'],
+    confirm: options?.confirm ?? true,
+    metadata: options?.metadata,
   });
 };
 

@@ -7,6 +7,7 @@ import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requirePolicies } from '../middleware/requirePolicies';
 import type { PolicyType } from '../models/policy.model';
+import { getMyPayments, payReceipt } from '../controllers/payment.controller';
 
 const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
@@ -36,6 +37,20 @@ r.post(
 
     res.json({ customerId: user.stripeCustomerId });
   })
+);
+
+r.get(
+  '/payments',
+  authenticate,
+  requirePolicies(REQUIRED_POLICIES),
+  asyncHandler(getMyPayments),
+);
+
+r.post(
+  '/payments/:id/pay',
+  authenticate,
+  requirePolicies(REQUIRED_POLICIES),
+  asyncHandler(payReceipt),
 );
 
 /**

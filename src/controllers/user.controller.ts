@@ -1,5 +1,8 @@
 import { Request, Response } from 'express';
 import { User } from '../models/user.model';
+import { Payment } from '../models/payment.model';
+import { Property } from '../models/property.model';
+import { Contract } from '../models/contract.model';
 
 /**
  * Retrieve a list of all users. The password hash is excluded for security.
@@ -48,5 +51,81 @@ export const updateUser = async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: 'Error al actualizar el usuario' });
+  }
+};
+
+export const getLandlordStats = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    const userObjectId = (req as any).user?._id;
+    if (!userId) {
+      return res.status(403).json({ message: 'No autorizado' });
+    }
+
+    const earningsAgg = await Payment.aggregate([
+      {
+        $match: {
+          payee: userObjectId || userId,
+          status: 'succeeded',
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: '$amount' },
+        },
+      },
+    ]);
+    const totalEarnings = earningsAgg[0]?.total || 0;
+
+    const totalProperties = await Property.countDocuments({ owner: userId });
+    const activeContracts = await Contract.countDocuments({
+      landlord: userId,
+      status: 'active',
+    });
+    const pendingContracts = await Contract.countDocuments({
+      landlord: userId,
+      status: { $in: ['draft', 'signing', 'signed'] },
+    });
+
+    const recentPayments = await Payment.find({
+      payee: userId,
+      status: 'succeeded',
+    })
+      .sort({ paidAt: -1 })
+      .limit(5)
+      .populate({
+        path: 'contract',
+        select: 'property',
+        populate: { path: 'property', select: 'title address' },
+      })
+      .lean();
+
+    res.setHeader('Cache-Control', 'no-store');
+    res.json({
+      earnings: totalEarnings,
+      properties: {
+        total: totalProperties,
+        rented: activeContracts,
+        vacancyRate:
+          totalProperties > 0
+            ? Math.round(((totalProperties - activeContracts) / totalProperties) * 100)
+            : 0,
+      },
+      contracts: {
+        active: activeContracts,
+        pending: pendingContracts,
+      },
+      recentPayments: recentPayments.map((p: any) => ({
+        id: p._id,
+        amount: p.amount,
+        date: p.paidAt,
+        concept: p.concept,
+        propertyName: p.contract?.property?.title || p.contract?.property?.address || 'Propiedad',
+      })),
+    });
+  } catch (error) {
+    console.error('Error getting landlord stats:', error);
+    res.status(500).json({ message: 'Error al calcular estadísticas' });
   }
 };

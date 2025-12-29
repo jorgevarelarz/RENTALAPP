@@ -54,15 +54,33 @@ const MyContracts: React.FC = () => {
         <p>No tienes contratos aún.</p>
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
-          {filtered.map((c: any) => (
+          {filtered.map((c: any) => {
+            const propertyTitle =
+              typeof c.property === 'object'
+                ? c.property?.title || c.property?.address || 'Propiedad'
+                : String(c.property || 'Propiedad');
+            const landlordLabel = c.landlordName || c.ownerId || '-';
+            const tenantLabel = c.tenantName || c.tenantId || '-';
+            const formatDate = (value?: string) => {
+              if (!value) return null;
+              const parsed = new Date(value);
+              if (Number.isNaN(parsed.getTime())) return null;
+              return parsed.toLocaleDateString('es-ES');
+            };
+            const startLabel = formatDate(c.signedAt || c.startDate);
+            const endLabel = formatDate(c.endDate);
+            return (
             <div key={c._id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, display: 'flex', justifyContent: 'space-between' }}>
               <div>
-                <Link to={`/contracts/${c._id}`} style={{ fontWeight: 700 }}>{String(c.property)}</Link>
-                <div style={{ fontSize: 12, opacity: .8 }}>Arrendador: {String(c.ownerId)} — Inquilino: {String(c.tenantId)}</div>
+                <Link to={`/contracts/${c._id}`} style={{ fontWeight: 700 }}>{propertyTitle}</Link>
+                <div style={{ fontSize: 12, opacity: .8 }}>Arrendador: {String(landlordLabel)} — Inquilino: {String(tenantLabel)}</div>
+                {(startLabel || endLabel) && (
+                  <div style={{ fontSize: 12, opacity: .8 }}>Vigencia: {startLabel || '-'} a {endLabel || '-'}</div>
+                )}
               </div>
               <ContractStatusBadge status={c.status || 'draft'} />
             </div>
-          ))}
+          )})}
         </div>
       )}
     </div>

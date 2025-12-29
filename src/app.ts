@@ -1,6 +1,6 @@
+import 'dotenv/config';
 import express from 'express';
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
 import cors from 'cors';
 import morgan from 'morgan';
 import fs from 'fs';
@@ -42,6 +42,7 @@ import tenantProMeRoutes from './routes/tenantPro.me';
 import adminTenantProRoutes from './routes/admin.tenantPro.routes';
 import { purgeOldTenantProDocs } from './jobs/tenantProRetention';
 import { startContractActivationJob } from './jobs/contractActivation.job';
+import { startRentGenerationJob } from './jobs/rentGeneration.job';
 import applicationsRoutes from './routes/applications.routes';
 
 import helmet from 'helmet';
@@ -53,7 +54,6 @@ import { metricsMiddleware, metricsHandler } from './metrics';
 import { signatureWebhook } from './controllers/contract.signature.controller';
 
 // Load environment variables
-dotenv.config();
 const env = loadEnv();
 
 const app = express();
@@ -77,6 +77,7 @@ app.use(
                   .split(',')
                   .map(s => s.trim())
                   .filter(Boolean),
+                'https://connect-js.stripe.com',
               ],
             },
           }
@@ -100,6 +101,7 @@ app.use(metricsMiddleware);
 
 if (process.env.NODE_ENV !== 'test') {
   startContractActivationJob();
+  startRentGenerationJob();
 }
 
 if (process.env.NODE_ENV !== 'test') {
@@ -118,7 +120,7 @@ app.use(cors({
   origin: allowedOrigins.length > 0 ? allowedOrigins : false,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: [
-    'Content-Type', 'Authorization', 'X-Requested-With', 'x-admin', 'x-user-id'
+    'Content-Type', 'Authorization', 'X-Requested-With', 'x-admin', 'x-user-id', 'Cache-Control'
   ],
   exposedHeaders: ['Content-Disposition'],
   credentials:true
@@ -188,6 +190,16 @@ app.get('/health', (_req, res) =>
 app.get('/api/health', (_req, res) => res.redirect(301, '/health'));
 app.get('/metrics', metricsHandler);
 
+// Stripe Connect redirects (avoid 404 when APP_URL points to backend)
+app.get('/connect/return', (_req, res) => {
+  const target = process.env.FRONTEND_URL || 'http://localhost:3001';
+  res.redirect(302, `${target}/landlord/payments?connect=success`);
+});
+app.get('/connect/refresh', (_req, res) => {
+  const target = process.env.FRONTEND_URL || 'http://localhost:3001';
+  res.redirect(302, `${target}/landlord/payments?connect=retry`);
+});
+
 // Public routes
 app.use('/api/auth', authRoutes);
 app.use('/api/verification', verificationRoutes);
@@ -205,17 +217,17 @@ app.use('/api', requireVerified, appointmentsFlowRoutes);
 app.use('/api', applicationsRoutes);
 
 // Protected routes (verified users)
-app.use('/api/contracts', requireVerified, contractRoutes);
-app.use('/api/users', requireVerified, userRoutes);
+app.use('/api/contracts', authenticate, requireVerified, contractRoutes);
+app.use('/api/users', authenticate, requireVerified, userRoutes);
 app.use('/api/pros', requireVerified, proRoutes);
 // Tickets necesitan usuario autenticado; permitir bypass de verificación en test si aplica
 app.use('/api/tickets', authenticate, requireVerified, ticketRoutes);
 app.use('/api/reviews', requireVerified, reviewRoutes);
 app.use('/api/chat', requireVerified, chatRoutes);
 // Contract-specific payments under /api/contracts require verificación
-app.use('/api/contracts', requireVerified, contractPaymentsRoutes);
+app.use('/api/contracts', authenticate, requireVerified, contractPaymentsRoutes);
 app.use('/api', paymentsRoutes);
-app.use('/api', requireVerified, connectRoutes);
+app.use('/api', authenticate, requireVerified, connectRoutes);
 app.use('/api', requireVerified, serviceOfferRoutes);
 
 // Admin

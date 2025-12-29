@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { usePolicyAcceptance } from '../../hooks/usePolicyAcceptance';
 import PolicyModal from '../../components/PolicyModal';
 import client from '../../api/client';
@@ -6,18 +7,38 @@ import client from '../../api/client';
 const PayoutSettings = () => {
   const [status, setStatus] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const location = useLocation();
+
+  const loadStatus = useCallback(async () => {
+    setLoading(true);
+    try {
+      const res = await client.get('/api/connect/owner/status', {
+        headers: { 'Cache-Control': 'no-cache' },
+      });
+      setStatus(res.data);
+    } catch (err: any) {
+      const message = err?.response?.data?.message || err?.message || 'No se pudo cargar el estado.';
+      alert(message);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    client.get('/connect/owner/status').then(r => setStatus(r.data));
-  }, []);
+    loadStatus();
+  }, [loadStatus, location.search]);
 
   const handleConnect = async () => {
     setLoading(true);
     try {
-      const { data } = await client.post('/connect/owner/link');
+      const { data } = await client.post('/api/connect/owner/link');
       if (data.url) window.location.href = data.url;
-    } catch {
-      alert('Error conectando con Stripe');
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.message ||
+        'Error conectando con Stripe';
+      alert(message);
       setLoading(false);
     }
   };
@@ -39,6 +60,14 @@ const PayoutSettings = () => {
           {status.charges_enabled ? 'Cuenta Activa y Verificada' : 'Acción Requerida / Verificación Pendiente'}
         </span>
       </div>
+      <div className="text-sm text-gray-600 mb-4">
+        <div>Conectada: {status.connected ? 'Si' : 'No'}</div>
+        <div>Pagos habilitados: {status.charges_enabled ? 'Si' : 'No'}</div>
+        <div>Retiros habilitados: {status.payouts_enabled ? 'Si' : 'No'}</div>
+        {status.requirements?.current_deadline && (
+          <div>Fecha limite: {new Date(status.requirements.current_deadline * 1000).toLocaleDateString()}</div>
+        )}
+      </div>
 
       <button
         onClick={handleConnect}
@@ -46,6 +75,13 @@ const PayoutSettings = () => {
         className="bg-indigo-600 text-white px-4 py-2 rounded hover:bg-indigo-700 disabled:opacity-50"
       >
         {status.connected ? 'Actualizar Datos Bancarios' : 'Conectar Cuenta Bancaria'}
+      </button>
+      <button
+        onClick={loadStatus}
+        disabled={loading}
+        className="ml-3 border border-gray-300 px-4 py-2 rounded hover:bg-gray-50 disabled:opacity-50"
+      >
+        {loading ? 'Actualizando...' : 'Actualizar estado'}
       </button>
     </div>
   );

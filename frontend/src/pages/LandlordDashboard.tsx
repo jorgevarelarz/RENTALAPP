@@ -1,9 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
+import { Link } from 'react-router-dom';
 import { createProperty, listProperties } from '../services/properties';
+import { userService } from '../services/user';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
 import Modal from '../components/ui/Modal';
+import Spinner from '../components/ui/Spinner';
 import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import PropertyFormRHF, { PropertyFormData } from '../components/PropertyFormRHF';
@@ -12,9 +15,27 @@ import { Building2, Plus, Home, BarChart3, Image as ImageIcon, Users } from 'luc
 
 const API_BASE = process.env.REACT_APP_API_URL || (process.env as any).VITE_API_URL || 'http://localhost:3000';
 
+const IconCash = () => (
+  <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+  </svg>
+);
+const IconHome = () => (
+  <svg className="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
+  </svg>
+);
+const IconDoc = () => (
+  <svg className="w-6 h-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 011.414.586l5.414 5.414a1 1 0 01.586 1.414V19a2 2 0 01-2 2z" />
+  </svg>
+);
+
 const LandlordDashboard: React.FC = () => {
   const { token, user } = useAuth();
   const [mine, setMine] = useState<any[]>([]);
+  const [stats, setStats] = useState<any>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<any | null>(null);
   const [showApplicantsFor, setShowApplicantsFor] = useState<any>(null);
@@ -30,7 +51,17 @@ const LandlordDashboard: React.FC = () => {
     setMine(myProps);
   }, [user]);
 
-  useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  useEffect(() => {
+    userService
+      .getLandlordStats()
+      .then(setStats)
+      .catch(() => setStats(null))
+      .finally(() => setStatsLoading(false));
+  }, []);
 
   const handleUpload = async (files: File[]): Promise<string[]> => {
     if (!token || !files.length) return [];
@@ -73,16 +104,110 @@ const LandlordDashboard: React.FC = () => {
   const draftProps = mine.filter(p => p.status !== 'active').length;
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-8 animate-in fade-in duration-500 pb-10">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Mi Cartera</h1>
-          <p className="text-gray-500 mt-1">Gestiona tus inmuebles y anuncios desde aquí.</p>
+          <h1 className="text-3xl font-bold text-gray-900">Panel de propietario</h1>
+          <p className="text-gray-500 mt-1">Gestiona inmuebles e ingresos desde aquí.</p>
         </div>
         <Button onClick={openCreate} className="shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
           <Plus size={20} className="mr-2" /> Nueva Propiedad
         </Button>
       </div>
+
+      {statsLoading ? (
+        <div className="p-6 flex justify-center"><Spinner /></div>
+      ) : stats ? (
+        <>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="p-6 border-l-4 border-l-green-500">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-gray-500 uppercase">Ingresos totales</p>
+                  <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.earnings} €</h3>
+                </div>
+                <div className="p-3 bg-green-50 rounded-full">
+                  <IconCash />
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6 border-l-4 border-l-indigo-500">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-gray-500 uppercase">Propiedades</p>
+                  <div className="flex items-baseline gap-2 mt-2">
+                    <h3 className="text-3xl font-bold text-gray-900">{stats.properties.total}</h3>
+                    <span className="text-sm text-gray-500">({stats.properties.rented} alquiladas)</span>
+                  </div>
+                </div>
+                <div className="p-3 bg-indigo-50 rounded-full">
+                  <IconHome />
+                </div>
+              </div>
+            </Card>
+
+            <Card className="p-6 border-l-4 border-l-yellow-500">
+              <div className="flex justify-between items-start">
+                <div>
+                  <p className="text-sm font-medium text-gray-500 uppercase">En tramite</p>
+                  <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.contracts.pending}</h3>
+                  <p className="text-xs text-gray-500 mt-1">Contratos pendientes de firma</p>
+                </div>
+                <div className="p-3 bg-yellow-50 rounded-full">
+                  <IconDoc />
+                </div>
+              </div>
+            </Card>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+                <h3 className="font-bold text-gray-800">Ultimos pagos recibidos</h3>
+                <Link to="/landlord/payments" className="text-sm text-indigo-600 hover:text-indigo-800">
+                  Ver todos
+                </Link>
+              </div>
+
+              {stats.recentPayments.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">No hay pagos recientes.</div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {stats.recentPayments.map((payment: any) => (
+                    <div key={payment.id} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
+                      <div>
+                        <p className="font-semibold text-gray-900">{payment.concept}</p>
+                        <p className="text-xs text-gray-500">
+                          {payment.propertyName} • {new Date(payment.date).toLocaleDateString()}
+                        </p>
+                      </div>
+                      <span className="font-mono font-bold text-green-600">+{payment.amount} €</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
+              <h3 className="font-bold text-gray-800 mb-4">Gestion rapida</h3>
+              <div className="space-y-3">
+                <Link to="/properties" className="block w-full p-3 text-left border rounded hover:border-indigo-500 hover:bg-indigo-50 transition-all">
+                  Mis propiedades: editar detalles y precios.
+                </Link>
+                <Link to="/contracts" className="block w-full p-3 text-left border rounded hover:border-indigo-500 hover:bg-indigo-50 transition-all">
+                  Contratos: revisar borradores y firmas.
+                </Link>
+                <Link to="/incidents" className="block w-full p-3 text-left border rounded hover:border-indigo-500 hover:bg-indigo-50 transition-all">
+                  Mantenimiento: incidencias abiertas.
+                </Link>
+              </div>
+            </div>
+          </div>
+        </>
+      ) : (
+        <Card className="p-6 text-center text-gray-500">No se pudieron cargar las estadisticas.</Card>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
@@ -109,7 +234,7 @@ const LandlordDashboard: React.FC = () => {
             <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
               <Home size={32} />
             </div>
-            <h4 className="text-lg font-medium text-gray-900">Aún no tienes propiedades</h4>
+            <h4 className="text-lg font-medium text-gray-900">Aun no tienes propiedades</h4>
             <p className="text-gray-500 mb-6">Crea tu primer anuncio en menos de 2 minutos.</p>
             <Button variant="secondary" onClick={openCreate}>Empezar ahora</Button>
           </div>

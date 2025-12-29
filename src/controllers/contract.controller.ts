@@ -507,8 +507,9 @@ export const createRentPaymentIntent = async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'El contrato no está activo' });
     }
 
-    const monthName = new Date().toLocaleString('es-ES', { month: 'long' });
-    const concept = `Renta ${monthName} ${new Date().getFullYear()}`;
+    const now = new Date();
+    const monthName = now.toLocaleString('es-ES', { month: 'long' });
+    const concept = `Renta ${monthName} ${now.getFullYear()}`;
     const amount = contract.rent ?? (contract as any).rentAmount ?? 0;
     const amountCents = Math.round(amount * 100);
 
@@ -527,11 +528,15 @@ export const createRentPaymentIntent = async (req: Request, res: Response) => {
     await Payment.create({
       contract: contract._id,
       payer: userId,
+      payee: contract.landlord,
       amount,
       currency: 'eur',
       stripePaymentIntentId: paymentIntent.id,
       status: 'pending',
+      type: 'rent',
       concept,
+      billingMonth: now.getMonth() + 1,
+      billingYear: now.getFullYear(),
     });
 
     res.json({ clientSecret: paymentIntent.client_secret, amount });
@@ -679,7 +684,14 @@ export const listContracts = async (req: Request, res: Response) => {
     }
 
     const [items, total] = await Promise.all([
-      Contract.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      Contract.find(q)
+        .populate('property')
+        .populate({ path: 'landlord', select: 'name email ratingAvg reviewCount' })
+        .populate({ path: 'tenant', select: 'name email ratingAvg reviewCount' })
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .lean(),
       Contract.countDocuments(q)
     ]);
 
@@ -687,32 +699,40 @@ export const listContracts = async (req: Request, res: Response) => {
         return res.status(200).json({ items: [], total: 0, page, limit });
     }
 
-    const userIds = new Set<string>();
-    items.forEach(c => {
-      userIds.add(String(c.landlord));
-      userIds.add(String(c.tenant));
-    });
-    const users = await User.find(
-      { _id: { $in: Array.from(userIds) } },
-      { ratingAvg: 1, reviewCount: 1 }
-    ).lean();
-    const userMap = new Map(users.map(u => [String(u._id), u]));
+    const getId = (value: any) => {
+      if (value && typeof value === 'object' && '_id' in value) {
+        return String((value as any)._id);
+      }
+      return value ? String(value) : '';
+    };
+    const getUser = (value: any) => {
+      if (value && typeof value === 'object' && '_id' in value) {
+        return value as any;
+      }
+      return null;
+    };
     const hydrated = items.map(c => {
-      const ownerId = String(c.landlord);
-      const tenantId = String(c.tenant);
+      const landlord = getUser(c.landlord);
+      const tenant = getUser(c.tenant);
+      const ownerId = getId(c.landlord);
+      const tenantId = getId(c.tenant);
       return {
         ...c,
         ownerId,
         tenantId,
+        landlordName: landlord?.name,
+        landlordEmail: landlord?.email,
+        tenantName: tenant?.name,
+        tenantEmail: tenant?.email,
         owner: {
           id: ownerId,
-          ratingAvg: userMap.get(ownerId)?.ratingAvg ?? 0,
-          reviewCount: userMap.get(ownerId)?.reviewCount ?? 0,
+          ratingAvg: landlord?.ratingAvg ?? 0,
+          reviewCount: landlord?.reviewCount ?? 0,
         },
         tenant: {
           id: tenantId,
-          ratingAvg: userMap.get(tenantId)?.ratingAvg ?? 0,
-          reviewCount: userMap.get(tenantId)?.reviewCount ?? 0,
+          ratingAvg: tenant?.ratingAvg ?? 0,
+          reviewCount: tenant?.reviewCount ?? 0,
         },
       } as any;
     });
@@ -724,35 +744,53 @@ export const listContracts = async (req: Request, res: Response) => {
 
 export const getContract = async (req: Request, res: Response) => {
   try {
-    const c = await Contract.findById(req.params.id).lean();
-    if (!c) return res.status(404).json({ error: 'Contrato no encontrado' });
-
     const user = (req as any).user;
     if (!user) {
       return res.status(403).json({ error: 'No autorizado' });
     }
-    if (user.role !== 'admin' && String(c.landlord) !== user.id && String(c.tenant) !== user.id) {
-      return res.status(404).json({ error: 'Contrato no encontrado' });
+
+    const c = await Contract.findById(req.params.id)
+      .populate('property')
+      .populate({ path: 'landlord', select: 'name email ratingAvg reviewCount' })
+      .populate({ path: 'tenant', select: 'name email ratingAvg reviewCount' })
+      .lean();
+    if (!c) return res.status(404).json({ error: 'Contrato no encontrado' });
+
+    const getId = (value: any) => {
+      if (value && typeof value === 'object' && '_id' in value) {
+        return String((value as any)._id);
+      }
+      return value ? String(value) : '';
+    };
+    const landlord = c.landlord && typeof c.landlord === 'object' ? (c.landlord as any) : null;
+    const tenant = c.tenant && typeof c.tenant === 'object' ? (c.tenant as any) : null;
+    const ownerId = getId(c.landlord);
+    const tenantId = getId(c.tenant);
+    const isLandlord = ownerId === user.id;
+    const isTenant = tenantId === user.id;
+    const isAdmin = user.role === 'admin';
+
+    if (!isLandlord && !isTenant && !isAdmin) {
+      return res.status(403).json({ error: 'No autorizado' });
     }
 
-    const ids = [String(c.landlord), String(c.tenant)];
-    const users = await User.find({ _id: { $in: ids } }, { ratingAvg: 1, reviewCount: 1 }).lean();
-    const userMap = new Map(users.map(u => [String(u._id), u]));
-    const ownerId = String(c.landlord);
-    const tenantId = String(c.tenant);
     const result: any = {
       ...c,
       ownerId,
       tenantId,
+      landlordName: landlord?.name,
+      landlordEmail: landlord?.email,
+      tenantName: tenant?.name,
+      tenantEmail: tenant?.email,
       owner: {
         id: ownerId,
-        ratingAvg: userMap.get(ownerId)?.ratingAvg ?? 0,
-        reviewCount: userMap.get(ownerId)?.reviewCount ?? 0,
+        ratingAvg: landlord?.ratingAvg ?? 0,
+        reviewCount: landlord?.reviewCount ?? 0,
       },
       tenant: {
         id: tenantId,
-        ratingAvg: userMap.get(tenantId)?.ratingAvg ?? 0,
-        reviewCount: userMap.get(tenantId)?.reviewCount ?? 0,
+        ratingAvg: tenant?.ratingAvg ?? 0,
+        reviewCount: tenant?.reviewCount ?? 0,
       },
     };
     res.json(result);

@@ -31,6 +31,7 @@ export default function ContractWizard() {
     tenantId: '',
     startDate: '',
     endDate: '',
+    durationYears: 1,
     rentAmount: 0,
     depositAmount: 0,
     paymentDay: 5,
@@ -57,9 +58,22 @@ export default function ContractWizard() {
         tenantEmail: (state as any).initialData?.tenantEmail || '',
         startDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
         endDate: new Date(Date.now() + 31536000000).toISOString().slice(0, 10),
+        durationYears: 1,
       }));
     }
   }, [state]);
+
+  useEffect(() => {
+    if (!formData.startDate || !formData.durationYears) return;
+    const start = new Date(formData.startDate);
+    if (Number.isNaN(start.getTime())) return;
+    const end = new Date(start);
+    end.setFullYear(end.getFullYear() + Number(formData.durationYears));
+    const nextEnd = end.toISOString().slice(0, 10);
+    if (nextEnd !== formData.endDate) {
+      setFormData(prev => ({ ...prev, endDate: nextEnd }));
+    }
+  }, [formData.startDate, formData.durationYears, formData.endDate]);
 
   const handleChange = (field: string, value: any) => {
     setFormData(prev => ({ ...prev, [field]: value }));
@@ -134,8 +148,27 @@ export default function ContractWizard() {
                 <Input
                   label="Fecha de Fin" type="date"
                   value={formData.endDate}
-                  onChange={e => handleChange('endDate', e.target.value)}
+                  readOnly
                 />
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <label style={{ display: 'grid', gap: 6 }}>
+                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>
+                    Duracion del contrato (anos)
+                  </span>
+                  <select
+                    className="auth-input"
+                    value={formData.durationYears}
+                    onChange={e => handleChange('durationYears', Number(e.target.value))}
+                  >
+                    {[1, 2, 3, 4, 5].map((years) => (
+                      <option key={years} value={years}>{years} ano{years > 1 ? 's' : ''}</option>
+                    ))}
+                  </select>
+                </label>
+                <div className="text-sm text-gray-500 flex items-end">
+                  Por defecto 1 ano, prorrogable hasta 5 anos.
+                </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>

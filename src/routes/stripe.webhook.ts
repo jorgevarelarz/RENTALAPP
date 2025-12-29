@@ -80,11 +80,25 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
       const intent = event.data.object as Stripe.PaymentIntent;
       const contractId = intent.metadata?.contractId as string | undefined;
       const offerId = intent.metadata?.offerId as string | undefined;
-       const paymentType = intent.metadata?.type as string | undefined;
+      const paymentType = intent.metadata?.type as string | undefined;
+      const paymentId = intent.metadata?.paymentId as string | undefined;
 
-      if (paymentType === 'rent') {
-        const receiptUrl = (intent as any)?.charges?.data?.[0]?.receipt_url;
-        const payment = await Payment.findOneAndUpdate(
+      const receiptUrl = (intent as any)?.charges?.data?.[0]?.receipt_url;
+      let payment: any = null;
+
+      if (paymentId) {
+        payment = await Payment.findByIdAndUpdate(
+          paymentId,
+          {
+            status: 'succeeded',
+            paidAt: new Date(),
+            receiptUrl,
+            stripePaymentIntentId: intent.id,
+          },
+          { new: true },
+        );
+      } else if (paymentType === 'rent') {
+        payment = await Payment.findOneAndUpdate(
           { stripePaymentIntentId: intent.id },
           {
             status: 'succeeded',
@@ -93,20 +107,19 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
           },
           { new: true },
         );
+      }
 
-        // Enviar recibo por email al pagador
-        if (payment?.payer) {
-          const payer = await User.findById(payment.payer).lean();
-          if (payer?.email) {
-            const amountEur = payment.amount;
-            sendPaymentReceiptEmail(
-              payer.email,
-              payer.name || 'Usuario',
-              amountEur,
-              payment.concept,
-              new Date(),
-            ).catch(console.error);
-          }
+      if (payment?.payer) {
+        const payer = await User.findById(payment.payer).lean();
+        if (payer?.email) {
+          const amountEur = payment.amount;
+          sendPaymentReceiptEmail(
+            payer.email,
+            payer.name || 'Usuario',
+            amountEur,
+            payment.concept,
+            new Date(),
+          ).catch(console.error);
         }
       }
 

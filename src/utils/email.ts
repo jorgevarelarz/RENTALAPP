@@ -114,3 +114,39 @@ export async function sendPaymentReceiptEmail(
 
   await sendEmail(email, `Recibo de Pago: ${concept}`, html);
 }
+
+export async function sendContractActiveEmail(
+  email: string,
+  tenantName: string,
+  propertyTitle: string,
+  contractId: string,
+) {
+  const dashboardLink = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/contracts/${contractId}`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e0e0e0; border-radius: 8px;">
+      <h2 style="color: #10B981; text-align: center;">Tu contrato esta ACTIVO</h2>
+      <p>Hola <strong>${tenantName}</strong>,</p>
+      <p>Tu contrato de alquiler para <strong>${propertyTitle}</strong> esta oficialmente <strong>ACTIVO</strong>.</p>
+
+      <div style="background-color: #f3f4f6; padding: 15px; margin: 20px 0; border-radius: 6px;">
+        <p style="margin: 0;">Contrato firmado</p>
+        <p style="margin: 0;">Fianza recibida</p>
+        <p style="margin: 0; font-weight: bold; color: #10B981;">Listo para entrar</p>
+      </div>
+
+      <p>Accede a tu panel para ver los detalles, gestionar pagos o contactar con el propietario.</p>
+
+      <div style="text-align: center; margin-top: 30px;">
+        <a href="${dashboardLink}" style="background-color: #10B981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; font-weight: bold;">Ir a mi dashboard</a>
+      </div>
+
+      <p style="margin-top: 30px; font-size: 12px; color: #6b7280; text-align: center;">Este es un mensaje automatico de RentalApp.</p>
+    </div>
+  `;
+
+  await sendEmail(
+    email,
+    `Tu alquiler en ${propertyTitle} esta activo`,
+    html,
+  );
+}
