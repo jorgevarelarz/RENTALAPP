@@ -11,6 +11,8 @@ import archiver from 'archiver';
 import fs from 'fs';
 import path from 'path';
 import { generateAuditTrailPdf } from '../services/auditTrailPdf';
+import { AdminRequest } from '../models/adminRequest.model';
+import { ContractParty } from '../models/contractParty.model';
 
 /**
  * Returns aggregate statistics about the platform: total number of users
@@ -210,6 +212,56 @@ export const exportAuditTrails = async (req: Request, res: Response) => {
     await archive.finalize();
   } catch (e: any) {
     res.status(500).json({ error: e?.message || 'zip_export_failed' });
+  }
+};
+
+export const listAdminRequests = async (req: Request, res: Response) => {
+  try {
+    const { type, status } = req.query as { type?: string; status?: string };
+    const q: any = {};
+    if (type) q.type = type;
+    if (status) q.status = status;
+    const items = await AdminRequest.find(q).sort({ createdAt: -1 }).lean();
+    res.json({ items });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'admin_requests_failed' });
+  }
+};
+
+export const decideAdminRequest = async (req: Request, res: Response) => {
+  try {
+    const { id } = req.params as { id: string };
+    const { decision, adminNotes } = req.body || {};
+    const reqDoc = await AdminRequest.findById(id);
+    if (!reqDoc) return res.status(404).json({ error: 'request_not_found' });
+    if (reqDoc.status !== 'OPEN' && reqDoc.status !== 'IN_REVIEW') {
+      return res.status(400).json({ error: 'request_not_open' });
+    }
+
+    const party = await ContractParty.findById(reqDoc.targetPartyId);
+    if (!party) return res.status(404).json({ error: 'party_not_found' });
+
+    if (decision === 'approve') {
+      party.status = 'REMOVED';
+      await party.save();
+      reqDoc.status = 'COMPLETED';
+      reqDoc.adminNotes = adminNotes;
+      await reqDoc.save();
+      return res.json({ ok: true, status: reqDoc.status });
+    }
+    if (decision === 'reject') {
+      if (party.status === 'REMOVED_PENDING_ADMIN') {
+        party.status = party.signedAt ? 'SIGNED' : 'JOINED';
+        await party.save();
+      }
+      reqDoc.status = 'REJECTED';
+      reqDoc.adminNotes = adminNotes;
+      await reqDoc.save();
+      return res.json({ ok: true, status: reqDoc.status });
+    }
+    return res.status(400).json({ error: 'invalid_decision' });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message || 'admin_decision_failed' });
   }
 };
 

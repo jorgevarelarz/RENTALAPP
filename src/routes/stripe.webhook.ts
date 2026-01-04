@@ -15,6 +15,8 @@ import { sendPaymentReceiptEmail } from '../utils/email';
 import { calcServiceFee } from '../utils/calcServiceFee';
 import { recordContractHistory } from '../utils/history';
 import { transitionContract } from '../services/contractState';
+import { ensureDirectConversation } from '../utils/ensureDirectConversation';
+import { RentPayment } from '../models/rentPayment.model';
 
 const r = Router();
 
@@ -35,197 +37,258 @@ async function ensureContractConversation(contractId: string): Promise<string> {
 r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
   const sig = req.headers['stripe-signature'] as string;
   const secret = process.env.STRIPE_WEBHOOK_SECRET || '';
-  // In producción el secreto es obligatorio
   if (process.env.NODE_ENV === 'production' && !secret) {
     return res.status(500).json({ error: 'stripe_webhook_secret_missing' });
   }
+
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, secret);
   } catch (err: any) {
+    console.error('Webhook signature verification failed:', err.message);
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 
-  // Idempotency: ensure each Stripe event is processed once (atomic upsert)
+  // 1. Idempotency Check (Optimistic Locking)
+  let processedEventDoc;
   try {
     const metadata = (event.data.object as any)?.metadata || {};
     const rawContractId = typeof metadata.contractId === 'string' ? metadata.contractId : undefined;
     const contractIdForEvent =
       rawContractId && Types.ObjectId.isValid(rawContractId)
         ? new Types.ObjectId(rawContractId)
-        : new Types.ObjectId();
-    const r = await ProcessedEvent.updateOne(
-      { provider: 'stripe', eventId: event.id },
-      {
-        $setOnInsert: {
-          provider: 'stripe',
-          eventId: event.id,
-          contractId: contractIdForEvent,
-          receivedAt: new Date(),
-        },
-      },
-      { upsert: true },
-    );
-    // If the document already existed, treat as duplicate and ack
-    if ((r as any).upsertedCount === 0 && (r as any).matchedCount > 0) {
-      return res.json({ received: true, duplicate: true });
+        : undefined;
+
+    // Check current status
+    processedEventDoc = await ProcessedEvent.findOne({ provider: 'stripe', eventId: event.id });
+
+    if (processedEventDoc) {
+      if (processedEventDoc.status === 'completed') {
+        // Already successfully processed
+        return res.json({ received: true, duplicate: true });
+      }
+      if (processedEventDoc.status === 'pending') {
+        // Check staleness (e.g., created > 5 mins ago means previous attempt crashed)
+        const fiveMinsAgo = new Date(Date.now() - 5 * 60 * 1000);
+        if (processedEventDoc.updatedAt > fiveMinsAgo) {
+          // Being processed right now by another thread/instance
+          return res.json({ received: true, processing: true });
+        }
+        // Else: Stale pending, assume crash and retry
+      }
+      // If status is 'failed' or stale 'pending', we proceed to retry
+    } else {
+      // Create new pending record
+      processedEventDoc = await ProcessedEvent.create({
+        provider: 'stripe',
+        eventId: event.id,
+        contractId: contractIdForEvent,
+        status: 'pending',
+        receivedAt: new Date(),
+      });
     }
-  } catch (_e: any) {
-    // For DB errors, surface 500 to allow Stripe to retry later
-    return res.status(500).json({ error: 'idempotency_store_failed' });
+  } catch (dbErr: any) {
+    // If we can't talk to DB, fail hard so Stripe retries
+    console.error('Database error during idempotency check:', dbErr);
+    return res.status(500).json({ error: 'idempotency_check_failed' });
   }
 
-  switch (event.type) {
-    case 'payment_intent.succeeded': {
-      const intent = event.data.object as Stripe.PaymentIntent;
-      const contractId = intent.metadata?.contractId as string | undefined;
-      const offerId = intent.metadata?.offerId as string | undefined;
-      const paymentType = intent.metadata?.type as string | undefined;
-      const paymentId = intent.metadata?.paymentId as string | undefined;
+  // 2. Business Logic Execution
+  try {
+    switch (event.type) {
+      case 'payment_intent.succeeded': {
+        const intent = event.data.object as Stripe.PaymentIntent;
+        const contractId = intent.metadata?.contractId as string | undefined;
+        const offerId = intent.metadata?.offerId as string | undefined;
+        const paymentType = intent.metadata?.type as string | undefined;
+        const paymentId = intent.metadata?.paymentId as string | undefined;
+        const rentPaymentId = intent.metadata?.rentPaymentId as string | undefined;
 
-      const receiptUrl = (intent as any)?.charges?.data?.[0]?.receipt_url;
-      let payment: any = null;
+        const receiptUrl = (intent as any)?.charges?.data?.[0]?.receipt_url;
+        let payment: any = null;
 
-      if (paymentId) {
-        payment = await Payment.findByIdAndUpdate(
-          paymentId,
-          {
-            status: 'succeeded',
-            paidAt: new Date(),
-            receiptUrl,
-            stripePaymentIntentId: intent.id,
-          },
-          { new: true },
-        );
-      } else if (paymentType === 'rent') {
-        payment = await Payment.findOneAndUpdate(
-          { stripePaymentIntentId: intent.id },
-          {
-            status: 'succeeded',
-            paidAt: new Date(),
-            receiptUrl,
-          },
-          { new: true },
-        );
-      }
-
-      if (payment?.payer) {
-        const payer = await User.findById(payment.payer).lean();
-        if (payer?.email) {
-          const amountEur = payment.amount;
-          sendPaymentReceiptEmail(
-            payer.email,
-            payer.name || 'Usuario',
-            amountEur,
-            payment.concept,
-            new Date(),
-          ).catch(console.error);
+        if (paymentId) {
+          payment = await Payment.findByIdAndUpdate(
+            paymentId,
+            {
+              status: 'succeeded',
+              paidAt: new Date(),
+              receiptUrl,
+              stripePaymentIntentId: intent.id,
+            },
+            { new: true },
+          );
+        } else if (paymentType === 'rent') {
+          payment = await Payment.findOneAndUpdate(
+            { stripePaymentIntentId: intent.id },
+            {
+              status: 'succeeded',
+              paidAt: new Date(),
+              receiptUrl,
+            },
+            { new: true },
+          );
         }
-      }
+        if (rentPaymentId) {
+          await RentPayment.findOneAndUpdate(
+            { _id: rentPaymentId, status: { $ne: 'PAID' } },
+            { status: 'PAID', paidAt: new Date(), providerPaymentId: intent.id },
+            { new: true },
+          );
+        }
 
-      if (contractId) {
-        await Contract.findByIdAndUpdate(contractId, { lastPaidAt: new Date(), paymentRef: intent.id });
-      }
-      if (offerId) {
-        const offer = await ServiceOffer.findById(offerId);
-        if (offer) {
-          const fee = calcServiceFee(offer.amount);
-          offer.status = 'confirmed';
-          await offer.save();
-          if (offer.appointmentId) {
-            await Appointment.findByIdAndUpdate(offer.appointmentId, { status: 'confirmed' });
+        if (payment?.payer) {
+          const payer = await User.findById(payment.payer).lean();
+          if (payer?.email) {
+            const amountEur = payment.amount;
+            sendPaymentReceiptEmail(
+              payer.email,
+              payer.name || 'Usuario',
+              amountEur,
+              payment.concept,
+              new Date(),
+            ).catch(console.error);
           }
-          const conv = await Conversation.findById(offer.conversationId);
-          if (conv) {
-            await publishSystem(conv.id, 'PAYMENT_SUCCEEDED', { offerId });
-            if (conv.meta?.contractId) {
-              const contractConvId = await ensureContractConversation(conv.meta.contractId);
-              await publishSystem(contractConvId, 'APPOINTMENT_CONFIRMED', { offerId });
-            }
-          }
-          if (offer.appointmentId) {
-            const appointment = await Appointment.findById(offer.appointmentId).lean();
-            if (appointment) {
-              let aConv = await Conversation.findOne({ kind: 'appointment', refId: offer.appointmentId });
-              if (!aConv) {
-                aConv = await Conversation.create({ kind: 'appointment', refId: offer.appointmentId, participants: [appointment.proId, appointment.tenantId], meta: { appointmentId: offer.appointmentId, proUserId: appointment.proId, tenantId: appointment.tenantId, ownerId: appointment.ownerId, ticketId: appointment.ticketId }, unread: {} });
-              }
-              await publishSystem(aConv.id, 'APPOINTMENT_CONFIRMED', { offerId });
-            }
-          }
-          await PlatformEarning.create({ kind: 'service', offerId, proId: offer.proId, serviceKey: offer.serviceKey, gross: fee.gross, fee: fee.fee, netToPro: fee.netToPro, currency: offer.currency, paymentRef: intent.id });
         }
-      }
-      break;
-    }
-    case 'payment_intent.payment_failed': {
-      const intent = event.data.object as Stripe.PaymentIntent;
-      const offerId = intent.metadata?.offerId as string | undefined;
-      if (offerId) {
-        const offer = await ServiceOffer.findById(offerId);
-        if (offer) {
-          await publishSystem(offer.conversationId, 'PAYMENT_FAILED', { offerId });
-        }
-      }
-      break;
-    }
-    case 'payment_intent.processing': {
-      const intent = event.data.object as Stripe.PaymentIntent;
-      const offerId = intent.metadata?.offerId as string | undefined;
-      if (offerId) {
-        const offer = await ServiceOffer.findById(offerId);
-        if (offer) {
-          await publishSystem(offer.conversationId, 'PAYMENT_PROCESSING', { offerId });
-        }
-      }
-      break;
-    }
-    case 'checkout.session.completed': {
-      const session = event.data.object as Stripe.Checkout.Session;
-      if (session.metadata?.deposit === 'true') {
-        const contractId = session.metadata?.contractId;
+
         if (contractId) {
-          const contract = await Contract.findById(contractId);
-          if (contract && !contract.depositPaid) {
-            contract.depositPaid = true;
-            contract.depositPaidAt = new Date();
-            await contract.save();
-            await recordContractHistory(contract.id, 'depositPaid', 'Fianza pagada a través de la plataforma');
+          await Contract.findByIdAndUpdate(contractId, { lastPaidAt: new Date(), paymentRef: intent.id });
+        }
+        if (contractId || payment?.contract) {
+          const contractRef = contractId || String(payment.contract);
+          const c = await Contract.findById(contractRef).lean();
+          if (c) {
+            const direct = await ensureDirectConversation(String(c.landlord), String(c.tenant));
+            await publishSystem(direct.id, 'PAYMENT_SUCCEEDED', { contractId: String(c._id) });
+          }
+        }
+        if (offerId) {
+          const offer = await ServiceOffer.findById(offerId);
+          if (offer) {
+            const fee = calcServiceFee(offer.amount);
+            offer.status = 'confirmed';
+            await offer.save();
+            if (offer.appointmentId) {
+              await Appointment.findByIdAndUpdate(offer.appointmentId, { status: 'confirmed' });
+            }
+            const conv = await Conversation.findById(offer.conversationId);
+            if (conv) {
+              await publishSystem(conv.id, 'PAYMENT_SUCCEEDED', { offerId });
+              if (conv.meta?.contractId) {
+                const contractConvId = await ensureContractConversation(conv.meta.contractId);
+                await publishSystem(contractConvId, 'APPOINTMENT_CONFIRMED', { offerId });
+              }
+            }
+            const direct = await ensureDirectConversation(String(offer.ownerId), String(offer.proId));
+            await publishSystem(direct.id, 'PAYMENT_SUCCEEDED', { offerId });
+            if (offer.appointmentId) {
+              const appointment = await Appointment.findById(offer.appointmentId).lean();
+              if (appointment) {
+                let aConv = await Conversation.findOne({ kind: 'appointment', refId: offer.appointmentId });
+                if (!aConv) {
+                  aConv = await Conversation.create({ kind: 'appointment', refId: offer.appointmentId, participants: [appointment.proId, appointment.tenantId], meta: { appointmentId: offer.appointmentId, proUserId: appointment.proId, tenantId: appointment.tenantId, ownerId: appointment.ownerId, ticketId: appointment.ticketId }, unread: {} });
+                }
+                await publishSystem(aConv.id, 'APPOINTMENT_CONFIRMED', { offerId });
+              }
+            }
+            await PlatformEarning.create({ kind: 'service', offerId, proId: offer.proId, serviceKey: offer.serviceKey, gross: fee.gross, fee: fee.fee, netToPro: fee.netToPro, currency: offer.currency, paymentRef: intent.id });
+          }
+        }
+        break;
+      }
+      case 'payment_intent.payment_failed': {
+        const intent = event.data.object as Stripe.PaymentIntent;
+        const offerId = intent.metadata?.offerId as string | undefined;
+        const rentPaymentId = intent.metadata?.rentPaymentId as string | undefined;
+        if (offerId) {
+          const offer = await ServiceOffer.findById(offerId);
+          if (offer) {
+            await publishSystem(offer.conversationId, 'PAYMENT_FAILED', { offerId });
+            const direct = await ensureDirectConversation(String(offer.ownerId), String(offer.proId));
+            await publishSystem(direct.id, 'PAYMENT_FAILED', { offerId });
+          }
+        }
+        if (rentPaymentId) {
+          await RentPayment.findByIdAndUpdate(rentPaymentId, { status: 'FAILED' });
+        }
+        break;
+      }
+      case 'payment_intent.processing': {
+        const intent = event.data.object as Stripe.PaymentIntent;
+        const offerId = intent.metadata?.offerId as string | undefined;
+        const rentPaymentId = intent.metadata?.rentPaymentId as string | undefined;
+        if (offerId) {
+          const offer = await ServiceOffer.findById(offerId);
+          if (offer) {
+            await publishSystem(offer.conversationId, 'PAYMENT_PROCESSING', { offerId });
+            const direct = await ensureDirectConversation(String(offer.ownerId), String(offer.proId));
+            await publishSystem(direct.id, 'PAYMENT_PROCESSING', { offerId });
+          }
+        }
+        if (rentPaymentId) {
+          await RentPayment.findByIdAndUpdate(rentPaymentId, { status: 'PROCESSING', providerPaymentId: intent.id });
+        }
+        break;
+      }
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        if (session.metadata?.deposit === 'true') {
+          const contractId = session.metadata?.contractId;
+          if (contractId) {
+            const contract = await Contract.findById(contractId);
+            if (contract && !contract.depositPaid) {
+              contract.depositPaid = true;
+              contract.depositPaidAt = new Date();
+              await contract.save();
+              await recordContractHistory(contract.id, 'depositPaid', 'Fianza pagada a través de la plataforma');
 
-            const now = new Date();
-            if (contract.status === 'signed') {
-              if (contract.startDate && now >= contract.startDate) {
-                try {
-                  await transitionContract(contract.id, 'active');
+              const now = new Date();
+              if (contract.status === 'signed') {
+                if (contract.startDate && now >= contract.startDate) {
+                  try {
+                    await transitionContract(contract.id, 'active');
+                    await recordContractHistory(
+                      contract.id,
+                      'activated',
+                      'Contrato activado automáticamente tras pago de fianza',
+                    );
+                    console.log(`Contrato ${contract.id} activado automáticamente.`);
+                  } catch (actErr) {
+                    console.error(`Error activando contrato ${contract.id}:`, actErr);
+                  }
+                } else if (contract.startDate) {
                   await recordContractHistory(
                     contract.id,
-                    'activated',
-                    'Contrato activado automáticamente tras pago de fianza',
+                    'pending_activation',
+                    `Fianza recibida. Activación programada para ${contract.startDate.toISOString()}`,
                   );
-                  console.log(`Contrato ${contract.id} activado automáticamente.`);
-                } catch (actErr) {
-                  console.error(`Error activando contrato ${contract.id}:`, actErr);
                 }
-              } else if (contract.startDate) {
-                await recordContractHistory(
-                  contract.id,
-                  'pending_activation',
-                  `Fianza recibida. Activación programada para ${contract.startDate.toISOString()}`,
-                );
               }
             }
           }
         }
+        break;
       }
-      break;
     }
-    case 'charge.refunded': {
-      // handle refund record logic
-      break;
-    }
-  }
 
-  res.json({ received: true });
+    // 3. Success: Mark as completed
+    await ProcessedEvent.updateOne(
+      { provider: 'stripe', eventId: event.id },
+      { status: 'completed' }
+    );
+
+    res.json({ received: true });
+
+  } catch (err: any) {
+    // 4. Failure: Mark as failed so we can audit or allow retry (depending on logic, usually allow retry)
+    console.error(`Error processing Stripe event ${event.id}:`, err);
+    await ProcessedEvent.updateOne(
+      { provider: 'stripe', eventId: event.id },
+      { status: 'failed', error: err.message }
+    );
+    // Return 500 so Stripe retries
+    res.status(500).json({ error: 'processing_failed' });
+  }
 });
 
 export default r;

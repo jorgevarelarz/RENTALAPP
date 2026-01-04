@@ -1,9 +1,9 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { ensureConversation, getMessages, sendMessage, markRead, type Message } from '../services/chat';
 import { useAuth } from '../context/AuthContext';
-import axios from 'axios';
+import { api as axios } from '../api/client';
 
-export default function ChatPanel({ kind, refId }: { kind: 'ticket'|'contract'|'appointment'; refId: string }) {
+export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'contract'|'appointment'; refId: string }) {
   const [conversationId, setConversationId] = useState<string>('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [body, setBody] = useState('');
@@ -13,7 +13,9 @@ export default function ChatPanel({ kind, refId }: { kind: 'ticket'|'contract'|'
   const [attachmentUrl, setAttachmentUrl] = useState<string | undefined>(undefined);
   const listRef = useRef<HTMLDivElement>(null);
   const { user } = useAuth();
+  const [participantName, setParticipantName] = useState<string>('Conversación');
   const [isDragging, setIsDragging] = useState(false);
+  const myId = (user as any)?.id || (user as any)?._id;
   const isImageUrl = (u?: string) => !!u && /\.(png|jpg|jpeg|gif|webp|bmp|svg)$/i.test(u);
   const isPdfUrl = (u?: string) => !!u && /\.pdf(?:$|\?)/i.test(u);
   const fileNameFromUrl = (u?: string) => {
@@ -30,6 +32,8 @@ export default function ChatPanel({ kind, refId }: { kind: 'ticket'|'contract'|'
       if (!refId) return;
       const conv = await ensureConversation(kind, refId);
       setConversationId(conv._id);
+      const other = conv.participantsInfo?.find(p => p.id !== String(myId));
+      setParticipantName(other?.name || 'Conversación');
       const msgs = await getMessages(conv._id, { limit: 50 });
       // backend devuelve descendente; mostramos ascendente
       setMessages(msgs.slice().reverse());
@@ -96,94 +100,115 @@ export default function ChatPanel({ kind, refId }: { kind: 'ticket'|'contract'|'
 
   if (!refId) return null;
   return (
-    <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-      <h3 style={{ marginTop: 0 }}>Conversación</h3>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-        <button onClick={loadMore} disabled={loadingMore || !messages.length} className="btn">
-          {loadingMore ? 'Cargando…' : 'Cargar mensajes anteriores'}
+    <div className="flex h-full flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="flex items-center justify-between border-b border-gray-100 bg-gray-50 px-4 py-3">
+        <div>
+          <p className="text-sm font-semibold text-gray-800">{participantName}</p>
+          <p className="text-xs text-gray-500">Chat de la incidencia</p>
+        </div>
+        <button
+          onClick={loadMore}
+          disabled={loadingMore || !messages.length}
+          className="rounded-md border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+        >
+          {loadingMore ? 'Cargando…' : 'Cargar anteriores'}
         </button>
-        <div style={{ fontSize: 12, color: '#6b7280' }}>{user ? 'Tú: ' + (user.email || user._id) : ''}</div>
       </div>
+
       <div
         ref={listRef}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
         onDrop={onDrop}
+        className="flex-1 space-y-3 overflow-y-auto px-4 py-3"
         style={{
-          maxHeight: 260,
-          overflowY: 'auto',
-          display: 'grid',
-          gap: 6,
-          padding: 8,
-          borderRadius: 6,
-          background: isDragging ? '#eef2ff' : '#fafafa',
-          outline: isDragging ? '2px dashed #6366f1' : 'none',
+          background: isDragging ? '#e0f2fe' : '#efeae2',
+          outline: isDragging ? '2px dashed #38bdf8' : 'none',
           transition: 'background 120ms',
         }}
         title="Arrastra y suelta archivos para adjuntar"
       >
-        {messages.map((m) => (
-          <div key={m._id} style={{ fontSize: 14 }}>
-            {m.type === 'system' ? (
-              <em style={{ color: '#6b7280' }}>[{m.systemCode}]</em>
-            ) : (
-              <>
-                {m.body && <span>{m.body}</span>}
-                {m.body && (m as any).attachmentUrl && <span> · </span>}
-                {(m as any).attachmentUrl && (
-                  isImageUrl((m as any).attachmentUrl) ? (
-                    <a href={(m as any).attachmentUrl} target="_blank" rel="noreferrer" style={{ display: 'inline-block', marginTop: 4 }}>
-                      <img
-                        src={(m as any).attachmentUrl}
-                        alt="adjunto"
-                        style={{ maxWidth: 180, maxHeight: 140, objectFit: 'cover', borderRadius: 6, border: '1px solid #e5e7eb' }}
-                      />
-                    </a>
-                  ) : isPdfUrl((m as any).attachmentUrl) ? (
-                    <a href={(m as any).attachmentUrl} target="_blank" rel="noreferrer">📄 {fileNameFromUrl((m as any).attachmentUrl)}</a>
-                  ) : (
-                    <a href={(m as any).attachmentUrl} target="_blank" rel="noreferrer">{fileNameFromUrl((m as any).attachmentUrl)}</a>
-                  )
+        {messages.map((m) => {
+          const mine = m.senderId === myId;
+          return (
+            <div key={m._id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm shadow ${
+                  mine ? 'bg-green-100 text-gray-900' : 'bg-white text-gray-900'
+                }`}
+              >
+                {m.type === 'system' ? (
+                  <em className="text-xs text-gray-500">[{m.systemCode}]</em>
+                ) : (
+                  <>
+                    {m.body && <div className="whitespace-pre-wrap">{m.body}</div>}
+                    {(m as any).attachmentUrl && (
+                      <div className="mt-2">
+                        {isImageUrl((m as any).attachmentUrl) ? (
+                          <a href={(m as any).attachmentUrl} target="_blank" rel="noreferrer">
+                            <img
+                              src={(m as any).attachmentUrl}
+                              alt="adjunto"
+                              className="max-h-48 rounded-lg border border-gray-200 object-cover"
+                            />
+                          </a>
+                        ) : isPdfUrl((m as any).attachmentUrl) ? (
+                          <a href={(m as any).attachmentUrl} target="_blank" rel="noreferrer" className="text-blue-600">
+                            📄 {fileNameFromUrl((m as any).attachmentUrl)}
+                          </a>
+                        ) : (
+                          <a href={(m as any).attachmentUrl} target="_blank" rel="noreferrer" className="text-blue-600">
+                            {fileNameFromUrl((m as any).attachmentUrl)}
+                          </a>
+                        )}
+                      </div>
+                    )}
+                  </>
                 )}
-              </>
-            )}
-            <span style={{ marginLeft: 8, color: '#9ca3af', fontSize: 12 }}>{m.createdAt ? new Date(m.createdAt).toLocaleString() : ''}</span>
-          </div>
-        ))}
-        {messages.length === 0 && <div style={{ color: '#6b7280' }}>No hay mensajes.</div>}
+                <div className={`mt-1 text-[11px] ${mine ? 'text-green-700' : 'text-gray-500'} text-right`}>
+                  {m.createdAt ? new Date(m.createdAt).toLocaleTimeString() : ''}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+        {messages.length === 0 && <div className="text-center text-sm text-gray-500">No hay mensajes.</div>}
       </div>
-      <form onSubmit={onSend} style={{ display: 'grid', gridTemplateColumns: '1fr auto auto auto', gap: 8, marginTop: 8, alignItems: 'center' }}>
+
+      <form onSubmit={onSend} className="flex items-center gap-2 border-t border-gray-100 bg-white px-3 py-3">
+        <label className="cursor-pointer rounded-full bg-gray-100 p-2 text-sm hover:bg-gray-200" title="Abrir cámara (móvil)">
+          📷
+          <input type="file" onChange={(e)=>onPickFile(e.target.files?.[0] || null)} className="hidden" accept="image/*" capture="environment" />
+        </label>
+        <label className="cursor-pointer rounded-full bg-gray-100 p-2 text-sm hover:bg-gray-200">
+          📎
+          <input type="file" onChange={(e)=>onPickFile(e.target.files?.[0] || null)} className="hidden" accept="image/*,.pdf" />
+        </label>
         <input
           value={body}
           onChange={(e)=>setBody(e.target.value)}
           onPaste={async (e) => {
             try { const f = e.clipboardData?.files?.[0]; if (f) await onPickFile(f); } catch {}
           }}
-          placeholder="Escribe un mensaje…"
-          style={{ border: '1px solid #d1d5db', borderRadius: 6, padding: '8px 10px' }}
+          placeholder="Escribe un mensaje..."
+          className="flex-1 rounded-full border border-gray-200 px-4 py-2 text-sm focus:border-green-500 focus:outline-none focus:ring-2 focus:ring-green-100"
         />
-        <label className="btn" style={{ cursor: 'pointer' }} title="Abrir cámara (móvil)">
-          📷 Cámara
-          <input type="file" onChange={(e)=>onPickFile(e.target.files?.[0] || null)} style={{ display: 'none' }} accept="image/*" capture="environment" />
-        </label>
-        <label className="btn" style={{ cursor: 'pointer' }}>
-          {uploading ? 'Subiendo…' : 'Adjuntar'}
-          <input type="file" onChange={(e)=>onPickFile(e.target.files?.[0] || null)} style={{ display: 'none' }} accept="image/*,.pdf" />
-        </label>
-        <button type="submit" className="btn" disabled={!body.trim() && !attachmentUrl}>Enviar</button>
+        <button type="submit" className="rounded-full bg-green-500 px-4 py-2 text-sm font-medium text-white hover:bg-green-600 disabled:opacity-50" disabled={!body.trim() && !attachmentUrl}>
+          Enviar
+        </button>
       </form>
       {attachmentUrl && (
-        <div style={{ marginTop: 6, fontSize: 12 }}>
+        <div className="px-4 pb-3 text-xs text-gray-600">
           Adjuntando: {isImageUrl(attachmentUrl) ? (
-            <a href={attachmentUrl} target="_blank" rel="noreferrer">imagen</a>
+            <a href={attachmentUrl} target="_blank" rel="noreferrer" className="text-blue-600">imagen</a>
           ) : isPdfUrl(attachmentUrl) ? (
-            <a href={attachmentUrl} target="_blank" rel="noreferrer">📄 {fileNameFromUrl(attachmentUrl)}</a>
+            <a href={attachmentUrl} target="_blank" rel="noreferrer" className="text-blue-600">📄 {fileNameFromUrl(attachmentUrl)}</a>
           ) : (
-            <a href={attachmentUrl} target="_blank" rel="noreferrer">{fileNameFromUrl(attachmentUrl)}</a>
+            <a href={attachmentUrl} target="_blank" rel="noreferrer" className="text-blue-600">{fileNameFromUrl(attachmentUrl)}</a>
           )}
         </div>
       )}
-      {uploadError && <div style={{ color: '#b91c1c', fontSize: 12, marginTop: 4 }}>{uploadError}</div>}
+      {uploadError && <div className="px-4 pb-3 text-xs text-red-600">{uploadError}</div>}
     </div>
   );
 }

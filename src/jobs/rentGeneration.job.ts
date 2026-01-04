@@ -1,6 +1,6 @@
 import cron from 'node-cron';
 import { Contract } from '../models/contract.model';
-import { Payment } from '../models/payment.model';
+import { RentPayment } from '../models/rentPayment.model';
 import { recordContractHistory } from '../utils/history';
 
 export const runRentGeneration = async () => {
@@ -8,17 +8,16 @@ export const runRentGeneration = async () => {
   const now = new Date();
   const currentMonth = now.getMonth() + 1;
   const currentYear = now.getFullYear();
+  const period = `${currentYear}-${String(currentMonth).padStart(2, '0')}`;
 
   try {
     const contracts = await Contract.find({ status: 'active' });
     let count = 0;
 
     for (const contract of contracts) {
-      const exists = await Payment.findOne({
-        contract: contract._id,
-        type: 'rent',
-        billingMonth: currentMonth,
-        billingYear: currentYear,
+      const exists = await RentPayment.findOne({
+        contractId: contract._id,
+        period,
       }).lean();
 
       if (exists) continue;
@@ -26,24 +25,17 @@ export const runRentGeneration = async () => {
       const dueDate = new Date(now);
       dueDate.setDate(dueDate.getDate() + 5);
 
-      await Payment.create({
-        contract: contract._id,
-        payer: contract.tenant,
-        payee: contract.landlord,
+      await RentPayment.create({
+        contractId: contract._id,
+        period,
         amount: contract.rent ?? (contract as any).rentAmount ?? 0,
-        currency: contract.currency || 'eur',
-        status: 'pending',
-        type: 'rent',
-        concept: `Renta ${now.toLocaleString('es-ES', { month: 'long' })} ${currentYear}`,
-        billingMonth: currentMonth,
-        billingYear: currentYear,
-        dueDate,
+        status: 'DUE',
       });
 
       await recordContractHistory(
         contract.id,
         'rent_generated',
-        `Recibo generado para ${currentMonth}/${currentYear}`,
+        `Recibo generado para ${period}`,
       );
 
       count += 1;

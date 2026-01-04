@@ -42,10 +42,15 @@ router.get('/:id/audit-trail', authenticate, signCtrl.getAuditTrail);
 
 // Firmar contrato
 router.patch('/:id/sign', authenticate, requirePolicies(REQUIRED_POLICIES), contractController.signContract);
+router.get('/:id/parties', authenticate, contractController.getContractParties);
+router.post('/:id/tenants/invite', ...assertRole('tenant'), contractController.inviteCoTenant);
+router.post('/:id/tenants/:partyId/sign', ...assertRole('tenant'), contractController.signCoTenant);
+router.post('/:id/tenants/:partyId/remove-request', ...assertRole('tenant', 'landlord'), contractController.removeCoTenantRequest);
 
 // Pagos de renta (Stripe Card)
 router.get('/:id/payments', authenticate, contractController.getContractPayments);
 router.post('/:id/pay-rent', ...assertRole('tenant'), contractController.createRentPaymentIntent);
+router.post('/:id/payments/:period/pay', ...assertRole('tenant'), contractController.payRentForPeriod);
 
 // Iniciar pago por SEPA con Stripe
 router.post('/:id/pay', ...assertRole('tenant'), contractController.initiatePayment);

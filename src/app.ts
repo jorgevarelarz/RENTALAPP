@@ -44,6 +44,8 @@ import { purgeOldTenantProDocs } from './jobs/tenantProRetention';
 import { startContractActivationJob } from './jobs/contractActivation.job';
 import { startRentGenerationJob } from './jobs/rentGeneration.job';
 import applicationsRoutes from './routes/applications.routes';
+import invitesRoutes from './routes/invites.routes';
+import meRoutes from './routes/me.routes';
 
 import helmet from 'helmet';
 import hpp from 'hpp';
@@ -223,12 +225,14 @@ app.use('/api/pros', requireVerified, proRoutes);
 // Tickets necesitan usuario autenticado; permitir bypass de verificación en test si aplica
 app.use('/api/tickets', authenticate, requireVerified, ticketRoutes);
 app.use('/api/reviews', requireVerified, reviewRoutes);
-app.use('/api/chat', requireVerified, chatRoutes);
+app.use('/api/chat', authenticate, requireVerified, chatRoutes);
 // Contract-specific payments under /api/contracts require verificación
 app.use('/api/contracts', authenticate, requireVerified, contractPaymentsRoutes);
 app.use('/api', paymentsRoutes);
 app.use('/api', authenticate, requireVerified, connectRoutes);
 app.use('/api', requireVerified, serviceOfferRoutes);
+app.use('/api/invites', authenticate, invitesRoutes);
+app.use('/api/me', authenticate, requireVerified, meRoutes);
 
 // Admin
 app.use(

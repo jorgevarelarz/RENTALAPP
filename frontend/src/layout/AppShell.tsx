@@ -13,7 +13,7 @@ function Header() {
     const load = async () => {
       try {
         if (!user?._id) { setUnread(0); return; }
-        const list = await listConversations({ page: 1, limit: 50 });
+        const list = await listConversations({ page: 1, limit: 50, kind: 'direct' });
         const total = list.reduce((acc: number, c: any) => acc + (c?.unread?.[user._id] || 0), 0);
         setUnread(total);
       } catch {}
@@ -64,7 +64,7 @@ function SideNav() {
     const load = async () => {
       try {
         if (!user?._id) { setUnread(0); return; }
-        const list = await listConversations({ page: 1, limit: 50 });
+        const list = await listConversations({ page: 1, limit: 50, kind: 'direct' });
         const total = list.reduce((acc: number, c: any) => acc + (c?.unread?.[user._id] || 0), 0);
         setUnread(total);
       } catch {}

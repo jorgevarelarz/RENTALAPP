@@ -38,30 +38,48 @@ export default function TicketsList() {
   }, [data, q]);
 
   return (
-    <div style={{ padding: 24 }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-        <h2 style={{ margin: 0 }}>Incidencias ({role})</h2>
-        <button
-          type="button"
-          onClick={() => setShowFilters(v => !v)}
-          style={{ border: '1px solid #e5e7eb', background: '#fff', borderRadius: 8, padding: '8px 12px' }}
-          aria-expanded={showFilters}
-          aria-controls="tickets-filters"
-        >
-          {showFilters ? 'Ocultar filtros' : 'Mostrar filtros'}
-        </button>
+    <div className="space-y-6 p-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-900">Incidencias</h2>
+          <p className="text-sm text-gray-500">Estado y seguimiento de tickets abiertos</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {role === 'tenant' && (
+            <Link
+              to="/tickets/new"
+              className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+            >
+              Abrir incidencia
+            </Link>
+          )}
+          <button
+            type="button"
+            onClick={() => setShowFilters(v => !v)}
+            className="inline-flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            aria-expanded={showFilters}
+            aria-controls="tickets-filters"
+          >
+            {showFilters ? 'Ocultar filtros' : 'Mostrar filtros'}
+          </button>
+        </div>
       </div>
+
       {showFilters && (
-        <div id="tickets-filters" style={{ display: 'grid', gap: 8, marginBottom: 12 }}>
+        <div id="tickets-filters" className="grid gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
           <input
-            placeholder="Buscar por título, estado o servicio…"
+            placeholder="Buscar por titulo, estado o servicio..."
             value={q}
             onChange={e => setQ(e.target.value)}
-            style={{ padding: '10px 12px', borderRadius: 8, border: '1px solid #e5e7eb' }}
+            className="w-full rounded-md border border-gray-200 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-100"
           />
-          <div>
-            <label style={{ fontSize: 12, color: '#6b7280', marginRight: 8 }}>Estado</label>
-            <select value={status} onChange={e => { setStatus(e.target.value); setPage(1); }}>
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs font-medium uppercase tracking-wide text-gray-500">Estado</label>
+            <select
+              value={status}
+              onChange={e => { setStatus(e.target.value); setPage(1); }}
+              className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm"
+            >
               <option value="">Todos</option>
               <option value="open">Abierto</option>
               <option value="quoted">Presupuestado</option>
@@ -75,44 +93,67 @@ export default function TicketsList() {
           </div>
         </div>
       )}
-      {isLoading && <div>Cargando…</div>}
-      <table style={{ width: "100%", borderCollapse: "collapse" }}>
-        <thead>
-          <tr style={{ textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
-            <th style={{ padding: 8 }}>ID</th>
-            <th style={{ padding: 8 }}>Título</th>
-            <th style={{ padding: 8 }}>Servicio</th>
-            <th style={{ padding: 8 }}>Estado</th>
-            <th style={{ padding: 8 }}>Actualizado</th>
-            <th style={{ padding: 8 }}></th>
-          </tr>
-        </thead>
-        <tbody>
-          {filtered.map((ticket) => (
-            <tr key={ticket._id} style={{ borderTop: "1px solid #eee" }}>
-              <td style={{ padding: 8 }}>{ticket._id.slice(-6)}</td>
-              <td style={{ padding: 8 }}>{ticket.title}</td>
-              <td style={{ padding: 8 }}>{ticket.service}</td>
-              <td style={{ padding: 8 }}>{ticket.status}</td>
-              <td style={{ padding: 8 }}>{new Date(ticket.updatedAt).toLocaleString()}</td>
-              <td style={{ padding: 8 }}>
-                <Link to={`/tickets/${ticket._id}`}>Ver</Link>
-              </td>
+
+      {isLoading && <div className="text-sm text-gray-500">Cargando...</div>}
+
+      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+        <table className="min-w-full divide-y divide-gray-100">
+          <thead className="bg-gray-50">
+            <tr className="text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+              <th className="px-4 py-3">ID</th>
+              <th className="px-4 py-3">Titulo</th>
+              <th className="px-4 py-3">Servicio</th>
+              <th className="px-4 py-3">Estado</th>
+              <th className="px-4 py-3">Actualizado</th>
+              <th className="px-4 py-3"></th>
             </tr>
-          ))}
-          {!((data?.items || []).length) && (
-            <tr>
-              <td colSpan={6} style={{ padding: 12 }}>
-                No hay incidencias.
-              </td>
-            </tr>
-          )}
-        </tbody>
-      </table>
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 }}>
-        <button disabled={(data?.page || 1) <= 1} onClick={() => setPage(p => Math.max(1, p - 1))} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '6px 10px' }}>Anterior</button>
-        <span style={{ fontSize: 12, color: '#6B7280' }}>Página {data?.page || 1}</span>
-        <button disabled={((data?.page || 1) * 10) >= (data?.total || 0)} onClick={() => setPage(p => p + 1)} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '6px 10px' }}>Siguiente</button>
+          </thead>
+          <tbody className="divide-y divide-gray-100 text-sm">
+            {filtered.map((ticket) => (
+              <tr key={ticket._id} className="hover:bg-gray-50">
+                <td className="px-4 py-3 font-mono text-xs text-gray-500">{ticket._id.slice(-6)}</td>
+                <td className="px-4 py-3 font-medium text-gray-900">{ticket.title}</td>
+                <td className="px-4 py-3 text-gray-600">{ticket.service}</td>
+                <td className="px-4 py-3">
+                  <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
+                    {ticket.status}
+                  </span>
+                </td>
+                <td className="px-4 py-3 text-gray-600">{new Date(ticket.updatedAt).toLocaleString()}</td>
+                <td className="px-4 py-3 text-right">
+                  <Link to={`/tickets/${ticket._id}`} className="text-sm font-medium text-blue-600 hover:text-blue-800">
+                    Ver
+                  </Link>
+                </td>
+              </tr>
+            ))}
+            {!((data?.items || []).length) && !isLoading && (
+              <tr>
+                <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
+                  No hay incidencias.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      <div className="flex items-center justify-center gap-3">
+        <button
+          disabled={(data?.page || 1) <= 1}
+          onClick={() => setPage(p => Math.max(1, p - 1))}
+          className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50"
+        >
+          Anterior
+        </button>
+        <span className="text-xs text-gray-500">Pagina {data?.page || 1}</span>
+        <button
+          disabled={((data?.page || 1) * 10) >= (data?.total || 0)}
+          onClick={() => setPage(p => p + 1)}
+          className="rounded-md border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 disabled:opacity-50"
+        >
+          Siguiente
+        </button>
       </div>
     </div>
   );

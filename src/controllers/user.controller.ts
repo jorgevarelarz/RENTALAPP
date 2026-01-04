@@ -54,6 +54,64 @@ export const updateUser = async (req: Request, res: Response) => {
   }
 };
 
+export const getMe = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(403).json({ message: 'No autorizado' });
+    }
+    const user = await User.findById(userId).select('-passwordHash').lean();
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error('Error obteniendo perfil:', error);
+    res.status(500).json({ message: 'Error al obtener perfil' });
+  }
+};
+
+export const updateProfile = async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).user?.id;
+    if (!userId) {
+      return res.status(403).json({ message: 'No autorizado' });
+    }
+
+    const updates: Record<string, any> = {};
+    // name is tied to verification and should not be editable here
+    if (Object.prototype.hasOwnProperty.call(req.body, 'phone')) updates.phone = req.body.phone;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'bio')) updates.bio = req.body.bio;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'avatar')) updates.avatar = req.body.avatar;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'jobTitle')) updates.jobTitle = req.body.jobTitle;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'monthlyIncome')) {
+      const raw = req.body.monthlyIncome;
+      if (raw === '' || raw === null || typeof raw === 'undefined') {
+        updates.monthlyIncome = undefined;
+      } else {
+        const parsed = Number(raw);
+        updates.monthlyIncome = Number.isFinite(parsed) ? parsed : undefined;
+      }
+    }
+    if (Object.prototype.hasOwnProperty.call(req.body, 'companyName')) updates.companyName = req.body.companyName;
+    if (Object.prototype.hasOwnProperty.call(req.body, 'serviceCategory')) updates.serviceCategory = req.body.serviceCategory;
+
+    const user = await User.findByIdAndUpdate(
+      userId,
+      { $set: updates },
+      { new: true, runValidators: true },
+    ).select('-passwordHash');
+
+    if (!user) {
+      return res.status(404).json({ message: 'Usuario no encontrado' });
+    }
+    res.json(user);
+  } catch (error) {
+    console.error('Error actualizando perfil:', error);
+    res.status(500).json({ message: 'Error al actualizar perfil' });
+  }
+};
+
 export const getLandlordStats = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;

@@ -15,6 +15,7 @@ import ContractWizard from "./pages/contracts/ContractWizard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleGuard from "./components/RoleGuard";
 import Inbox from "./pages/Inbox";
+import ChatDirectPage from "./pages/ChatDirect";
 import TicketsList from "./pages/tickets/TicketsList";
 import TicketCreatePage from "./pages/tickets/TicketCreatePage";
 import TicketDetail from "./pages/tickets/TicketDetail";
@@ -65,6 +66,7 @@ export default function AppRoutes() {
             <Route path="/properties" element={<PropertiesList />} />
             <Route path="/properties/:id" element={<PropertyDetail />} />
             <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
+            <Route path="/inbox/:userId" element={<ProtectedRoute><ChatDirectPage /></ProtectedRoute>} />
             <Route path="/tenant" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantHome /></RoleGuard></ProtectedRoute>} />
             <Route path="/tenant/payments" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantPayments /></RoleGuard></ProtectedRoute>} />
             <Route path="/tenant/applications" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantApplications /></RoleGuard></ProtectedRoute>} />

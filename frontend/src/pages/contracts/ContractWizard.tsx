@@ -107,7 +107,11 @@ export default function ContractWizard() {
       push({ title: 'Contrato enviado a firma correctamente', tone: 'success' });
       nav('/landlord');
     } catch (e: any) {
-      push({ title: e.message || 'Error al crear contrato', tone: 'error' });
+      const raw = e?.response?.data?.error;
+      const msg = raw && String(raw).toLowerCase().includes('contrato activo vigente')
+        ? 'No puedes alquilar esta propiedad porque ya hay un contrato vigente.'
+        : raw || e?.message || 'Error al crear contrato';
+      push({ title: msg, tone: 'error' });
     } finally {
       setLoading(false);
     }

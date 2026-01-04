@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import crypto from 'crypto';
 import { Contract } from '../models/contract.model';
+import { ContractParty } from '../models/contractParty.model';
 import { Property } from '../models/property.model';
 import { User } from '../models/user.model';
 import {
@@ -66,6 +67,20 @@ export const createContractAction = async (params: CreateContractParams) => {
 
   if (!landlordObjectId) {
     throw new Error('No se pudo determinar el arrendador del contrato');
+  }
+
+  const now = new Date();
+  const activeConflict = await Contract.findOne({
+    property: propertyObjectId,
+    status: 'active',
+    $or: [
+      { endDate: { $exists: false } },
+      { endDate: null },
+      { endDate: { $gte: now } },
+    ],
+  }).lean();
+  if (activeConflict) {
+    throw new Error('La propiedad ya tiene un contrato activo vigente');
   }
 
   const normalizedRegion = normalizeRegion(region ?? undefined) ?? 'general';
@@ -135,6 +150,17 @@ export const createContractAction = async (params: CreateContractParams) => {
 
   await contract.save();
 
+  const tenantUser = await User.findById(tenantObjectId).select('email').lean();
+  if (tenantUser?.email) {
+    await ContractParty.create({
+      contractId: contract._id,
+      role: 'TENANT',
+      userId: tenantObjectId,
+      email: tenantUser.email,
+      status: 'JOINED',
+    }).catch(() => {});
+  }
+
   // Record history entry for creation
   await recordContractHistory(contract.id, 'created', 'Contrato creado');
 
@@ -173,11 +199,38 @@ export const signContractAction = async (contractId: string, user: { id: string;
   let actionLabel = '';
   // Determine who is signing based on the user's role
   if (user.role === 'tenant') {
-    if (contract.signedByTenant) {
-      throw new Error('El inquilino ya ha firmado este contrato');
+    const party = await ContractParty.findOne({
+      contractId: contract._id,
+      role: 'TENANT',
+      userId: user.id,
+      status: { $in: ['JOINED', 'SIGNED'] },
+    });
+    if (!party) {
+      if (String(contract.tenant) !== String(user.id)) {
+        throw new Error('No estás autorizado para firmar este contrato');
+      }
+      contract.signedByTenant = true;
+      actionLabel = 'signedByTenant';
+      const u = await User.findById(user.id).select('email').lean();
+      if (u?.email) {
+        await ContractParty.create({
+          contractId: contract._id,
+          role: 'TENANT',
+          userId: user.id,
+          email: u.email,
+          status: 'SIGNED',
+          signedAt: new Date(),
+        }).catch(() => {});
+      }
+    } else {
+      if (party.status === 'SIGNED') {
+        throw new Error('Este inquilino ya ha firmado el contrato');
+      }
+      party.status = 'SIGNED';
+      party.signedAt = new Date();
+      await party.save();
+      actionLabel = 'signedByTenant';
     }
-    contract.signedByTenant = true;
-    actionLabel = 'signedByTenant';
   } else if (user.role === 'landlord') {
     if (contract.signedByLandlord) {
       throw new Error('El arrendador ya ha firmado este contrato');
@@ -186,6 +239,12 @@ export const signContractAction = async (contractId: string, user: { id: string;
     actionLabel = 'signedByLandlord';
   } else {
     throw new Error('Rol no autorizado para firmar');
+  }
+
+  const tenants = await ContractParty.find({ contractId: contract._id, role: 'TENANT' });
+  const allTenantsSigned = tenants.length === 0 ? !!contract.signedByTenant : tenants.every(t => t.status === 'SIGNED');
+  if (allTenantsSigned) {
+    contract.signedByTenant = true;
   }
 
   // Actualización de Estado

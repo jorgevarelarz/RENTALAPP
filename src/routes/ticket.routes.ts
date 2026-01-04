@@ -7,6 +7,7 @@ import Escrow from '../models/escrow.model';
 import Pro from '../models/pro.model';
 import { User } from '../models/user.model';
 import { getUserId } from '../utils/getUserId';
+import { ensureDirectConversation } from '../utils/ensureDirectConversation';
 import { holdPayment, releasePayment } from '../utils/payment';
 import { calcPlatformFee } from '../utils/calcFee';
 import PlatformEarning from '../models/platformEarning.model';
@@ -46,6 +47,10 @@ r.post('/', ...assertRole('tenant'), async (req, res) => {
       status: 'open',
       history: [{ ts: new Date(), actor: userId, action: 'opened' }]
     });
+    const direct = await ensureDirectConversation(ownerId, userId);
+    if (direct) {
+      await publishSystem(direct.id, userId, 'TICKET_OPENED', { ticketId: String(t._id) });
+    }
     res.status(201).json(t);
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });

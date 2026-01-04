@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { Link } from 'react-router-dom';
 import { createProperty, listProperties } from '../services/properties';
+import { listContracts } from '../services/contracts';
 import { userService } from '../services/user';
 import Button from '../components/ui/Button';
 import Card from '../components/ui/Card';
@@ -34,6 +35,7 @@ const IconDoc = () => (
 const LandlordDashboard: React.FC = () => {
   const { token, user } = useAuth();
   const [mine, setMine] = useState<any[]>([]);
+  const [rentedByProperty, setRentedByProperty] = useState<Record<string, { tenantName?: string; endDate?: string }>>({});
   const [stats, setStats] = useState<any>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,7 +51,26 @@ const LandlordDashboard: React.FC = () => {
       return owner && String(owner) === ownerId;
     });
     setMine(myProps);
-  }, [user]);
+    if (token) {
+      try {
+        const { items } = await listContracts(token, { status: 'active', limit: 500 });
+        const map: Record<string, { tenantName?: string; endDate?: string }> = {};
+        items.forEach((c: any) => {
+          const propId = c.property?._id || c.propertyId || c.property;
+          if (!propId) return;
+          map[String(propId)] = {
+            tenantName: c.tenantName || c.tenant?.name,
+            endDate: c.endDate,
+          };
+        });
+        setRentedByProperty(map);
+      } catch {
+        setRentedByProperty({});
+      }
+    } else {
+      setRentedByProperty({});
+    }
+  }, [user, token]);
 
   useEffect(() => {
     refresh();
@@ -100,7 +121,7 @@ const LandlordDashboard: React.FC = () => {
     setIsModalOpen(true);
   };
 
-  const activeProps = mine.filter(p => p.status === 'active').length;
+  const activeProps = mine.filter(p => p.status === 'active' && !rentedByProperty[String(p._id)]).length;
   const draftProps = mine.filter(p => p.status !== 'active').length;
 
   return (
@@ -240,7 +261,22 @@ const LandlordDashboard: React.FC = () => {
           </div>
         ) : (
           <div className="divide-y divide-gray-100">
-            {mine.map((p: any) => (
+            {mine.map((p: any) => {
+              const rented = rentedByProperty[String(p._id)];
+              const statusLabel = rented
+                ? 'Alquilado'
+                : p.status === 'active'
+                  ? 'Publicado'
+                  : 'Borrador';
+              const statusClass = rented
+                ? 'bg-purple-50 text-purple-700 border-purple-200'
+                : p.status === 'active'
+                  ? 'bg-green-50 text-green-700 border-green-200'
+                  : 'bg-yellow-50 text-yellow-700 border-yellow-200';
+              const endLabel = rented?.endDate
+                ? new Date(rented.endDate).toLocaleDateString('es-ES')
+                : '';
+              return (
               <div key={p._id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-4 hover:bg-gray-50 transition-colors group">
                 <div className="flex items-start gap-4">
                   <div className="w-24 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200 relative">
@@ -257,16 +293,20 @@ const LandlordDashboard: React.FC = () => {
                   <div>
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <h4 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{p.title}</h4>
-                      <span className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${
-                        p.status === 'active' ? 'bg-green-50 text-green-700 border-green-200' :
-                        p.status === 'rented' ? 'bg-gray-100 text-gray-600 border-gray-300' :
-                        'bg-yellow-50 text-yellow-700 border-yellow-200'
-                      }`}>
-                        {p.status === 'active' ? 'Publicado' : p.status === 'rented' ? 'Alquilado' : 'Borrador'}
+                      <span
+                        className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${statusClass}`}
+                        style={rented ? { animation: 'pulse 3s ease-in-out infinite' } : undefined}
+                      >
+                        {statusLabel}
                       </span>
                     </div>
                     <p className="text-sm text-gray-600">{p.address}, {p.city}</p>
                     <p className="text-sm font-medium text-gray-900 mt-1">{p.price} €/mes</p>
+                    {rented && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Alquilado por {rented.tenantName || 'Inquilino'}{endLabel ? ` · Hasta ${endLabel}` : ''}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -313,7 +353,7 @@ const LandlordDashboard: React.FC = () => {
                   }}>Borrar</Button>
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         )}
       </Card>

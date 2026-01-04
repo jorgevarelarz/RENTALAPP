@@ -32,7 +32,11 @@ export default function WizardStep3Review({ basics, clauses, onBack, onCreated }
         console.warn('No se pudo disparar email de contrato', error);
       }
     } catch (error: any) {
-      push('error', error?.response?.data?.error || 'No se pudo crear el contrato');
+      const raw = error?.response?.data?.error;
+      const msg = raw && String(raw).toLowerCase().includes('contrato activo vigente')
+        ? 'No puedes alquilar esta propiedad porque ya hay un contrato vigente.'
+        : raw || 'No se pudo crear el contrato';
+      push('error', msg);
     }
   };
 

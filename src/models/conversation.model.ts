@@ -1,7 +1,7 @@
 import { Schema, model, Document } from 'mongoose';
 
 export interface IConversation extends Document {
-  kind: 'contract' | 'ticket' | 'appointment';
+  kind: 'direct' | 'contract' | 'ticket' | 'appointment';
   refId: string;
   participants: string[]; // exactly 2
   lastMessageAt?: Date;

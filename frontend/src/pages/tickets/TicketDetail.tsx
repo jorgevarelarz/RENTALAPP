@@ -141,7 +141,18 @@ export default function TicketDetail() {
               <span className="font-semibold text-gray-700">Actividad y Comentarios</span>
             </div>
             <div className="flex-1 overflow-hidden">
-              <ChatPanel kind="ticket" refId={ticket._id} />
+              <ChatPanel
+                kind="direct"
+                refId={
+                  role === 'tenant'
+                    ? ticket.ownerId
+                    : role === 'landlord'
+                      ? ticket.openedBy
+                      : role === 'pro'
+                        ? ticket.openedBy
+                        : ticket.ownerId
+                }
+              />
             </div>
           </div>
         </div>
