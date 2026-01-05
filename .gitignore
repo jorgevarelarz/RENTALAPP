@@ -15,3 +15,9 @@ yarn-error.log*
 
 # Coverage
 coverage/
+
+# Local tooling
+.gemini/
+
+# Runtime uploads (should be volume / runtime only)
+/uploads/
