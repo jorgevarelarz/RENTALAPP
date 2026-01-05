@@ -10,6 +10,7 @@ volumes:
   nginx_vhost:
   nginx_html:
   nginx_acme:
+  uploads_data:
 
 services:
   nginx-proxy:
@@ -22,7 +23,9 @@ services:
     volumes:
       - nginx_certs:/etc/nginx/certs
       - nginx_vhost:/etc/nginx/vhost.d
+      - ./nginx/vhost.d/default:/etc/nginx/vhost.d/default:ro
       - nginx_html:/usr/share/nginx/html
+      - uploads_data:/uploads:ro
       - /var/run/docker.sock:/tmp/docker.sock:ro
     networks:
       - nginx-proxy
@@ -81,4 +84,6 @@ services:
       - "3000"
     networks:
       - nginx-proxy
+    volumes:
+      - uploads_data:/app/uploads
     command: ["npm","run","start:prod"]

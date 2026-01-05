@@ -24,4 +24,6 @@ services:
       LETSENCRYPT_EMAIL: ""
     ports:
       - "3000:3000"
+    volumes:
+      - uploads_data:/app/uploads
     command: ["npm","run","start:prod"]
