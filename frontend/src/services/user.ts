@@ -1,7 +1,8 @@
 import { api as axios } from '../api/client';
 
 export interface UserProfile {
-  _id: string;
+  id: string;
+  _id?: string;
   email: string;
   name: string;
   role: 'tenant' | 'landlord' | 'admin' | 'pro';
@@ -20,11 +21,13 @@ export interface UserProfile {
 export const userService = {
   getProfile: async () => {
     const res = await axios.get<UserProfile>('/api/users/me');
-    return res.data;
+    const data: any = res.data;
+    return { ...data, id: data.id ?? data._id } as UserProfile;
   },
   updateProfile: async (data: Partial<UserProfile>) => {
     const res = await axios.put<UserProfile>('/api/users/me', data);
-    return res.data;
+    const body: any = res.data;
+    return { ...body, id: body.id ?? body._id } as UserProfile;
   },
   uploadAvatar: async (formData: FormData) => {
     const res = await axios.post('/api/uploads/images', formData, {

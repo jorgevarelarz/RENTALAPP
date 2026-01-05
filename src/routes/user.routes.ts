@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { getAllUsers, updateUser, getLandlordStats, getMe, updateProfile } from '../controllers/user.controller';
 import { authenticate } from '../middleware/auth.middleware';
+import { authorizeRoles } from '../middleware/role.middleware';
 
 const router = Router();
 
-// List all users (requires authentication)
-router.get('/', authenticate, getAllUsers);
+// List all users (admin only)
+router.get('/', authenticate, authorizeRoles('admin'), getAllUsers);
 
 router.get('/me', authenticate, getMe);
 router.put('/me', authenticate, updateProfile);

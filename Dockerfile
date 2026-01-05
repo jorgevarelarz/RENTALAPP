@@ -10,10 +10,22 @@ RUN npm run build
 FROM node:20-alpine AS runner
 WORKDIR /app
 ENV NODE_ENV=production
-COPY package*.json ./
+
+# Crear directorios necesarios para uploads y storage
+# Asegurar permisos correctos para el usuario 'node'
+RUN mkdir -p uploads storage/contracts-audit storage/contracts-signed && \
+    chown -R node:node /app
+
+# Copiar dependencias y asignar permisos
+COPY --chown=node:node package*.json ./
 RUN npm ci --omit=dev
-COPY --from=builder /app/dist ./dist
-COPY --from=builder /app/legal ./legal
+
+# Copiar artefactos construidos
+COPY --chown=node:node --from=builder /app/dist ./dist
+COPY --chown=node:node --from=builder /app/legal ./legal
+
+# Ejecutar como usuario no-root por seguridad
+USER node
 
 ENV PORT=3000
 EXPOSE 3000

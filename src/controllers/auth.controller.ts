@@ -4,8 +4,9 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { sendEmail } from '../utils/email';
+import { getJwtSecret } from '../utils/getJwtSecret';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
+const EFFECTIVE_JWT_SECRET = getJwtSecret();
 
 /**
  * Register a new user.
@@ -20,7 +21,7 @@ export const register = async (req: Request, res: Response) => {
     // Save new user with hashed password
     const user = new User({ name, email, passwordHash, role });
     await user.save();
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user._id, role: user.role }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
     res.status(201).json({
       token,
       user: { _id: user._id, email: user.email, role: user.role },
@@ -36,18 +37,16 @@ export const register = async (req: Request, res: Response) => {
  * Expects: email and password in the request body.
  */
 export const login = async (req: Request, res: Response) => {
-  console.log('Login  request recibido:', req.body);
   try {
     const { email, password } = req.body;
-    console.log('Email:', email);
     // Find the user by email
-    const user = await User.findOne({ email });
+    const user = await User.findOne({ email }).select('+passwordHash');
     if (!user) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
     // Compare provided password with stored hash
-    const isMatch = await bcrypt.compare(password, user.passwordHash);
+    const isMatch = await bcrypt.compare(password, user.passwordHash as string);
     if (!isMatch) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
     // Generate and return JWT
-    const token = jwt.sign({ id: user._id, role: user.role }, JWT_SECRET, { expiresIn: '7d' });
+    const token = jwt.sign({ id: user._id, role: user.role }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
     res.json({
       token,
       user: { _id: user._id, email: user.email, role: user.role },

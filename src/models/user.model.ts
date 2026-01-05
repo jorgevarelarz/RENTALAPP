@@ -75,7 +75,7 @@ const userSchema = new Schema(
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     // Passwords are stored hashed; see controllers/auth.controller.ts
-    passwordHash: { type: String, required: true },
+    passwordHash: { type: String, required: true, select: false },
     /**
      * Role assigned to the user. Supported values include:
      *  - tenant: standard renter of properties.

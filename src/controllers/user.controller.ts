@@ -4,6 +4,46 @@ import { Payment } from '../models/payment.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
 
+const toPublicUser = (u: any) => ({
+  id: String(u._id),
+  name: u.name,
+  role: u.role,
+  avatar: u.avatar,
+  ratingAvg: u.ratingAvg,
+  reviewCount: u.reviewCount,
+  companyName: u.companyName,
+  serviceCategory: u.serviceCategory,
+  createdAt: u.createdAt,
+});
+
+const toMeUser = (u: any) => ({
+  id: String(u._id),
+  name: u.name,
+  email: u.email,
+  role: u.role,
+  phone: u.phone,
+  avatar: u.avatar,
+  bio: u.bio,
+  jobTitle: u.jobTitle,
+  monthlyIncome: u.monthlyIncome,
+  companyName: u.companyName,
+  serviceCategory: u.serviceCategory,
+  ratingAvg: u.ratingAvg,
+  reviewCount: u.reviewCount,
+  createdAt: u.createdAt,
+  tenantPro: u.tenantPro
+    ? {
+        status: u.tenantPro.status,
+        isActive: u.tenantPro.isActive,
+        maxRent: u.tenantPro.maxRent,
+        consentAccepted: u.tenantPro.consentAccepted,
+        consentTextVersion: u.tenantPro.consentTextVersion,
+        consentAcceptedAt: u.tenantPro.consentAcceptedAt,
+        lastDecisionAt: u.tenantPro.lastDecisionAt,
+      }
+    : undefined,
+});
+
 /**
  * Retrieve a list of all users. The password hash is excluded for security.
  */
@@ -24,7 +64,6 @@ export const getAllUsers = async (req: Request, res: Response) => {
 
   const [items, total] = await Promise.all([
     User.find(query)
-      .select('-passwordHash')
       .sort({ ratingAvg: -1, reviewCount: -1, createdAt: -1 })
       .skip((pg - 1) * lim)
       .limit(lim)
@@ -32,7 +71,7 @@ export const getAllUsers = async (req: Request, res: Response) => {
     User.countDocuments(query),
   ]);
 
-  res.json({ items, total, page: pg, limit: lim });
+  res.json({ items: items.map(toPublicUser), total, page: pg, limit: lim });
 };
 
 /**
@@ -42,12 +81,45 @@ export const getAllUsers = async (req: Request, res: Response) => {
 export const updateUser = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    const updates: any = { ...req.body };
-    // Prevent changing passwordHash directly via this endpoint
+    const requester = (req as any).user;
+    const requesterId = String(requester?.id || '');
+    const isAdmin = requester?.role === 'admin';
+    const isSelf = requesterId && requesterId === String(id);
+    if (!isAdmin && !isSelf) {
+      return res.status(403).json({ error: 'No autorizado' });
+    }
+
+    let updates: any = { ...req.body };
+    // Prevent changing sensitive fields directly via this endpoint
     delete updates.passwordHash;
-    const user = await User.findByIdAndUpdate(id, updates, { new: true }).select('-passwordHash');
+    delete updates.resetToken;
+    delete updates.resetTokenExp;
+    delete updates.stripeAccountId;
+    delete updates.stripeCustomerId;
+    delete updates.tenantPro;
+
+    if (!isAdmin) {
+      const allowed = [
+        'phone',
+        'bio',
+        'avatar',
+        'jobTitle',
+        'monthlyIncome',
+        'companyName',
+        'serviceCategory',
+      ];
+      const filtered: any = {};
+      for (const key of allowed) {
+        if (Object.prototype.hasOwnProperty.call(updates, key)) {
+          filtered[key] = updates[key];
+        }
+      }
+      updates = filtered;
+    }
+
+    const user = await User.findByIdAndUpdate(id, updates, { new: true, runValidators: true }).lean();
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
-    res.json(user);
+    res.json(isSelf ? toMeUser(user) : toPublicUser(user));
   } catch (error: any) {
     console.error(error);
     res.status(500).json({ error: 'Error al actualizar el usuario' });
@@ -60,11 +132,11 @@ export const getMe = async (req: Request, res: Response) => {
     if (!userId) {
       return res.status(403).json({ message: 'No autorizado' });
     }
-    const user = await User.findById(userId).select('-passwordHash').lean();
+    const user = await User.findById(userId).lean();
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
-    res.json(user);
+    res.json(toMeUser(user));
   } catch (error) {
     console.error('Error obteniendo perfil:', error);
     res.status(500).json({ message: 'Error al obtener perfil' });
@@ -100,12 +172,12 @@ export const updateProfile = async (req: Request, res: Response) => {
       userId,
       { $set: updates },
       { new: true, runValidators: true },
-    ).select('-passwordHash');
+    ).lean();
 
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
-    res.json(user);
+    res.json(toMeUser(user));
   } catch (error) {
     console.error('Error actualizando perfil:', error);
     res.status(500).json({ message: 'Error al actualizar perfil' });

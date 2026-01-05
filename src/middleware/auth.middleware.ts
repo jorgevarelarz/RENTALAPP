@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { getJwtSecret } from '../utils/getJwtSecret';
 
-const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
+const EFFECTIVE_JWT_SECRET = getJwtSecret();
 
 /**
  * Authentication middleware. Verifies a JWT from the Authorization header
@@ -11,7 +12,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 export const authenticate = (req: Request, res: Response, next: NextFunction) => {
   const token = req.headers.authorization?.split(' ')[1];
   if (!token) {
-    if (process.env.NODE_ENV === 'test') {
+    const allowBypass = process.env.NODE_ENV === 'test' && process.env.ALLOW_TEST_AUTH === 'true';
+    if (allowBypass) {
       const idHeader = (req.headers['x-user-id'] as string) || '000000000000000000000001';
       const roleHeader = (req.headers['x-user-role'] as string) || 'landlord';
       const verifiedHeader = req.headers['x-user-verified'];
@@ -20,19 +22,18 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
           ? ['true', '1', 'yes'].includes(String(verifiedHeader).toLowerCase())
           : true;
 
-      const fallbackUser = {
+      req.user = {
         id: idHeader,
         _id: idHeader,
         role: roleHeader,
         isVerified,
       };
-      (req as any).user = fallbackUser;
       return next();
     }
     return res.status(401).json({ error: 'Token requerido' });
   }
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as any;
+    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET) as any;
     const resolvedId = decoded._id || decoded.id;
 
     // Resolver isVerified del token si existe; no asumir false por defecto todavía
@@ -51,7 +52,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
       }
     }
 
-    (req as any).user = {
+    req.user = {
       ...decoded,
       id: resolvedId,
       _id: resolvedId,
