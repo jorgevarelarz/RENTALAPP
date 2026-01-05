@@ -92,13 +92,13 @@ app.use(
         : false,
     hsts: process.env.NODE_ENV === 'production' ? undefined : false,
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
-    permissionsPolicy: {
-      camera: [],
-      microphone: [],
-      geolocation: [],
-    },
   }),
 );
+
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  next();
+});
 
 // ID de solicitud para trazabilidad
 app.use(requestId);
