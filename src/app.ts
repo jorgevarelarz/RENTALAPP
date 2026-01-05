@@ -70,9 +70,13 @@ app.use(
             useDefaults: true,
             directives: {
               defaultSrc: ["'self'"],
-              imgSrc: ["'self'", 'data:', 'https:', 'http:'],
-              scriptSrc: ["'self'", "'unsafe-inline'"],
+              baseUri: ["'self'"],
+              objectSrc: ["'none'"],
+              frameAncestors: ["'self'"],
+              imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
+              scriptSrc: ["'self'", 'https://loader.sandbox.signaturit.com'],
               styleSrc: ["'self'", "'unsafe-inline'"],
+              fontSrc: ["'self'", 'data:'],
               connectSrc: [
                 "'self'",
                 ...(process.env.CORS_ORIGIN || '')
@@ -80,11 +84,19 @@ app.use(
                   .map(s => s.trim())
                   .filter(Boolean),
                 'https://connect-js.stripe.com',
+                'https://*.sandbox.signaturit.com',
               ],
+              frameSrc: ["'self'", 'https://*.sandbox.signaturit.com'],
             },
           }
         : false,
     hsts: process.env.NODE_ENV === 'production' ? undefined : false,
+    referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+    permissionsPolicy: {
+      camera: [],
+      microphone: [],
+      geolocation: [],
+    },
   }),
 );
 
