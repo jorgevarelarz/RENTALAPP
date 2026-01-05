@@ -53,6 +53,28 @@ describe("Properties (minimal)", () => {
     expect(res.body.status).toBe("active");
   });
 
+  it("blocks update by non-owner landlord", async () => {
+    const otherOwner = "507f1f77bcf86cd799439012";
+    await request(app)
+      .put(`/api/properties/${pid}`)
+      .set("x-user-id", otherOwner)
+      .set("x-user-role", "landlord")
+      .set("x-user-verified", "true")
+      .send({ price: 999 })
+      .expect(403);
+  });
+
+  it("owner can update property", async () => {
+    const res = await request(app)
+      .put(`/api/properties/${pid}`)
+      .set("x-user-id", ownerId)
+      .set("x-user-role", "landlord")
+      .set("x-user-verified", "true")
+      .send({ price: 900 })
+      .expect(200);
+    expect(res.body.price).toBe(900);
+  });
+
   it("publish bloqueado si no verificado", async () => {
     const payload = {
       owner: ownerId,

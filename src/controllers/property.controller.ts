@@ -21,8 +21,22 @@ export async function update(req: Request, res: Response) {
   const { id } = req.params;
   const prev = await Property.findById(id);
   if (!prev) return res.status(404).json({ error: 'not_found' });
+  const user: any = req.user;
+  const userId = user?._id ?? user?.id;
+  const isAdmin = user?.role === 'admin';
+  const ownerId = (prev as any).owner?._id ?? prev.owner;
+  const isOwner = userId ? String(userId) === String(ownerId) : false;
+  if (!isAdmin && !isOwner) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
 
-  const b: any = req.body;
+  const b: any = { ...req.body };
+  delete b._id;
+  delete b.owner;
+  delete b.createdBy;
+  delete b.createdAt;
+  delete b.updatedAt;
+  if (!isAdmin) delete b.status;
   if (b.location) b.location = { type: 'Point', coordinates: [b.location.lng, b.location.lat] };
 
   if (b.onlyTenantPro) {
@@ -32,7 +46,7 @@ export async function update(req: Request, res: Response) {
     }
   }
 
-  const updated = await Property.findByIdAndUpdate(id, b, { new: true });
+  const updated = await Property.findByIdAndUpdate(id, b, { new: true, runValidators: true });
   if (!updated) return res.status(404).json({ error: 'not_found' });
 
   const priceChanged = prev.price !== updated.price;
@@ -79,8 +93,18 @@ export async function publish(req: Request, res: Response) {
 }
 
 export async function archive(req: Request, res: Response) {
-  const p = await Property.findByIdAndUpdate(req.params.id, { status: 'archived' }, { new: true });
+  const p = await Property.findById(req.params.id);
   if (!p) return res.status(404).json({ error: 'not_found' });
+  const user: any = req.user;
+  const userId = user?._id ?? user?.id;
+  const isAdmin = user?.role === 'admin';
+  const ownerId = (p as any).owner?._id ?? p.owner;
+  const isOwner = userId ? String(userId) === String(ownerId) : false;
+  if (!isAdmin && !isOwner) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+  p.status = 'archived';
+  await p.save();
   res.json({ _id: p._id, status: p.status });
 }
 
