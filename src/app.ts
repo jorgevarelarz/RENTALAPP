@@ -73,10 +73,22 @@ app.use(
               baseUri: ["'self'"],
               objectSrc: ["'none'"],
               frameAncestors: ["'self'"],
-              imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
-              scriptSrc: ["'self'", 'https://loader.sandbox.signaturit.com'],
-              styleSrc: ["'self'", "'unsafe-inline'"],
-              fontSrc: ["'self'", 'data:'],
+              imgSrc: [
+                "'self'",
+                'data:',
+                'blob:',
+                'https://*.stripe.com',
+                'https://via.placeholder.com',
+                'https://upload.wikimedia.org',
+              ],
+              scriptSrc: [
+                "'self'",
+                'https://loader.sandbox.signaturit.com',
+                'https://js.stripe.com',
+                'https://connect-js.stripe.com',
+              ],
+              styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://unpkg.com'],
+              fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com', 'https://unpkg.com'],
               connectSrc: [
                 "'self'",
                 ...(process.env.CORS_ORIGIN || '')
@@ -85,8 +97,14 @@ app.use(
                   .filter(Boolean),
                 'https://connect-js.stripe.com',
                 'https://*.sandbox.signaturit.com',
+                'https://api.stripe.com',
               ],
-              frameSrc: ["'self'", 'https://*.sandbox.signaturit.com'],
+              frameSrc: [
+                "'self'",
+                'https://*.sandbox.signaturit.com',
+                'https://js.stripe.com',
+                'https://connect-js.stripe.com',
+              ],
             },
           }
         : false,
