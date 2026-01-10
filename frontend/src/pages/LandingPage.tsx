@@ -70,7 +70,7 @@ export default function LandingPage() {
             </div>
             <h3 className="text-2xl font-bold text-gray-900 mb-2">Propietarios</h3>
             <p className="text-gray-500 mb-6 min-h-[48px]">
-              Gestiona tus rentas, automatiza cobros y accede a TenantPro.
+              Gestiona tus rentas, automatiza cobros y accede a Tenant PRO.
             </p>
             <Link
               to="/register?role=landlord"

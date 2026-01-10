@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { getContract, createSignSession } from '../services/contracts';
+import { getContract, createSignSession, downloadPdf, downloadSignedPdf } from '../services/contracts';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import Card from '../components/ui/Card';
@@ -58,12 +58,48 @@ export default function ContractDetail() {
     loadContract();
   };
 
+  const handleDownloadDraft = async () => {
+    if (!token || !contract?._id) return;
+    try {
+      const blob = await downloadPdf(token, contract._id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `contrato_${contract._id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      push({ title: 'No se pudo descargar el contrato', tone: 'error' });
+    }
+  };
+
+  const handleDownloadSigned = async () => {
+    if (!token || !contract?._id) return;
+    try {
+      const blob = await downloadSignedPdf(token, contract._id);
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `contrato_firmado_${contract._id}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (e) {
+      push({ title: 'No se pudo descargar el contrato firmado', tone: 'error' });
+    }
+  };
+
   if (loading) return <div className="p-8 text-center">Cargando contrato...</div>;
   if (!contract) return <div className="p-8 text-center text-red-500">Contrato no encontrado</div>;
 
   const isTenant = user?.role === 'tenant';
   const needsMySignature = isTenant && contract.status === 'pending_signature';
   const isActive = contract.status === 'active';
+  const hasSignedPdf = !!contract?.signature?.pdfUrl;
+  const downloadLabel = isActive || contract.status === 'signed' ? 'Descargar contrato' : 'Descargar borrador';
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
@@ -93,9 +129,14 @@ export default function ContractDetail() {
               style={{ fontSize: 12, padding: '4px 10px' }}
             />
           </div>
-          <Button variant="secondary" className="flex items-center gap-2">
-            <Download size={16} /> Descargar Borrador
+          <Button variant="secondary" className="flex items-center gap-2" onClick={handleDownloadDraft}>
+            <Download size={16} /> {downloadLabel}
           </Button>
+          {hasSignedPdf && (
+            <Button variant="secondary" className="flex items-center gap-2" onClick={handleDownloadSigned}>
+              <Download size={16} /> Descargar firmado
+            </Button>
+          )}
           {needsMySignature && (
             <Button
               onClick={handleStartSigning}

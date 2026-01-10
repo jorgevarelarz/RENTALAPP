@@ -27,6 +27,7 @@ beforeAll(async () => {
   process.env.MONGO_URL = mongo.getUri();
   process.env.NODE_ENV = 'test';
   process.env.ALLOW_UNVERIFIED = 'true';
+  await mongoose.connect(mongo.getUri());
   const mod = await import('../app');
   app = mod.app || mod.default;
 });
@@ -59,4 +60,3 @@ describe('Stripe webhook idempotency', () => {
     expect(count).toBe(1);
   });
 });
-

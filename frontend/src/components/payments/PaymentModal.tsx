@@ -4,7 +4,7 @@ import { Elements } from '@stripe/react-stripe-js';
 import Modal from '../ui/Modal';
 import CheckoutForm from './CheckoutForm';
 
-const stripeKey = process.env.REACT_APP_STRIPE_KEY || (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_STRIPE_KEY);
+const stripeKey = process.env.REACT_APP_STRIPE_KEY;
 const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
 
 interface Props {

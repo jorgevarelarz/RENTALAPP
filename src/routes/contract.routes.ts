@@ -30,6 +30,8 @@ router.post(
 // Webhooks de firma (globales, antes de rutas con :id)
 router.post('/signature/callback', signCtrl.signatureCallback);
 router.post('/signature/webhook', signCtrl.signatureWebhook);
+// Compatibilidad: callback con :id (usado en tests/legacy)
+router.post('/:id/signature/callback', signCtrl.signatureCallback);
 
 // Descargar contrato en PDF
 router.get('/:id/pdf', authenticate, contractController.getContractPDF);

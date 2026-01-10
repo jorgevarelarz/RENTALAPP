@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import PropertyCard from '../../components/PropertyCard';
-import { favoriteProperty, unfavoriteProperty } from '../../services/properties';
+import { favoriteProperty, listMyFavorites, unfavoriteProperty } from '../../services/properties';
 import FilterBar from '../../components/FilterBar';
 import SkeletonGrid from '../../components/ui/SkeletonGrid';
 import { usePropertyFilters, usePropertiesQuery } from '../../hooks/useProperties';
@@ -15,19 +15,47 @@ export default function PropertiesList() {
   const { data, isLoading, isFetching } = usePropertiesQuery(filters);
   const [showFilters, setShowFilters] = useState(false);
   const [promptLogin, setPromptLogin] = useState(false);
+  const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
   const { user } = useAuth();
 
   // filtros se aplican inline en FilterBar: no necesitamos handler aparte
 
+  useEffect(() => {
+    let mounted = true;
+    (async () => {
+      if (!user) { setLikedIds(new Set()); return; }
+      try {
+        const res = await listMyFavorites();
+        if (!mounted) return;
+        const next = new Set((res.items || []).map((p: any) => String(p._id)));
+        setLikedIds(next);
+      } catch {}
+    })();
+    return () => { mounted = false; };
+  }, [user]);
+
   const onFavToggle = async (id: string, liked: boolean) => {
     if (!user) { setPromptLogin(true); return; }
     try {
-      const fn = liked ? favoriteProperty : unfavoriteProperty;
+      const fn = liked ? unfavoriteProperty : favoriteProperty;
+      setLikedIds((prev) => {
+        const next = new Set(prev);
+        if (!liked) next.add(id);
+        else next.delete(id);
+        return next;
+      });
       await fn(id);
     } catch {}
   };
 
-  const items = ((data?.items as any[]) || []).filter((it: any) => (filters as any).onlyTenantPro ? !!it.onlyTenantPro : true);
+  const items = useMemo(() => {
+    const raw = ((data?.items as any[]) || []);
+    const filtered = raw.filter((it: any) => (filters as any).onlyTenantPro ? !!it.onlyTenantPro : true);
+    return filtered.map((it: any) => ({
+      ...it,
+      _liked: likedIds.has(String(it._id)) || !!it._liked,
+    }));
+  }, [data, filters, likedIds]);
   const page = (data as any)?.page || 1;
   const limit = (data as any)?.limit || filters.limit || 12;
   const total = (data as any)?.total || 0;

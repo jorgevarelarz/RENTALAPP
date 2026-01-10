@@ -12,6 +12,7 @@ beforeAll(async () => {
   mongo = await startMongoMemoryServer();
   process.env.MONGO_URL = mongo.getUri();
   process.env.NODE_ENV = 'test';
+  await mongoose.connect(mongo.getUri());
   const mod = await import('../../src/app');
   app = mod.app || mod.default;
 });
@@ -44,7 +45,7 @@ describe('Password reset flow', () => {
     const res = await request(app).post('/api/auth/request-reset').send({ email: user.email });
     expect(res.status).toBe(200);
 
-    const updated = await User.findById(user._id);
+    const updated = await User.findById(user._id).select('+passwordHash');
     expect(updated?.resetToken).toBeDefined();
     expect(updated?.resetTokenExp).toBeInstanceOf(Date);
     expect(updated!.resetTokenExp!.getTime()).toBeGreaterThan(Date.now());
@@ -68,7 +69,7 @@ describe('Password reset flow', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
 
-    const updated = await User.findById(user._id);
+    const updated = await User.findById(user._id).select('+passwordHash');
     expect(updated?.resetToken).toBeFalsy();
     expect(updated?.resetTokenExp).toBeFalsy();
     expect(await bcrypt.compare('newpassword', updated!.passwordHash)).toBe(true);

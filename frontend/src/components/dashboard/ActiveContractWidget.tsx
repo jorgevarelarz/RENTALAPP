@@ -7,6 +7,7 @@ import { ContractStatusBadge } from '../ContractStatusBadge';
 import Card from '../ui/Card';
 import Spinner from '../ui/Spinner';
 import Button from '../ui/Button';
+import { toAbsoluteUrl } from '../../utils/media';
 
 const pickActiveContract = (contracts: Contract[]) => {
   return (
@@ -155,7 +156,7 @@ export const ActiveContractWidget: React.FC = () => {
           <div className="w-full md:w-1/3 aspect-video bg-gray-200 rounded-lg overflow-hidden relative">
             {property?.images?.[0] ? (
               <img
-                src={property.images[0]}
+                src={toAbsoluteUrl(property.images[0])}
                 alt="Propiedad"
                 className="object-cover w-full h-full"
               />

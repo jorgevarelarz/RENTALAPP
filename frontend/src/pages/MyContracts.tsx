@@ -3,6 +3,8 @@ import { listContracts } from '../services/contracts';
 import { useAuth } from '../context/AuthContext';
 import { ContractStatusBadge } from '../components/ContractStatusBadge';
 import { Link } from 'react-router-dom';
+import EmptyState from '../components/ui/EmptyState';
+import PageHeader from '../components/ui/PageHeader';
 
 const MyContracts: React.FC = () => {
   const { token, user } = useAuth();
@@ -36,9 +38,24 @@ const MyContracts: React.FC = () => {
   if (loading) return <div>Cargando contratos...</div>;
   if (error) return <div>Error: {error}</div>;
 
+  const isTenant = user?.role === 'tenant';
+  const emptyCta = isTenant ? (
+    <Link to="/properties" className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+      Buscar pisos
+    </Link>
+  ) : (
+    <Link to="/owner/properties" className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+      Gestionar propiedades
+    </Link>
+  );
+
   return (
     <div>
-      <h2>Mis contratos</h2>
+      <PageHeader
+        title="Contratos"
+        subtitle="Accede a tus contratos y documentos firmados."
+        cta={emptyCta}
+      />
       <div style={{ margin: '8px 0 16px' }}>
         <label style={{ fontSize: 12, color: 'var(--muted)', marginRight: 8 }}>Estado</label>
         <select value={status} onChange={e => setStatus(e.target.value)}>
@@ -51,7 +68,11 @@ const MyContracts: React.FC = () => {
         </select>
       </div>
       {filtered.length === 0 ? (
-        <p>No tienes contratos aún.</p>
+        <EmptyState
+          title="No tienes contratos aun"
+          detail={isTenant ? 'Cuando firmes un contrato aparecera aqui.' : 'Crea un contrato para tus propiedades.'}
+          cta={emptyCta}
+        />
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
           {filtered.map((c: any) => {

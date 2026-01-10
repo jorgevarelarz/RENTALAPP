@@ -48,6 +48,8 @@ type Props = {
 export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhotos }: Props) {
   const [step, setStep] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
+  const [isSearchingAddress, setIsSearchingAddress] = useState(false);
 
   const {
     register,
@@ -83,11 +85,68 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
   const images = watch('images') || [];
   const onlyPro = watch('onlyTenantPro');
   const price = watch('price');
+  const addressValue = watch('address');
 
   useEffect(() => {
     if (onlyPro) setValue('requiredTenantProMaxRent', Number(price) || 0);
     else setValue('requiredTenantProMaxRent', 0);
   }, [onlyPro, price, setValue]);
+
+  useEffect(() => {
+    const query = String(addressValue || '').trim();
+    if (query.length < 4) {
+      setAddressSuggestions([]);
+      setIsSearchingAddress(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeout = setTimeout(async () => {
+      try {
+        setIsSearchingAddress(true);
+        const params = new URLSearchParams({
+          q: query,
+          format: 'jsonv2',
+          addressdetails: '1',
+          limit: '5',
+        });
+        const res = await fetch(`https://nominatim.openstreetmap.org/search?${params.toString()}`, {
+          signal: controller.signal,
+          headers: { 'Accept-Language': 'es' },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        setAddressSuggestions(Array.isArray(data) ? data : []);
+      } catch (error) {
+        if ((error as any)?.name !== 'AbortError') {
+          setAddressSuggestions([]);
+        }
+      } finally {
+        setIsSearchingAddress(false);
+      }
+    }, 350);
+
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [addressValue]);
+
+  const applySuggestion = (suggestion: any) => {
+    const address = suggestion?.display_name || '';
+    const addr = suggestion?.address || {};
+    const city = addr.city || addr.town || addr.village || addr.municipality || '';
+    const region = addr.state || addr.region || addr.county || '';
+    const lat = Number(suggestion?.lat);
+    const lng = Number(suggestion?.lon);
+
+    if (address) setValue('address', address, { shouldValidate: true });
+    if (city) setValue('city', city, { shouldValidate: true });
+    if (region) setValue('region', region, { shouldValidate: true });
+    if (!Number.isNaN(lat)) setValue('location.lat', lat, { shouldValidate: true });
+    if (!Number.isNaN(lng)) setValue('location.lng', lng, { shouldValidate: true });
+    setAddressSuggestions([]);
+  };
 
   const nextStep = async () => {
     const fieldsToValidate = STEPS[step].fields as any[];
@@ -149,7 +208,30 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Dirección completa</label>
-              <input className="auth-input w-full" placeholder="Ej. Calle Mayor, 10, 3A" {...register('address')} />
+              <div className="relative">
+                <input
+                  className="auth-input w-full"
+                  placeholder="Ej. Calle Mayor, 10, 3A"
+                  {...register('address')}
+                />
+                {isSearchingAddress && (
+                  <div className="absolute right-3 top-2.5 text-xs text-gray-400">Buscando...</div>
+                )}
+                {addressSuggestions.length > 0 && (
+                  <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-56 overflow-auto">
+                    {addressSuggestions.map((item) => (
+                      <button
+                        type="button"
+                        key={item.place_id}
+                        onClick={() => applySuggestion(item)}
+                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
+                      >
+                        {item.display_name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address.message}</p>}
             </div>
 
@@ -281,7 +363,7 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
               <label className={`flex items-start gap-4 p-4 cursor-pointer transition-colors ${onlyPro ? 'bg-blue-50' : 'bg-white hover:bg-gray-50'}`}>
                 <input type="checkbox" className="mt-1 w-5 h-5 text-blue-600 rounded" {...register('onlyTenantPro')} />
                 <div>
-                  <span className="block font-bold text-gray-900">Solo Inquilinos Tenant PRO</span>
+                  <span className="block font-bold text-gray-900">Solo inquilinos Tenant PRO</span>
                   <span className="text-sm text-gray-500">Exige perfil verificado y análisis de solvencia automático.</span>
                 </div>
               </label>

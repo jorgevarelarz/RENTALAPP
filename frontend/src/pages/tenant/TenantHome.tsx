@@ -44,7 +44,7 @@ export default function TenantHome() {
             <div className="bg-emerald-100 w-12 h-12 rounded-full flex items-center justify-center mb-4 group-hover:bg-emerald-600 transition-colors">
               <ShieldCheck className="text-emerald-600 group-hover:text-white" size={24} />
             </div>
-            <h3 className="font-bold text-lg mb-2">Perfil TenantPro</h3>
+            <h3 className="font-bold text-lg mb-2">Perfil Tenant PRO</h3>
             <p className="text-sm text-gray-500">
               {user?.tenantPro?.status === 'verified'
                 ? '¡Tu perfil está verificado! Tienes prioridad.'

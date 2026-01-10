@@ -9,6 +9,7 @@ import Spinner from '../../components/ui/Spinner';
 import Badge from '../../components/ui/Badge';
 import { useToast } from '../../context/ToastContext';
 import { userService, UserProfile } from '../../services/user';
+import { toAbsoluteUrl } from '../../utils/media';
 
 const RatingStars = ({ rating }: { rating: number }) => (
   <div className="flex items-center text-yellow-400">
@@ -78,6 +79,10 @@ export default function ProfilePage() {
     const phoneRegex = /^(\+34|0034|34)?[6789]\d{8}$/;
     if (rawPhone && !phoneRegex.test(rawPhone)) {
       push({ title: 'Formato de telefono invalido (ej: 600123456)', tone: 'error' });
+      return;
+    }
+    if (formData.bio && formData.bio.length > 500) {
+      push({ title: 'El texto "Sobre mi" no puede superar 500 caracteres', tone: 'error' });
       return;
     }
     if (profile?.role === 'tenant' && formData.monthlyIncome) {
@@ -152,7 +157,7 @@ export default function ProfilePage() {
           <div className="relative group">
             <div className="w-32 h-32 rounded-full border-4 border-white bg-gray-200 overflow-hidden shadow-md">
               {profile.avatar ? (
-                <img src={profile.avatar} alt="Avatar" className="w-full h-full object-cover" />
+                <img src={toAbsoluteUrl(profile.avatar)} alt="Avatar" className="w-full h-full object-cover" />
               ) : (
                 <div className="w-full h-full flex items-center justify-center bg-gray-100 text-3xl font-bold text-gray-400">
                   {profile.name?.charAt(0).toUpperCase()}
@@ -194,6 +199,11 @@ export default function ProfilePage() {
                           ? 'Propietario'
                           : 'Profesional'}
                   </Badge>
+                  {user?.isVerified && (
+                    <Badge tone="highlight" className="uppercase text-xs">
+                      KYC verificado
+                    </Badge>
+                  )}
                 </p>
                 <p className="text-xs text-gray-400 mt-1">{profile.email}</p>
                 {isTenantPro && (
@@ -221,7 +231,7 @@ export default function ProfilePage() {
             <h3 className="font-semibold text-gray-900 mb-3">Tu reputacion</h3>
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm text-gray-600">Puntuacion media</span>
-              <span className="font-bold text-indigo-600">{rating ? rating.toFixed(1) : 'New'}</span>
+              <span className="font-bold text-indigo-600">{rating ? rating.toFixed(1) : 'Aun sin valoraciones'}</span>
             </div>
             {memberSince && (
               <div className="flex items-center justify-between">
@@ -281,6 +291,9 @@ export default function ProfilePage() {
               {profile.role === 'tenant' && (
                 <div className="p-4 bg-blue-50 rounded-lg border border-blue-100 space-y-4">
                   <h3 className="text-sm font-bold text-blue-800 uppercase tracking-wide">Datos de solvencia</h3>
+                  <p className="text-xs text-blue-700">
+                    Solo visible para propietarios tras enviar una solicitud.
+                  </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <Input
                       label="Profesion / Cargo"
@@ -346,6 +359,7 @@ export default function ProfilePage() {
                   value={formData.bio}
                   onChange={handleChange}
                   rows={4}
+                  maxLength={500}
                   className="w-full p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
                   placeholder={
                     profile.role === 'tenant'
@@ -355,6 +369,7 @@ export default function ProfilePage() {
                         : 'Cuentanos algo sobre ti...'
                   }
                 />
+                <p className="text-xs text-gray-500 mt-1">Maximo 500 caracteres.</p>
               </div>
 
               <div className="flex justify-end pt-4">

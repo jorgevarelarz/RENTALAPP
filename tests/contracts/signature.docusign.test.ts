@@ -1,6 +1,8 @@
 import request from 'supertest';
 import { app } from '../../src/app';
 import mongoose from 'mongoose';
+import type { MongoMemoryServer } from 'mongodb-memory-server';
+import { startMongoMemoryServer } from '../../src/__tests__/utils/mongoMemoryServer';
 import { Contract } from '../../src/models/contract.model';
 import { User } from '../../src/models/user.model';
 import { Property } from '../../src/models/property.model';
@@ -17,8 +19,14 @@ describe('DocuSign signature flow (mocked provider)', () => {
   const tenant = new mongoose.Types.ObjectId().toString();
   let id = '';
   const prevSignProvider = process.env.SIGN_PROVIDER;
+  let mongo: MongoMemoryServer | undefined;
   beforeAll(async () => {
     process.env.SIGN_PROVIDER = 'docusign';
+    mongo = await startMongoMemoryServer();
+    process.env.MONGO_URL = mongo.getUri();
+    process.env.NODE_ENV = 'test';
+    process.env.ALLOW_UNVERIFIED = 'true';
+    await mongoose.connect(mongo.getUri());
     // Create minimal users
     await User.create({ _id: landlord, name: 'Landlord', email: 'l@test.com', passwordHash: 'x', role: 'landlord' } as any);
     await User.create({ _id: tenant, name: 'Tenant', email: 't@test.com', passwordHash: 'x', role: 'tenant' } as any);
@@ -54,9 +62,11 @@ describe('DocuSign signature flow (mocked provider)', () => {
     } as any);
     id = c.id;
   });
-  afterAll(() => {
+  afterAll(async () => {
     if (prevSignProvider === undefined) delete process.env.SIGN_PROVIDER;
     else process.env.SIGN_PROVIDER = prevSignProvider;
+    await mongoose.connection.close();
+    if (mongo) await mongo.stop();
   });
 
   it('starts signature and stores envelopeId/status', async () => {

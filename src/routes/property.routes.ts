@@ -15,9 +15,6 @@ r.put('/properties/:id', ...assertRole('landlord', 'admin'), validate(propertyUp
 r.post('/properties/:id/publish', ...assertRole('landlord', 'admin'), asyncHandler(ctrl.publish));
 r.post('/properties/:id/archive', ...assertRole('landlord', 'admin'), asyncHandler(ctrl.archive));
 
-r.get('/properties/:id', asyncHandler(ctrl.getById));
-r.get('/properties', asyncHandler(ctrl.search));
-
 r.post(
   '/properties/:id/favorite',
   authenticate,
@@ -30,6 +27,15 @@ r.delete(
   authorizeRoles('tenant', 'landlord', 'admin'),
   asyncHandler(ctrl.unfavorite),
 );
+r.get(
+  '/properties/favorites',
+  authenticate,
+  authorizeRoles('tenant', 'landlord', 'admin'),
+  asyncHandler(ctrl.listMyFavorites),
+);
+
+r.get('/properties/:id', asyncHandler(ctrl.getById));
+r.get('/properties', asyncHandler(ctrl.search));
 
 r.post('/properties/:id/apply', ...assertRole('tenant', 'admin'), asyncHandler(ctrl.apply));
 r.get('/properties/:id/applications', authenticate, authorizeRoles('landlord', 'admin'), asyncHandler(ctrl.listApplications));

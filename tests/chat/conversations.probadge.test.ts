@@ -17,6 +17,7 @@ describe('Conversations payload includes PRO flags', () => {
     mongo = await startMongoMemoryServer();
     process.env.MONGO_URL = mongo.getUri();
     process.env.NODE_ENV = 'test';
+    await mongoose.connect(mongo.getUri());
     const mod = await import('../../src/app');
     app = mod.app || mod.default;
     // Create users (tenant with PRO)

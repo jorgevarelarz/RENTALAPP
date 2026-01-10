@@ -19,6 +19,7 @@ describe('Chat attachments whitelist', () => {
     process.env.MONGO_URL = mongo.getUri();
     process.env.NODE_ENV = 'test';
     process.env.UPLOADS_BASE_URL = 'https://cdn.example.com/uploads';
+    await mongoose.connect(mongo.getUri());
     const mod = await import('../../src/app');
     app = mod.app || mod.default;
     const t = await Ticket.create({
@@ -65,4 +66,3 @@ describe('Chat attachments whitelist', () => {
     expect(res.body).toMatchObject({ type: 'user', body: 'ok' });
   });
 });
-

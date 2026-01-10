@@ -89,3 +89,8 @@ export async function getPropertyApplications(propertyId: string) {
   const res = await client.get(`/api/properties/${propertyId}/applications`);
   return res.data as { items?: Application[] } | Application[];
 }
+
+export async function listMyFavorites() {
+  const res = await client.get('/api/properties/favorites');
+  return res.data as { items: any[] };
+}

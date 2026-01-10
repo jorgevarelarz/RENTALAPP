@@ -53,7 +53,12 @@ describe("Property alerts", () => {
   });
 
   it("triggers price alert on update", async () => {
-    await request(app).put(`/api/properties/${pid}`).send({ price: 650 }).expect(200);
+    await request(app)
+      .put(`/api/properties/${pid}`)
+      .set("x-user-id", "507f1f77bcf86cd799439011")
+      .set("x-user-role", "landlord")
+      .send({ price: 650 })
+      .expect(200);
 
     const priceAlertLogged = logSpy.mock.calls.some(([msg]) =>
       typeof msg === "string" &&
@@ -67,6 +72,8 @@ describe("Property alerts", () => {
   it("triggers availability alert on update", async () => {
     await request(app)
       .put(`/api/properties/${pid}`)
+      .set("x-user-id", "507f1f77bcf86cd799439011")
+      .set("x-user-role", "landlord")
       .send({ availableFrom: "2025-12-15", availableTo: "2026-01-10" })
       .expect(200);
 

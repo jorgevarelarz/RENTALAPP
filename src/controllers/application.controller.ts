@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { Application } from '../models/application.model';
 import { Property } from '../models/property.model';
+import { Contract } from '../models/contract.model';
 
 export async function listMyApplications(req: Request, res: Response) {
   const user: any = (req as any).user;
@@ -9,8 +10,27 @@ export async function listMyApplications(req: Request, res: Response) {
 
   const apps = await Application.find({ tenantId: userId })
     .sort({ createdAt: -1 })
-    .populate('propertyId', 'title address city price images')
+    .populate({
+      path: 'propertyId',
+      select: 'title address city price images owner',
+      populate: { path: 'owner', select: 'name avatar' },
+    })
     .lean();
+
+  const propertyIds = apps
+    .map((a: any) => a.propertyId?._id)
+    .filter(Boolean);
+  const contracts = propertyIds.length
+    ? await Contract.find({ tenant: userId, property: { $in: propertyIds } })
+        .sort({ createdAt: -1 })
+        .select('property status')
+        .lean()
+    : [];
+  const contractMap = new Map<string, any>();
+  contracts.forEach((c: any) => {
+    const key = String(c.property);
+    if (!contractMap.has(key)) contractMap.set(key, c);
+  });
 
   const items = apps.map((a: any) => ({
     _id: a._id,
@@ -19,6 +39,8 @@ export async function listMyApplications(req: Request, res: Response) {
     proposedDate: a.proposedDate,
     proposedBy: a.proposedBy,
     visitDate: a.visitDate,
+    contractId: contractMap.get(String(a.propertyId?._id))?._id,
+    contractStatus: contractMap.get(String(a.propertyId?._id))?.status,
     property: a.propertyId ? {
       _id: a.propertyId._id,
       title: a.propertyId.title,
@@ -26,6 +48,11 @@ export async function listMyApplications(req: Request, res: Response) {
       city: a.propertyId.city,
       price: a.propertyId.price,
       images: a.propertyId.images,
+      owner: a.propertyId.owner ? {
+        _id: a.propertyId.owner._id,
+        name: a.propertyId.owner.name,
+        avatar: a.propertyId.owner.avatar,
+      } : undefined,
     } : undefined,
   }));
 

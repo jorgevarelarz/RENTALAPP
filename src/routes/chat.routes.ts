@@ -122,6 +122,21 @@ async function canChatDirect(userId: string, otherId: string) {
   }).lean();
   if (pairAppointment) return true;
 
+  const pairApplications = await Application.find({
+    tenantId: { $in: [userId, otherId] },
+  })
+    .populate('propertyId', 'owner')
+    .lean();
+  if (pairApplications.length > 0) {
+    const matched = pairApplications.some((app: any) => {
+      const ownerId = String(app.propertyId?.owner || '');
+      const tenantId = String(app.tenantId || '');
+      return (tenantId === userId && ownerId === otherId) ||
+        (tenantId === otherId && ownerId === userId);
+    });
+    if (matched) return true;
+  }
+
   const pairOffer = await ServiceOffer.findOne({
     $or: [
       { ownerId: userId, proId: otherId },

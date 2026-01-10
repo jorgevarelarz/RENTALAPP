@@ -97,7 +97,7 @@ export default function FilterBar({ initial, onApply }: Props) {
           <div className="h-8 w-px bg-gray-200 mx-1 hidden md:block"></div>
           <TogglePill label="Amueblado" active={!!state.furnished} onClick={() => update('furnished', !state.furnished)} />
           <TogglePill label="Mascotas" active={!!state.petsAllowed} onClick={() => update('petsAllowed', !state.petsAllowed)} />
-          <TogglePill label="Solo PRO" active={!!state.onlyTenantPro} onClick={() => update('onlyTenantPro', !state.onlyTenantPro)} />
+          <TogglePill label="Solo Tenant PRO" active={!!state.onlyTenantPro} onClick={() => update('onlyTenantPro', !state.onlyTenantPro)} />
         </div>
 
         <div className="flex items-center gap-3 w-full md:w-auto justify-end">

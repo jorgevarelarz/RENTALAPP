@@ -1,5 +1,6 @@
 import type { ClauseDefinition, RegionKey } from "../policies/clauses/catalog.v1";
 import { CLAUSE_POLICY_VERSION, CLAUSES_BASE, CLAUSES_BY_REGION } from "../policies/clauses/catalog.v1";
+import { zodToMeta } from "../policies/clauses";
 
 export type ClauseScope = "base" | "regional";
 
@@ -8,6 +9,7 @@ export interface ClauseCatalogEntry {
   label: string;
   version: string;
   scope: ClauseScope;
+  paramsMeta: any;
 }
 
 export interface ClauseCatalog {
@@ -52,6 +54,7 @@ const definitionToCatalogEntry = (
   label: definition.label,
   version: definition.version,
   scope,
+  paramsMeta: zodToMeta(definition.paramsSchema),
 });
 
 export const buildClauseCatalog = (region?: string | null): ClauseCatalog => {

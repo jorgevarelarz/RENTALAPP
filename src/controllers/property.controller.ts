@@ -215,6 +215,20 @@ export async function unfavorite(req: Request, res: Response) {
   res.json({ ok: true });
 }
 
+export async function listMyFavorites(req: Request, res: Response) {
+  const userId = (req as any).user?.id;
+  if (!userId) return res.status(401).json({ error: 'unauthorized' });
+  const rows = await UserFavorite.find({ userId })
+    .sort({ createdAt: -1 })
+    .populate('propertyId')
+    .lean();
+  const items = rows
+    .map((row: any) => row.propertyId)
+    .filter(Boolean)
+    .map((p: any) => ({ ...p, _liked: true }));
+  res.json({ items });
+}
+
 export async function subscribePriceAlert(req: Request, res: Response) {
   const userId = (req as any).user.id;
   const { id: propertyId } = req.params;

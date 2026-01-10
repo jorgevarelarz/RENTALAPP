@@ -5,7 +5,7 @@ import Card from '../components/ui/Card';
 import { TrendingUp, DollarSign, Calendar, ArrowUpRight, Wallet, DownloadCloud } from 'lucide-react';
 import Button from '../components/ui/Button';
 
-const API_URL = process.env.REACT_APP_API_URL || (import.meta as any).env?.VITE_API_URL || '/api';
+const API_URL = process.env.REACT_APP_API_URL || '/api';
 
 export default function Earnings() {
   const { token } = useAuth();

@@ -61,7 +61,7 @@ export default function AdminTenantProPage() {
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <h2 style={{ margin: 0 }}>Revisión Inquilino PRO</h2>
+        <h2 style={{ margin: 0 }}>Revision Tenant PRO</h2>
         <button
           type="button"
           onClick={() => setShowFilters(v => !v)}

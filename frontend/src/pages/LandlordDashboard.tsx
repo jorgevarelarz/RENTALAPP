@@ -13,6 +13,7 @@ import { useAuth } from '../context/AuthContext';
 import PropertyFormRHF, { PropertyFormData } from '../components/PropertyFormRHF';
 import ApplicantsModal from '../components/ApplicantsModal';
 import { Building2, Plus, Home, BarChart3, Image as ImageIcon, Users } from 'lucide-react';
+import { toAbsoluteUrl } from '../utils/media';
 
 const API_BASE = process.env.REACT_APP_API_URL || (process.env as any).VITE_API_URL || 'http://localhost:3000';
 
@@ -281,12 +282,12 @@ const LandlordDashboard: React.FC = () => {
                 <div className="flex items-start gap-4">
                   <div className="w-24 h-20 bg-gray-100 rounded-lg overflow-hidden flex-shrink-0 border border-gray-200 relative">
                     {(p.images?.[0] || p.photos?.[0]) ? (
-                      <img src={p.images?.[0] || p.photos?.[0]} alt="" className="w-full h-full object-cover" />
+                      <img src={toAbsoluteUrl(p.images?.[0] || p.photos?.[0])} alt="" className="w-full h-full object-cover" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-gray-400"><ImageIcon size={24} /></div>
                     )}
                     {p.onlyTenantPro && (
-                      <div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[10px] font-bold text-center py-0.5">PRO</div>
+                      <div className="absolute bottom-0 left-0 right-0 bg-blue-600 text-white text-[10px] font-bold text-center py-0.5">Tenant PRO</div>
                     )}
                   </div>
 

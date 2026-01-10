@@ -14,10 +14,9 @@ export default function ProBadge({ maxRent }: { maxRent?: number }) {
         alignItems: 'center',
         gap: 6,
       }}
-      title="Inquilino PRO (solvencia verificada)"
+      title="Tenant PRO (solvencia verificada)"
     >
-      PRO {typeof maxRent === 'number' ? `· Hasta ${maxRent} €/mes` : ''}
+      Tenant PRO {typeof maxRent === 'number' ? `· Hasta ${maxRent} €/mes` : ''}
     </span>
   );
 }
-

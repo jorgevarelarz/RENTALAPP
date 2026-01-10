@@ -31,10 +31,7 @@ jest.mock('../../components/ChatPanel', () => () => <div data-testid="chat" />);
 jest.mock('../../services/contracts', () => ({
   __esModule: true,
   getContract: jest.fn(),
-  sendToSignature: jest.fn(),
-  downloadPdf: jest.fn(),
-  payDeposit: jest.fn(),
-  signContract: jest.fn(),
+  createSignSession: jest.fn(),
 }));
 
 import ContractDetail from '../ContractDetail';
@@ -51,68 +48,60 @@ describe('ContractDetail', () => {
     (global as any).__mockId = 'c1';
   });
 
-  test('Muestra “Enviar a firma” para landlord con status none', async () => {
-    setAuth({ _id: 'u1', role: 'landlord' });
-    (contracts.getContract as jest.Mock).mockResolvedValue({ id: 'c1', owner: { id: 'u1' }, signature: { status: 'none' } });
-
-    render(<ContractDetail />);
-
-    expect(await screen.findByRole('button', { name: /enviar a firma/i })).toBeInTheDocument();
-  });
-
-  test('Acción “Enviar a firma” cambia a sent y oculta el botón', async () => {
-    setAuth({ _id: 'u1', role: 'landlord' });
-    // 1a carga: none → muestra botón
-    (contracts.getContract as jest.Mock)
-      .mockResolvedValueOnce({ id: 'c1', owner: { id: 'u1' }, signature: { status: 'none' } })
-      // recarga tras enviar → sent
-      .mockResolvedValueOnce({ id: 'c1', owner: { id: 'u1' }, signature: { status: 'sent' } });
-    (contracts.sendToSignature as jest.Mock).mockResolvedValue({ status: 'sent' });
-
-    render(<ContractDetail />);
-
-    const sendBtn = await screen.findByRole('button', { name: /enviar a firma/i });
-    await userEvent.click(sendBtn);
-
-    await waitFor(() => expect(screen.getByLabelText(/estado de la firma: enviado a firma/i)).toBeInTheDocument());
-    expect(screen.queryByRole('button', { name: /enviar a firma/i })).toBeNull();
-  });
-
-  test('Muestra “Ver PDF firmado” cuando status completed y pdfUrl presente', async () => {
-    setAuth({ _id: 'u2', role: 'tenant' });
-    (contracts.getContract as jest.Mock).mockResolvedValue({ id: 'c1', tenant: 'u2', signature: { status: 'completed', pdfUrl: 'http://x/signed.pdf' } });
-
-    render(<ContractDetail />);
-
-    expect(await screen.findByRole('button', { name: /ver pdf firmado/i })).toBeInTheDocument();
-  });
-
-  test('Muestra “Ver registro de auditoría” cuando auditPdfUrl está presente y abre nueva pestaña', async () => {
-    const openSpy = jest.spyOn(window, 'open').mockImplementation(() => null as any);
+  test('Muestra boton de firma para tenant cuando esta pendiente de firma', async () => {
     setAuth({ _id: 'u2', role: 'tenant' });
     (contracts.getContract as jest.Mock).mockResolvedValue({
-      id: 'c1',
+      _id: 'c1',
       tenant: 'u2',
-      signature: { status: 'completed', auditPdfUrl: '/api/contracts/c1/audit-trail?format=pdf' },
+      status: 'pending_signature',
+      rentAmount: 900,
+      depositAmount: 900,
+      startDate: new Date().toISOString(),
+      endDate: new Date().toISOString(),
+      landlordName: 'Landlord',
+      tenantName: 'Tenant',
     });
 
     render(<ContractDetail />);
 
-    const btn = await screen.findByRole('button', { name: /ver registro de auditoría/i });
-    expect(btn).toBeInTheDocument();
-    await userEvent.click(btn);
-    expect(openSpy).toHaveBeenCalledWith('/api/contracts/c1/audit-trail?format=pdf', '_blank');
-    openSpy.mockRestore();
+    expect(await screen.findByRole('button', { name: /firmar con signaturit/i })).toBeInTheDocument();
   });
 
-  test('Render defensivo: sin signature trata como none y no crashea', async () => {
+  test('No muestra boton de firma para landlord', async () => {
     setAuth({ _id: 'u1', role: 'landlord' });
-    (contracts.getContract as jest.Mock).mockResolvedValue({ id: 'c1', owner: { id: 'u1' } });
+    (contracts.getContract as jest.Mock).mockResolvedValue({
+      _id: 'c1',
+      landlord: 'u1',
+      status: 'pending_signature',
+      rentAmount: 900,
+      depositAmount: 900,
+      startDate: new Date().toISOString(),
+      endDate: new Date().toISOString(),
+      landlordName: 'Landlord',
+      tenantName: 'Tenant',
+    });
 
     render(<ContractDetail />);
 
-    // Chip de estado "No iniciado" visible y botón disponible
-    expect(await screen.findByLabelText(/estado de la firma: no iniciado/i)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /enviar a firma/i })).toBeInTheDocument();
+    await screen.findByText(/pendiente de firma/i);
+    expect(screen.queryByRole('button', { name: /firmar con signaturit/i })).toBeNull();
+  });
+
+  test('Render defensivo: contrato cargado muestra accion de descarga', async () => {
+    setAuth({ _id: 'u1', role: 'landlord' });
+    (contracts.getContract as jest.Mock).mockResolvedValue({
+      _id: 'c1',
+      status: 'pending_signature',
+      rentAmount: 900,
+      depositAmount: 900,
+      startDate: new Date().toISOString(),
+      endDate: new Date().toISOString(),
+      landlordName: 'Landlord',
+      tenantName: 'Tenant',
+    });
+
+    render(<ContractDetail />);
+
+    expect(await screen.findByRole('button', { name: /descargar borrador/i })).toBeInTheDocument();
   });
 });

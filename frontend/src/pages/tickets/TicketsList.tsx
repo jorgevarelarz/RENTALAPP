@@ -3,6 +3,9 @@ import { Link, useSearchParams } from "react-router-dom";
 import { listMyTickets } from "../../services/tickets";
 import { useAuth } from "../../context/AuthContext";
 import { useQuery } from "@tanstack/react-query";
+import EmptyState from "../../components/ui/EmptyState";
+import PageHeader from "../../components/ui/PageHeader";
+import StatusBadge from "../../components/ui/StatusBadge";
 
 export default function TicketsList() {
   const { user } = useAuth();
@@ -39,31 +42,31 @@ export default function TicketsList() {
 
   return (
     <div className="space-y-6 p-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h2 className="text-2xl font-semibold text-gray-900">Incidencias</h2>
-          <p className="text-sm text-gray-500">Estado y seguimiento de tickets abiertos</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          {role === 'tenant' && (
-            <Link
-              to="/tickets/new"
-              className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+      <PageHeader
+        title="Incidencias"
+        subtitle="Estado y seguimiento de tickets abiertos."
+        cta={(
+          <>
+            {role === 'tenant' && (
+              <Link
+                to="/tickets/new"
+                className="inline-flex items-center rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
+              >
+                Abrir incidencia
+              </Link>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowFilters(v => !v)}
+              className="inline-flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              aria-expanded={showFilters}
+              aria-controls="tickets-filters"
             >
-              Abrir incidencia
-            </Link>
-          )}
-          <button
-            type="button"
-            onClick={() => setShowFilters(v => !v)}
-            className="inline-flex items-center rounded-md border border-gray-200 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-            aria-expanded={showFilters}
-            aria-controls="tickets-filters"
-          >
-            {showFilters ? 'Ocultar filtros' : 'Mostrar filtros'}
-          </button>
-        </div>
-      </div>
+              {showFilters ? 'Ocultar filtros' : 'Mostrar filtros'}
+            </button>
+          </>
+        )}
+      />
 
       {showFilters && (
         <div id="tickets-filters" className="grid gap-3 rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
@@ -96,7 +99,7 @@ export default function TicketsList() {
 
       {isLoading && <div className="text-sm text-gray-500">Cargando...</div>}
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-gray-100">
           <thead className="bg-gray-50">
             <tr className="text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -115,9 +118,7 @@ export default function TicketsList() {
                 <td className="px-4 py-3 font-medium text-gray-900">{ticket.title}</td>
                 <td className="px-4 py-3 text-gray-600">{ticket.service}</td>
                 <td className="px-4 py-3">
-                  <span className="rounded-full bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700">
-                    {ticket.status}
-                  </span>
+                  <StatusBadge status={ticket.status} />
                 </td>
                 <td className="px-4 py-3 text-gray-600">{new Date(ticket.updatedAt).toLocaleString()}</td>
                 <td className="px-4 py-3 text-right">
@@ -129,8 +130,16 @@ export default function TicketsList() {
             ))}
             {!((data?.items || []).length) && !isLoading && (
               <tr>
-                <td colSpan={6} className="px-4 py-8 text-center text-sm text-gray-500">
-                  No hay incidencias.
+                <td colSpan={6} className="px-4 py-8">
+                  <EmptyState
+                    title="No hay incidencias"
+                    detail="Todo funciona bien. Si surge un problema, puedes abrir un ticket."
+                    cta={role === 'tenant' ? (
+                      <Link to="/tickets/new" className="inline-flex items-center rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
+                        Abrir incidencia
+                      </Link>
+                    ) : undefined}
+                  />
                 </td>
               </tr>
             )}

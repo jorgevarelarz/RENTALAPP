@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, BedDouble, Bath, Ruler, Heart } from 'lucide-react';
+import { toAbsoluteUrl } from '../utils/media';
 
 type Props = {
   p: any;
@@ -8,7 +9,7 @@ type Props = {
 };
 
 export default function PropertyCard({ p, onFavToggle }: Props) {
-  const image = p.images?.[0] || 'https://via.placeholder.com/1000x600?text=Sin+Foto';
+  const image = toAbsoluteUrl(p.images?.[0] || 'https://via.placeholder.com/1000x600?text=Sin+Foto');
   const liked = !!p._liked;
 
   return (
@@ -26,7 +27,7 @@ export default function PropertyCard({ p, onFavToggle }: Props) {
         <div className="absolute top-3 left-3 flex flex-col gap-1">
           {p.onlyTenantPro && (
             <span className="bg-blue-600/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide shadow-sm">
-              PRO
+              Tenant PRO
             </span>
           )}
           {p.status === 'rented' && (

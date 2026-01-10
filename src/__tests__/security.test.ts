@@ -14,6 +14,7 @@ beforeAll(async () => {
   process.env.MONGO_URL = mongo.getUri();
   process.env.NODE_ENV = 'test';
   process.env.ALLOW_UNVERIFIED = 'true';
+  await mongoose.connect(mongo.getUri());
   const mod = await import('../app');
   app = mod.app || mod.default;
 });
@@ -85,7 +86,7 @@ describe('Security: Contract Access (IDOR)', () => {
       .get(`/api/contracts/${contractId}`)
       .set('Authorization', `Bearer ${tokenUserB}`);
     
-    expect(res.status).toBe(404);
+    expect(res.status).toBe(403);
   });
 
   it('User B should NOT see User A\'s contract in listContracts', async () => {

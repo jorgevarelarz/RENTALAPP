@@ -77,6 +77,14 @@ export const downloadPdf = async (token: string, id: string) => {
   return res.data as Blob;
 };
 
+export const downloadSignedPdf = async (token: string, id: string) => {
+  const res = await client.get(`/api/contracts/${id}/pdf/signed`, {
+    ...withAuth(token),
+    responseType: 'blob',
+  });
+  return res.data as Blob;
+};
+
 export async function getClauses(region: string, version = '1.0.0') {
   const { data } = await client.get(`/api/clauses`, { params: { region, version } });
   return data as { version: string; region: string; items: Array<{ id: string; label: string; version: string; paramsMeta: any }> };

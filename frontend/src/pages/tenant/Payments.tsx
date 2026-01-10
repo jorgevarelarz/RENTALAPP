@@ -6,6 +6,9 @@ import Button from '../../components/ui/Button';
 import Spinner from '../../components/ui/Spinner';
 import PaymentModal from '../../components/payments/PaymentModal';
 import { useToast } from '../../context/ToastContext';
+import EmptyState from '../../components/ui/EmptyState';
+import PageHeader from '../../components/ui/PageHeader';
+import StatusBadge from '../../components/ui/StatusBadge';
 
 type PaymentItem = {
   _id: string;
@@ -69,16 +72,17 @@ export default function Payments() {
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">Mis pagos y recibos</h1>
-        <p className="text-gray-500">Revisa tus recibos pendientes y pagos completados.</p>
-      </div>
+      <PageHeader
+        title="Pagos y recibos"
+        subtitle="Revisa recibos pendientes y pagos completados."
+      />
 
       <div className="grid gap-4">
         {payments.length === 0 ? (
-          <Card className="p-6 text-center">
-            <p className="text-gray-500">No tienes pagos registrados.</p>
-          </Card>
+          <EmptyState
+            title="Todo al dia"
+            detail="No hay pagos pendientes en este momento."
+          />
         ) : (
           payments.map((payment) => {
             const dueLabel = payment.dueDate
@@ -97,9 +101,7 @@ export default function Payments() {
                 <div className="flex items-center gap-4">
                   <span className="font-mono font-bold text-lg">{payment.amount} €</span>
                   {payment.status === 'succeeded' ? (
-                    <span className="bg-green-100 text-green-700 text-xs px-2 py-1 rounded-full font-medium">
-                      Pagado
-                    </span>
+                    <StatusBadge status="succeeded" label="Pagado" />
                   ) : (
                     <Button
                       variant="primary"

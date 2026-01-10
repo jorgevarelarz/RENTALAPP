@@ -3,7 +3,10 @@ import { listConversations, listRelatedUsers, type Conversation, type RelatedUse
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import ProBadge from '../components/ProBadge';
+import EmptyState from '../components/ui/EmptyState';
+import PageHeader from '../components/ui/PageHeader';
 import { useNavigate } from 'react-router-dom';
+import { toAbsoluteUrl } from '../utils/media';
 
 export default function Inbox() {
   const [items, setItems] = useState<Conversation[]>([]);
@@ -88,18 +91,20 @@ export default function Inbox() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-2xl font-semibold text-gray-900">Conversaciones</h2>
-        <p className="text-sm text-gray-500">Listado de chats por persona</p>
-      </div>
+      <PageHeader
+        title="Conversaciones"
+        subtitle="Conversaciones con propietarios, profesionales y soporte."
+        cta={(
+          <button
+            type="button"
+            onClick={() => setShowNew(v => !v)}
+            className="rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
+          >
+            Nuevo chat
+          </button>
+        )}
+      />
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          onClick={() => setShowNew(v => !v)}
-          className="rounded-md bg-green-600 px-3 py-2 text-sm font-medium text-white hover:bg-green-700"
-        >
-          Nuevo chat
-        </button>
         {showNew && (
           <div className="flex flex-1 items-center gap-2">
             <select
@@ -132,51 +137,66 @@ export default function Inbox() {
       )}
       {loading && <div className="text-sm text-gray-500">Cargando...</div>}
       {err && <div className="text-sm text-red-600">{err}</div>}
-      {!loading && items.length === 0 && <div className="text-sm text-gray-500">No hay conversaciones</div>}
-      <div className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
-        {items.map((c) => {
-          const others = c.participantsInfo?.filter(p => p.id !== String(myId)) || [];
-          const main = others[0];
-          const extraCount = Math.max(0, others.length - 1);
-          const displayName = main?.name || 'Usuario';
-          const label = extraCount > 0 ? `${displayName} +${extraCount}` : displayName;
-          const initials = displayName.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase();
-          return (
-            <Link
-              key={c._id}
-              to={targetLink(c)}
-              className="flex items-center gap-4 px-4 py-3 transition hover:bg-gray-50"
+      {!loading && items.length === 0 ? (
+        <EmptyState
+          title="Aun no tienes conversaciones"
+          detail="Cuando envies solicitudes o tengas un contrato, podras chatear aqui."
+          cta={(
+            <button
+              type="button"
+              onClick={() => setShowNew(true)}
+              className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50"
             >
-              {main?.avatar ? (
-                <img
-                  src={main.avatar}
-                  alt={displayName}
-                  className="h-11 w-11 rounded-full border border-gray-200 object-cover"
-                />
-              ) : (
-                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-green-100 text-sm font-bold text-green-700">
-                  {initials || 'U'}
-                </div>
-              )}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className="truncate text-sm font-semibold text-gray-900">{label}</span>
-                  {main?.isPro && <ProBadge maxRent={main?.proLimit} />}
-                </div>
-                <div className="truncate text-xs text-gray-500">{lastPreview(c)}</div>
-              </div>
-              <div className="flex flex-col items-end gap-1 text-xs text-gray-400">
-                <span>{c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString() : ''}</span>
-                {unreadFor(c) > 0 && (
-                  <span className="rounded-full bg-green-500 px-2 py-0.5 text-[11px] font-semibold text-white">
-                    {unreadFor(c)}
-                  </span>
+              Nuevo chat
+            </button>
+          )}
+        />
+      ) : (
+        <div className="divide-y divide-gray-100 rounded-xl border border-gray-200 bg-white">
+          {items.map((c) => {
+            const others = c.participantsInfo?.filter(p => p.id !== String(myId)) || [];
+            const main = others[0];
+            const extraCount = Math.max(0, others.length - 1);
+            const displayName = main?.name || 'Usuario';
+            const label = extraCount > 0 ? `${displayName} +${extraCount}` : displayName;
+            const initials = displayName.split(' ').map(s => s[0]).slice(0, 2).join('').toUpperCase();
+            return (
+              <Link
+                key={c._id}
+                to={targetLink(c)}
+                className="flex items-center gap-4 px-4 py-3 transition hover:bg-gray-50"
+              >
+                {main?.avatar ? (
+                  <img
+                    src={toAbsoluteUrl(main.avatar)}
+                    alt={displayName}
+                    className="h-11 w-11 rounded-full border border-gray-200 object-cover"
+                  />
+                ) : (
+                  <div className="flex h-11 w-11 items-center justify-center rounded-full bg-green-100 text-sm font-bold text-green-700">
+                    {initials || 'U'}
+                  </div>
                 )}
-              </div>
-            </Link>
-          );
-        })}
-      </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className="truncate text-sm font-semibold text-gray-900">{label}</span>
+                    {main?.isPro && <ProBadge maxRent={main?.proLimit} />}
+                  </div>
+                  <div className="truncate text-xs text-gray-500">{lastPreview(c)}</div>
+                </div>
+                <div className="flex flex-col items-end gap-1 text-xs text-gray-400">
+                  <span>{c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleTimeString() : ''}</span>
+                  {unreadFor(c) > 0 && (
+                    <span className="rounded-full bg-green-500 px-2 py-0.5 text-[11px] font-semibold text-white">
+                      {unreadFor(c)}
+                    </span>
+                  )}
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }

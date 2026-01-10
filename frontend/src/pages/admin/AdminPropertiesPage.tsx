@@ -33,7 +33,7 @@ export default function AdminPropertiesPage() {
       <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0 12px' }}>
         <input placeholder="Buscar por título o ciudad…" value={q} onChange={e => { setQ(e.target.value); setPage(1); }} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '8px 12px', width: 320 }} />
         <select value={onlyPro} onChange={e => { setOnlyPro(e.target.value); setPage(1); }} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '8px 12px' }}>
-          <option value="">Only PRO: todos</option>
+          <option value="">Tenant PRO: todos</option>
           <option value="yes">Solo PRO</option>
           <option value="no">Normales</option>
         </select>
@@ -75,7 +75,7 @@ export default function AdminPropertiesPage() {
               <th style={{ padding: 8 }}>Título</th>
               <th style={{ padding: 8 }}>Ciudad</th>
               <th style={{ padding: 8 }}>Precio</th>
-              <th style={{ padding: 8 }}>Only PRO</th>
+              <th style={{ padding: 8 }}>Tenant PRO</th>
               <th style={{ padding: 8 }}>Estado</th>
             </tr>
           </thead>

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { ensureConversation, getMessages, sendMessage, markRead, type Message } from '../services/chat';
 import { useAuth } from '../context/AuthContext';
 import { api as axios } from '../api/client';
+import { toAbsoluteUrl } from '../utils/media';
 
 export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'contract'|'appointment'; refId: string }) {
   const [conversationId, setConversationId] = useState<string>('');
@@ -145,19 +146,19 @@ export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'co
                     {(m as any).attachmentUrl && (
                       <div className="mt-2">
                         {isImageUrl((m as any).attachmentUrl) ? (
-                          <a href={(m as any).attachmentUrl} target="_blank" rel="noreferrer">
+                          <a href={toAbsoluteUrl((m as any).attachmentUrl)} target="_blank" rel="noreferrer">
                             <img
-                              src={(m as any).attachmentUrl}
+                              src={toAbsoluteUrl((m as any).attachmentUrl)}
                               alt="adjunto"
                               className="max-h-48 rounded-lg border border-gray-200 object-cover"
                             />
                           </a>
                         ) : isPdfUrl((m as any).attachmentUrl) ? (
-                          <a href={(m as any).attachmentUrl} target="_blank" rel="noreferrer" className="text-blue-600">
+                          <a href={toAbsoluteUrl((m as any).attachmentUrl)} target="_blank" rel="noreferrer" className="text-blue-600">
                             📄 {fileNameFromUrl((m as any).attachmentUrl)}
                           </a>
                         ) : (
-                          <a href={(m as any).attachmentUrl} target="_blank" rel="noreferrer" className="text-blue-600">
+                          <a href={toAbsoluteUrl((m as any).attachmentUrl)} target="_blank" rel="noreferrer" className="text-blue-600">
                             {fileNameFromUrl((m as any).attachmentUrl)}
                           </a>
                         )}

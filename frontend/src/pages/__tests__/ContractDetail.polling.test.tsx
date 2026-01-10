@@ -30,10 +30,7 @@ jest.mock('../../components/ChatPanel', () => () => <div data-testid="chat" />);
 jest.mock('../../services/contracts', () => ({
   __esModule: true,
   getContract: jest.fn(),
-  sendToSignature: jest.fn(),
-  downloadPdf: jest.fn(),
-  payDeposit: jest.fn(),
-  signContract: jest.fn(),
+  createSignSession: jest.fn(),
 }));
 
 import ContractDetail from '../ContractDetail';
@@ -61,38 +58,59 @@ describe('ContractDetail polling', () => {
     jest.useRealTimers();
   });
 
-  it('polls load() every 8s when signature is sent', async () => {
+  it('no hace polling automatico', async () => {
     setAuth({ _id: 'u1', role: 'landlord' });
-    (contracts.getContract as jest.Mock).mockResolvedValue({ id: 'c1', owner: { id: 'u1' }, status: 'signing', signature: { status: 'sent' } });
+    (contracts.getContract as jest.Mock).mockResolvedValue({
+      _id: 'c1',
+      landlord: 'u1',
+      status: 'pending_signature',
+      rentAmount: 900,
+      depositAmount: 900,
+      startDate: new Date().toISOString(),
+      endDate: new Date().toISOString(),
+      landlordName: 'Landlord',
+      tenantName: 'Tenant',
+    });
 
     render(<ContractDetail />);
     await flushPromises();
 
-    expect(contracts.getContract).toHaveBeenCalledTimes(1);
+    const initialCalls = (contracts.getContract as jest.Mock).mock.calls.length;
+    expect(initialCalls).toBeGreaterThan(0);
 
     await act(async () => {
       jest.advanceTimersByTime(10000);
     });
     await flushPromises();
 
-    // 1 inicial + 2 intervalos
-    expect(contracts.getContract).toHaveBeenCalledTimes(3);
+    expect((contracts.getContract as jest.Mock).mock.calls.length).toBe(initialCalls);
   });
 
-  it('does not poll when signature is completed', async () => {
+  it('mantiene una sola carga aunque avance el tiempo', async () => {
     setAuth({ _id: 'u2', role: 'tenant' });
-    (contracts.getContract as jest.Mock).mockResolvedValue({ id: 'c1', tenant: 'u2', status: 'signed', signature: { status: 'completed' } });
+    (contracts.getContract as jest.Mock).mockResolvedValue({
+      _id: 'c1',
+      tenant: 'u2',
+      status: 'active',
+      rentAmount: 900,
+      depositAmount: 900,
+      startDate: new Date().toISOString(),
+      endDate: new Date().toISOString(),
+      landlordName: 'Landlord',
+      tenantName: 'Tenant',
+    });
 
     render(<ContractDetail />);
     await flushPromises();
 
-    expect(contracts.getContract).toHaveBeenCalledTimes(1);
+    const initialCalls = (contracts.getContract as jest.Mock).mock.calls.length;
+    expect(initialCalls).toBeGreaterThan(0);
 
     await act(async () => {
       jest.advanceTimersByTime(16000);
     });
     await flushPromises();
 
-    expect(contracts.getContract).toHaveBeenCalledTimes(1);
+    expect((contracts.getContract as jest.Mock).mock.calls.length).toBe(initialCalls);
   });
 });

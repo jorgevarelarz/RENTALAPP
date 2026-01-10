@@ -8,6 +8,7 @@ import LoginPrompt from '../../components/LoginPrompt';
 import toast from 'react-hot-toast';
 import SkeletonDetail from '../../components/ui/SkeletonDetail';
 import { MapPin, BedDouble, Bath, Ruler, PawPrint, Sofa, Calendar, Share2, Heart, ShieldCheck } from 'lucide-react';
+import { toAbsoluteUrl } from '../../utils/media';
 
 export default function PropertyDetail() {
   const { id } = useParams();
@@ -62,8 +63,19 @@ export default function PropertyDetail() {
 
   if (!property) return <SkeletonDetail />;
 
-  const images = property.images?.length ? property.images : ['https://via.placeholder.com/1200x800?text=Sin+Imagen'];
+  const images = (property.images?.length ? property.images : ['https://via.placeholder.com/1200x800?text=Sin+Imagen'])
+    .map((img: string) => toAbsoluteUrl(img));
   const safeRent35 = Math.ceil((property.price || 0) / 0.35);
+  const coords = property.location?.coordinates;
+  const lat = typeof coords?.[1] === 'number' ? coords[1] : undefined;
+  const lng = typeof coords?.[0] === 'number' ? coords[0] : undefined;
+  const hasCoords = typeof lat === 'number' && typeof lng === 'number';
+  const bbox = hasCoords ? [
+    (lng as number) - 0.01,
+    (lat as number) - 0.006,
+    (lng as number) + 0.01,
+    (lat as number) + 0.006,
+  ] : [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-500">
@@ -145,7 +157,7 @@ export default function PropertyDetail() {
               {property.onlyTenantPro && (
                 <div className="flex items-center gap-3 text-blue-700 font-medium">
                   <ShieldCheck />
-                  <span>Verificación Tenant PRO requerida</span>
+                  <span>Verificacion Tenant PRO requerida</span>
                 </div>
               )}
             </div>
@@ -157,6 +169,33 @@ export default function PropertyDetail() {
               {property.description || "El propietario no ha proporcionado una descripción detallada."}
             </p>
           </div>
+
+          {hasCoords && (
+            <div className="py-6 border-t border-gray-100">
+              <h3 className="text-xl font-bold text-gray-900 mb-4">Ubicación en el mapa</h3>
+              <div className="relative overflow-hidden rounded-2xl border border-gray-200">
+                <iframe
+                  title="Mapa de la propiedad"
+                  src={`https://www.openstreetmap.org/export/embed.html?bbox=${bbox.join('%2C')}&layer=mapnik&marker=${lat}%2C${lng}`}
+                  className="w-full h-72"
+                  loading="lazy"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const addressLabel = [property.address, property.city].filter(Boolean).join(', ');
+                    const query = encodeURIComponent(addressLabel || `${lat},${lng}`);
+                    const ok = window.confirm('Abrir esta direccion en Google Maps?');
+                    if (ok) window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
+                  }}
+                  className="absolute inset-0"
+                  aria-label="Abrir en Google Maps"
+                  style={{ background: 'transparent' }}
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-2">Mapa aproximado. La dirección exacta se confirma al concertar visita.</p>
+            </div>
+          )}
 
           {user?.role === 'tenant' && (
             <div className="py-6 border-t border-gray-100">
@@ -178,11 +217,11 @@ export default function PropertyDetail() {
             </div>
 
             {property.onlyTenantPro && (
-              <div className="bg-blue-50 p-4 rounded-xl text-sm space-y-2 text-blue-800">
-                <div className="flex items-start gap-2 font-semibold">
-                  <ShieldCheck size={18} className="mt-0.5 shrink-0"/>
-                  <span>Solo Inquilinos PRO</span>
-                </div>
+                <div className="bg-blue-50 p-4 rounded-xl text-sm space-y-2 text-blue-800">
+                  <div className="flex items-start gap-2 font-semibold">
+                    <ShieldCheck size={18} className="mt-0.5 shrink-0"/>
+                    <span>Solo inquilinos Tenant PRO</span>
+                  </div>
                 <p className="text-blue-600/80 text-xs leading-relaxed">
                   Esta propiedad requiere solvencia verificada. Se recomiendan ingresos aprox. de <strong>{safeRent35.toLocaleString()} €/mes</strong> (35% ratio).
                 </p>

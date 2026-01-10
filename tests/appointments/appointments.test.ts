@@ -17,6 +17,7 @@ describe('Appointments API', () => {
     mongo = await startMongoMemoryServer();
     process.env.MONGO_URL = mongo.getUri();
     process.env.NODE_ENV = 'test';
+    await mongoose.connect(mongo.getUri());
     const mod = await import('../../src/app');
     app = mod.app || mod.default;
     const t = await Ticket.create({
@@ -66,4 +67,3 @@ describe('Appointments API', () => {
     expect(res.body).toMatchObject({ status: 'proposed', ticketId });
   });
 });
-

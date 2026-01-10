@@ -3,6 +3,7 @@ import { Outlet, Link, NavLink } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import navConfig from '../config/nav.config.json';
 import Breadcrumbs from '../components/Breadcrumbs';
+import Badge from '../components/ui/Badge';
 import { listConversations } from '../services/chat';
 
 function Header() {
@@ -47,6 +48,9 @@ function Header() {
           ) : (
             <>
               <span className="text-gray-600 hidden sm:inline">{user.email} · {user.role}</span>
+              {user?.isVerified && (
+                <Badge tone="highlight">KYC verificado</Badge>
+              )}
               <button onClick={logout} className="px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50">Salir</button>
             </>
           )}

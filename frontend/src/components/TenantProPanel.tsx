@@ -58,7 +58,7 @@ export default function TenantProPanel({ requiredRent }: Props) {
       display: 'inline-block',
       marginBottom: 12,
     }}>
-      Inquilino PRO – validado hasta {info?.maxRent ?? 0} €/mes
+      Tenant PRO – validado hasta {info?.maxRent ?? 0} €/mes
     </div>
   ) : null;
 
@@ -74,7 +74,7 @@ export default function TenantProPanel({ requiredRent }: Props) {
 
   return (
     <div style={{ border: '1px solid #d4d4d8', padding: 16, borderRadius: 10, display: 'grid', gap: 12 }}>
-      <strong>Programa Inquilino PRO</strong>
+      <strong>Programa Tenant PRO</strong>
       {badge}
       {loading && <div>Cargando estado…</div>}
       {error && (
@@ -85,11 +85,11 @@ export default function TenantProPanel({ requiredRent }: Props) {
       )}
       {!loading && !badge && (
         <p style={{ margin: 0, color: '#4b5563' }}>
-          Sube tu documentación una vez y solicita viviendas exclusivas para inquilinos PRO.
+          Sube tu documentación una vez y solicita viviendas exclusivas para Tenant PRO.
         </p>
       )}
       {!!info?.consentAccepted && (info as any)?.docs?.length === 0 && (
-        <div style={{ color: '#6b7280' }}>Aún no has subido documentación. Sube tu nómina, contrato, etc. para obtener el badge PRO.</div>
+        <div style={{ color: '#6b7280' }}>Aún no has subido documentación. Sube tu nómina, contrato, etc. para obtener el badge Tenant PRO.</div>
       )}
       {needsUpgrade && (
         <div style={{ color: '#b91c1c', fontWeight: 500 }}>
@@ -110,7 +110,7 @@ export default function TenantProPanel({ requiredRent }: Props) {
             fontWeight: 600,
           }}
         >
-          Hazte PRO gratis
+          Hazte Tenant PRO gratis
         </button>
       )}
       {showFlow && (

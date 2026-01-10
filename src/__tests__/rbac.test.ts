@@ -1,5 +1,23 @@
 import request from 'supertest';
+import mongoose from 'mongoose';
+import type { MongoMemoryServer } from 'mongodb-memory-server';
+import { startMongoMemoryServer } from './utils/mongoMemoryServer';
 import { app } from '../app';
+
+let mongo: MongoMemoryServer | undefined;
+
+beforeAll(async () => {
+  mongo = await startMongoMemoryServer();
+  process.env.MONGO_URL = mongo.getUri();
+  process.env.NODE_ENV = 'test';
+  process.env.ALLOW_UNVERIFIED = 'true';
+  await mongoose.connect(mongo.getUri());
+});
+
+afterAll(async () => {
+  await mongoose.connection.close();
+  if (mongo) await mongo.stop();
+});
 
 describe('RBAC basic matrix', () => {
   // 401 (use invalid token to bypass test fallback)
@@ -74,4 +92,3 @@ describe('RBAC basic matrix', () => {
     expect(res.status).toBe(200);
   });
 });
-

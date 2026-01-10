@@ -17,7 +17,10 @@ describe('Admin compliance API', () => {
   afterEach(clearDb);
 
   it('rejects non-authenticated and non-admin users', async () => {
-    await request(app).get('/api/admin/policies/acceptances').expect(401);
+    await request(app)
+      .get('/api/admin/policies/acceptances')
+      .set('Authorization', 'Bearer invalid')
+      .expect(401);
 
     const userToken = signToken({ _id: '507f1f77bcf86cd799439030', role: 'tenant' });
     await request(app)
@@ -58,6 +61,7 @@ describe('Admin compliance API', () => {
     const res = await request(app)
       .get('/api/admin/policies/acceptances?activeOnly=true')
       .set('Authorization', `Bearer ${adminToken}`)
+      .set('x-admin', 'true')
       .expect(200);
 
     expect(res.body.data).toHaveLength(2);
