@@ -51,6 +51,7 @@ import helmet from 'helmet';
 import hpp from 'hpp';
 import rateLimit from 'express-rate-limit';
 import { requestId } from './middleware/requestId';
+import { adminRateLimit } from './middleware/adminRateLimit';
 import { loadEnv } from './config/env';
 import { metricsMiddleware, metricsHandler } from './metrics';
 import { signatureWebhook } from './controllers/contract.signature.controller';
@@ -270,6 +271,7 @@ app.use(
   authenticate,
   requireVerified,
   requireAdmin,
+  adminRateLimit,
   adminRoutes,
   adminEarningsRoutes,
   adminTenantProRoutes,

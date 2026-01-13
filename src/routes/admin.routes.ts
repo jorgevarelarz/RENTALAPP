@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { exportAuditTrails, getStats, listAuditTrails, listPolicyAcceptances, listWeeklyStats, streamAuditTrails, listAdminRequests, decideAdminRequest, upsertAdminTensionedArea, listTensionedAreas, getComplianceDashboard, exportComplianceDashboardCsv } from '../controllers/admin.controller';
+import { exportAuditTrails, getStats, listAuditTrails, listPolicyAcceptances, listWeeklyStats, streamAuditTrails, listAdminRequests, decideAdminRequest, upsertAdminTensionedArea, listTensionedAreas, getComplianceDashboard, exportComplianceDashboardCsv, listSystemEventsAdmin } from '../controllers/admin.controller';
 import { authenticate } from '../middleware/auth.middleware';
 import { authorizeRoles } from '../middleware/role.middleware';
 
@@ -14,6 +14,7 @@ router.get('/compliance/audit-trails/stream', streamAuditTrails);
 router.get('/compliance/stats/weekly', authenticate, authorizeRoles('admin'), listWeeklyStats);
 router.get('/compliance/dashboard', authenticate, authorizeRoles('admin'), getComplianceDashboard);
 router.get('/compliance/dashboard/export.csv', authenticate, authorizeRoles('admin'), exportComplianceDashboardCsv);
+router.get('/system-events', authenticate, authorizeRoles('admin'), listSystemEventsAdmin);
 router.get('/compliance/tensioned-areas', authenticate, authorizeRoles('admin'), listTensionedAreas);
 router.post('/compliance/tensioned-areas', authenticate, authorizeRoles('admin'), upsertAdminTensionedArea);
 router.get('/requests', authenticate, authorizeRoles('admin'), listAdminRequests);

@@ -145,6 +145,7 @@ export async function create(req: Request, res: Response) {
         changeDate: contract.startDate,
         reason: 'contract_created',
         source: 'system',
+        requestId: (res.locals as any)?.requestId,
       });
     } catch (complianceErr) {
       console.error('Error evaluando compliance Rental Public:', {

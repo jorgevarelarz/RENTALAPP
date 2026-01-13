@@ -15,6 +15,7 @@ import { generateAuditTrailPdf } from '../services/auditTrailPdf';
 import { AdminRequest } from '../models/adminRequest.model';
 import { ContractParty } from '../models/contractParty.model';
 import { buildComplianceCsv, getComplianceDashboard as getComplianceDashboardData, upsertTensionedArea } from '../modules/rentalPublic';
+import { listSystemEvents } from '../services/systemEvents.service';
 import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
 
 /**
@@ -306,6 +307,23 @@ export const exportComplianceDashboardCsv = async (req: Request, res: Response) 
     return res.send(csv);
   } catch (error: any) {
     res.status(500).json({ error: error?.message || 'compliance_dashboard_export_failed' });
+  }
+};
+
+export const listSystemEventsAdmin = async (req: Request, res: Response) => {
+  try {
+    const { type, resourceType, dateFrom, dateTo, page, pageSize } = req.query as {
+      type?: string;
+      resourceType?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      page?: string;
+      pageSize?: string;
+    };
+    const data = await listSystemEvents({ type, resourceType, dateFrom, dateTo, page, pageSize });
+    res.json({ data });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'system_events_list_failed' });
   }
 };
 

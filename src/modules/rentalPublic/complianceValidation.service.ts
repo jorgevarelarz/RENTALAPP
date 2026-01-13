@@ -14,6 +14,7 @@ export type EvaluateComplianceOptions = {
   source?: string;
   previousRent?: number;
   newRent?: number;
+  requestId?: string;
 };
 
 function buildAreaKey(region?: string, city?: string, zoneCode?: string) {
@@ -127,6 +128,7 @@ export async function evaluateAndPersist(contractId: string, opts: EvaluateCompl
           checkedAt: compliancePayload.checkedAt,
         },
         areaKey,
+        requestId: opts.requestId,
       },
     };
 
