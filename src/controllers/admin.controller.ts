@@ -15,7 +15,7 @@ import { generateAuditTrailPdf } from '../services/auditTrailPdf';
 import { AdminRequest } from '../models/adminRequest.model';
 import { ContractParty } from '../models/contractParty.model';
 import { buildComplianceCsv, getComplianceDashboard as getComplianceDashboardData, upsertTensionedArea } from '../modules/rentalPublic';
-import { listSystemEvents } from '../services/systemEvents.service';
+import { buildSystemEventsCsv, listSystemEvents, listSystemEventsAll } from '../services/systemEvents.service';
 import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
 
 /**
@@ -324,6 +324,24 @@ export const listSystemEventsAdmin = async (req: Request, res: Response) => {
     res.json({ data });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || 'system_events_list_failed' });
+  }
+};
+
+export const exportSystemEventsCsv = async (req: Request, res: Response) => {
+  try {
+    const { type, resourceType, dateFrom, dateTo } = req.query as {
+      type?: string;
+      resourceType?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    };
+    const items = await listSystemEventsAll({ type, resourceType, dateFrom, dateTo });
+    const csv = buildSystemEventsCsv(items);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="system-events.csv"');
+    return res.send(csv);
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'system_events_export_failed' });
   }
 };
 
