@@ -27,6 +27,8 @@ import AdminIncidents from "./pages/admin/Incidents";
 import AdminSettings from "./pages/admin/Settings";
 import AdminPayments from "./pages/admin/Payments";
 import AdminCompliancePage from "./pages/admin/AdminCompliancePage";
+import ComplianceDashboard from "./pages/admin/ComplianceDashboard";
+import TensionedAreas from "./pages/admin/TensionedAreas";
 import AdminAuditDashboard from "./pages/admin/AdminAuditDashboard";
 import RedirectHome from "./pages/RedirectHome";
 import MyContracts from "./pages/MyContracts";
@@ -217,7 +219,9 @@ export default function AppRoutes() {
             <Route path="/admin/incidents" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminIncidents /></RoleGuard></ProtectedRoute>} />
             <Route path="/admin/settings" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminSettings /></RoleGuard></ProtectedRoute>} />
             <Route path="/admin/payments" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminPayments /></RoleGuard></ProtectedRoute>} />
-            <Route path="/admin/compliance" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminCompliancePage /></RoleGuard></ProtectedRoute>} />
+            <Route path="/admin/compliance" element={<ProtectedRoute><RoleGuard roles={["admin"]}><ComplianceDashboard /></RoleGuard></ProtectedRoute>} />
+            <Route path="/admin/compliance/policies" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminCompliancePage /></RoleGuard></ProtectedRoute>} />
+            <Route path="/admin/compliance/tensioned-areas" element={<ProtectedRoute><RoleGuard roles={["admin"]}><TensionedAreas /></RoleGuard></ProtectedRoute>} />
             <Route path="/admin/compliance/audit-trails" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminAuditDashboard /></RoleGuard></ProtectedRoute>} />
 
             {/* Public catalog for pros */}

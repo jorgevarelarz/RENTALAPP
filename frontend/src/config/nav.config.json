@@ -40,6 +40,8 @@
     { "label": "Pagos", "path": "/admin/payments" },
     { "label": "Reportes", "path": "/admin/reports" },
     { "label": "Ajustes", "path": "/admin/settings" },
+    { "label": "Compliance", "path": "/admin/compliance" },
+    { "label": "Zonas tensionadas", "path": "/admin/compliance/tensioned-areas" },
     { "label": "Perfil y cuenta", "path": "/profile" }
   ]
 }
