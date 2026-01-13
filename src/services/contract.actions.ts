@@ -13,6 +13,7 @@ import {
 import { recordContractHistory } from '../utils/history';
 import { sendContractCreatedEmail } from '../utils/email';
 import { normalizeRegion, resolveClauses, type ClauseInput, type ResolvedClause } from './clauses.service';
+import { evaluateAndPersist } from '../modules/rentalPublic';
 
 interface CreateContractParams {
   tenantId: mongoose.Types.ObjectId | string;
@@ -176,6 +177,20 @@ export const createContractAction = async (params: CreateContractParams) => {
     }
   } catch (notifyErr) {
     console.error('Error enviando notificaciones:', notifyErr);
+  }
+
+  try {
+    await evaluateAndPersist(contract.id, {
+      changeDate: contract.startDate,
+      reason: 'contract_created',
+      source: 'system',
+    });
+  } catch (complianceErr) {
+    console.error('Error evaluando compliance Rental Public:', {
+      contractId: contract.id,
+      message: (complianceErr as any)?.message,
+      stack: (complianceErr as any)?.stack,
+    });
   }
 
   return contract;
