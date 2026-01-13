@@ -10,6 +10,7 @@ const EnvSchema = z.object({
   TENANT_PRO_CONSENT_VERSION: z.string().default('v1'),
   ALLOW_UNVERIFIED: z.string().optional(),
   ENFORCE_TENSIONED_RULES: z.string().optional(),
+  RENTAL_PUBLIC_DEMO_MODE: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema> & { MONGO: string };

@@ -14,7 +14,7 @@ import path from 'path';
 import { generateAuditTrailPdf } from '../services/auditTrailPdf';
 import { AdminRequest } from '../models/adminRequest.model';
 import { ContractParty } from '../models/contractParty.model';
-import { getComplianceDashboard as getComplianceDashboardData, upsertTensionedArea } from '../modules/rentalPublic';
+import { buildComplianceCsv, getComplianceDashboard as getComplianceDashboardData, upsertTensionedArea } from '../modules/rentalPublic';
 import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
 
 /**
@@ -281,6 +281,19 @@ export const getComplianceDashboard = async (req: Request, res: Response) => {
     res.json({ data });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || 'compliance_dashboard_failed' });
+  }
+};
+
+export const exportComplianceDashboardCsv = async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize } = req.query as { page?: string; pageSize?: string };
+    const data = await getComplianceDashboardData({ page, pageSize });
+    const csv = buildComplianceCsv(data);
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="compliance-dashboard.csv"');
+    return res.send(csv);
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'compliance_dashboard_export_failed' });
   }
 };
 
