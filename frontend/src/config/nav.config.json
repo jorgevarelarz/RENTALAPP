@@ -42,6 +42,7 @@
     { "label": "Ajustes", "path": "/admin/settings" },
     { "label": "Compliance", "path": "/admin/compliance" },
     { "label": "Zonas tensionadas", "path": "/admin/compliance/tensioned-areas" },
+    { "label": "System events", "path": "/admin/system-events" },
     { "label": "Perfil y cuenta", "path": "/profile" }
   ]
 }
