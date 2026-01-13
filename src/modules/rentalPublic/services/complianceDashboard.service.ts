@@ -2,6 +2,7 @@ import { ComplianceStatus } from '../models/complianceStatus.model';
 
 type DashboardData = {
   totals: { evaluated: number; risk: number };
+  lastUpdated?: Date | null;
   byArea: { areaKey: string; total: number; risk: number }[];
   items: {
     contractId: string;
@@ -18,18 +19,24 @@ type DashboardData = {
   }[];
   page: number;
   pageSize: number;
+  total: number;
 };
 
 export type ComplianceDashboardFilters = {
   page?: number | string;
   pageSize?: number | string;
+  status?: string;
+  areaKey?: string;
+  dateFrom?: string | Date;
+  dateTo?: string | Date;
+  includeAll?: boolean;
 };
 
 function isDemoMode() {
   return String(process.env.RENTAL_PUBLIC_DEMO_MODE || '').toLowerCase() === 'true';
 }
 
-function getDemoDashboardData(): DashboardData {
+function getDemoDashboardData(filters: ComplianceDashboardFilters = {}): DashboardData {
   const checkedAt = new Date('2025-02-01T10:00:00.000Z');
   const items = [
     {
@@ -92,26 +99,54 @@ function getDemoDashboardData(): DashboardData {
     { areaKey: 'galicia|santiago|', total: 1, risk: 0 },
   ];
 
+  const filtered = items.filter(item => {
+    if (filters.status && item.status !== filters.status) return false;
+    if (filters.areaKey && item.areaKey !== filters.areaKey) return false;
+    if (filters.dateFrom && new Date(item.checkedAt).getTime() < new Date(filters.dateFrom).getTime()) return false;
+    if (filters.dateTo && new Date(item.checkedAt).getTime() > new Date(filters.dateTo).getTime()) return false;
+    return true;
+  });
+
+  const page = Math.max(1, Number(filters.page || 1));
+  const pageSize = Math.min(100, Math.max(1, Number(filters.pageSize || 25)));
+  const total = filtered.length;
+  const risk = filtered.filter(item => item.status === 'risk').length;
+  const lastUpdated = filtered.length ? new Date(filtered[0].checkedAt) : null;
+  const paged = filters.includeAll ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
+
   return {
-    totals: { evaluated: 8, risk: 3 },
+    totals: { evaluated: total, risk },
     byArea,
-    items,
-    page: 1,
-    pageSize: 25,
+    items: paged,
+    page,
+    pageSize,
+    lastUpdated,
+    total,
   };
 }
 
 export async function getComplianceDashboard(filters: ComplianceDashboardFilters = {}): Promise<DashboardData> {
   if (isDemoMode()) {
-    return getDemoDashboardData();
+    return getDemoDashboardData(filters);
   }
   const page = Math.max(1, Number(filters.page || 1));
   const pageSize = Math.min(100, Math.max(1, Number(filters.pageSize || 25)));
 
-  const [total, risk, byArea, rows] = await Promise.all([
-    ComplianceStatus.countDocuments({}),
-    ComplianceStatus.countDocuments({ status: 'risk' }),
+  const query: any = {};
+  if (filters.status) query.status = filters.status;
+  if (filters.areaKey) query['meta.areaKey'] = String(filters.areaKey).trim().toLowerCase();
+  if (filters.dateFrom || filters.dateTo) {
+    query.checkedAt = {
+      ...(filters.dateFrom ? { $gte: new Date(filters.dateFrom) } : {}),
+      ...(filters.dateTo ? { $lte: new Date(filters.dateTo) } : {}),
+    };
+  }
+
+  const [total, risk, byArea, rows, lastUpdatedRow] = await Promise.all([
+    ComplianceStatus.countDocuments(query),
+    ComplianceStatus.countDocuments({ ...query, status: 'risk' }),
     ComplianceStatus.aggregate([
+      { $match: query },
       {
         $group: {
           _id: { $ifNull: ['$meta.areaKey', 'unknown'] },
@@ -123,13 +158,14 @@ export async function getComplianceDashboard(filters: ComplianceDashboardFilters
       { $limit: 100 },
       { $project: { _id: 0, areaKey: '$_id', total: 1, risk: 1 } },
     ]),
-    ComplianceStatus.find({})
+    ComplianceStatus.find(query)
       .sort({ checkedAt: -1 })
-      .skip((page - 1) * pageSize)
-      .limit(pageSize)
+      .skip(filters.includeAll ? 0 : (page - 1) * pageSize)
+      .limit(filters.includeAll ? 0 : pageSize)
       .populate('property', 'address city region')
       .populate('contract', '_id')
       .lean(),
+    ComplianceStatus.find(query).sort({ checkedAt: -1 }).select('checkedAt').limit(1).lean(),
   ]);
 
   const items = (rows as any[]).map(r => ({
@@ -152,6 +188,8 @@ export async function getComplianceDashboard(filters: ComplianceDashboardFilters
     items,
     page,
     pageSize,
+    lastUpdated: lastUpdatedRow?.[0]?.checkedAt || null,
+    total,
   };
 }
 

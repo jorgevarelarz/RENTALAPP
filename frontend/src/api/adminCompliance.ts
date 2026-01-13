@@ -16,10 +16,12 @@ export type ComplianceDashboardItem = {
 
 export type ComplianceDashboardData = {
   totals: { evaluated: number; risk: number };
+  lastUpdated?: string | Date | null;
   byArea: { areaKey: string; total: number; risk: number }[];
   items: ComplianceDashboardItem[];
   page: number;
   pageSize: number;
+  total?: number;
 };
 
 export type TensionedArea = {
@@ -34,12 +36,24 @@ export type TensionedArea = {
   active: boolean;
 };
 
-export async function fetchComplianceDashboard(params?: { page?: number; pageSize?: number }) {
+export async function fetchComplianceDashboard(params?: {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+  areaKey?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) {
   const res = await api.get('/api/admin/compliance/dashboard', { params });
   return res.data?.data as ComplianceDashboardData;
 }
 
-export async function exportComplianceDashboardCsv(params?: { page?: number; pageSize?: number }) {
+export async function exportComplianceDashboardCsv(params?: {
+  status?: string;
+  areaKey?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) {
   const res = await api.get('/api/admin/compliance/dashboard/export.csv', {
     params,
     responseType: 'blob',

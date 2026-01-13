@@ -276,8 +276,15 @@ export const listTensionedAreas = async (req: Request, res: Response) => {
 
 export const getComplianceDashboard = async (req: Request, res: Response) => {
   try {
-    const { page, pageSize } = req.query as { page?: string; pageSize?: string };
-    const data = await getComplianceDashboardData({ page, pageSize });
+    const { page, pageSize, status, areaKey, dateFrom, dateTo } = req.query as {
+      page?: string;
+      pageSize?: string;
+      status?: string;
+      areaKey?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    };
+    const data = await getComplianceDashboardData({ page, pageSize, status, areaKey, dateFrom, dateTo });
     res.json({ data });
   } catch (error: any) {
     res.status(500).json({ error: error?.message || 'compliance_dashboard_failed' });
@@ -286,8 +293,13 @@ export const getComplianceDashboard = async (req: Request, res: Response) => {
 
 export const exportComplianceDashboardCsv = async (req: Request, res: Response) => {
   try {
-    const { page, pageSize } = req.query as { page?: string; pageSize?: string };
-    const data = await getComplianceDashboardData({ page, pageSize });
+    const { status, areaKey, dateFrom, dateTo } = req.query as {
+      status?: string;
+      areaKey?: string;
+      dateFrom?: string;
+      dateTo?: string;
+    };
+    const data = await getComplianceDashboardData({ status, areaKey, dateFrom, dateTo, includeAll: true });
     const csv = buildComplianceCsv(data);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="compliance-dashboard.csv"');
