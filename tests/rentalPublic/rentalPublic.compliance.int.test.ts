@@ -9,6 +9,7 @@ import {
   evaluateAndPersist,
   ComplianceReasonCode,
   ComplianceStatusValue,
+  buildAreaKey,
 } from '../../src/modules/rentalPublic';
 
 describe('RentalPublic compliance', () => {
@@ -38,6 +39,7 @@ describe('RentalPublic compliance', () => {
     await TensionedArea.create({
       region: 'galicia',
       city: 'oleiros',
+      areaKey: buildAreaKey('galicia', 'oleiros', ''),
       source: 'test',
       effectiveFrom: new Date(now.getTime() - 24 * 60 * 60 * 1000),
       active: true,
@@ -70,6 +72,7 @@ describe('RentalPublic compliance', () => {
     expect(compliance).toBeTruthy();
     expect(compliance?.status).toBe(ComplianceStatusValue.Risk);
     expect(compliance?.reasons).toContain(ComplianceReasonCode.RentIncreaseTensionedArea);
+    expect(compliance?.isTensionedArea).toBe(true);
 
     let histories = await RentalPriceHistory.find({ contract: contract._id }).lean();
     expect(histories).toHaveLength(1);
