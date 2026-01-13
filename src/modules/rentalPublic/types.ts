@@ -4,6 +4,12 @@ export enum ComplianceStatusValue {
   NonCompliant = 'non_compliant',
 }
 
+export enum ComplianceSeverity {
+  Info = 'info',
+  Warning = 'warning',
+  Critical = 'critical',
+}
+
 export enum ComplianceReasonCode {
   RentIncreaseTensionedArea = 'RENT_INCREASE_TENSIONED_AREA',
 }

@@ -9,6 +9,7 @@ const EnvSchema = z.object({
   CORS_ORIGIN: z.string().optional(),
   TENANT_PRO_CONSENT_VERSION: z.string().default('v1'),
   ALLOW_UNVERIFIED: z.string().optional(),
+  ENFORCE_TENSIONED_RULES: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema> & { MONGO: string };
@@ -36,4 +37,3 @@ export function loadEnv(): Env {
 
   return { ...e, MONGO } as Env;
 }
-

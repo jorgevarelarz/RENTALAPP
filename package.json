@@ -16,6 +16,7 @@
     "seed": "ts-node src/seed.ts",
     "seed:services": "ts-node scripts/seed_services.ts",
     "seed:tenantpro-demo": "ts-node scripts/seed_tenantpro_demo.ts",
+    "seed:tensioned-areas": "ts-node scripts/seed_tensioned_areas.ts",
     "test:policies": "jest --runInBand --testPathPattern=\"tests/(policies|contracts|escrow)/.*policy.*\\.test\\.ts\""
   },
   "dependencies": {

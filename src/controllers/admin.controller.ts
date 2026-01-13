@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { z } from 'zod';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
@@ -13,6 +14,8 @@ import path from 'path';
 import { generateAuditTrailPdf } from '../services/auditTrailPdf';
 import { AdminRequest } from '../models/adminRequest.model';
 import { ContractParty } from '../models/contractParty.model';
+import { getComplianceDashboard as getComplianceDashboardData, upsertTensionedArea } from '../modules/rentalPublic';
+import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
 
 /**
  * Returns aggregate statistics about the platform: total number of users
@@ -225,6 +228,59 @@ export const listAdminRequests = async (req: Request, res: Response) => {
     res.json({ items });
   } catch (error: any) {
     res.status(500).json({ error: error.message || 'admin_requests_failed' });
+  }
+};
+
+const tensionedAreaSchema = z.object({
+  region: z.string().min(1),
+  city: z.string().optional(),
+  zoneCode: z.string().optional(),
+  areaKey: z.string().optional(),
+  source: z.string().min(1),
+  effectiveFrom: z.coerce.date(),
+  effectiveTo: z.coerce.date().nullable().optional(),
+  active: z.boolean().optional(),
+});
+
+export const upsertAdminTensionedArea = async (req: Request, res: Response) => {
+  try {
+    const payload = tensionedAreaSchema.parse(req.body);
+    const saved = await upsertTensionedArea({
+      ...payload,
+      effectiveTo: payload.effectiveTo ?? undefined,
+    });
+    res.json({ data: saved });
+  } catch (error: any) {
+    if (error?.issues) {
+      return res.status(400).json({ error: 'invalid_payload', details: error.issues });
+    }
+    res.status(500).json({ error: error?.message || 'tensioned_area_upsert_failed' });
+  }
+};
+
+export const listTensionedAreas = async (req: Request, res: Response) => {
+  try {
+    const { areaKey, region, city, active } = req.query as Record<string, string | undefined>;
+    const query: any = {};
+    if (areaKey) query.areaKey = String(areaKey).trim().toLowerCase();
+    if (region) query.region = String(region);
+    if (city) query.city = String(city);
+    if (active !== undefined) query.active = active === 'true';
+
+    const items = await TensionedArea.find(query).sort({ effectiveFrom: -1 }).lean();
+    res.json({ data: items });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'tensioned_area_list_failed' });
+  }
+};
+
+export const getComplianceDashboard = async (req: Request, res: Response) => {
+  try {
+    const { page, pageSize } = req.query as { page?: string; pageSize?: string };
+    const data = await getComplianceDashboardData({ page, pageSize });
+    res.json({ data });
+  } catch (error: any) {
+    res.status(500).json({ error: error?.message || 'compliance_dashboard_failed' });
   }
 };
 

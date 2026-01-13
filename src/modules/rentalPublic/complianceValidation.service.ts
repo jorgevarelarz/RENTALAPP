@@ -1,10 +1,12 @@
 import { Types } from 'mongoose';
 import { Contract } from '../../models/contract.model';
 import { Property } from '../../models/property.model';
+import { SystemEvent } from '../../models/systemEvent.model';
+import { emitSystemEvent } from '../../events/system.events';
 import { ComplianceStatus } from './models/complianceStatus.model';
 import { RentalPriceHistory } from './models/rentalPriceHistory.model';
 import { TensionedArea } from './models/tensionedArea.model';
-import { ComplianceReasonCode, ComplianceStatusValue, RULE_VERSION, type RuleInputs } from './types';
+import { ComplianceReasonCode, ComplianceSeverity, ComplianceStatusValue, RULE_VERSION, type RuleInputs } from './types';
 
 export type EvaluateComplianceOptions = {
   changeDate?: Date;
@@ -74,9 +76,11 @@ export async function evaluateAndPersist(contractId: string, opts: EvaluateCompl
   const isTensionedArea = !!tensionedArea;
 
   let status = ComplianceStatusValue.Compliant;
+  let severity = ComplianceSeverity.Info;
   const reasons: ComplianceReasonCode[] = [];
   if (isTensionedArea && newRent > resolvedPreviousRent) {
     status = ComplianceStatusValue.Risk;
+    severity = ComplianceSeverity.Warning;
     reasons.push(ComplianceReasonCode.RentIncreaseTensionedArea);
   }
 
@@ -90,6 +94,7 @@ export async function evaluateAndPersist(contractId: string, opts: EvaluateCompl
     contract: contract._id,
     property: property._id,
     status,
+    severity,
     checkedAt: new Date(),
     previousRent: resolvedPreviousRent,
     newRent,
@@ -108,6 +113,31 @@ export async function evaluateAndPersist(contractId: string, opts: EvaluateCompl
     { $set: compliancePayload, $setOnInsert: { createdAt: new Date() } },
     { upsert: true, new: true, setDefaultsOnInsert: true },
   );
+
+  if (status === ComplianceStatusValue.Risk) {
+    const eventPayload = {
+      type: 'COMPLIANCE_RISK_CREATED',
+      resourceType: 'contract',
+      resourceId: String(contract._id),
+      payload: {
+        complianceStatus: {
+          status,
+          severity,
+          reasons,
+          checkedAt: compliancePayload.checkedAt,
+        },
+        areaKey,
+      },
+    };
+
+    await SystemEvent.updateOne(
+      { type: eventPayload.type, resourceType: eventPayload.resourceType, resourceId: eventPayload.resourceId },
+      { $setOnInsert: { ...eventPayload, createdAt: new Date() }, $set: { updatedAt: new Date() } },
+      { upsert: true },
+    );
+
+    emitSystemEvent({ ...eventPayload, createdAt: new Date().toISOString() });
+  }
 
   const existingHistory = await RentalPriceHistory.findOne({ contract: contract._id })
     .select('_id')
