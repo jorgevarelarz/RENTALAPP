@@ -29,6 +29,7 @@ import PDFDocument from 'pdfkit';
 import { createContractAction, signContractAction, initiatePaymentAction } from '../services/contract.actions';
 import type { ResolvedClause } from '../services/clauses.service';
 import { generateContractPdfFile } from '../services/pdfGenerator';
+import { evaluateAndPersist } from '../modules/rentalPublic';
 // @ts-ignore
 import SignaturitClient from 'signaturit-sdk';
 
@@ -137,6 +138,21 @@ export async function create(req: Request, res: Response) {
         String(contract._id),
         propertyDoc?.address || propertyDoc?.title || 'Propiedad',
       ).catch(console.error);
+    }
+
+    try {
+      await evaluateAndPersist(String(contract._id), {
+        changeDate: contract.startDate,
+        reason: 'contract_created',
+        source: 'system',
+        requestId: (res.locals as any)?.requestId,
+      });
+    } catch (complianceErr) {
+      console.error('Error evaluando compliance Rental Public:', {
+        contractId: String(contract._id),
+        message: (complianceErr as any)?.message,
+        stack: (complianceErr as any)?.stack,
+      });
     }
 
     return res.status(201).json({ contract: { ...contract.toObject(), pdfPath: publicPath, pdfHash } });
