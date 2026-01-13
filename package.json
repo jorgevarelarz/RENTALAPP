@@ -18,6 +18,7 @@
     "seed:tenantpro-demo": "ts-node scripts/seed_tenantpro_demo.ts",
     "seed:tensioned-areas": "ts-node scripts/seed_tensioned_areas.ts",
     "seed:rental-public-demo": "ts-node scripts/seed_rental_public_demo.ts",
+    "system-events:cleanup": "ts-node scripts/system_events_cleanup.ts",
     "test:policies": "jest --runInBand --testPathPattern=\"tests/(policies|contracts|escrow)/.*policy.*\\.test\\.ts\""
   },
   "dependencies": {
@@ -34,6 +35,7 @@
     "file-type": "^15.0.1",
     "helmet": "^8.1.0",
     "hpp": "^0.2.3",
+    "ioredis": "^5.9.1",
     "jsonwebtoken": "^9.0.0",
     "mongodb": "^6.19.0",
     "mongoose": "^7.0.4",

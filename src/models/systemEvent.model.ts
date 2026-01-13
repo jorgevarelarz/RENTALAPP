@@ -20,5 +20,8 @@ const systemEventSchema = new Schema<ISystemEvent>(
 );
 
 systemEventSchema.index({ type: 1, resourceType: 1, resourceId: 1 }, { unique: true, sparse: true });
+systemEventSchema.index({ createdAt: -1 });
+systemEventSchema.index({ type: 1, createdAt: -1 });
+systemEventSchema.index({ resourceType: 1, createdAt: -1 });
 
 export const SystemEvent = model<ISystemEvent>('SystemEvent', systemEventSchema);

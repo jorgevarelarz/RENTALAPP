@@ -11,6 +11,10 @@ const EnvSchema = z.object({
   ALLOW_UNVERIFIED: z.string().optional(),
   ENFORCE_TENSIONED_RULES: z.string().optional(),
   RENTAL_PUBLIC_DEMO_MODE: z.string().optional(),
+  SYSTEM_EVENTS_RETENTION_DAYS: z.string().optional(),
+  REDIS_URL: z.string().optional(),
+  REDIS_HOST: z.string().optional(),
+  REDIS_PORT: z.string().optional(),
 });
 
 export type Env = z.infer<typeof EnvSchema> & { MONGO: string };
