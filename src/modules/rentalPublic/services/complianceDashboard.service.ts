@@ -1,9 +1,11 @@
 import { ComplianceStatus } from '../models/complianceStatus.model';
+import { parseDateRange } from '../../../utils/dateRange';
 
 type DashboardData = {
   totals: { evaluated: number; risk: number };
   lastUpdated?: Date | null;
   byArea: { areaKey: string; total: number; risk: number }[];
+  byAreaTotal?: number;
   items: {
     contractId: string;
     propertyId: string;
@@ -25,6 +27,8 @@ type DashboardData = {
 export type ComplianceDashboardFilters = {
   page?: number | string;
   pageSize?: number | string;
+  byAreaPage?: number | string;
+  byAreaPageSize?: number | string;
   status?: string;
   areaKey?: string;
   dateFrom?: string | Date;
@@ -109,6 +113,8 @@ function getDemoDashboardData(filters: ComplianceDashboardFilters = {}): Dashboa
 
   const page = Math.max(1, Number(filters.page || 1));
   const pageSize = Math.min(100, Math.max(1, Number(filters.pageSize || 25)));
+  const byAreaPage = Math.max(1, Number(filters.byAreaPage || 1));
+  const byAreaPageSize = Math.min(100, Math.max(1, Number(filters.byAreaPageSize || 100)));
   const total = filtered.length;
   const risk = filtered.filter(item => item.status === 'risk').length;
   const lastUpdated = filtered.length ? new Date(filtered[0].checkedAt) : null;
@@ -117,6 +123,7 @@ function getDemoDashboardData(filters: ComplianceDashboardFilters = {}): Dashboa
   return {
     totals: { evaluated: total, risk },
     byArea,
+    byAreaTotal: byArea.length,
     items: paged,
     page,
     pageSize,
@@ -136,28 +143,38 @@ export async function getComplianceDashboard(filters: ComplianceDashboardFilters
   if (filters.status) query.status = filters.status;
   if (filters.areaKey) query['meta.areaKey'] = String(filters.areaKey).trim().toLowerCase();
   if (filters.dateFrom || filters.dateTo) {
+    const parsed = parseDateRange({ dateFrom: filters.dateFrom, dateTo: filters.dateTo });
+    if ('error' in parsed) {
+      throw new Error('invalid_date_range');
+    }
     query.checkedAt = {
-      ...(filters.dateFrom ? { $gte: new Date(filters.dateFrom) } : {}),
-      ...(filters.dateTo ? { $lte: new Date(filters.dateTo) } : {}),
+      ...(parsed.from ? { $gte: parsed.from } : {}),
+      ...(parsed.to ? { $lte: parsed.to } : {}),
     };
   }
 
-  const [total, risk, byArea, rows, lastUpdatedRow] = await Promise.all([
+  const byAreaMatch = [
+    { $match: query },
+    {
+      $group: {
+        _id: { $ifNull: ['$meta.areaKey', 'unknown'] },
+        total: { $sum: 1 },
+        risk: { $sum: { $cond: [{ $eq: ['$status', 'risk'] }, 1, 0] } },
+      },
+    },
+    { $sort: { total: -1 } },
+  ];
+
+  const [total, risk, byArea, byAreaTotalRow, rows, lastUpdatedRow] = await Promise.all([
     ComplianceStatus.countDocuments(query),
     ComplianceStatus.countDocuments({ ...query, status: 'risk' }),
     ComplianceStatus.aggregate([
-      { $match: query },
-      {
-        $group: {
-          _id: { $ifNull: ['$meta.areaKey', 'unknown'] },
-          total: { $sum: 1 },
-          risk: { $sum: { $cond: [{ $eq: ['$status', 'risk'] }, 1, 0] } },
-        },
-      },
-      { $sort: { total: -1 } },
-      { $limit: 100 },
+      ...byAreaMatch,
+      { $skip: (byAreaPage - 1) * byAreaPageSize },
+      { $limit: byAreaPageSize },
       { $project: { _id: 0, areaKey: '$_id', total: 1, risk: 1 } },
     ]),
+    ComplianceStatus.aggregate([...byAreaMatch, { $count: 'total' }]),
     ComplianceStatus.find(query)
       .sort({ checkedAt: -1 })
       .skip(filters.includeAll ? 0 : (page - 1) * pageSize)
@@ -185,12 +202,30 @@ export async function getComplianceDashboard(filters: ComplianceDashboardFilters
   return {
     totals: { evaluated: total, risk },
     byArea,
+    byAreaTotal: byAreaTotalRow?.[0]?.total || 0,
     items,
     page,
     pageSize,
     lastUpdated: lastUpdatedRow?.[0]?.checkedAt || null,
     total,
   };
+}
+
+export function buildComplianceQuery(filters: ComplianceDashboardFilters = {}) {
+  const query: any = {};
+  if (filters.status) query.status = filters.status;
+  if (filters.areaKey) query['meta.areaKey'] = String(filters.areaKey).trim().toLowerCase();
+  if (filters.dateFrom || filters.dateTo) {
+    const parsed = parseDateRange({ dateFrom: filters.dateFrom, dateTo: filters.dateTo });
+    if ('error' in parsed) {
+      throw new Error('invalid_date_range');
+    }
+    query.checkedAt = {
+      ...(parsed.from ? { $gte: parsed.from } : {}),
+      ...(parsed.to ? { $lte: parsed.to } : {}),
+    };
+  }
+  return query;
 }
 
 export function buildComplianceCsv(data: DashboardData) {

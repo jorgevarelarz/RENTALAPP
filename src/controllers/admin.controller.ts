@@ -14,7 +14,8 @@ import path from 'path';
 import { generateAuditTrailPdf } from '../services/auditTrailPdf';
 import { AdminRequest } from '../models/adminRequest.model';
 import { ContractParty } from '../models/contractParty.model';
-import { buildComplianceCsv, getComplianceDashboard as getComplianceDashboardData, upsertTensionedArea } from '../modules/rentalPublic';
+import { buildComplianceCsv, buildComplianceQuery, getComplianceDashboard as getComplianceDashboardData, upsertTensionedArea } from '../modules/rentalPublic';
+import { ComplianceStatus } from '../modules/rentalPublic/models/complianceStatus.model';
 import { buildSystemEventsCsv, listSystemEvents, listSystemEventsAll } from '../services/systemEvents.service';
 import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
 
@@ -309,17 +310,31 @@ export const listTensionedAreas = async (req: Request, res: Response) => {
 
 export const getComplianceDashboard = async (req: Request, res: Response) => {
   try {
-    const { page, pageSize, status, areaKey, dateFrom, dateTo } = req.query as {
+    const { page, pageSize, byAreaPage, byAreaPageSize, status, areaKey, dateFrom, dateTo } = req.query as {
       page?: string;
       pageSize?: string;
+      byAreaPage?: string;
+      byAreaPageSize?: string;
       status?: string;
       areaKey?: string;
       dateFrom?: string;
       dateTo?: string;
     };
-    const data = await getComplianceDashboardData({ page, pageSize, status, areaKey, dateFrom, dateTo });
+    const data = await getComplianceDashboardData({
+      page,
+      pageSize,
+      byAreaPage,
+      byAreaPageSize,
+      status,
+      areaKey,
+      dateFrom,
+      dateTo,
+    });
     res.json({ data });
   } catch (error: any) {
+    if (error?.message === 'invalid_date_range') {
+      return res.status(400).json({ error: 'invalid_date_range' });
+    }
     res.status(500).json({ error: error?.message || 'compliance_dashboard_failed' });
   }
 };
@@ -332,12 +347,32 @@ export const exportComplianceDashboardCsv = async (req: Request, res: Response) 
       dateFrom?: string;
       dateTo?: string;
     };
-    const data = await getComplianceDashboardData({ status, areaKey, dateFrom, dateTo, includeAll: true });
-    const csv = buildComplianceCsv(data);
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', 'attachment; filename="compliance-dashboard.csv"');
-    return res.send(csv);
+    const query = buildComplianceQuery({ status, areaKey, dateFrom, dateTo });
+    res.write('property_id,areaKey,previousRent,newRent,status,checkedAt\n');
+    const cursor = ComplianceStatus.find(query)
+      .sort({ checkedAt: -1 })
+      .select('property previousRent newRent status checkedAt meta.areaKey')
+      .lean()
+      .cursor();
+    for await (const row of cursor) {
+      const values = [
+        String((row as any).property ?? ''),
+        String((row as any).meta?.areaKey ?? ''),
+        String((row as any).previousRent ?? ''),
+        String((row as any).newRent ?? ''),
+        String((row as any).status ?? ''),
+        (row as any).checkedAt ? new Date((row as any).checkedAt).toISOString() : '',
+      ];
+      const line = values.map(v => `"${v.replace(/"/g, '""')}"`).join(',');
+      res.write(`${line}\n`);
+    }
+    return res.end();
   } catch (error: any) {
+    if (error?.message === 'invalid_date_range') {
+      return res.status(400).json({ error: 'invalid_date_range' });
+    }
     res.status(500).json({ error: error?.message || 'compliance_dashboard_export_failed' });
   }
 };

@@ -2,8 +2,10 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { Types } from 'mongoose';
 import { UserPolicyAcceptance } from '../../src/models/userPolicyAcceptance.model';
 import { PolicyVersion } from '../../src/models/policy.model';
+import { ComplianceStatus } from '../../src/modules/rentalPublic/models/complianceStatus.model';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 
@@ -68,5 +70,64 @@ describe('Admin compliance API', () => {
     expect(res.body.data[0]).toHaveProperty('policyType');
     expect(res.body.data[0]).toHaveProperty('policyVersion');
     expect(res.body.data[0]).toHaveProperty('user.email');
+  });
+
+  it('rejects invalid date ranges for compliance dashboard', async () => {
+    const adminToken = signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
+
+    await request(app)
+      .get('/api/admin/compliance/dashboard?dateFrom=invalid-date')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('x-admin', 'true')
+      .expect(400);
+
+    await request(app)
+      .get('/api/admin/compliance/dashboard?dateFrom=2025-01-10&dateTo=2025-01-01')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('x-admin', 'true')
+      .expect(400);
+  });
+
+  it('rejects invalid date ranges for compliance export', async () => {
+    const adminToken = signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
+
+    await request(app)
+      .get('/api/admin/compliance/dashboard/export.csv?dateFrom=invalid-date')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('x-admin', 'true')
+      .expect(400);
+
+    await request(app)
+      .get('/api/admin/compliance/dashboard/export.csv?dateFrom=2025-01-10&dateTo=2025-01-01')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('x-admin', 'true')
+      .expect(400);
+  });
+
+  it('exports compliance CSV with data rows', async () => {
+    const adminToken = signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
+    const propertyId = new Types.ObjectId();
+    await ComplianceStatus.create({
+      contract: new Types.ObjectId(),
+      property: propertyId,
+      status: 'risk',
+      severity: 'warning',
+      checkedAt: new Date('2025-01-15T10:00:00.000Z'),
+      previousRent: 900,
+      newRent: 1100,
+      isTensionedArea: true,
+      ruleVersion: 'es-housing:v1',
+      reasons: ['RENT_INCREASE_TENSIONED_AREA'],
+      meta: { areaKey: 'galicia|oleiros|' },
+    });
+
+    const res = await request(app)
+      .get('/api/admin/compliance/dashboard/export.csv')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .set('x-admin', 'true')
+      .expect(200);
+
+    expect(res.text).toContain('property_id,areaKey,previousRent,newRent,status,checkedAt');
+    expect(res.text).toContain(String(propertyId));
   });
 });

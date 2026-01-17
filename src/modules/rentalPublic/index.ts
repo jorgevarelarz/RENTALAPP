@@ -1,6 +1,6 @@
 export { evaluateAndPersist, buildAreaKey } from './complianceValidation.service';
 export { upsertTensionedArea } from './services/tensionedArea.service';
-export { getComplianceDashboard, buildComplianceCsv } from './services/complianceDashboard.service';
+export { getComplianceDashboard, buildComplianceCsv, buildComplianceQuery } from './services/complianceDashboard.service';
 export { isTensionedRulesEnforced } from './enforcement';
 export * from './types';
 export * from './models/complianceStatus.model';

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
 import { ComplianceStatus } from '../modules/rentalPublic/models/complianceStatus.model';
+import { parseDateRange } from '../utils/dateRange';
 
 const CASEID_SALT =
   process.env.INSTITUTION_CASEID_SALT || process.env.JWT_SECRET || 'insecure-institution-salt';
@@ -9,6 +10,7 @@ type InstitutionDashboardData = {
   totals: { evaluated: number; risk: number };
   lastUpdated?: Date | null;
   byArea: { areaKey: string; total: number; risk: number }[];
+  byAreaTotal?: number;
   items: {
     caseId: string;
     areaKey?: string;
@@ -26,6 +28,8 @@ type InstitutionDashboardData = {
 type DashboardFilters = {
   page?: number | string;
   pageSize?: number | string;
+  byAreaPage?: number | string;
+  byAreaPageSize?: number | string;
   status?: string;
   areaKey?: string;
   dateFrom?: string | Date;
@@ -59,9 +63,13 @@ function buildQuery(filters: DashboardFilters, scopeAreaKeys: string[]) {
     query['meta.areaKey'] = normalized;
   }
   if (filters.dateFrom || filters.dateTo) {
+    const parsed = parseDateRange({ dateFrom: filters.dateFrom, dateTo: filters.dateTo });
+    if ('error' in parsed) {
+      return { error: 'invalid_date_range' } as const;
+    }
     query.checkedAt = {
-      ...(filters.dateFrom ? { $gte: new Date(filters.dateFrom) } : {}),
-      ...(filters.dateTo ? { $lte: new Date(filters.dateTo) } : {}),
+      ...(parsed.from ? { $gte: parsed.from } : {}),
+      ...(parsed.to ? { $lte: parsed.to } : {}),
     };
   }
 
@@ -74,6 +82,8 @@ async function fetchInstitutionDashboard(
 ): Promise<InstitutionDashboardData> {
   const page = Math.max(1, Number(filters.page || 1));
   const pageSize = Math.min(100, Math.max(1, Number(filters.pageSize || 25)));
+  const byAreaPage = Math.max(1, Number(filters.byAreaPage || 1));
+  const byAreaPageSize = Math.min(100, Math.max(1, Number(filters.byAreaPageSize || 100)));
 
   const built = buildQuery(filters, scopeAreaKeys);
   if ('error' in built) {
@@ -81,22 +91,28 @@ async function fetchInstitutionDashboard(
   }
   const query = built.query;
 
-  const [total, risk, byArea, rows, lastUpdatedRow] = await Promise.all([
+  const byAreaMatch = [
+    { $match: query },
+    {
+      $group: {
+        _id: { $ifNull: ['$meta.areaKey', 'unknown'] },
+        total: { $sum: 1 },
+        risk: { $sum: { $cond: [{ $eq: ['$status', 'risk'] }, 1, 0] } },
+      },
+    },
+    { $sort: { total: -1 } },
+  ];
+
+  const [total, risk, byArea, byAreaTotalRow, rows, lastUpdatedRow] = await Promise.all([
     ComplianceStatus.countDocuments(query),
     ComplianceStatus.countDocuments({ ...query, status: 'risk' }),
     ComplianceStatus.aggregate([
-      { $match: query },
-      {
-        $group: {
-          _id: { $ifNull: ['$meta.areaKey', 'unknown'] },
-          total: { $sum: 1 },
-          risk: { $sum: { $cond: [{ $eq: ['$status', 'risk'] }, 1, 0] } },
-        },
-      },
-      { $sort: { total: -1 } },
-      { $limit: 100 },
+      ...byAreaMatch,
+      { $skip: (byAreaPage - 1) * byAreaPageSize },
+      { $limit: byAreaPageSize },
       { $project: { _id: 0, areaKey: '$_id', total: 1, risk: 1 } },
     ]),
+    ComplianceStatus.aggregate([...byAreaMatch, { $count: 'total' }]),
     ComplianceStatus.find(query)
       .sort({ checkedAt: -1 })
       .skip(filters.includeAll ? 0 : (page - 1) * pageSize)
@@ -119,6 +135,7 @@ async function fetchInstitutionDashboard(
   return {
     totals: { evaluated: total, risk },
     byArea,
+    byAreaTotal: byAreaTotalRow?.[0]?.total || 0,
     items,
     page,
     pageSize,
@@ -145,9 +162,11 @@ function buildInstitutionComplianceCsv(data: InstitutionDashboardData) {
 
 export const getInstitutionComplianceDashboard = async (req: Request, res: Response) => {
   try {
-    const { page, pageSize, status, areaKey, dateFrom, dateTo } = req.query as {
+    const { page, pageSize, byAreaPage, byAreaPageSize, status, areaKey, dateFrom, dateTo } = req.query as {
       page?: string;
       pageSize?: string;
+      byAreaPage?: string;
+      byAreaPageSize?: string;
       status?: string;
       areaKey?: string;
       dateFrom?: string;
@@ -156,13 +175,16 @@ export const getInstitutionComplianceDashboard = async (req: Request, res: Respo
 
     const scopeAreaKeys = getScopeAreaKeys(req);
     const data = await fetchInstitutionDashboard(
-      { page, pageSize, status, areaKey, dateFrom, dateTo },
+      { page, pageSize, byAreaPage, byAreaPageSize, status, areaKey, dateFrom, dateTo },
       scopeAreaKeys,
     );
     res.json({ data });
   } catch (error: any) {
     if (error?.message === 'area_not_in_scope') {
       return res.status(403).json({ error: 'area_not_in_scope' });
+    }
+    if (error?.message === 'invalid_date_range') {
+      return res.status(400).json({ error: 'invalid_date_range' });
     }
     res.status(500).json({ error: error?.message || 'institution_dashboard_failed' });
   }
@@ -189,6 +211,9 @@ export const exportInstitutionComplianceDashboardCsv = async (req: Request, res:
   } catch (error: any) {
     if (error?.message === 'area_not_in_scope') {
       return res.status(403).json({ error: 'area_not_in_scope' });
+    }
+    if (error?.message === 'invalid_date_range') {
+      return res.status(400).json({ error: 'invalid_date_range' });
     }
     res.status(500).json({ error: error?.message || 'institution_dashboard_export_failed' });
   }

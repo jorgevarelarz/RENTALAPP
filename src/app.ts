@@ -47,6 +47,7 @@ import { startRentGenerationJob } from './jobs/rentGeneration.job';
 import applicationsRoutes from './routes/applications.routes';
 import invitesRoutes from './routes/invites.routes';
 import meRoutes from './routes/me.routes';
+import taxReportRoutes from './routes/taxReport.routes';
 
 import helmet from 'helmet';
 import hpp from 'hpp';
@@ -267,6 +268,7 @@ app.use('/api', authenticate, requireVerified, connectRoutes);
 app.use('/api', requireVerified, serviceOfferRoutes);
 app.use('/api/invites', authenticate, invitesRoutes);
 app.use('/api/me', authenticate, requireVerified, meRoutes);
+app.use('/api', authenticate, requireVerified, taxReportRoutes);
 
 // Institution portal (read-only)
 app.use(

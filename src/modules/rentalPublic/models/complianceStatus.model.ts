@@ -42,5 +42,7 @@ complianceStatusSchema.index({ property: 1, checkedAt: -1 });
 complianceStatusSchema.index({ status: 1 });
 complianceStatusSchema.index({ 'meta.areaKey': 1 });
 complianceStatusSchema.index({ checkedAt: -1 });
+complianceStatusSchema.index({ status: 1, checkedAt: -1 });
+complianceStatusSchema.index({ 'meta.areaKey': 1, checkedAt: -1 });
 
 export const ComplianceStatus = model<IComplianceStatus>('ComplianceStatus', complianceStatusSchema);
