@@ -21,3 +21,4 @@ coverage/
 
 # Runtime uploads (should be volume / runtime only)
 /uploads/
+.mongo-data/

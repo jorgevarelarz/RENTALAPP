@@ -31,6 +31,11 @@ export type TensionedArea = {
   city?: string;
   zoneCode?: string;
   source: string;
+  maxRent?: number;
+  geometry?: {
+    type: 'Polygon' | 'MultiPolygon';
+    coordinates: number[][][] | number[][][][];
+  };
   effectiveFrom: string;
   effectiveTo?: string;
   active: boolean;
@@ -64,4 +69,23 @@ export async function exportComplianceDashboardCsv(params?: {
 export async function fetchTensionedAreas(params?: { region?: string; city?: string; active?: string }) {
   const res = await api.get('/api/admin/compliance/tensioned-areas', { params });
   return (res.data?.data || []) as TensionedArea[];
+}
+
+export async function upsertTensionedArea(payload: {
+  region: string;
+  city?: string;
+  zoneCode?: string;
+  areaKey?: string;
+  source: string;
+  maxRent?: number;
+  geometry?: {
+    type: 'Polygon' | 'MultiPolygon';
+    coordinates: number[][][] | number[][][][];
+  };
+  effectiveFrom: string;
+  effectiveTo?: string;
+  active?: boolean;
+}) {
+  const res = await api.post('/api/admin/compliance/tensioned-areas', payload);
+  return res.data?.data as TensionedArea;
 }

@@ -81,4 +81,65 @@ describe('RentalPublic compliance', () => {
     histories = await RentalPriceHistory.find({ contract: contract._id }).lean();
     expect(histories).toHaveLength(1);
   });
+
+  it('uses geo geometry for tensioned areas when available', async () => {
+    const now = new Date();
+    const ownerId = new Types.ObjectId();
+    const landlordId = new Types.ObjectId();
+    const tenantId = new Types.ObjectId();
+
+    const property = await Property.create({
+      owner: ownerId,
+      title: 'Geo Property',
+      address: 'Calle Geo 1',
+      region: 'galicia',
+      city: 'oleiros',
+      location: { type: 'Point', coordinates: [-8.3, 43.3] },
+      price: 900,
+      deposit: 900,
+      availableFrom: now,
+      status: 'active',
+    });
+
+    const tensioned = await TensionedArea.create({
+      region: 'madrid',
+      city: 'madrid',
+      areaKey: buildAreaKey('madrid', 'madrid', ''),
+      source: 'geo-test',
+      geometry: {
+        type: 'Polygon',
+        coordinates: [
+          [
+            [-8.4, 43.2],
+            [-8.2, 43.2],
+            [-8.2, 43.4],
+            [-8.4, 43.4],
+            [-8.4, 43.2],
+          ],
+        ],
+      },
+      effectiveFrom: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      active: true,
+    });
+
+    const contract = await Contract.create({
+      landlord: landlordId,
+      tenant: tenantId,
+      property: property._id,
+      rent: 1100,
+      deposit: 1100,
+      startDate: now,
+      endDate: new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000),
+      region: 'galicia',
+      status: 'draft',
+    });
+
+    await evaluateAndPersist(String(contract._id), { changeDate: contract.startDate });
+
+    const compliance = await ComplianceStatus.findOne({ contract: contract._id }).lean();
+    expect(compliance).toBeTruthy();
+    expect(compliance?.status).toBe(ComplianceStatusValue.Risk);
+    expect(compliance?.isTensionedArea).toBe(true);
+    expect(compliance?.meta?.areaKey).toBe(tensioned.areaKey);
+  });
 });

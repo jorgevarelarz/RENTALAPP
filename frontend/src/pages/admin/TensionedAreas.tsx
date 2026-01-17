@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import {
   fetchTensionedAreas,
   type TensionedArea,
+  upsertTensionedArea,
 } from '../../api/adminCompliance';
 
 export default function TensionedAreas() {
@@ -12,6 +13,17 @@ export default function TensionedAreas() {
   const [region, setRegion] = useState('');
   const [city, setCity] = useState('');
   const [active, setActive] = useState('');
+  const [formRegion, setFormRegion] = useState('');
+  const [formCity, setFormCity] = useState('');
+  const [formZoneCode, setFormZoneCode] = useState('');
+  const [formAreaKey, setFormAreaKey] = useState('');
+  const [formSource, setFormSource] = useState('manual');
+  const [formMaxRent, setFormMaxRent] = useState('');
+  const [formEffectiveFrom, setFormEffectiveFrom] = useState('');
+  const [formEffectiveTo, setFormEffectiveTo] = useState('');
+  const [formActive, setFormActive] = useState(true);
+  const [formGeometry, setFormGeometry] = useState('');
+  const [formStatus, setFormStatus] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -42,6 +54,42 @@ export default function TensionedAreas() {
       return true;
     });
   }, [areas, region, city, active]);
+
+  const handleSubmit = async () => {
+    setFormStatus(null);
+    setError(null);
+    try {
+      const geometry = formGeometry.trim()
+        ? (JSON.parse(formGeometry) as {
+            type: 'Polygon' | 'MultiPolygon';
+            coordinates: number[][][] | number[][][][];
+          })
+        : undefined;
+
+      const payload = {
+        region: formRegion.trim().toLowerCase(),
+        city: formCity.trim().toLowerCase() || undefined,
+        zoneCode: formZoneCode.trim().toLowerCase() || undefined,
+        areaKey: formAreaKey.trim().toLowerCase() || undefined,
+        source: formSource.trim() || 'manual',
+        maxRent: formMaxRent.trim() ? Number(formMaxRent) : undefined,
+        effectiveFrom: formEffectiveFrom,
+        effectiveTo: formEffectiveTo || undefined,
+        active: formActive,
+        geometry,
+      };
+
+      if (!payload.region || !payload.source || !payload.effectiveFrom) {
+        throw new Error('Region, source y effectiveFrom son obligatorios');
+      }
+
+      await upsertTensionedArea(payload);
+      setFormStatus('Zona guardada correctamente');
+      await fetchData();
+    } catch (err: any) {
+      setError(err?.message || 'No se pudo guardar la zona');
+    }
+  };
 
   return (
     <div style={{ padding: 24, display: 'grid', gap: 16 }}>
@@ -76,6 +124,110 @@ export default function TensionedAreas() {
         </button>
       </div>
 
+      <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, display: 'grid', gap: 12 }}>
+        <h3 style={{ margin: 0 }}>Crear o actualizar zona</h3>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12 }}>
+          <label style={labelStyle}>
+            Region *
+            <input
+              value={formRegion}
+              onChange={e => setFormRegion(e.target.value)}
+              placeholder="galicia"
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
+            City
+            <input
+              value={formCity}
+              onChange={e => setFormCity(e.target.value)}
+              placeholder="oleiros"
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
+            Zone Code
+            <input
+              value={formZoneCode}
+              onChange={e => setFormZoneCode(e.target.value)}
+              placeholder="centro"
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
+            AreaKey
+            <input
+              value={formAreaKey}
+              onChange={e => setFormAreaKey(e.target.value)}
+              placeholder="galicia|oleiros|"
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
+            Source *
+            <input
+              value={formSource}
+              onChange={e => setFormSource(e.target.value)}
+              placeholder="manual"
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
+            Max rent
+            <input
+              type="number"
+              min="0"
+              value={formMaxRent}
+              onChange={e => setFormMaxRent(e.target.value)}
+              placeholder="1200"
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
+            Effective From *
+            <input
+              type="date"
+              value={formEffectiveFrom}
+              onChange={e => setFormEffectiveFrom(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+          <label style={labelStyle}>
+            Effective To
+            <input
+              type="date"
+              value={formEffectiveTo}
+              onChange={e => setFormEffectiveTo(e.target.value)}
+              style={inputStyle}
+            />
+          </label>
+          <label style={{ ...labelStyle, flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            Activa
+            <input
+              type="checkbox"
+              checked={formActive}
+              onChange={e => setFormActive(e.target.checked)}
+            />
+          </label>
+        </div>
+        <label style={labelStyle}>
+          Geometry (GeoJSON Polygon/MultiPolygon)
+          <textarea
+            value={formGeometry}
+            onChange={e => setFormGeometry(e.target.value)}
+            placeholder='{"type":"Polygon","coordinates":[[[...]]]}' 
+            style={textAreaStyle}
+            rows={4}
+          />
+        </label>
+        <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <button className="px-3 py-1.5 rounded border border-gray-300" onClick={handleSubmit}>
+            Guardar zona
+          </button>
+          {formStatus && <span style={{ color: '#15803d' }}>{formStatus}</span>}
+        </div>
+      </div>
+
       {loading && <div>Cargando zonas...</div>}
       {error && <div style={{ color: '#b91c1c' }}>{error}</div>}
       {!loading && !error && filtered.length === 0 && <div>No hay zonas aun.</div>}
@@ -93,6 +245,8 @@ export default function TensionedAreas() {
                 <th style={cellStyle}>Effective To</th>
                 <th style={cellStyle}>Active</th>
                 <th style={cellStyle}>Source</th>
+                <th style={cellStyle}>Max rent</th>
+                <th style={cellStyle}>Geometry</th>
               </tr>
             </thead>
             <tbody>
@@ -106,6 +260,8 @@ export default function TensionedAreas() {
                   <td style={cellStyle}>{area.effectiveTo ? new Date(area.effectiveTo).toLocaleDateString() : '-'}</td>
                   <td style={cellStyle}>{area.active ? 'true' : 'false'}</td>
                   <td style={cellStyle}>{area.source}</td>
+                  <td style={cellStyle}>{typeof area.maxRent === 'number' ? area.maxRent : '-'}</td>
+                  <td style={cellStyle}>{area.geometry?.type || '-'}</td>
                 </tr>
               ))}
             </tbody>
@@ -126,6 +282,20 @@ const selectStyle: React.CSSProperties = {
   border: '1px solid #d4d4d8',
   borderRadius: 8,
   padding: '6px 10px',
+};
+
+const textAreaStyle: React.CSSProperties = {
+  border: '1px solid #d4d4d8',
+  borderRadius: 8,
+  padding: '6px 10px',
+  minWidth: 280,
+  fontFamily: 'monospace',
+};
+
+const labelStyle: React.CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  gap: 6,
 };
 
 const cellStyle: React.CSSProperties = {

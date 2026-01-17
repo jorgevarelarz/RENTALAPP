@@ -70,6 +70,13 @@ const tenantProSchema = new Schema(
  * Schema for users. The role distinguishes between landlords and tenants.
  * Passwords are stored hashed in the passwordHash field.
  */
+const institutionScopeSchema = new Schema(
+  {
+    areaKeys: { type: [String], default: [] },
+  },
+  { _id: false },
+);
+
 const userSchema = new Schema(
   {
     name: { type: String, required: true },
@@ -81,13 +88,14 @@ const userSchema = new Schema(
      *  - tenant: standard renter of properties.
      *  - landlord: owner of one or more properties.
      *  - admin: platform administrator with elevated privileges.
+     *  - institution_viewer: government/public-sector read-only access.
      *
      * Additional roles can be added here as the system evolves, e.g. for
      * community‐level managers when offering a SaaS model to governments.
      */
     role: {
       type: String,
-      enum: ['landlord', 'tenant', 'admin', 'pro'],
+      enum: ['landlord', 'tenant', 'admin', 'pro', 'institution_viewer'],
       required: true,
     },
     ratingAvg: { type: Number, default: 0 },
@@ -121,6 +129,7 @@ const userSchema = new Schema(
     // Password reset support
     resetToken: { type: String },
     resetTokenExp: { type: Date },
+    institutionScope: { type: institutionScopeSchema, default: undefined },
   },
   { timestamps: true },
 );

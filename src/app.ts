@@ -40,6 +40,7 @@ import postsignRouter from './routes/postsign';
 import tenantProRoutes from './routes/tenantPro.routes';
 import tenantProMeRoutes from './routes/tenantPro.me';
 import adminTenantProRoutes from './routes/admin.tenantPro.routes';
+import institutionRoutes from './routes/institution.routes';
 import { purgeOldTenantProDocs } from './jobs/tenantProRetention';
 import { startContractActivationJob } from './jobs/contractActivation.job';
 import { startRentGenerationJob } from './jobs/rentGeneration.job';
@@ -55,6 +56,8 @@ import { adminRateLimit } from './middleware/adminRateLimit';
 import { loadEnv } from './config/env';
 import { metricsMiddleware, metricsHandler } from './metrics';
 import { signatureWebhook } from './controllers/contract.signature.controller';
+import { authorizeRoles } from './middleware/role.middleware';
+import { loadInstitutionScope } from './middleware/institutionScope';
 
 // Load environment variables
 const env = loadEnv();
@@ -145,7 +148,7 @@ if (process.env.NODE_ENV !== 'test') {
 app.use('/api', stripeWebhookRoutes);
 
 // CORS: configurar orígenes desde CORS_ORIGIN (coma-separado). En producción, sin fallback amplio.
-const allowedOrigins = (process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000,http://localhost:3001'))
+const allowedOrigins = (process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:5174'))
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
@@ -265,6 +268,15 @@ app.use('/api', requireVerified, serviceOfferRoutes);
 app.use('/api/invites', authenticate, invitesRoutes);
 app.use('/api/me', authenticate, requireVerified, meRoutes);
 
+// Institution portal (read-only)
+app.use(
+  '/api/institution',
+  authenticate,
+  authorizeRoles('institution_viewer'),
+  loadInstitutionScope,
+  institutionRoutes,
+);
+
 // Admin
 app.use(
   '/api/admin',
@@ -285,6 +297,25 @@ app.get('/', (_req, res) => {
     timestamp: new Date().toISOString()
   });
 });
+
+if (process.env.NODE_ENV === 'production') {
+  const frontendDist = path.resolve(process.cwd(), 'frontend/build');
+  const institutionDist = path.resolve(process.cwd(), 'institution-frontend/dist');
+
+  if (fs.existsSync(institutionDist)) {
+    app.use('/institution', express.static(institutionDist));
+    app.get('/institution/*', (_req, res) => {
+      res.sendFile(path.join(institutionDist, 'index.html'));
+    });
+  }
+
+  if (fs.existsSync(frontendDist)) {
+    app.use(express.static(frontendDist));
+    app.get(/^\/(?!api\/|institution\/).*/, (_req, res) => {
+      res.sendFile(path.join(frontendDist, 'index.html'));
+    });
+  }
+}
 
 // 404 handler for undefined routes
 app.use((_req, res) => {

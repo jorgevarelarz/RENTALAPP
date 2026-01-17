@@ -9,7 +9,9 @@
     "test": "jest",
     "test:backend": "jest --config jest.config.js",
     "test:frontend": "npm test --prefix frontend -- --watchAll=false",
-    "dev:all": "concurrently -k -n back,front \"npm run dev\" \"npm --prefix frontend start\"",
+    "dev:all": "concurrently -k -n back,front,institution \"npm run dev\" \"npm --prefix frontend start\" \"npm --prefix institution-frontend run dev\"",
+    "dev:institution": "npm --prefix institution-frontend run dev",
+    "build:institution": "npm --prefix institution-frontend run build",
     "test:rbac": "jest --runInBand src/__tests__/rbac.test.ts",
     "test:unit": "jest tests/unit",
     "test:e2e": "jest --config jest.config.e2e.js --runInBand",
@@ -17,6 +19,7 @@
     "seed:services": "ts-node scripts/seed_services.ts",
     "seed:tenantpro-demo": "ts-node scripts/seed_tenantpro_demo.ts",
     "seed:tensioned-areas": "ts-node scripts/seed_tensioned_areas.ts",
+    "import:tensioned-geojson": "ts-node scripts/import_tensioned_geojson.ts",
     "seed:rental-public-demo": "ts-node scripts/seed_rental_public_demo.ts",
     "system-events:cleanup": "ts-node scripts/system_events_cleanup.ts",
     "test:policies": "jest --runInBand --testPathPattern=\"tests/(policies|contracts|escrow)/.*policy.*\\.test\\.ts\""

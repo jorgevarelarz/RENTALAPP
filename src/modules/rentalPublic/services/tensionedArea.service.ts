@@ -6,6 +6,11 @@ export type TensionedAreaInput = {
   city?: string;
   zoneCode?: string;
   source: string;
+  maxRent?: number;
+  geometry?: {
+    type: 'Polygon' | 'MultiPolygon';
+    coordinates: number[][][] | number[][][][];
+  };
   effectiveFrom: Date | string;
   effectiveTo?: Date | string | null;
   active?: boolean;
@@ -27,6 +32,8 @@ export async function upsertTensionedArea(input: TensionedAreaInput) {
     typeof input.active === 'boolean'
       ? input.active
       : effectiveFrom <= now && (!effectiveTo || effectiveTo >= now);
+  const geometry = input.geometry;
+  const maxRent = input.maxRent;
 
   const endBoundary = effectiveTo ?? new Date('9999-12-31T00:00:00.000Z');
   const overlapQuery = {
@@ -37,30 +44,24 @@ export async function upsertTensionedArea(input: TensionedAreaInput) {
   };
 
   const existing = await TensionedArea.findOne(overlapQuery).sort({ effectiveFrom: -1 });
-
-  if (existing) {
-    existing.set({
-      areaKey,
-      region: input.region,
-      city: input.city,
-      zoneCode: input.zoneCode,
-      source: input.source,
-      effectiveFrom,
-      effectiveTo,
-      active,
-    });
-    await existing.save();
-    return existing;
-  }
-
-  return TensionedArea.create({
+  const payload: Record<string, unknown> = {
     areaKey,
     region: input.region,
     city: input.city,
     zoneCode: input.zoneCode,
     source: input.source,
+    ...(typeof maxRent === 'number' ? { maxRent } : {}),
     effectiveFrom,
     effectiveTo,
     active,
-  });
+    ...(geometry ? { geometry } : {}),
+  };
+
+  if (existing) {
+    existing.set(payload);
+    await existing.save();
+    return existing;
+  }
+
+  return TensionedArea.create(payload);
 }

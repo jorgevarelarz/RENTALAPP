@@ -232,12 +232,44 @@ export const listAdminRequests = async (req: Request, res: Response) => {
   }
 };
 
+const isNumberPair = (value: unknown): value is [number, number] =>
+  Array.isArray(value) &&
+  value.length === 2 &&
+  value.every(entry => typeof entry === 'number' && Number.isFinite(entry));
+
+const isLinearRing = (value: unknown): boolean =>
+  Array.isArray(value) &&
+  value.length >= 4 &&
+  value.every(isNumberPair) &&
+  value[0][0] === value[value.length - 1][0] &&
+  value[0][1] === value[value.length - 1][1];
+
+const isPolygonCoordinates = (value: unknown): boolean =>
+  Array.isArray(value) && value.length > 0 && value.every(isLinearRing);
+
+const isMultiPolygonCoordinates = (value: unknown): boolean =>
+  Array.isArray(value) && value.length > 0 && value.every(isPolygonCoordinates);
+
+const geometrySchema = z
+  .object({
+    type: z.enum(['Polygon', 'MultiPolygon']),
+    coordinates: z.array(z.any()),
+  })
+  .refine(
+    value =>
+      (value.type === 'Polygon' && isPolygonCoordinates(value.coordinates)) ||
+      (value.type === 'MultiPolygon' && isMultiPolygonCoordinates(value.coordinates)),
+    { message: 'invalid geometry coordinates' },
+  );
+
 const tensionedAreaSchema = z.object({
   region: z.string().min(1),
   city: z.string().optional(),
   zoneCode: z.string().optional(),
   areaKey: z.string().optional(),
   source: z.string().min(1),
+  maxRent: z.coerce.number().min(0).optional(),
+  geometry: geometrySchema.optional(),
   effectiveFrom: z.coerce.date(),
   effectiveTo: z.coerce.date().nullable().optional(),
   active: z.boolean().optional(),

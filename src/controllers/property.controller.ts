@@ -5,6 +5,93 @@ import { AlertSubscription } from '../models/alertSubscription.model';
 import { sendAvailabilityAlert, sendPriceAlert } from '../utils/email';
 import { User } from '../models/user.model';
 import { Application } from '../models/application.model';
+import { buildAreaKey, TensionedArea } from '../modules/rentalPublic';
+import { SystemEvent } from '../models/systemEvent.model';
+import { emitSystemEvent } from '../events/system.events';
+
+const tensionedAreaDateQuery = (changeDate: Date) => ({
+  active: true,
+  effectiveFrom: { $lte: changeDate },
+  $or: [{ effectiveTo: { $exists: false } }, { effectiveTo: null }, { effectiveTo: { $gte: changeDate } }],
+});
+
+const isGeoPoint = (value: any): value is { type: 'Point'; coordinates: [number, number] } =>
+  value?.type === 'Point' &&
+  Array.isArray(value.coordinates) &&
+  value.coordinates.length === 2 &&
+  value.coordinates.every((entry: unknown) => typeof entry === 'number');
+
+async function findTensionedAreaForProperty(property: any, changeDate: Date) {
+  const areaKeyFallback = buildAreaKey(property.region, property.city, property.zoneCode);
+  const geoPoint = property.location;
+  const dateQuery = tensionedAreaDateQuery(changeDate);
+
+  if (isGeoPoint(geoPoint)) {
+    const byGeo = await TensionedArea.findOne({
+      geometry: { $geoIntersects: { $geometry: geoPoint } },
+      ...dateQuery,
+    })
+      .sort({ effectiveFrom: -1 })
+      .lean();
+    if (byGeo) {
+      return { tensionedArea: byGeo, areaKey: byGeo.areaKey || areaKeyFallback };
+    }
+  }
+
+  const byAreaKey = await TensionedArea.findOne({
+    areaKey: areaKeyFallback,
+    ...dateQuery,
+  })
+    .sort({ effectiveFrom: -1 })
+    .lean();
+
+  return { tensionedArea: byAreaKey, areaKey: byAreaKey?.areaKey || areaKeyFallback };
+}
+
+async function buildTensionedAreaWarnings(property: any) {
+  const warnings: { code: string; message: string; limit?: number }[] = [];
+  try {
+    const { tensionedArea, areaKey } = await findTensionedAreaForProperty(property, new Date());
+    if (tensionedArea && typeof (tensionedArea as any).maxRent === 'number') {
+      const limit = (tensionedArea as any).maxRent as number;
+      warnings.push({
+        code: 'tensioned_area_price_limit',
+        message: `Zona tensionada. Limite recomendado: ${limit} EUR`,
+        limit,
+      });
+
+      if (typeof property.price === 'number' && property.price > limit) {
+        const owner = await User.findById(property.owner).select('name email').lean();
+        const payload = {
+          type: 'LISTING_PRICE_LIMIT_EXCEEDED',
+          resourceType: 'property',
+          resourceId: String(property._id),
+          payload: {
+            ownerId: String(property.owner),
+            ownerName: owner?.name,
+            ownerEmail: owner?.email,
+            propertyId: String(property._id),
+            price: property.price,
+            limit,
+            areaKey,
+            tensionedAreaId: tensionedArea._id,
+          },
+        };
+
+        await SystemEvent.updateOne(
+          { type: payload.type, resourceType: payload.resourceType, resourceId: payload.resourceId },
+          { $setOnInsert: { ...payload, createdAt: new Date() }, $set: { updatedAt: new Date() } },
+          { upsert: true },
+        );
+        emitSystemEvent({ ...payload, createdAt: new Date().toISOString() });
+      }
+    }
+  } catch (error) {
+    // Silence failures to avoid changing publication UX.
+  }
+
+  return warnings;
+}
 
 export async function create(req: Request, res: Response) {
   const b: any = req.body;
@@ -72,6 +159,10 @@ export async function update(req: Request, res: Response) {
     }
   }
 
+  const warnings = priceChanged ? await buildTensionedAreaWarnings(updated) : [];
+  if (warnings.length > 0) {
+    return res.json({ ...updated.toObject(), warnings });
+  }
   res.json(updated);
 }
 
@@ -89,6 +180,11 @@ export async function publish(req: Request, res: Response) {
   if ((p.images?.length || 0) < 3) return res.status(400).json({ error: 'min_images_3' });
   p.status = 'active';
   await p.save();
+
+  const warnings = await buildTensionedAreaWarnings(p);
+  if (warnings.length > 0) {
+    return res.json({ _id: p._id, status: p.status, warnings });
+  }
   res.json({ _id: p._id, status: p.status });
 }
 

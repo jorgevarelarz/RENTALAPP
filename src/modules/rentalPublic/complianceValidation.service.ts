@@ -63,18 +63,34 @@ export async function evaluateAndPersist(contractId: string, opts: EvaluateCompl
 
   const rawChangeDate = opts.changeDate || contract.startDate || new Date();
   const changeDate = rawChangeDate instanceof Date ? rawChangeDate : new Date(rawChangeDate);
-  const areaKey = buildAreaKey(property.region, property.city, (property as any).zoneCode);
+  const areaKeyFallback = buildAreaKey(property.region, property.city, (property as any).zoneCode);
 
-  const tensionedArea = await TensionedArea.findOne({
-    areaKey,
-    active: true,
-    effectiveFrom: { $lte: changeDate },
-    $or: [{ effectiveTo: { $exists: false } }, { effectiveTo: null }, { effectiveTo: { $gte: changeDate } }],
-  })
-    .sort({ effectiveFrom: -1 })
-    .lean();
+  const geoPoint = (property as any).location;
+  const geoQuery =
+    geoPoint?.type === 'Point' && Array.isArray(geoPoint.coordinates) && geoPoint.coordinates.length === 2
+      ? {
+          geometry: { $geoIntersects: { $geometry: geoPoint } },
+          active: true,
+          effectiveFrom: { $lte: changeDate },
+          $or: [{ effectiveTo: { $exists: false } }, { effectiveTo: null }, { effectiveTo: { $gte: changeDate } }],
+        }
+      : null;
+
+  const tensionedArea =
+    (geoQuery
+      ? await TensionedArea.findOne(geoQuery).sort({ effectiveFrom: -1 }).lean()
+      : null) ||
+    (await TensionedArea.findOne({
+      areaKey: areaKeyFallback,
+      active: true,
+      effectiveFrom: { $lte: changeDate },
+      $or: [{ effectiveTo: { $exists: false } }, { effectiveTo: null }, { effectiveTo: { $gte: changeDate } }],
+    })
+      .sort({ effectiveFrom: -1 })
+      .lean());
 
   const isTensionedArea = !!tensionedArea;
+  const resolvedAreaKey = tensionedArea?.areaKey || areaKeyFallback;
 
   let status = ComplianceStatusValue.Compliant;
   let severity = ComplianceSeverity.Info;
@@ -104,7 +120,7 @@ export async function evaluateAndPersist(contractId: string, opts: EvaluateCompl
     reasons,
     meta: {
       tensionedAreaId: tensionedArea?._id,
-      areaKey,
+      areaKey: resolvedAreaKey,
       ruleInputs,
     },
   };
@@ -127,7 +143,7 @@ export async function evaluateAndPersist(contractId: string, opts: EvaluateCompl
           reasons,
           checkedAt: compliancePayload.checkedAt,
         },
-        areaKey,
+        areaKey: resolvedAreaKey,
         requestId: opts.requestId,
       },
     };
@@ -158,7 +174,7 @@ export async function evaluateAndPersist(contractId: string, opts: EvaluateCompl
     await RentalPriceHistory.create(historyPayload);
   }
 
-  return { status, reasons, isTensionedArea, areaKey };
+  return { status, reasons, isTensionedArea, areaKey: resolvedAreaKey };
 }
 
 export { buildAreaKey };

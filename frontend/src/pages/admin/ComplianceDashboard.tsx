@@ -263,7 +263,7 @@ export default function ComplianceDashboard() {
                     </div>
                   </td>
                   <td style={cellStyle}>
-                    {item.previousRent} EUR -> {item.newRent} EUR
+                    {item.previousRent} EUR {'->'} {item.newRent} EUR
                   </td>
                   <td style={cellStyle}>{renderStatusBadge(item.status)}</td>
                   <td style={cellStyle}>{renderSeverityBadge(item.severity)}</td>

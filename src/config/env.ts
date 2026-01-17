@@ -11,6 +11,7 @@ const EnvSchema = z.object({
   ALLOW_UNVERIFIED: z.string().optional(),
   ENFORCE_TENSIONED_RULES: z.string().optional(),
   RENTAL_PUBLIC_DEMO_MODE: z.string().optional(),
+  INSTITUTION_CASEID_SALT: z.string().optional(),
   SYSTEM_EVENTS_RETENTION_DAYS: z.string().optional(),
   REDIS_URL: z.string().optional(),
   REDIS_HOST: z.string().optional(),
@@ -34,6 +35,9 @@ export function loadEnv(): Env {
     if (!MONGO) throw new Error('MONGO_URL/MONGO_URI requerido en producción');
     if (!e.JWT_SECRET || e.JWT_SECRET.length < 16) {
       throw new Error('JWT_SECRET fuerte requerido en producción');
+    }
+    if (!e.INSTITUTION_CASEID_SALT || e.INSTITUTION_CASEID_SALT.length < 16) {
+      throw new Error('INSTITUTION_CASEID_SALT requerido en producción');
     }
     if (!e.CORS_ORIGIN) {
       console.warn('[env] CORS_ORIGIN no definido en producción — se recomienda configurarlo');
