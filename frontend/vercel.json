@@ -1,0 +1,15 @@
+{
+  "redirects": [
+    {
+      "source": "/inversores",
+      "destination": "https://inversores.rentalapp.es",
+      "permanent": false
+    },
+    {
+      "source": "/inversores/:path*",
+      "destination": "https://inversores.rentalapp.es/:path*",
+      "permanent": false
+    }
+  ]
+}
+
