@@ -234,7 +234,7 @@ export async function exportTaxReportCsv(req: Request, res: Response) {
       ]),
     ];
 
-    res.send(lines.map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n'));
+    res.send(lines.map(r => r.map((v: unknown) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n'));
   } catch (error: any) {
     const status = error?.status || 500;
     res.status(status).json({ error: error?.message || 'tax_report_export_failed' });

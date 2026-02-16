@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import crypto from 'crypto';
+import { PipelineStage } from 'mongoose';
 import { ComplianceStatus } from '../modules/rentalPublic/models/complianceStatus.model';
 import { parseDateRange } from '../utils/dateRange';
 
@@ -91,7 +92,7 @@ async function fetchInstitutionDashboard(
   }
   const query = built.query;
 
-  const byAreaMatch = [
+  const byAreaMatch: PipelineStage[] = [
     { $match: query },
     {
       $group: {
@@ -100,7 +101,7 @@ async function fetchInstitutionDashboard(
         risk: { $sum: { $cond: [{ $eq: ['$status', 'risk'] }, 1, 0] } },
       },
     },
-    { $sort: { total: -1 } },
+    { $sort: { total: -1 as const } },
   ];
 
   const [total, risk, byArea, byAreaTotalRow, rows, lastUpdatedRow] = await Promise.all([

@@ -1,4 +1,5 @@
 import { ComplianceStatus } from '../models/complianceStatus.model';
+import { PipelineStage } from 'mongoose';
 import { parseDateRange } from '../../../utils/dateRange';
 
 type DashboardData = {
@@ -138,6 +139,8 @@ export async function getComplianceDashboard(filters: ComplianceDashboardFilters
   }
   const page = Math.max(1, Number(filters.page || 1));
   const pageSize = Math.min(100, Math.max(1, Number(filters.pageSize || 25)));
+  const byAreaPage = Math.max(1, Number(filters.byAreaPage || 1));
+  const byAreaPageSize = Math.min(100, Math.max(1, Number(filters.byAreaPageSize || 100)));
 
   const query: any = {};
   if (filters.status) query.status = filters.status;
@@ -153,7 +156,7 @@ export async function getComplianceDashboard(filters: ComplianceDashboardFilters
     };
   }
 
-  const byAreaMatch = [
+  const byAreaMatch: PipelineStage[] = [
     { $match: query },
     {
       $group: {
@@ -162,7 +165,7 @@ export async function getComplianceDashboard(filters: ComplianceDashboardFilters
         risk: { $sum: { $cond: [{ $eq: ['$status', 'risk'] }, 1, 0] } },
       },
     },
-    { $sort: { total: -1 } },
+    { $sort: { total: -1 as const } },
   ];
 
   const [total, risk, byArea, byAreaTotalRow, rows, lastUpdatedRow] = await Promise.all([
