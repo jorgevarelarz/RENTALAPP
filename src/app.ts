@@ -64,6 +64,7 @@ import { loadInstitutionScope } from './middleware/institutionScope';
 const env = loadEnv();
 
 const app = express();
+app.set('trust proxy', 1);
 // Endurecer cabeceras y parámetros
 app.disable('x-powered-by');
 app.use(
@@ -154,7 +155,14 @@ const allowedOrigins = (process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'pr
   .map(s => s.trim())
   .filter(Boolean);
 app.use(cors({
-  origin: allowedOrigins.length > 0 ? allowedOrigins : false,
+  origin: (origin, callback) => {
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) {
+      return callback(null, true);
+    }
+    console.warn(`[CORS] Blocked origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
+  },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
   allowedHeaders: [
     'Content-Type', 'Authorization', 'X-Requested-With', 'x-admin', 'x-user-id', 'Cache-Control'
@@ -223,8 +231,15 @@ app.get('/api/legal/privacy-policy', (_req, res) => {
 app.get('/health', (_req, res) =>
   res.json({ ok: true, env: process.env.NODE_ENV, mongo: { state: mongoose.connection.readyState } }),
 );
+app.get('/ready', (_req, res) => {
+  if (mongoose.connection.readyState !== 1) {
+    return res.status(503).json({ ok: false, ready: false, mongo: { state: mongoose.connection.readyState } });
+  }
+  return res.json({ ok: true, ready: true, mongo: { state: mongoose.connection.readyState } });
+});
 // Alias: /api/health redirige al endpoint canónico /health (evita romper clientes antiguos)
 app.get('/api/health', (_req, res) => res.redirect(301, '/health'));
+app.get('/api/ready', (_req, res) => res.redirect(301, '/ready'));
 app.get('/metrics', metricsHandler);
 
 // Stripe Connect redirects (avoid 404 when APP_URL points to backend)
@@ -374,16 +389,42 @@ async function connectMongoWithRetry(uri: string, maxAttempts = 5) {
 if (require.main === module) {
   const PORT = Number(process.env.PORT) || 3000;
   const mongoUri = process.env.MONGO_URL || process.env.MONGO_URI || '';
+  let server: ReturnType<typeof app.listen> | null = null;
 
   if (!mongoUri) {
     console.error('MongoDB connection error: missing MONGO_URL or MONGO_URI');
     process.exit(1);
   }
+  const mongoHost = (() => {
+    try {
+      return new URL(mongoUri).host;
+    } catch {
+      return '[invalid-mongo-uri]';
+    }
+  })();
+  console.log(`MongoDB target host: ${mongoHost}`);
+
+  const shutdown = (signal: string) => {
+    console.log(`[Shutdown] Received ${signal}, closing resources...`);
+    if (server) {
+      server.close(async () => {
+        try {
+          await mongoose.disconnect();
+        } finally {
+          process.exit(0);
+        }
+      });
+    } else {
+      mongoose.disconnect().finally(() => process.exit(0));
+    }
+  };
+  process.on('SIGTERM', () => shutdown('SIGTERM'));
+  process.on('SIGINT', () => shutdown('SIGINT'));
 
   connectMongoWithRetry(mongoUri)
     .then(async () => {
       await runSeedIfNeeded();
-      app.listen(PORT, '0.0.0.0', () => {
+      server = app.listen(PORT, '0.0.0.0', () => {
         console.log(`Server running on port ${PORT}`);
       });
     })
