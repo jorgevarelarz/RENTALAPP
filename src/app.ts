@@ -330,14 +330,6 @@ app.use(errorHandler);
 export { app };
 export default app;
 
-// Start server if this file is run directly
-if (require.main === module) {
-  const PORT = Number(process.env.PORT) || 3000;  
-  // Connect to MongoDB
-  mongoose.connect(process.env.MONGO_URL || '')
-    .then(async () => {
-      console.log('MongoDB connected');
-
 async function runSeedIfNeeded() {
   console.log('SEED CHECK RUN_SEED:', process.env.RUN_SEED);
 
@@ -356,16 +348,47 @@ async function runSeedIfNeeded() {
   }
 }
 
-          await runSeedIfNeeded();
+const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function connectMongoWithRetry(uri: string, maxAttempts = 5) {
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await mongoose.connect(uri, { serverSelectionTimeoutMS: 60000 });
+      console.log('MongoDB connected');
+      return;
+    } catch (error) {
+      const isLastAttempt = attempt === maxAttempts;
+      console.error(
+        `MongoDB connection error (attempt ${attempt}/${maxAttempts}):`,
+        error,
+      );
+      if (isLastAttempt) {
+        throw error;
+      }
+      await sleep(Math.min(5000 * attempt, 30000));
+    }
+  }
+}
+
+// Start server if this file is run directly
+if (require.main === module) {
+  const PORT = Number(process.env.PORT) || 3000;
+  const mongoUri = process.env.MONGO_URL || process.env.MONGO_URI || '';
+
+  if (!mongoUri) {
+    console.error('MongoDB connection error: missing MONGO_URL or MONGO_URI');
+    process.exit(1);
+  }
+
+  connectMongoWithRetry(mongoUri)
+    .then(async () => {
+      await runSeedIfNeeded();
+      app.listen(PORT, '0.0.0.0', () => {
+        console.log(`Server running on port ${PORT}`);
+      });
     })
     .catch((error) => {
       console.error('MongoDB connection error:', error);
       process.exit(1);
     });
-  // Trigger Railway deployment
-
-    // Start the server
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
-  });
 }
