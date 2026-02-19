@@ -32,6 +32,7 @@ import { generateContractPdfFile } from '../services/pdfGenerator';
 import { evaluateAndPersist } from '../modules/rentalPublic';
 // @ts-ignore
 import SignaturitClient from 'signaturit-sdk';
+import { ensureCanReadContract } from '../utils/contractAccess';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i);
 
@@ -212,6 +213,7 @@ export const createContract = async (req: Request, res: Response) => {
 
 export const getContractPDF = async (req: Request, res: Response) => {
   try {
+    await ensureCanReadContract({ contractId: req.params.id, user: req.user as any });
     const contract = await Contract.findById(req.params.id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
 
@@ -300,11 +302,13 @@ export const signContract = async (req: Request, res: Response) => {
 export const getContractHistory = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    await ensureCanReadContract({ contractId: id, user: req.user as any });
     const history = await ContractHistory.find({ contract: id }).sort({ timestamp: 1 });
     res.json(history);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Error al obtener el historial del contrato' });
+    const status = (error as any)?.status || 500;
+    res.status(status).json({ error: status === 403 ? 'forbidden' : 'Error al obtener el historial del contrato' });
   }
 };
 
@@ -499,6 +503,7 @@ export const createSigningSession = async (req: Request, res: Response) => {
 export const sendRentReminder = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    await ensureCanReadContract({ contractId: id, user: req.user as any });
     const contract = await Contract.findById(id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
     const tenant = await User.findById(contract.tenant);
@@ -510,13 +515,15 @@ export const sendRentReminder = async (req: Request, res: Response) => {
     res.json({ message: 'Recordatorio de renta enviado' });
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: 'Error enviando recordatorio', details: error.message });
+    const status = error?.status || 500;
+    res.status(status).json({ error: status === 403 ? 'forbidden' : 'Error enviando recordatorio', details: error.message });
   }
 };
 
 export const sendRenewalNotification = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    await ensureCanReadContract({ contractId: id, user: req.user as any });
     const contract = await Contract.findById(id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
     const landlord = await User.findById(contract.landlord);
@@ -532,7 +539,8 @@ export const sendRenewalNotification = async (req: Request, res: Response) => {
     res.json({ message: 'Notificaciones de renovación enviadas' });
   } catch (error: any) {
     console.error(error);
-    res.status(500).json({ error: 'Error enviando notificaciones', details: error.message });
+    const status = error?.status || 500;
+    res.status(status).json({ error: status === 403 ? 'forbidden' : 'Error enviando notificaciones', details: error.message });
   }
 };
 
@@ -954,19 +962,16 @@ export const getMyInvites = async (req: Request, res: Response) => {
 export const getContractPayments = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
+    await ensureCanReadContract({ contractId: id, user: req.user as any });
     const contract = await Contract.findById(id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
-
-    const userId = req.user?.id;
-    const isAdmin = req.user?.role === 'admin';
-    const isParty = isAdmin || String(contract.tenant) === userId || String(contract.landlord) === userId;
-    if (!isParty) return res.status(403).json({ error: 'No autorizado' });
 
     const payments = await Payment.find({ contract: id, status: 'succeeded' }).sort({ createdAt: -1 }).lean();
     res.json(payments);
   } catch (error: any) {
     console.error('Error obteniendo historial de pagos', error);
-    res.status(500).json({ error: 'Error al obtener historial' });
+    const status = error?.status || 500;
+    res.status(status).json({ error: status === 403 ? 'forbidden' : 'Error al obtener historial' });
   }
 };
 

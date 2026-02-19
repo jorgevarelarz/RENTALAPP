@@ -7,10 +7,15 @@ export interface IPartnerEarning {
   propertyId: Types.ObjectId;
   stripeEventId: string;
   stripePaymentIntentId: string;
+  currency: string;
   platformFeeCents: number;
   sharePct: number;
   partnerShareCents: number;
+  destinationStripeAccountId: string;
+  transferGroup?: string;
   stripeTransferId?: string;
+  status: 'created' | 'failed';
+  error?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -23,10 +28,15 @@ const partnerEarningSchema = new Schema<IPartnerEarning>(
     propertyId: { type: Schema.Types.ObjectId, ref: 'Property', required: true, index: true },
     stripeEventId: { type: String, required: true },
     stripePaymentIntentId: { type: String, required: true },
+    currency: { type: String, required: true },
     platformFeeCents: { type: Number, required: true },
     sharePct: { type: Number, required: true },
     partnerShareCents: { type: Number, required: true },
+    destinationStripeAccountId: { type: String, required: true },
+    transferGroup: { type: String },
     stripeTransferId: { type: String },
+    status: { type: String, enum: ['created', 'failed'], required: true, default: 'created' },
+    error: { type: String },
   },
   { timestamps: true },
 );

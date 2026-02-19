@@ -22,6 +22,7 @@
     "import:tensioned-geojson": "ts-node scripts/import_tensioned_geojson.ts",
     "seed:rental-public-demo": "ts-node scripts/seed_rental_public_demo.ts",
     "system-events:cleanup": "ts-node scripts/system_events_cleanup.ts",
+    "partner-earnings:retry": "ts-node scripts/retry_partner_earnings.ts",
     "test:policies": "jest --runInBand --testPathPattern=\"tests/(policies|contracts|escrow)/.*policy.*\\.test\\.ts\""
   },
   "dependencies": {

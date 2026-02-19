@@ -51,6 +51,7 @@ import meRoutes from './routes/me.routes';
 import taxReportRoutes from './routes/taxReport.routes';
 import aiRoutes from './routes/ai.routes';
 import assistantRoutes from './routes/assistant.routes';
+import agencyRoutes from './routes/agency.routes';
 
 import helmet from 'helmet';
 import hpp from 'hpp';
@@ -284,6 +285,7 @@ app.use('/api/ai', authenticate, requireVerified, aiRoutes);
 app.use('/api/assistant', authenticate, requireVerified, assistantRoutes);
 // Contract-specific payments under /api/contracts require verificación
 app.use('/api/contracts', authenticate, requireVerified, contractPaymentsRoutes);
+app.use('/api/agency', authenticate, requireVerified, agencyRoutes);
 app.use('/api', paymentsRoutes);
 app.use('/api', authenticate, requireVerified, connectRoutes);
 app.use('/api', requireVerified, serviceOfferRoutes);

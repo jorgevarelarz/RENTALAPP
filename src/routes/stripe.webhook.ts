@@ -19,6 +19,7 @@ import { ensureDirectConversation } from '../utils/ensureDirectConversation';
 import { RentPayment } from '../models/rentPayment.model';
 import { PartnerEarning } from '../models/partnerEarning.model';
 import { Property } from '../models/property.model';
+import { calcPartnerShareCents, getAgencySharePctFromEnv, parsePositiveInt } from '../utils/partnerEarnings';
 
 const r = Router();
 
@@ -36,21 +37,6 @@ async function ensureContractConversation(contractId: string): Promise<string> {
   return conv.id;
 }
 
-function parsePositiveInt(value: unknown): number | undefined {
-  const n = typeof value === 'number' ? value : typeof value === 'string' ? Number(value) : NaN;
-  if (!Number.isFinite(n)) return undefined;
-  const i = Math.floor(n);
-  return i > 0 ? i : undefined;
-}
-
-function getAgencySharePct(): number {
-  const raw = process.env.AGENCY_RENT_FEE_SHARE_PCT;
-  const parsed = raw ? Number(raw) : 20;
-  if (!Number.isFinite(parsed)) return 20;
-  // Clamp to avoid accidental huge payouts.
-  return Math.max(0, Math.min(100, Math.floor(parsed)));
-}
-
 async function maybePayAgencyRentFeeShare(params: {
   eventId: string;
   intent: Stripe.PaymentIntent;
@@ -66,14 +52,15 @@ async function maybePayAgencyRentFeeShare(params: {
   const rentFeeCents = parsePositiveInt((md as any).rentFeeCents);
   if (!rentFeeCents) return;
 
-  const sharePct = getAgencySharePct();
+  const sharePct = getAgencySharePctFromEnv();
   if (sharePct <= 0) return;
 
-  const partnerShareCents = Math.floor((rentFeeCents * sharePct) / 100);
+  const partnerShareCents = calcPartnerShareCents(rentFeeCents, sharePct);
   if (partnerShareCents <= 0) return;
 
   const existing = await PartnerEarning.findOne({ stripeEventId: eventId, kind: 'rent_fee_share' }).lean();
-  if (existing) return;
+  if (existing?.stripeTransferId) return;
+  if (existing?.status === 'failed') return;
 
   const contract = await Contract.findById(contractIdStr).select('agencyId property').lean();
   if (!contract) return;
@@ -90,36 +77,77 @@ async function maybePayAgencyRentFeeShare(params: {
   if (!agency?.stripeAccountId) return;
 
   // Stripe idempotency protects against duplicate transfers on webhook retry.
+  const transferGroup = `contract:${contractIdStr}`;
+  const currency = intent.currency || 'eur';
+  const destinationStripeAccountId = agency.stripeAccountId;
   const idempotencyKey = `partner_earning:rent_fee_share:${eventId}`;
-  const transfer = await stripe.transfers.create(
-    {
-      amount: partnerShareCents,
-      currency: intent.currency || 'eur',
-      destination: agency.stripeAccountId,
-      transfer_group: `contract:${contractIdStr}`,
-      metadata: {
-        kind: 'rent_fee_share',
-        contractId: contractIdStr,
-        stripePaymentIntentId: intent.id,
-        sharePct: String(sharePct),
-        platformFeeCents: String(rentFeeCents),
-      },
-    },
-    { idempotencyKey },
-  );
 
-  await PartnerEarning.create({
-    kind: 'rent_fee_share',
-    agencyId: new Types.ObjectId(String(agencyId)),
-    contractId: new Types.ObjectId(contractIdStr),
-    propertyId: new Types.ObjectId(String(propertyId)),
-    stripeEventId: eventId,
-    stripePaymentIntentId: intent.id,
-    platformFeeCents: rentFeeCents,
-    sharePct,
-    partnerShareCents,
-    stripeTransferId: transfer.id,
-  });
+  try {
+    const transfer = await stripe.transfers.create(
+      {
+        amount: partnerShareCents,
+        currency,
+        destination: destinationStripeAccountId,
+        transfer_group: transferGroup,
+        metadata: {
+          kind: 'rent_fee_share',
+          contractId: contractIdStr,
+          stripePaymentIntentId: intent.id,
+          sharePct: String(sharePct),
+          platformFeeCents: String(rentFeeCents),
+        },
+      },
+      { idempotencyKey },
+    );
+
+    await PartnerEarning.create({
+      kind: 'rent_fee_share',
+      agencyId: new Types.ObjectId(String(agencyId)),
+      contractId: new Types.ObjectId(contractIdStr),
+      propertyId: new Types.ObjectId(String(propertyId)),
+      stripeEventId: eventId,
+      stripePaymentIntentId: intent.id,
+      currency,
+      platformFeeCents: rentFeeCents,
+      sharePct,
+      partnerShareCents,
+      destinationStripeAccountId,
+      transferGroup,
+      stripeTransferId: transfer.id,
+      status: 'created',
+    });
+  } catch (e: any) {
+    // Controlled retry: mark failed and continue (no infinite Stripe webhook retries).
+    // Use an update to tolerate races; unique index enforces one doc per event.
+    const errorMsg = String(e?.message || 'transfer_failed');
+    await PartnerEarning.updateOne(
+      { stripeEventId: eventId, kind: 'rent_fee_share' },
+      {
+        $setOnInsert: {
+          kind: 'rent_fee_share',
+          agencyId: new Types.ObjectId(String(agencyId)),
+          contractId: new Types.ObjectId(contractIdStr),
+          propertyId: new Types.ObjectId(String(propertyId)),
+          stripeEventId: eventId,
+          stripePaymentIntentId: intent.id,
+          currency,
+          platformFeeCents: rentFeeCents,
+          sharePct,
+          partnerShareCents,
+          destinationStripeAccountId,
+          transferGroup,
+        },
+        $set: { status: 'failed', error: errorMsg },
+      },
+      { upsert: true },
+    );
+    console.error('[partner_earning] transfer failed', {
+      eventId,
+      paymentIntentId: intent.id,
+      contractId: contractIdStr,
+      error: errorMsg,
+    });
+  }
 }
 
 r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
@@ -252,16 +280,7 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
         }
 
         // Partner/agency earnings: share a % of platform rent fee via Stripe Connect transfer.
-        try {
-          await maybePayAgencyRentFeeShare({ eventId: event.id, intent });
-        } catch (e: any) {
-          console.error('Error processing agency rent fee share:', {
-            eventId: event.id,
-            paymentIntentId: intent.id,
-            message: e?.message,
-          });
-          throw e;
-        }
+        await maybePayAgencyRentFeeShare({ eventId: event.id, intent });
         if (offerId) {
           const offer = await ServiceOffer.findById(offerId);
           if (offer) {
