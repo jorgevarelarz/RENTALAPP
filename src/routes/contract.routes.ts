@@ -22,7 +22,7 @@ router.get('/earnings/export', ...assertRole('landlord'), contractController.exp
 // Crear contrato
 router.post(
   '/',
-  ...assertRole('landlord', 'admin'),
+  ...assertRole('landlord', 'admin', 'agency'),
   requirePolicies(REQUIRED_POLICIES),
   contractController.create
 );

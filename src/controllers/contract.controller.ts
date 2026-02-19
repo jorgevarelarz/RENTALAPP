@@ -97,10 +97,20 @@ export async function create(req: Request, res: Response) {
   }
 
   try {
+    const actor: any = req.user;
+    const actorIdRaw = actor?._id ?? actor?.id;
+    const isAgency = actor?.role === 'agency';
+
+    let agencyIdToAttach: any = undefined;
+    if (isAgency && actorIdRaw) {
+      agencyIdToAttach = actorIdRaw;
+    }
+
     const contract = await Contract.create({
       landlord: data.landlord,
       tenant: data.tenant,
       property: data.property,
+      agencyId: agencyIdToAttach,
       region: data.region,
       rent: data.rent,
       deposit: data.deposit,
@@ -1074,7 +1084,18 @@ export const listContracts = async (req: Request, res: Response) => {
     if (!user) {
       return res.status(403).json({ error: 'No autorizado' });
     }
-    if (user.role !== 'admin') {
+    if (user.role === 'agency') {
+      // Agencies can only see contracts for properties they still manage (pre-handoff).
+      const managedProperties = await Property.find({
+        agencyId: user.id,
+        agencyAccess: 'manage',
+      })
+        .select('_id')
+        .lean();
+      const ids = managedProperties.map(p => p._id);
+      q.property = { $in: ids.length ? ids : [new Types.ObjectId('000000000000000000000000')] };
+      q.agencyId = user.id;
+    } else if (user.role !== 'admin') {
       q.$or = [{ landlord: user.id }, { tenant: user.id }];
     }
 
@@ -1150,6 +1171,17 @@ export const getContract = async (req: Request, res: Response) => {
       .populate({ path: 'tenant', select: 'name email ratingAvg reviewCount' })
       .lean();
     if (!c) return res.status(404).json({ error: 'Contrato no encontrado' });
+
+    if (user.role === 'agency') {
+      const property: any = (c as any).property;
+      const managesStill =
+        property?.agencyAccess === 'manage' &&
+        String(property?.agencyId || '') === String(user.id) &&
+        String((c as any).agencyId || '') === String(user.id);
+      if (!managesStill) {
+        return res.status(403).json({ error: 'forbidden' });
+      }
+    }
 
     const getId = (value: any) => {
       if (value && typeof value === 'object' && '_id' in value) {

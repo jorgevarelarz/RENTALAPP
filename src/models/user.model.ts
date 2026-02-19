@@ -88,6 +88,7 @@ const userSchema = new Schema(
      *  - tenant: standard renter of properties.
      *  - landlord: owner of one or more properties.
      *  - admin: platform administrator with elevated privileges.
+     *  - agency: real-estate agency (partner) that can list/manage properties on behalf of owners.
      *  - institution_viewer: government/public-sector read-only access.
      *
      * Additional roles can be added here as the system evolves, e.g. for
@@ -95,7 +96,7 @@ const userSchema = new Schema(
      */
     role: {
       type: String,
-      enum: ['landlord', 'tenant', 'admin', 'pro', 'institution_viewer'],
+      enum: ['landlord', 'tenant', 'admin', 'pro', 'agency', 'institution_viewer'],
       required: true,
     },
     ratingAvg: { type: Number, default: 0 },

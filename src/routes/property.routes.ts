@@ -10,10 +10,11 @@ import { requireVerified } from '../middleware/requireVerified';
 
 const r = Router();
 
-r.post('/properties', ...assertRole('landlord', 'admin'), validate(propertyCreateSchema), asyncHandler(ctrl.create));
-r.put('/properties/:id', ...assertRole('landlord', 'admin'), validate(propertyUpdateSchema), asyncHandler(ctrl.update));
-r.post('/properties/:id/publish', ...assertRole('landlord', 'admin'), asyncHandler(ctrl.publish));
-r.post('/properties/:id/archive', ...assertRole('landlord', 'admin'), asyncHandler(ctrl.archive));
+r.post('/properties', ...assertRole('landlord', 'admin', 'agency'), validate(propertyCreateSchema), asyncHandler(ctrl.create));
+r.put('/properties/:id', ...assertRole('landlord', 'admin', 'agency'), validate(propertyUpdateSchema), asyncHandler(ctrl.update));
+r.post('/properties/:id/publish', ...assertRole('landlord', 'admin', 'agency'), asyncHandler(ctrl.publish));
+r.post('/properties/:id/archive', ...assertRole('landlord', 'admin', 'agency'), asyncHandler(ctrl.archive));
+r.post('/properties/:id/handoff', ...assertRole('agency', 'admin'), asyncHandler(ctrl.handoffToOwner));
 
 r.post(
   '/properties/:id/favorite',

@@ -97,6 +97,12 @@ export async function create(req: Request, res: Response) {
   const b: any = req.body;
   const coords: [number, number] = [b.location.lng, b.location.lat];
   const payload: any = { ...b, location: { type: 'Point', coordinates: coords }, status: 'draft' };
+  const user: any = req.user;
+  const userId = user?._id ?? user?.id;
+  if (user?.role === 'agency' && userId) {
+    payload.agencyId = userId;
+    payload.agencyAccess = 'manage';
+  }
   if (payload.onlyTenantPro && (!payload.requiredTenantProMaxRent || payload.requiredTenantProMaxRent === 0)) {
     payload.requiredTenantProMaxRent = payload.price;
   }
@@ -113,7 +119,13 @@ export async function update(req: Request, res: Response) {
   const isAdmin = user?.role === 'admin';
   const ownerId = (prev as any).owner?._id ?? prev.owner;
   const isOwner = userId ? String(userId) === String(ownerId) : false;
-  if (!isAdmin && !isOwner) {
+  const isAgencyManager =
+    user?.role === 'agency' &&
+    prev.agencyAccess === 'manage' &&
+    userId &&
+    prev.agencyId &&
+    String(prev.agencyId) === String(userId);
+  if (!isAdmin && !isOwner && !isAgencyManager) {
     return res.status(403).json({ error: 'forbidden' });
   }
 
@@ -123,6 +135,9 @@ export async function update(req: Request, res: Response) {
   delete b.createdBy;
   delete b.createdAt;
   delete b.updatedAt;
+  delete b.agencyId;
+  delete b.agencyAccess;
+  delete b.agencyTransferredAt;
   if (!isAdmin) delete b.status;
   if (b.location) b.location = { type: 'Point', coordinates: [b.location.lng, b.location.lat] };
 
@@ -174,7 +189,13 @@ export async function publish(req: Request, res: Response) {
   const userId = user?._id ?? user?.id;
   const isOwner = userId ? String(userId) === String(p.owner) : false;
   const isAdmin = user?.role === 'admin';
-  if (!isAdmin && (!isOwner || !user?.isVerified)) {
+  const isAgencyManager =
+    user?.role === 'agency' &&
+    p.agencyAccess === 'manage' &&
+    userId &&
+    p.agencyId &&
+    String(p.agencyId) === String(userId);
+  if (!isAdmin && !isAgencyManager && (!isOwner || !user?.isVerified)) {
     return res.status(403).json({ error: 'owner_not_verified' });
   }
   if ((p.images?.length || 0) < 3) return res.status(400).json({ error: 'min_images_3' });
@@ -196,12 +217,39 @@ export async function archive(req: Request, res: Response) {
   const isAdmin = user?.role === 'admin';
   const ownerId = (p as any).owner?._id ?? p.owner;
   const isOwner = userId ? String(userId) === String(ownerId) : false;
-  if (!isAdmin && !isOwner) {
+  const isAgencyManager =
+    user?.role === 'agency' &&
+    p.agencyAccess === 'manage' &&
+    userId &&
+    p.agencyId &&
+    String(p.agencyId) === String(userId);
+  if (!isAdmin && !isOwner && !isAgencyManager) {
     return res.status(403).json({ error: 'forbidden' });
   }
   p.status = 'archived';
   await p.save();
   res.json({ _id: p._id, status: p.status });
+}
+
+export async function handoffToOwner(req: Request, res: Response) {
+  const p = await Property.findById(req.params.id);
+  if (!p) return res.status(404).json({ error: 'not_found' });
+  const user: any = req.user;
+  const userId = user?._id ?? user?.id;
+  const isAdmin = user?.role === 'admin';
+  const isAgencyOwner =
+    user?.role === 'agency' &&
+    userId &&
+    p.agencyId &&
+    String(p.agencyId) === String(userId);
+  if (!isAdmin && !isAgencyOwner) {
+    return res.status(403).json({ error: 'forbidden' });
+  }
+
+  p.agencyAccess = 'status_only';
+  p.agencyTransferredAt = new Date();
+  await p.save();
+  res.json({ ok: true, propertyId: String(p._id), agencyAccess: p.agencyAccess, transferredAt: p.agencyTransferredAt });
 }
 
 export async function getById(req: Request, res: Response) {

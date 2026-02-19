@@ -7,6 +7,7 @@ export interface IContract extends Document {
   landlord: Types.ObjectId;
   tenant: Types.ObjectId;
   property: Types.ObjectId;
+  agencyId?: Types.ObjectId;
   rent: number;
   rentAmount?: number;
   currency?: string;
@@ -90,6 +91,7 @@ const contractSchema = new Schema<IContract>(
     landlord: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     tenant: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     property: { type: Schema.Types.ObjectId, ref: 'Property', required: true },
+    agencyId: { type: Schema.Types.ObjectId, ref: 'User' },
     rent: { type: Number, required: true },
     rentAmount: { type: Number },
     currency: { type: String, default: 'EUR' },
@@ -194,5 +196,6 @@ contractSchema.index({ updatedAt: -1 });
 contractSchema.index({ 'signature.status': 1 });
 contractSchema.index({ landlord: 1 });
 contractSchema.index({ tenant: 1 });
+contractSchema.index({ agencyId: 1 });
 
 export const Contract = model<IContract>('Contract', contractSchema);

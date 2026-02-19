@@ -3,6 +3,13 @@ import { Schema, model } from 'mongoose';
 const propertySchema = new Schema(
   {
     owner: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
+    agencyId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    agencyAccess: {
+      type: String,
+      enum: ['manage', 'status_only'],
+      default: 'manage',
+    },
+    agencyTransferredAt: { type: Date },
     title: { type: String, required: true, maxlength: 120 },
     description: { type: String, maxlength: 8000 },
     address: { type: String, required: true },
@@ -42,5 +49,6 @@ const propertySchema = new Schema(
 propertySchema.index({ location: '2dsphere' });
 propertySchema.index({ city: 1, price: 1 });
 propertySchema.index({ region: 1, status: 1 });
+propertySchema.index({ agencyId: 1, agencyAccess: 1 });
 
 export const Property = model('Property', propertySchema);
