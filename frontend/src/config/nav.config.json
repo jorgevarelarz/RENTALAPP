@@ -1,6 +1,7 @@
 {
   "general": [
-    { "label": "Conversaciones", "path": "/inbox" }
+    { "label": "Conversaciones", "path": "/inbox" },
+    { "label": "Asistente", "path": "/assistant" }
   ],
   "tenant": [
     { "label": "Inicio", "path": "/tenant" },

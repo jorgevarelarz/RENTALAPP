@@ -55,6 +55,7 @@ import ProfilePage from "./pages/profile/ProfilePage";
 import ProList from "./pages/ProList";
 import ProDetail from "./pages/ProDetail";
 import ContractDetail from "./pages/ContractDetail";
+import AssistantPage from "./pages/Assistant";
 
 export default function AppRoutes() {
   return (
@@ -70,6 +71,7 @@ export default function AppRoutes() {
             <Route path="/properties/:id" element={<PropertyDetail />} />
             <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
             <Route path="/inbox/:userId" element={<ProtectedRoute><ChatDirectPage /></ProtectedRoute>} />
+            <Route path="/assistant" element={<ProtectedRoute><AssistantPage /></ProtectedRoute>} />
             <Route path="/tenant" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantHome /></RoleGuard></ProtectedRoute>} />
             <Route path="/tenant/payments" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantPayments /></RoleGuard></ProtectedRoute>} />
             <Route path="/tenant/applications" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantApplications /></RoleGuard></ProtectedRoute>} />

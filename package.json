@@ -26,6 +26,7 @@
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.650.0",
+    "@google/generative-ai": "^0.24.1",
     "@types/archiver": "^6.0.4",
     "archiver": "^7.0.1",
     "bcryptjs": "^2.4.3",

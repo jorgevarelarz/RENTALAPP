@@ -44,10 +44,13 @@ import institutionRoutes from './routes/institution.routes';
 import { purgeOldTenantProDocs } from './jobs/tenantProRetention';
 import { startContractActivationJob } from './jobs/contractActivation.job';
 import { startRentGenerationJob } from './jobs/rentGeneration.job';
+import { startLauUpdateJob } from './jobs/lauUpdate.job';
 import applicationsRoutes from './routes/applications.routes';
 import invitesRoutes from './routes/invites.routes';
 import meRoutes from './routes/me.routes';
 import taxReportRoutes from './routes/taxReport.routes';
+import aiRoutes from './routes/ai.routes';
+import assistantRoutes from './routes/assistant.routes';
 
 import helmet from 'helmet';
 import hpp from 'hpp';
@@ -140,6 +143,7 @@ app.use(metricsMiddleware);
 if (process.env.NODE_ENV !== 'test') {
   startContractActivationJob();
   startRentGenerationJob();
+  startLauUpdateJob();
 }
 
 if (process.env.NODE_ENV !== 'test') {
@@ -276,6 +280,8 @@ app.use('/api/pros', requireVerified, proRoutes);
 app.use('/api/tickets', authenticate, requireVerified, ticketRoutes);
 app.use('/api/reviews', requireVerified, reviewRoutes);
 app.use('/api/chat', authenticate, requireVerified, chatRoutes);
+app.use('/api/ai', authenticate, requireVerified, aiRoutes);
+app.use('/api/assistant', authenticate, requireVerified, assistantRoutes);
 // Contract-specific payments under /api/contracts require verificación
 app.use('/api/contracts', authenticate, requireVerified, contractPaymentsRoutes);
 app.use('/api', paymentsRoutes);
