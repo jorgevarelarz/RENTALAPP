@@ -4,7 +4,7 @@ import { getUserId } from '../utils/getUserId';
 
 /**
  * Middleware that ensures the requesting user has a verified status.
- * The user ID is expected in the `x-user-id` header.
+ * In production, identity must come from the authenticated user payload.
  */
 export const requireVerified = async (
   req: Request,

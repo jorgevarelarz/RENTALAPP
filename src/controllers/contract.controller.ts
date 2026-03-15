@@ -31,7 +31,6 @@ import type { ResolvedClause } from '../services/clauses.service';
 import { generateContractPdfFile } from '../services/pdfGenerator';
 import { evaluateAndPersist } from '../modules/rentalPublic';
 // @ts-ignore
-import SignaturitClient from 'signaturit-sdk';
 import { ensureCanReadContract } from '../utils/contractAccess';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i);
@@ -463,29 +462,29 @@ export const createSigningSession = async (req: Request, res: Response) => {
       depositAmount: contract.deposit ?? (contract as any).depositAmount,
     });
 
-    const client = new SignaturitClient(process.env.SIGNATURIT_TOKEN, true);
-    const response = await client.createSignature(pdfPath, {
-      recipients: [
+    const { requestId, signerLinks } = await signaturitProvider.createSignatureFlow({
+      contractId: String(contract._id),
+      pdfPath,
+      signers: [
         {
+          role: 'tenant',
+          userId: String(tenant?._id || contract.tenant),
           name: tenant?.name || (contract as any).tenantName || 'Inquilino',
           email: tenant?.email || (contract as any).tenantEmail || 'email@test.com',
         },
       ],
-      delivery_type: 'url',
+      returnUrl: process.env.SIGN_REDIRECT_URL || 'https://example.com/signing-complete',
+      webhookUrl: process.env.SIGN_WEBHOOK_URL || 'https://api.example.com/webhook/signature',
     });
 
     await fs.unlink(pdfPath).catch(() => {});
 
-    const signingUrl =
-      (response as any)?.url ||
-      (response as any)?.signing_url ||
-      (response as any)?.signingUrl ||
-      (response as any)?.processed_documents?.[0]?.url;
+    const signingUrl = signerLinks.tenant;
 
     contract.signature = {
       ...(contract.signature || {}),
       provider: 'signaturit' as any,
-      envelopeId: (response as any)?.id || (response as any)?.signature_id,
+      envelopeId: requestId,
       status: 'sent',
       updatedAt: new Date(),
       recipientUrls: { tenantUrl: signingUrl },

@@ -20,8 +20,8 @@ r.post(
   authenticate,
   requirePolicies(REQUIRED_POLICIES),
   asyncHandler(async (req: any, res) => {
-    const userId = req.user?.id ?? req.header('x-user-id');
-    if (!userId) return res.status(400).json({ error: 'missing_user' });
+    const userId = req.user?.id;
+    if (!userId) return res.status(401).json({ error: 'missing_user' });
 
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: 'user_not_found' });

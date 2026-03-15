@@ -11,8 +11,8 @@ const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
 
 r.post('/:id/pay-rent', async (req, res) => {
-  const tenantId = req.header('x-user-id');
-  if (!tenantId) return res.status(400).json({ error: 'Missing x-user-id' });
+  const tenantId = (req as any).user?.id;
+  if (!tenantId) return res.status(401).json({ error: 'unauthorized' });
 
   const { method, paymentMethodId } = req.body || {};
   if (!['sepa_debit', 'card', 'bizum'].includes(method)) return res.status(400).json({ error: 'invalid_method' });

@@ -29,13 +29,17 @@ export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'co
   };
 
   useEffect(() => {
+    let alive = true;
+
     (async () => {
       if (!refId) return;
       const conv = await ensureConversation(kind, refId);
+      if (!alive) return;
       setConversationId(conv._id);
       const other = conv.participantsInfo?.find(p => p.id !== String(myId));
       setParticipantName(other?.name || 'Conversación');
       const msgs = await getMessages(conv._id, { limit: 50 });
+      if (!alive) return;
       // backend devuelve descendente; mostramos ascendente
       setMessages(msgs.slice().reverse());
       // scroll bottom
@@ -43,7 +47,11 @@ export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'co
       // marca como leído para el usuario actual
       try { await markRead(conv._id); } catch {}
     })();
-  }, [kind, refId]);
+
+    return () => {
+      alive = false;
+    };
+  }, [kind, refId, myId]);
 
   const onSend = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -109,10 +117,10 @@ export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'co
         </div>
         <button
           onClick={loadMore}
-          disabled={loadingMore || !messages.length}
+          disabled={loadingMore || uploading || !messages.length}
           className="rounded-md border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
         >
-          {loadingMore ? 'Cargando…' : 'Cargar anteriores'}
+          {uploading ? 'Subiendo…' : loadingMore ? 'Cargando…' : 'Cargar anteriores'}
         </button>
       </div>
 
@@ -198,6 +206,7 @@ export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'co
           Enviar
         </button>
       </form>
+      {uploading && <div className="px-4 pb-2 text-xs text-gray-500">Subiendo archivo...</div>}
       {attachmentUrl && (
         <div className="px-4 pb-3 text-xs text-gray-600">
           Adjuntando: {isImageUrl(attachmentUrl) ? (

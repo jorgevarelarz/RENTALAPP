@@ -276,10 +276,10 @@ app.use('/api', applicationsRoutes);
 // Protected routes (verified users)
 app.use('/api/contracts', authenticate, requireVerified, contractRoutes);
 app.use('/api/users', authenticate, requireVerified, userRoutes);
-app.use('/api/pros', requireVerified, proRoutes);
+app.use('/api/pros', authenticate, requireVerified, proRoutes);
 // Tickets necesitan usuario autenticado; permitir bypass de verificación en test si aplica
 app.use('/api/tickets', authenticate, requireVerified, ticketRoutes);
-app.use('/api/reviews', requireVerified, reviewRoutes);
+app.use('/api/reviews', authenticate, requireVerified, reviewRoutes);
 app.use('/api/chat', authenticate, requireVerified, chatRoutes);
 app.use('/api/ai', authenticate, requireVerified, aiRoutes);
 app.use('/api/assistant', authenticate, requireVerified, assistantRoutes);
@@ -288,7 +288,7 @@ app.use('/api/contracts', authenticate, requireVerified, contractPaymentsRoutes)
 app.use('/api/agency', authenticate, requireVerified, agencyRoutes);
 app.use('/api', paymentsRoutes);
 app.use('/api', authenticate, requireVerified, connectRoutes);
-app.use('/api', requireVerified, serviceOfferRoutes);
+app.use('/api', authenticate, requireVerified, serviceOfferRoutes);
 app.use('/api/invites', authenticate, invitesRoutes);
 app.use('/api/me', authenticate, requireVerified, meRoutes);
 app.use('/api', authenticate, requireVerified, taxReportRoutes);

@@ -11,7 +11,7 @@ const r = Router();
 r.post('/', async (req, res) => {
   try {
     const userId = getUserId(req);
-    const { displayName, city, services = [], verified } = req.body || {};
+    const { displayName, city, services = [] } = req.body || {};
 
     if (!displayName || !city) {
       return res.status(400).json({ error: 'displayName and city are required', code: 400 });
@@ -19,7 +19,7 @@ r.post('/', async (req, res) => {
 
     const pro = await Pro.findOneAndUpdate(
       { userId },
-      { $set: { displayName, city, services, verified: !!verified, active: true } },
+      { $set: { displayName, city, services, active: true } },
       { new: true, upsert: true, runValidators: true }
     );
 

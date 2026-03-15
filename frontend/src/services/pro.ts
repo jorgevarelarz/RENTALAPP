@@ -1,12 +1,14 @@
 import { api as axios } from '../api/client';
 
 export const upsertPro = async (token: string, userId: string, data: { displayName: string; city: string; services: { key: string; basePrice?: number }[] }) => {
-  const res = await axios.post(`/api/pros`, data, { headers: { Authorization: `Bearer ${token}`, 'x-user-id': userId } });
+  void userId;
+  const res = await axios.post(`/api/pros`, data, { headers: { Authorization: `Bearer ${token}` } });
   return res.data;
 };
 
 export const getMyPro = async (token: string, userId: string) => {
-  const res = await axios.get(`/api/pros/me`, { headers: { Authorization: `Bearer ${token}`, 'x-user-id': userId } });
+  void userId;
+  const res = await axios.get(`/api/pros/me`, { headers: { Authorization: `Bearer ${token}` } });
   return res.data;
 };
 

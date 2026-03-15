@@ -30,6 +30,34 @@ export default function Payments() {
   const [showPayModal, setShowPayModal] = useState(false);
   const [payData, setPayData] = useState<{ clientSecret: string; amount: number } | null>(null);
 
+  useEffect(() => {
+    let alive = true;
+
+    const loadPayments = async () => {
+      if (!token) {
+        if (alive) setLoading(false);
+        return;
+      }
+      try {
+        setLoading(true);
+        const items = await getPayments(token);
+        if (alive) setPayments(items);
+      } catch (e: any) {
+        if (alive) {
+          push({ title: e?.message || 'No se pudieron cargar los pagos', tone: 'error' });
+        }
+      } finally {
+        if (alive) setLoading(false);
+      }
+    };
+
+    loadPayments();
+
+    return () => {
+      alive = false;
+    };
+  }, [token, push]);
+
   const loadPayments = async () => {
     if (!token) return;
     try {
@@ -42,10 +70,6 @@ export default function Payments() {
       setLoading(false);
     }
   };
-
-  useEffect(() => {
-    loadPayments();
-  }, [token]);
 
   const handlePaymentSuccess = async () => {
     setShowPayModal(false);
