@@ -9,10 +9,11 @@ import LoginPrompt from '../../components/LoginPrompt';
 import { useAuth } from '../../context/AuthContext';
 import EmptyState from '../../components/ui/EmptyState';
 import ErrorCard from '../../components/ui/ErrorCard';
+import type { Property } from '../../types/property';
 
 export default function PropertiesList() {
   const { filters, setFilters } = usePropertyFilters();
-  const { data, isLoading, isFetching } = usePropertiesQuery(filters);
+  const { data, isLoading, isFetching, error } = usePropertiesQuery(filters);
   const [showFilters, setShowFilters] = useState(false);
   const [promptLogin, setPromptLogin] = useState(false);
   const [likedIds, setLikedIds] = useState<Set<string>>(new Set());
@@ -27,7 +28,7 @@ export default function PropertiesList() {
       try {
         const res = await listMyFavorites();
         if (!mounted) return;
-        const next = new Set((res.items || []).map((p: any) => String(p._id)));
+        const next = new Set((res.items || []).map((p) => String(p._id)));
         setLikedIds(next);
       } catch {}
     })();
@@ -49,16 +50,16 @@ export default function PropertiesList() {
   };
 
   const items = useMemo(() => {
-    const raw = ((data?.items as any[]) || []);
-    const filtered = raw.filter((it: any) => (filters as any).onlyTenantPro ? !!it.onlyTenantPro : true);
-    return filtered.map((it: any) => ({
+    const raw = data?.items || [];
+    const filtered = raw.filter((it) => (filters as { onlyTenantPro?: boolean }).onlyTenantPro ? !!it.onlyTenantPro : true);
+    return filtered.map((it): Property => ({
       ...it,
       _liked: likedIds.has(String(it._id)) || !!it._liked,
     }));
   }, [data, filters, likedIds]);
-  const page = (data as any)?.page || 1;
-  const limit = (data as any)?.limit || filters.limit || 12;
-  const total = (data as any)?.total || 0;
+  const page = data?.page || 1;
+  const limit = data?.limit || filters.limit || 12;
+  const total = data?.total || 0;
   const pages = Math.ceil((total || 0) / (limit || 1)) || 1;
 
   return (
@@ -82,8 +83,8 @@ export default function PropertiesList() {
       </div>
       {isLoading ? (
         <SkeletonGrid />
-      ) : (data as any)?.error ? (
-        <ErrorCard message={(data as any)?.error || 'No se pudo cargar el listado'} />
+      ) : error ? (
+        <ErrorCard message={error.message || 'No se pudo cargar el listado'} />
       ) : items.length === 0 ? (
         <EmptyState
           title="No encontramos propiedades con esos filtros"
@@ -93,7 +94,7 @@ export default function PropertiesList() {
       ) : (
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
-            {items.map((property: any) => (
+            {items.map((property) => (
               <PropertyCard key={property._id} p={property} onFavToggle={onFavToggle} />
             ))}
           </div>

@@ -18,6 +18,8 @@
  */
 
 import { MongoClient, ObjectId } from "mongodb";
+import Lead from "../models/lead.model";
+import mongoose from "mongoose";
 
 /* =========================
    CONFIGURACIÓN BÁSICA
@@ -278,6 +280,31 @@ async function main() {
   console.log(
     `db.${COLLECTIONS.users}.deleteMany({ "${USER_EMAIL_FIELD}": "${landlordEmail}" })`
   );
+
+  await mongoose.connect(process.env.MONGO_URL || process.env.MONGO_URI || 'mongodb://localhost:27017/rental-app');
+  await Lead.findOneAndUpdate(
+    { externalLeadId: `beta-owner-${env.SEED_TAG}` },
+    {
+      externalLeadId: `beta-owner-${env.SEED_TAG}`,
+      source: 'seed-beta',
+      leadType: 'OWNER',
+      leadStatus: 'PARTIALLY_QUALIFIED',
+      conversationStage: 'OWNER_DETAILS_PENDING',
+      qualificationScore: 60,
+      nextBestAction: 'Completar datos comerciales del inmueble.',
+      suggestedQuestions: [
+        '¿Es venta o alquiler?',
+        '¿En qué zona está el inmueble?',
+        '¿Cuál es el precio que tienes en mente?',
+      ],
+      lastInboundMessage: 'Tengo un piso y quiero publicarlo.',
+      lastReplyMessage: 'Gracias. Necesitamos algunos datos clave para continuar.',
+      extractedData: {},
+      messageCount: 1,
+    },
+    { upsert: true, new: true },
+  );
+  await mongoose.disconnect();
 
   await client.close();
 }

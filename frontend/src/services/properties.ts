@@ -1,4 +1,10 @@
 import { api as client } from '../api/client';
+import type {
+  Property,
+  PropertyApplication,
+  PropertyFavoritesResponse,
+  PropertyListResponse,
+} from '../types/property';
 
 export type SearchParams = {
   q?: string;
@@ -21,28 +27,28 @@ export type SearchParams = {
   limit?: number;
 };
 
-export const createProperty = async (token: string, data: any) => {
+export const createProperty = async (token: string, data: Partial<Property>) => {
   const res = await client.post('/api/properties', data, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  return res.data;
+  return res.data as Property;
 };
 
 export const listProperties = async (params: Partial<SearchParams> = {}) => {
   const res = await client.get('/api/properties', { params });
-  const data = res.data;
+  const data = res.data as Property[] | Partial<PropertyListResponse>;
   if (Array.isArray(data)) return data;
-  return (data && Array.isArray(data.items)) ? data.items : [];
+  return Array.isArray(data.items) ? data.items : [];
 };
 
 export const getProperty = async (id: string) => {
   const res = await client.get(`/api/properties/${id}`);
-  return res.data;
+  return res.data as Property;
 };
 
 export async function searchProperties(params: SearchParams = {}) {
   const { data } = await client.get('/api/properties', { params });
-  return data as { items: any[]; page: number; limit: number; total: number };
+  return data as PropertyListResponse;
 }
 
 export async function favoriteProperty(id: string) {
@@ -69,20 +75,14 @@ export async function applyToProperty(id: string) {
 }
 
 export interface Application {
-  _id: string;
-  tenant: {
-    _id: string;
-    name: string;
-    email: string;
-    avatar?: string;
-    tenantPro?: { status: string };
-  };
-  status: 'pending' | 'proposed' | 'scheduled' | 'rejected';
-  proposedBy?: 'tenant' | 'landlord';
-  proposedDate?: string;
-  visitDate?: string;
-  createdAt: string;
-  message?: string;
+  _id: PropertyApplication['_id'];
+  tenant: PropertyApplication['tenant'];
+  status: PropertyApplication['status'];
+  proposedBy?: PropertyApplication['proposedBy'];
+  proposedDate?: PropertyApplication['proposedDate'];
+  visitDate?: PropertyApplication['visitDate'];
+  createdAt: PropertyApplication['createdAt'];
+  message?: PropertyApplication['message'];
 }
 
 export async function getPropertyApplications(propertyId: string) {
@@ -92,5 +92,5 @@ export async function getPropertyApplications(propertyId: string) {
 
 export async function listMyFavorites() {
   const res = await client.get('/api/properties/favorites');
-  return res.data as { items: any[] };
+  return res.data as PropertyFavoritesResponse;
 }

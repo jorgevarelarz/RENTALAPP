@@ -1,36 +1,39 @@
 import React from 'react';
 import { act, render } from '@testing-library/react';
+import { Mock, vi } from 'vitest';
 
 // Mock router param id
-jest.mock('react-router-dom', () => ({
+vi.mock('react-router-dom', () => ({
   useParams: () => ({ id: (global as any).__mockId || 'c1' }),
 }), { virtual: true });
 
 // Mock AuthContext with configurable user
-jest.mock('../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: () => (global as any).__mockAuth || { token: 't', user: null },
 }));
 
 // Mock ToastContext to avoid provider
-jest.mock('../../context/ToastContext', () => ({
-  useToast: () => ({ push: jest.fn(), remove: jest.fn(), toasts: [] }),
+vi.mock('../../context/ToastContext', () => ({
+  useToast: () => ({ push: vi.fn(), remove: vi.fn(), toasts: [] }),
 }));
 
 // Avoid importing real axios (ESM) via api/client
-jest.mock('axios', () => {
-  const axiosMock: any = { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() };
-  axiosMock.create = jest.fn(() => axiosMock);
+vi.mock('axios', () => {
+  const axiosMock: any = { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() };
+  axiosMock.create = vi.fn(() => axiosMock);
   return { __esModule: true, default: axiosMock };
 }, { virtual: true });
 
 // Stub ChatPanel to avoid deep imports
-jest.mock('../../components/ChatPanel', () => () => <div data-testid="chat" />);
+vi.mock('../../components/ChatPanel', () => ({
+  default: () => <div data-testid="chat" />,
+}));
 
 // Mock services used by the page
-jest.mock('../../services/contracts', () => ({
+vi.mock('../../services/contracts', () => ({
   __esModule: true,
-  getContract: jest.fn(),
-  createSignSession: jest.fn(),
+  getContract: vi.fn(),
+  createSignSession: vi.fn(),
 }));
 
 import ContractDetail from '../ContractDetail';
@@ -48,19 +51,19 @@ const flushPromises = async () => {
 
 describe('ContractDetail polling', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
-    jest.useFakeTimers();
+    vi.resetAllMocks();
+    vi.useFakeTimers();
     (global as any).__mockAuth = { token: 't', user: null };
     (global as any).__mockId = 'c1';
   });
 
   afterEach(() => {
-    jest.useRealTimers();
+    vi.useRealTimers();
   });
 
   it('no hace polling automatico', async () => {
     setAuth({ _id: 'u1', role: 'landlord' });
-    (contracts.getContract as jest.Mock).mockResolvedValue({
+    (contracts.getContract as Mock).mockResolvedValue({
       _id: 'c1',
       landlord: 'u1',
       status: 'pending_signature',
@@ -75,20 +78,20 @@ describe('ContractDetail polling', () => {
     render(<ContractDetail />);
     await flushPromises();
 
-    const initialCalls = (contracts.getContract as jest.Mock).mock.calls.length;
+    const initialCalls = (contracts.getContract as Mock).mock.calls.length;
     expect(initialCalls).toBeGreaterThan(0);
 
     await act(async () => {
-      jest.advanceTimersByTime(10000);
+      vi.advanceTimersByTime(10000);
     });
     await flushPromises();
 
-    expect((contracts.getContract as jest.Mock).mock.calls.length).toBe(initialCalls);
+    expect((contracts.getContract as Mock).mock.calls.length).toBe(initialCalls);
   });
 
   it('mantiene una sola carga aunque avance el tiempo', async () => {
     setAuth({ _id: 'u2', role: 'tenant' });
-    (contracts.getContract as jest.Mock).mockResolvedValue({
+    (contracts.getContract as Mock).mockResolvedValue({
       _id: 'c1',
       tenant: 'u2',
       status: 'active',
@@ -103,14 +106,14 @@ describe('ContractDetail polling', () => {
     render(<ContractDetail />);
     await flushPromises();
 
-    const initialCalls = (contracts.getContract as jest.Mock).mock.calls.length;
+    const initialCalls = (contracts.getContract as Mock).mock.calls.length;
     expect(initialCalls).toBeGreaterThan(0);
 
     await act(async () => {
-      jest.advanceTimersByTime(16000);
+      vi.advanceTimersByTime(16000);
     });
     await flushPromises();
 
-    expect((contracts.getContract as jest.Mock).mock.calls.length).toBe(initialCalls);
+    expect((contracts.getContract as Mock).mock.calls.length).toBe(initialCalls);
   });
 });

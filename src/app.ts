@@ -52,6 +52,7 @@ import taxReportRoutes from './routes/taxReport.routes';
 import aiRoutes from './routes/ai.routes';
 import assistantRoutes from './routes/assistant.routes';
 import agencyRoutes from './routes/agency.routes';
+import testingInboundRoutes from './routes/testingInbound.routes';
 
 import helmet from 'helmet';
 import hpp from 'hpp';
@@ -258,6 +259,7 @@ app.get('/connect/refresh', (_req, res) => {
 });
 
 // Public routes
+app.use('/api', testingInboundRoutes);
 app.use('/api/auth', authRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/kyc', identityRoutes);

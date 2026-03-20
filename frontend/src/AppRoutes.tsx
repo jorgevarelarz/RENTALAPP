@@ -1,251 +1,145 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
-import AppShell from "./layout/AppShell";
-import PublicLayout from "./layout/PublicLayout";
-import LoginPage from "./pages/auth/LoginPage";
-import ForgotPassword from "./pages/auth/ForgotPassword";
-import ResetPassword from "./pages/auth/ResetPassword";
-import RegisterPage from "./pages/auth/RegisterPage";
-import ForbiddenPage from "./pages/system/ForbiddenPage";
-import PropertiesList from "./pages/properties/PropertiesList";
-import PropertyDetail from "./pages/properties/PropertyDetail";
-import FavoritesPage from "./pages/properties/FavoritesPage";
-import ContractWizard from "./pages/contracts/ContractWizard";
 import ProtectedRoute from "./components/ProtectedRoute";
 import RoleGuard from "./components/RoleGuard";
-import Inbox from "./pages/Inbox";
-import ChatDirectPage from "./pages/ChatDirect";
-import TicketsList from "./pages/tickets/TicketsList";
-import TicketCreatePage from "./pages/tickets/TicketCreatePage";
-import TicketDetail from "./pages/tickets/TicketDetail";
-import AdminTenantProPage from "./pages/admin/AdminTenantProPage";
-import AdminUsersPage from "./pages/admin/AdminUsersPage";
-import AdminPropertiesPage from "./pages/admin/AdminPropertiesPage";
-import AdminReports from "./pages/admin/Reports";
-import AdminIncidents from "./pages/admin/Incidents";
-import AdminSettings from "./pages/admin/Settings";
-import AdminPayments from "./pages/admin/Payments";
-import AdminCompliancePage from "./pages/admin/AdminCompliancePage";
-import ComplianceDashboard from "./pages/admin/ComplianceDashboard";
-import TensionedAreas from "./pages/admin/TensionedAreas";
-import SystemEvents from "./pages/admin/SystemEvents";
-import AdminAuditDashboard from "./pages/admin/AdminAuditDashboard";
-import RedirectHome from "./pages/RedirectHome";
-import MyContracts from "./pages/MyContracts";
-import LandlordDashboard from "./pages/LandlordDashboard";
-import ProDashboard from "./pages/ProDashboard";
-import Earnings from "./pages/Earnings";
-import TenantProPage from "./pages/TenantProPage";
+import AppShell from "./layout/AppShell";
+import PublicLayout from "./layout/PublicLayout";
 import AuthLayout from "./layout/AuthLayout";
-import ServiceUpsell from "./features/postsign/ServiceUpsell";
-import TenantHome from "./pages/tenant/TenantHome";
-import AdminHome from "./pages/admin/AdminHome";
-import TenantPayments from "./pages/tenant/Payments";
-import TenantApplications from "./pages/tenant/Applications";
-import TenantKyc from "./pages/tenant/Kyc";
-import LandlordPayments from "./pages/landlord/Payments";
-import LandlordIssues from "./pages/landlord/Issues";
-import LandlordServices from "./pages/landlord/Services";
-import LandlordShowings from "./pages/landlord/Showings";
-import ProProfile from "./pages/pro/Profile";
-import ProQuotes from "./pages/pro/Quotes";
-import ProBilling from "./pages/pro/Billing";
-import ProfilePage from "./pages/profile/ProfilePage";
-import ProList from "./pages/ProList";
-import ProDetail from "./pages/ProDetail";
-import ContractDetail from "./pages/ContractDetail";
-import AssistantPage from "./pages/Assistant";
+
+type UserRole = "tenant" | "landlord" | "pro" | "admin";
+
+const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
+const ForgotPassword = lazy(() => import("./pages/auth/ForgotPassword"));
+const ResetPassword = lazy(() => import("./pages/auth/ResetPassword"));
+const RegisterPage = lazy(() => import("./pages/auth/RegisterPage"));
+const ForbiddenPage = lazy(() => import("./pages/system/ForbiddenPage"));
+const PropertiesList = lazy(() => import("./pages/properties/PropertiesList"));
+const PropertyDetail = lazy(() => import("./pages/properties/PropertyDetail"));
+const FavoritesPage = lazy(() => import("./pages/properties/FavoritesPage"));
+const ContractWizard = lazy(() => import("./pages/contracts/ContractWizard"));
+const Inbox = lazy(() => import("./pages/Inbox"));
+const ChatDirectPage = lazy(() => import("./pages/ChatDirect"));
+const TicketsList = lazy(() => import("./pages/tickets/TicketsList"));
+const TicketCreatePage = lazy(() => import("./pages/tickets/TicketCreatePage"));
+const TicketDetail = lazy(() => import("./pages/tickets/TicketDetail"));
+const AdminTenantProPage = lazy(() => import("./pages/admin/AdminTenantProPage"));
+const AdminUsersPage = lazy(() => import("./pages/admin/AdminUsersPage"));
+const AdminPropertiesPage = lazy(() => import("./pages/admin/AdminPropertiesPage"));
+const AdminReports = lazy(() => import("./pages/admin/Reports"));
+const AdminIncidents = lazy(() => import("./pages/admin/Incidents"));
+const AdminSettings = lazy(() => import("./pages/admin/Settings"));
+const AdminPayments = lazy(() => import("./pages/admin/Payments"));
+const AdminCompliancePage = lazy(() => import("./pages/admin/AdminCompliancePage"));
+const ComplianceDashboard = lazy(() => import("./pages/admin/ComplianceDashboard"));
+const TensionedAreas = lazy(() => import("./pages/admin/TensionedAreas"));
+const SystemEvents = lazy(() => import("./pages/admin/SystemEvents"));
+const AdminAuditDashboard = lazy(() => import("./pages/admin/AdminAuditDashboard"));
+const RedirectHome = lazy(() => import("./pages/RedirectHome"));
+const MyContracts = lazy(() => import("./pages/MyContracts"));
+const LandlordDashboard = lazy(() => import("./pages/LandlordDashboard"));
+const ProDashboard = lazy(() => import("./pages/ProDashboard"));
+const Earnings = lazy(() => import("./pages/Earnings"));
+const TenantProPage = lazy(() => import("./pages/TenantProPage"));
+const ServiceUpsell = lazy(() => import("./features/postsign/ServiceUpsell"));
+const TenantHome = lazy(() => import("./pages/tenant/TenantHome"));
+const AdminHome = lazy(() => import("./pages/admin/AdminHome"));
+const TenantPayments = lazy(() => import("./pages/tenant/Payments"));
+const TenantApplications = lazy(() => import("./pages/tenant/Applications"));
+const TenantKyc = lazy(() => import("./pages/tenant/Kyc"));
+const LandlordPayments = lazy(() => import("./pages/landlord/Payments"));
+const LandlordIssues = lazy(() => import("./pages/landlord/Issues"));
+const LandlordServices = lazy(() => import("./pages/landlord/Services"));
+const LandlordShowings = lazy(() => import("./pages/landlord/Showings"));
+const ProProfile = lazy(() => import("./pages/pro/Profile"));
+const ProQuotes = lazy(() => import("./pages/pro/Quotes"));
+const ProBilling = lazy(() => import("./pages/pro/Billing"));
+const ProfilePage = lazy(() => import("./pages/profile/ProfilePage"));
+const ProList = lazy(() => import("./pages/ProList"));
+const ProDetail = lazy(() => import("./pages/ProDetail"));
+const ContractDetail = lazy(() => import("./pages/ContractDetail"));
+const AssistantPage = lazy(() => import("./pages/Assistant"));
+const InboundTestingPage = lazy(() => import("./pages/testing/InboundTestingPage"));
+
+function RouteFallback() {
+  return <div className="p-6 text-sm text-gray-500">Cargando...</div>;
+}
+
+function withProtected(children: React.ReactElement, roles?: UserRole[]) {
+  const guarded = roles ? <RoleGuard roles={roles}>{children}</RoleGuard> : children;
+  return <ProtectedRoute>{guarded}</ProtectedRoute>;
+}
 
 export default function AppRoutes() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <Routes>
-          <Route element={<PublicLayout />}>
-            <Route path="/" element={<RedirectHome />} />
-          </Route>
+        <Suspense fallback={<RouteFallback />}>
+          <Routes>
+            <Route element={<PublicLayout />}>
+              <Route path="/" element={<RedirectHome />} />
+              <Route path="/testing/inbound" element={<InboundTestingPage />} />
+            </Route>
 
-          <Route element={<AppShell />}>
-            <Route path="/properties" element={<PropertiesList />} />
-            <Route path="/properties/:id" element={<PropertyDetail />} />
-            <Route path="/inbox" element={<ProtectedRoute><Inbox /></ProtectedRoute>} />
-            <Route path="/inbox/:userId" element={<ProtectedRoute><ChatDirectPage /></ProtectedRoute>} />
-            <Route path="/assistant" element={<ProtectedRoute><AssistantPage /></ProtectedRoute>} />
-            <Route path="/tenant" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantHome /></RoleGuard></ProtectedRoute>} />
-            <Route path="/tenant/payments" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantPayments /></RoleGuard></ProtectedRoute>} />
-            <Route path="/tenant/applications" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantApplications /></RoleGuard></ProtectedRoute>} />
-            <Route path="/tenant/kyc" element={<ProtectedRoute><RoleGuard roles={["tenant"]}><TenantKyc /></RoleGuard></ProtectedRoute>} />
-            <Route path="/landlord" element={<ProtectedRoute><RoleGuard roles={["landlord"]}><LandlordDashboard /></RoleGuard></ProtectedRoute>} />
-            <Route path="/landlord/payments" element={<ProtectedRoute><RoleGuard roles={["landlord"]}><LandlordPayments /></RoleGuard></ProtectedRoute>} />
-            <Route path="/landlord/issues" element={<ProtectedRoute><RoleGuard roles={["landlord"]}><LandlordIssues /></RoleGuard></ProtectedRoute>} />
-            <Route path="/landlord/services" element={<ProtectedRoute><RoleGuard roles={["landlord"]}><LandlordServices /></RoleGuard></ProtectedRoute>} />
-            <Route path="/landlord/showings" element={<ProtectedRoute><RoleGuard roles={["landlord"]}><LandlordShowings /></RoleGuard></ProtectedRoute>} />
-            <Route path="/admin" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminHome /></RoleGuard></ProtectedRoute>} />
-            <Route
-              path="/tenant-pro"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard roles={["tenant"]}>
-                    <TenantProPage />
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/contracts"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard roles={["tenant", "landlord", "admin"]}>
-                    <MyContracts />
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/contracts/:id"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard roles={["tenant", "landlord", "admin"]}>
-                    <ContractDetail />
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/contracts/:id/signed" element={<ServiceUpsell />} />
-            <Route
-              path="/me/favorites"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard roles={["tenant", "landlord", "admin"]}>
-                    <FavoritesPage />
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
+            <Route element={<AppShell />}>
+              <Route path="/properties" element={<PropertiesList />} />
+              <Route path="/properties/:id" element={<PropertyDetail />} />
+              <Route path="/inbox" element={withProtected(<Inbox />)} />
+              <Route path="/inbox/:userId" element={withProtected(<ChatDirectPage />)} />
+              <Route path="/assistant" element={withProtected(<AssistantPage />)} />
+              <Route path="/tenant" element={withProtected(<TenantHome />, ["tenant"])} />
+              <Route path="/tenant/payments" element={withProtected(<TenantPayments />, ["tenant"])} />
+              <Route path="/tenant/applications" element={withProtected(<TenantApplications />, ["tenant"])} />
+              <Route path="/tenant/kyc" element={withProtected(<TenantKyc />, ["tenant"])} />
+              <Route path="/landlord" element={withProtected(<LandlordDashboard />, ["landlord"])} />
+              <Route path="/landlord/payments" element={withProtected(<LandlordPayments />, ["landlord"])} />
+              <Route path="/landlord/issues" element={withProtected(<LandlordIssues />, ["landlord"])} />
+              <Route path="/landlord/services" element={withProtected(<LandlordServices />, ["landlord"])} />
+              <Route path="/landlord/showings" element={withProtected(<LandlordShowings />, ["landlord"])} />
+              <Route path="/admin" element={withProtected(<AdminHome />, ["admin"])} />
+              <Route path="/tenant-pro" element={withProtected(<TenantProPage />, ["tenant"])} />
+              <Route path="/contracts" element={withProtected(<MyContracts />, ["tenant", "landlord", "admin"])} />
+              <Route path="/contracts/:id" element={withProtected(<ContractDetail />, ["tenant", "landlord", "admin"])} />
+              <Route path="/contracts/:id/signed" element={<ServiceUpsell />} />
+              <Route path="/me/favorites" element={withProtected(<FavoritesPage />, ["tenant", "landlord", "admin"])} />
+              <Route path="/contracts/new" element={withProtected(<ContractWizard />, ["landlord", "admin"])} />
+              <Route path="/tickets" element={withProtected(<TicketsList />)} />
+              <Route path="/tickets/new" element={withProtected(<TicketCreatePage />, ["tenant", "landlord", "admin"])} />
+              <Route path="/tickets/:id" element={withProtected(<TicketDetail />)} />
+              <Route path="/owner/properties" element={withProtected(<LandlordDashboard />, ["landlord"])} />
+              <Route path="/pro" element={withProtected(<ProDashboard />, ["pro"])} />
+              <Route path="/pro/tickets" element={withProtected(<TicketsList />, ["pro"])} />
+              <Route path="/pro/profile" element={withProtected(<ProProfile />, ["pro"])} />
+              <Route path="/pro/quotes" element={withProtected(<ProQuotes />, ["pro"])} />
+              <Route path="/pro/billing" element={withProtected(<ProBilling />, ["pro"])} />
+              <Route path="/earnings" element={withProtected(<Earnings />, ["admin", "landlord"])} />
+              <Route path="/admin/tenant-pro" element={withProtected(<AdminTenantProPage />, ["admin"])} />
+              <Route path="/admin/users" element={withProtected(<AdminUsersPage />, ["admin"])} />
+              <Route path="/admin/properties" element={withProtected(<AdminPropertiesPage />, ["admin"])} />
+              <Route path="/admin/reports" element={withProtected(<AdminReports />, ["admin"])} />
+              <Route path="/admin/incidents" element={withProtected(<AdminIncidents />, ["admin"])} />
+              <Route path="/admin/settings" element={withProtected(<AdminSettings />, ["admin"])} />
+              <Route path="/admin/payments" element={withProtected(<AdminPayments />, ["admin"])} />
+              <Route path="/admin/compliance" element={withProtected(<ComplianceDashboard />, ["admin"])} />
+              <Route path="/admin/compliance/policies" element={withProtected(<AdminCompliancePage />, ["admin"])} />
+              <Route path="/admin/compliance/tensioned-areas" element={withProtected(<TensionedAreas />, ["admin"])} />
+              <Route path="/admin/compliance/audit-trails" element={withProtected(<AdminAuditDashboard />, ["admin"])} />
+              <Route path="/admin/system-events" element={withProtected(<SystemEvents />, ["admin"])} />
+              <Route path="/pros" element={<ProList />} />
+              <Route path="/pros/:id" element={<ProDetail />} />
+              <Route path="/profile" element={withProtected(<ProfilePage />)} />
+              <Route path="/403" element={<ForbiddenPage />} />
+              <Route path="*" element={<div style={{ padding: 24 }}>404</div>} />
+            </Route>
 
-            <Route
-              path="/contracts/new"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard roles={["landlord", "admin"]}>
-                    <ContractWizard />
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="/tickets"
-              element={
-                <ProtectedRoute>
-                  <TicketsList />
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/tickets/new"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard roles={["tenant", "landlord", "admin"]}>
-                    <TicketCreatePage />
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/tickets/:id"
-              element={
-                <ProtectedRoute>
-                  <TicketDetail />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route path="/owner/properties" element={<ProtectedRoute><RoleGuard roles={["landlord"]}><LandlordDashboard /></RoleGuard></ProtectedRoute>} />
-            <Route
-              path="/pro"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard roles={["pro"]}>
-                    <ProDashboard />
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/pro/tickets"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard roles={["pro"]}>
-                    <TicketsList />
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-            <Route path="/pro/profile" element={<ProtectedRoute><RoleGuard roles={["pro"]}><ProProfile /></RoleGuard></ProtectedRoute>} />
-            <Route path="/pro/quotes" element={<ProtectedRoute><RoleGuard roles={["pro"]}><ProQuotes /></RoleGuard></ProtectedRoute>} />
-            <Route path="/pro/billing" element={<ProtectedRoute><RoleGuard roles={["pro"]}><ProBilling /></RoleGuard></ProtectedRoute>} />
-            <Route path="/earnings" element={<ProtectedRoute><RoleGuard roles={["admin", "landlord"]}><Earnings /></RoleGuard></ProtectedRoute>} />
-            <Route
-              path="/admin/tenant-pro"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard roles={["admin"]}>
-                    <AdminTenantProPage />
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/users"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard roles={["admin"]}>
-                    <AdminUsersPage />
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/admin/properties"
-              element={
-                <ProtectedRoute>
-                  <RoleGuard roles={["admin"]}>
-                    <AdminPropertiesPage />
-                  </RoleGuard>
-                </ProtectedRoute>
-              }
-            />
-
-            <Route path="/admin/reports" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminReports /></RoleGuard></ProtectedRoute>} />
-            <Route path="/admin/incidents" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminIncidents /></RoleGuard></ProtectedRoute>} />
-            <Route path="/admin/settings" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminSettings /></RoleGuard></ProtectedRoute>} />
-            <Route path="/admin/payments" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminPayments /></RoleGuard></ProtectedRoute>} />
-            <Route path="/admin/compliance" element={<ProtectedRoute><RoleGuard roles={["admin"]}><ComplianceDashboard /></RoleGuard></ProtectedRoute>} />
-            <Route path="/admin/compliance/policies" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminCompliancePage /></RoleGuard></ProtectedRoute>} />
-            <Route path="/admin/compliance/tensioned-areas" element={<ProtectedRoute><RoleGuard roles={["admin"]}><TensionedAreas /></RoleGuard></ProtectedRoute>} />
-            <Route path="/admin/compliance/audit-trails" element={<ProtectedRoute><RoleGuard roles={["admin"]}><AdminAuditDashboard /></RoleGuard></ProtectedRoute>} />
-            <Route path="/admin/system-events" element={<ProtectedRoute><RoleGuard roles={["admin"]}><SystemEvents /></RoleGuard></ProtectedRoute>} />
-
-            {/* Public catalog for pros */}
-            <Route path="/pros" element={<ProList />} />
-            <Route path="/pros/:id" element={<ProDetail />} />
-
-            {/* Profile */}
-            <Route path="/profile" element={<ProtectedRoute><ProfilePage /></ProtectedRoute>} />
-
-            <Route path="/403" element={<ForbiddenPage />} />
-            <Route path="*" element={<div style={{ padding: 24 }}>404</div>} />
-          </Route>
-
-          <Route element={<AuthLayout />}>
-            <Route path="/login" element={<LoginPage />} />
-            <Route path="/register" element={<RegisterPage />} />
-            <Route path="/forgot-password" element={<ForgotPassword />} />
-            <Route path="/reset" element={<ResetPassword />} />
-          </Route>
-        </Routes>
+            <Route element={<AuthLayout />}>
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/register" element={<RegisterPage />} />
+              <Route path="/forgot-password" element={<ForgotPassword />} />
+              <Route path="/reset" element={<ResetPassword />} />
+            </Route>
+          </Routes>
+        </Suspense>
       </BrowserRouter>
     </AuthProvider>
   );

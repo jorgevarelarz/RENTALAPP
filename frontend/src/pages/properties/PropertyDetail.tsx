@@ -9,10 +9,11 @@ import toast from 'react-hot-toast';
 import SkeletonDetail from '../../components/ui/SkeletonDetail';
 import { MapPin, BedDouble, Bath, Ruler, PawPrint, Sofa, Calendar, Share2, Heart, ShieldCheck } from 'lucide-react';
 import { toAbsoluteUrl } from '../../utils/media';
+import type { Property } from '../../types/property';
 
 export default function PropertyDetail() {
   const { id } = useParams();
-  const [property, setProperty] = useState<any>(null);
+  const [property, setProperty] = useState<Property | null>(null);
   const [liked, setLiked] = useState(false);
   const { user } = useAuth();
   const [tp, setTp] = useState<TenantProInfo | null>(null);
@@ -30,7 +31,7 @@ export default function PropertyDetail() {
 
   useEffect(() => {
     if (user?.role === 'tenant') {
-      getTenantProInfo().then(info => setTp(info as any)).catch(() => {});
+      getTenantProInfo().then(setTp).catch(() => {});
     }
   }, [user]);
 
@@ -48,6 +49,7 @@ export default function PropertyDetail() {
   };
 
   const handleApply = async () => {
+    if (!property) return;
     if (!user) { setPromptLogin(true); return; }
     if (property.onlyTenantPro && tp?.status !== 'verified') {
       toast.error('Requieres perfil Tenant PRO verificado');
@@ -63,10 +65,12 @@ export default function PropertyDetail() {
 
   if (!property) return <SkeletonDetail />;
 
-  const images = (property.images?.length ? property.images : ['https://via.placeholder.com/1200x800?text=Sin+Imagen'])
+  const currentProperty = property;
+
+  const images = (currentProperty.images?.length ? currentProperty.images : ['https://via.placeholder.com/1200x800?text=Sin+Imagen'])
     .map((img: string) => toAbsoluteUrl(img));
-  const safeRent35 = Math.ceil((property.price || 0) / 0.35);
-  const coords = property.location?.coordinates;
+  const safeRent35 = Math.ceil((currentProperty.price || 0) / 0.35);
+  const coords = currentProperty.location?.coordinates;
   const lat = typeof coords?.[1] === 'number' ? coords[1] : undefined;
   const lng = typeof coords?.[0] === 'number' ? coords[0] : undefined;
   const hasCoords = typeof lat === 'number' && typeof lng === 'number';
@@ -80,11 +84,11 @@ export default function PropertyDetail() {
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 animate-in fade-in duration-500">
       <div className="mb-6">
-        <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">{property.title}</h1>
+        <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">{currentProperty.title}</h1>
         <div className="flex flex-wrap items-center justify-between gap-4 text-sm text-gray-600">
           <div className="flex items-center gap-2">
             <MapPin size={18} className="text-blue-600" />
-            <span className="font-medium underline decoration-dotted">{property.address}, {property.city}</span>
+            <span className="font-medium underline decoration-dotted">{currentProperty.address}, {currentProperty.city}</span>
           </div>
           <div className="flex gap-2">
             <button onClick={toggleFavorite} className="flex items-center gap-2 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition-colors">
@@ -127,15 +131,15 @@ export default function PropertyDetail() {
           <div className="flex flex-wrap gap-6 py-6 border-b border-gray-100">
             <div className="flex items-center gap-3">
               <div className="p-3 bg-gray-100 rounded-full"><BedDouble className="text-gray-700" size={24}/></div>
-              <div><p className="font-bold">{property.rooms} Habitaciones</p></div>
+              <div><p className="font-bold">{currentProperty.rooms} Habitaciones</p></div>
             </div>
             <div className="flex items-center gap-3">
               <div className="p-3 bg-gray-100 rounded-full"><Bath className="text-gray-700" size={24}/></div>
-              <div><p className="font-bold">{property.bathrooms} Baños</p></div>
+              <div><p className="font-bold">{currentProperty.bathrooms} Baños</p></div>
             </div>
             <div className="flex items-center gap-3">
               <div className="p-3 bg-gray-100 rounded-full"><Ruler className="text-gray-700" size={24}/></div>
-              <div><p className="font-bold">{property.sizeM2} m²</p></div>
+              <div><p className="font-bold">{currentProperty.sizeM2} m²</p></div>
             </div>
           </div>
 
@@ -143,18 +147,18 @@ export default function PropertyDetail() {
             <h3 className="text-xl font-bold text-gray-900 mb-4">Lo que ofrece este lugar</h3>
             <div className="grid grid-cols-2 gap-4">
               <div className="flex items-center gap-3 text-gray-700">
-                <PawPrint className={property.petsAllowed ? "text-green-600" : "text-gray-400"} />
-                <span className={!property.petsAllowed ? "line-through text-gray-400" : ""}>Mascotas permitidas</span>
+                <PawPrint className={currentProperty.petsAllowed ? "text-green-600" : "text-gray-400"} />
+                <span className={!currentProperty.petsAllowed ? "line-through text-gray-400" : ""}>Mascotas permitidas</span>
               </div>
               <div className="flex items-center gap-3 text-gray-700">
-                <Sofa className={property.furnished ? "text-green-600" : "text-gray-400"} />
-                <span>{property.furnished ? "Totalmente amueblado" : "Sin amueblar"}</span>
+                <Sofa className={currentProperty.furnished ? "text-green-600" : "text-gray-400"} />
+                <span>{currentProperty.furnished ? "Totalmente amueblado" : "Sin amueblar"}</span>
               </div>
               <div className="flex items-center gap-3 text-gray-700">
                 <Calendar className="text-blue-600" />
-                <span>Disponible: {property.availableFrom ? new Date(property.availableFrom).toLocaleDateString() : "Inmediata"}</span>
+                <span>Disponible: {currentProperty.availableFrom ? new Date(currentProperty.availableFrom).toLocaleDateString() : "Inmediata"}</span>
               </div>
-              {property.onlyTenantPro && (
+              {currentProperty.onlyTenantPro && (
                 <div className="flex items-center gap-3 text-blue-700 font-medium">
                   <ShieldCheck />
                   <span>Verificacion Tenant PRO requerida</span>
@@ -166,7 +170,7 @@ export default function PropertyDetail() {
           <div className="py-6 border-t border-gray-100">
             <h3 className="text-xl font-bold text-gray-900 mb-4">Acerca de este alojamiento</h3>
             <p className="text-gray-600 leading-relaxed whitespace-pre-line">
-              {property.description || "El propietario no ha proporcionado una descripción detallada."}
+              {currentProperty.description || "El propietario no ha proporcionado una descripción detallada."}
             </p>
           </div>
 
@@ -183,7 +187,7 @@ export default function PropertyDetail() {
                 <button
                   type="button"
                   onClick={() => {
-                    const addressLabel = [property.address, property.city].filter(Boolean).join(', ');
+                    const addressLabel = [currentProperty.address, currentProperty.city].filter(Boolean).join(', ');
                     const query = encodeURIComponent(addressLabel || `${lat},${lng}`);
                     const ok = window.confirm('Abrir esta direccion en Google Maps?');
                     if (ok) window.open(`https://www.google.com/maps/search/?api=1&query=${query}`, '_blank');
@@ -199,7 +203,7 @@ export default function PropertyDetail() {
 
           {user?.role === 'tenant' && (
             <div className="py-6 border-t border-gray-100">
-              <TenantProPanel requiredRent={property.onlyTenantPro ? (property.requiredTenantProMaxRent || property.price) : undefined} />
+              <TenantProPanel requiredRent={currentProperty.onlyTenantPro ? (currentProperty.requiredTenantProMaxRent || currentProperty.price) : undefined} />
             </div>
           )}
         </div>
@@ -208,15 +212,15 @@ export default function PropertyDetail() {
           <div className="sticky top-24 bg-white rounded-2xl border border-gray-200 shadow-xl p-6 space-y-6">
             <div className="flex justify-between items-end border-b border-gray-100 pb-4">
               <div>
-                <span className="text-3xl font-bold text-gray-900">{property.price?.toLocaleString()} €</span>
+                <span className="text-3xl font-bold text-gray-900">{currentProperty.price?.toLocaleString()} €</span>
                 <span className="text-gray-500"> / mes</span>
               </div>
               <span className="text-sm text-gray-500 bg-gray-50 px-2 py-1 rounded">
-                Fianza: {property.deposit ? `${property.deposit} €` : '1 mes'}
+                Fianza: {currentProperty.deposit ? `${currentProperty.deposit} €` : '1 mes'}
               </span>
             </div>
 
-            {property.onlyTenantPro && (
+            {currentProperty.onlyTenantPro && (
                 <div className="bg-blue-50 p-4 rounded-xl text-sm space-y-2 text-blue-800">
                   <div className="flex items-start gap-2 font-semibold">
                     <ShieldCheck size={18} className="mt-0.5 shrink-0"/>

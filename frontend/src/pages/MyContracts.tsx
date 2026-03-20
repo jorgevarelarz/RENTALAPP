@@ -5,10 +5,11 @@ import { ContractStatusBadge } from '../components/ContractStatusBadge';
 import { Link } from 'react-router-dom';
 import EmptyState from '../components/ui/EmptyState';
 import PageHeader from '../components/ui/PageHeader';
+import type { Contract } from '../types/contract';
 
 const MyContracts: React.FC = () => {
   const { token, user } = useAuth();
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Contract[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [status, setStatus] = useState<string>('');
@@ -19,7 +20,7 @@ const MyContracts: React.FC = () => {
       try {
         setLoading(true); setError(null);
         const r = await listContracts(token);
-        const mine = (r.items || []).filter((c: any) =>
+        const mine = (r.items || []).filter((c) =>
           String(c.ownerId) === user._id || String(c.tenantId) === user._id
         );
         setItems(mine);
@@ -75,7 +76,7 @@ const MyContracts: React.FC = () => {
         />
       ) : (
         <div style={{ display: 'grid', gap: 10 }}>
-          {filtered.map((c: any) => {
+          {filtered.map((c) => {
             const propertyTitle =
               typeof c.property === 'object'
                 ? c.property?.title || c.property?.address || 'Propiedad'

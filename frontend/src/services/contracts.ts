@@ -1,11 +1,21 @@
 import { api as client } from '../api/client';
+import type { Contract } from '../types/contract';
 
 const withAuth = (token?: string) => {
   if (!token) return undefined;
   return { headers: { Authorization: `Bearer ${token}` } };
 };
 
-export const downloadDemoContract = async (token: string, payload: any) => {
+export type ClauseDefinition = {
+  id: string;
+  label: string;
+  version: string;
+  paramsMeta: unknown;
+};
+
+export type ContractsResponse = { items: Contract[] };
+
+export const downloadDemoContract = async (token: string, payload: Record<string, unknown>) => {
   const res = await client.post(`/api/contracts/demo`, payload, {
     ...withAuth(token),
     responseType: 'blob',
@@ -13,12 +23,12 @@ export const downloadDemoContract = async (token: string, payload: any) => {
   return res.data as Blob;
 };
 
-export const listContracts = async (token: string, params?: Record<string, any>) => {
+export const listContracts = async (token: string, params?: Record<string, unknown>) => {
   const res = await client.get(`/api/contracts`, {
     ...withAuth(token),
     params,
   });
-  return res.data as { items: any[] };
+  return res.data as ContractsResponse;
 };
 
 export const getContract = async (token: string, id: string, signal?: AbortSignal) => {
@@ -26,7 +36,7 @@ export const getContract = async (token: string, id: string, signal?: AbortSigna
     ...withAuth(token),
     signal,
   });
-  return res.data as any;
+  return res.data as Contract;
 };
 
 export const sendToSignature = async (token: string, id: string) => {
@@ -44,21 +54,21 @@ export const getSignatureStatus = async (token: string, id: string) => {
   const res = await client.get(`/api/contracts/${id}/signature/status`, {
     ...withAuth(token),
   });
-  return res.data as any;
+  return res.data as { status?: string; signedAt?: string; envelopeId?: string };
 };
 
 export const signContract = async (token: string, id: string) => {
   const res = await client.patch(`/api/contracts/${id}/sign`, {}, {
     ...withAuth(token),
   });
-  return res.data as any;
+  return res.data as Contract;
 };
 
 export const payDeposit = async (token: string, id: string) => {
   const res = await client.post(`/api/contracts/${id}/deposit`, {}, {
     ...withAuth(token),
   });
-  return res.data as any;
+  return res.data as { ok?: boolean; clientSecret?: string; amount?: number };
 };
 
 // Cobrar renta usando método guardado (off-session)
@@ -66,7 +76,7 @@ export const payRentWithSavedMethod = async (token: string, id: string) => {
   const res = await client.post(`/api/contracts/${id}/pay-rent-saved`, {}, {
     ...withAuth(token),
   });
-  return res.data as any;
+  return res.data as { ok?: boolean; paymentId?: string };
 };
 
 export const downloadPdf = async (token: string, id: string) => {
@@ -87,12 +97,12 @@ export const downloadSignedPdf = async (token: string, id: string) => {
 
 export async function getClauses(region: string, version = '1.0.0') {
   const { data } = await client.get(`/api/clauses`, { params: { region, version } });
-  return data as { version: string; region: string; items: Array<{ id: string; label: string; version: string; paramsMeta: any }> };
+  return data as { version: string; region: string; items: ClauseDefinition[] };
 }
 
-export async function createContract(payload: any) {
+export async function createContract(payload: Record<string, unknown>) {
   const { data } = await client.post(`/api/contracts`, payload);
-  return data.contract as any;
+  return data.contract as Contract;
 }
 
 export async function createSignSession(id: string) {

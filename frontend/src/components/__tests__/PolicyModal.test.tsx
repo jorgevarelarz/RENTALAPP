@@ -1,31 +1,32 @@
 import React from 'react';
 import { render, screen, fireEvent } from '@testing-library/react';
+import { MockedFunction, vi } from 'vitest';
 import PolicyModal from '../PolicyModal';
 import { usePolicyAcceptance } from '../../hooks/usePolicyAcceptance';
 
-jest.mock('../../hooks/usePolicyAcceptance');
-const mockUsePolicyAcceptance = usePolicyAcceptance as jest.MockedFunction<
+vi.mock('../../hooks/usePolicyAcceptance');
+const mockUsePolicyAcceptance = usePolicyAcceptance as MockedFunction<
   typeof usePolicyAcceptance
 >;
 
 describe('PolicyModal', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockUsePolicyAcceptance.mockReturnValue({
       loading: false,
       needsAcceptance: false,
       hasAccepted: false,
-      acceptPolicy: jest.fn(),
+      acceptPolicy: vi.fn(),
     });
   });
 
   it('does not render when isOpen is false', () => {
-    render(<PolicyModal isOpen={false} onClose={jest.fn()} />);
+    render(<PolicyModal isOpen={false} onClose={vi.fn()} />);
     expect(screen.queryByText(/Política de Privacidad/i)).toBeNull();
   });
 
   it('renders content when open and handles cancel', () => {
-    const onClose = jest.fn();
+    const onClose = vi.fn();
     render(<PolicyModal isOpen={true} onClose={onClose} pendingType="data_processing" />);
 
     expect(screen.getByRole('heading', { name: /Política de Datos/i })).toBeInTheDocument();
@@ -36,8 +37,8 @@ describe('PolicyModal', () => {
   });
 
   it('calls acceptPolicy and onClose when accepting', () => {
-    const onClose = jest.fn();
-    const acceptPolicy = jest.fn();
+    const onClose = vi.fn();
+    const acceptPolicy = vi.fn();
     mockUsePolicyAcceptance.mockReturnValueOnce({
       loading: false,
       needsAcceptance: true,

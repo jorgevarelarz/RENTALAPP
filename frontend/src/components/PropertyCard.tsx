@@ -2,9 +2,10 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { MapPin, BedDouble, Bath, Ruler, Heart } from 'lucide-react';
 import { toAbsoluteUrl } from '../utils/media';
+import type { Property } from '../types/property';
 
 type Props = {
-  p: any;
+  p: Property;
   onFavToggle?: (id: string, liked: boolean) => void;
 };
 

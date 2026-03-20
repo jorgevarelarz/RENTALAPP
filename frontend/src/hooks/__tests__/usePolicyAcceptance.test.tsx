@@ -1,17 +1,18 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
 import axios from 'axios';
+import { vi } from 'vitest';
 import { usePolicyAcceptance } from '../usePolicyAcceptance';
 
-jest.mock('axios');
-const mockedAxios = jest.mocked(axios, { shallow: false });
+vi.mock('axios');
+const mockedAxios = vi.mocked(axios, { partial: false });
 
 describe('usePolicyAcceptance', () => {
   beforeEach(() => {
     localStorage.clear();
-    jest.clearAllMocks();
+    vi.clearAllMocks();
     mockedAxios.get.mockReset();
     mockedAxios.post.mockReset();
-    jest.spyOn(console, 'error').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   it('returns accepted=true when there is no token (no fetch)', async () => {

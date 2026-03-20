@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import { User } from './models/user.model';
 import Ticket from './models/ticket.model';
 import { Property } from './models/property.model';
+import Lead from './models/lead.model';
 
 async function main() {
   const mongoUrl = process.env.MONGO_URL || process.env.MONGO_URI || 'mongodb://localhost:27017/rental-app';
@@ -74,6 +75,59 @@ async function main() {
   console.log(`Pro      -> pro@example.com / ${password}`);
   console.log(`Properties created: ${p1.id}, ${p2.id}`);
   console.log(`Ticket created: ${t.id}`);
+
+  await Lead.findOneAndUpdate(
+    { externalLeadId: 'demo-owner-lead' },
+    {
+      externalLeadId: 'demo-owner-lead',
+      source: 'seed',
+      leadType: 'OWNER',
+      leadStatus: 'PARTIALLY_QUALIFIED',
+      conversationStage: 'PROPERTY_MEDIA_PENDING',
+      qualificationScore: 72,
+      nextBestAction: 'Solicitar fotos y documentación antes del seguimiento comercial.',
+      suggestedQuestions: ['¿Tienes fotos disponibles?'],
+      lastInboundMessage: 'Quiero vender mi piso en Salamanca por 450000 euros, tiene 95 m2 y 3 habitaciones.',
+      lastReplyMessage: 'Gracias. Necesitamos fotos y documentación para continuar.',
+      extractedData: {
+        operation: 'sale',
+        zone: 'Salamanca',
+        targetPrice: 450000,
+        squareMeters: 95,
+        bedrooms: 3,
+        hasPhotos: false,
+        hasDocumentation: false,
+      },
+      messageCount: 1,
+    },
+    { upsert: true, new: true },
+  );
+
+  await Lead.findOneAndUpdate(
+    { externalLeadId: 'demo-buyer-lead' },
+    {
+      externalLeadId: 'demo-buyer-lead',
+      source: 'seed',
+      leadType: 'BUYER',
+      leadStatus: 'QUALIFIED',
+      conversationStage: 'READY_FOR_FOLLOWUP',
+      qualificationScore: 85,
+      nextBestAction: 'Programar seguimiento con inmuebles recomendados.',
+      suggestedQuestions: [],
+      lastInboundMessage: 'Busco comprar en Retiro, presupuesto 700000 euros, 3 habitaciones y necesito hipoteca.',
+      lastReplyMessage: 'Perfecto, ya tenemos base suficiente para preparar el seguimiento.',
+      extractedData: {
+        zone: 'Retiro',
+        budgetMax: 700000,
+        bedrooms: 3,
+        financingNeeded: true,
+      },
+      messageCount: 1,
+    },
+    { upsert: true, new: true },
+  );
+
+  console.log('Demo leads created: demo-owner-lead, demo-buyer-lead');
   await mongoose.disconnect();
 }
 

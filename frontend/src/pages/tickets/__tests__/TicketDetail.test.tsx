@@ -1,21 +1,25 @@
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { Mock, vi } from 'vitest';
 import TicketDetail from '../TicketDetail';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import * as ticketService from '../../../services/tickets';
 import * as proService from '../../../services/pros';
 
-jest.mock('../../../services/tickets');
-jest.mock('../../../services/pros');
-jest.mock('../../../components/ChatPanel', () => () => <div data-testid="chat-panel">Chat Mock</div>);
-jest.mock('../../../context/AuthContext', () => ({
+vi.mock('../../../services/tickets');
+vi.mock('../../../services/pros');
+vi.mock('../../../components/ChatPanel', () => ({
+  default: () => <div data-testid="chat-panel">Chat Mock</div>,
+}));
+vi.mock('../../../context/AuthContext', () => ({
   useAuth: () => ({
     user: { _id: 'user1', role: (global as any).__TEST_ROLE__ || 'tenant', name: 'Test User', email: 'test@test.com' },
     token: 'token',
   }),
 }));
-jest.mock('../../../utils/notify', () => ({
-  useNotify: () => ({ push: jest.fn() }),
+vi.mock('../../../utils/notify', () => ({
+  useNotify: () => ({ push: vi.fn() }),
 }));
 
 const mockTicket = {
@@ -42,30 +46,28 @@ const renderWithContext = (ui: React.ReactElement, role: string = 'tenant') => {
 
 describe('TicketDetail Component', () => {
   beforeEach(() => {
-    jest.clearAllMocks();
-    (proService.searchPros as jest.Mock).mockResolvedValue({ items: [] });
+    vi.clearAllMocks();
+    (proService.searchPros as Mock).mockResolvedValue({ items: [] });
   });
 
   test('Muestra detalles básicos del ticket', async () => {
-    (ticketService.getTicket as jest.Mock).mockResolvedValue(mockTicket);
+    (ticketService.getTicket as Mock).mockResolvedValue(mockTicket);
 
     renderWithContext(<TicketDetail />);
 
     expect(screen.getByText(/Cargando detalles.../i)).toBeInTheDocument();
 
-    await waitFor(() => {
-      expect(screen.getByText('Fuga de agua')).toBeInTheDocument();
-      expect(screen.getByText('Calle Falsa 123')).toBeInTheDocument();
-      expect(screen.getByText('Hay una fuga en el baño principal')).toBeInTheDocument();
-    });
+    expect(await screen.findByText('Fuga de agua')).toBeInTheDocument();
+    expect(await screen.findByText('Calle Falsa 123')).toBeInTheDocument();
+    expect(await screen.findByText('Hay una fuga en el baño principal')).toBeInTheDocument();
   });
 
   test('PRO: Muestra formulario de cotización cuando está abierto', async () => {
-    (ticketService.getTicket as jest.Mock).mockResolvedValue({ ...mockTicket, status: 'open' });
+    (ticketService.getTicket as Mock).mockResolvedValue({ ...mockTicket, status: 'open' });
 
     renderWithContext(<TicketDetail />, 'pro');
 
-    await waitFor(() => expect(screen.getByText('Fuga de agua')).toBeInTheDocument());
+    expect(await screen.findByText('Fuga de agua')).toBeInTheDocument();
 
     expect(screen.getByText(/Enviar Presupuesto/i)).toBeInTheDocument();
     expect(screen.getByPlaceholderText('€')).toBeInTheDocument();
@@ -78,25 +80,25 @@ describe('TicketDetail Component', () => {
       status: 'quoted',
       quote: { amount: 150, note: 'Reparación tubería' },
     };
-    (ticketService.getTicket as jest.Mock).mockResolvedValue(quotedTicket);
+    (ticketService.getTicket as Mock).mockResolvedValue(quotedTicket);
 
     renderWithContext(<TicketDetail />, 'landlord');
 
-    await waitFor(() => expect(screen.getByText('Fuga de agua')).toBeInTheDocument());
+    expect(await screen.findByText('Fuga de agua')).toBeInTheDocument();
 
     expect(screen.getByText('150€')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /Aprobar y Pagar/i })).toBeInTheDocument();
   });
 
   test('LANDLORD: Puede asignar un profesional si está abierto', async () => {
-    (ticketService.getTicket as jest.Mock).mockResolvedValue({ ...mockTicket, status: 'open', pro: null });
+    (ticketService.getTicket as Mock).mockResolvedValue({ ...mockTicket, status: 'open', pro: null });
 
     renderWithContext(<TicketDetail />, 'landlord');
 
-    await waitFor(() => expect(screen.getByRole('button', { name: /Buscar Profesional/i })).toBeInTheDocument());
+    const searchButton = await screen.findByRole('button', { name: /Buscar Profesional/i });
 
-    fireEvent.click(screen.getByRole('button', { name: /Buscar Profesional/i }));
+    userEvent.click(searchButton);
 
-    expect(proService.searchPros).toHaveBeenCalled();
+    await waitFor(() => expect(proService.searchPros).toHaveBeenCalled());
   });
 });

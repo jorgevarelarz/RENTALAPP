@@ -5,9 +5,10 @@ import EmptyState from '../../components/ui/EmptyState';
 import PageHeader from '../../components/ui/PageHeader';
 import { listMyFavorites, unfavoriteProperty } from '../../services/properties';
 import { useAuth } from '../../context/AuthContext';
+import type { Property } from '../../types/property';
 
 export default function FavoritesPage() {
-  const [items, setItems] = useState<any[]>([]);
+  const [items, setItems] = useState<Property[]>([]);
   const { user } = useAuth();
 
   useEffect(() => {

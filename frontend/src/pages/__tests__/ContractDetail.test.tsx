@@ -1,37 +1,40 @@
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { Mock, vi } from 'vitest';
 
 // Mock router param id
-jest.mock('react-router-dom', () => ({
+vi.mock('react-router-dom', () => ({
   useParams: () => ({ id: (global as any).__mockId || 'c1' })
 }), { virtual: true });
 
 // Mock AuthContext with configurable user
-jest.mock('../../context/AuthContext', () => ({
+vi.mock('../../context/AuthContext', () => ({
   useAuth: () => (global as any).__mockAuth || { token: 't', user: null }
 }));
 
 // Mock ToastContext to avoid provider
-jest.mock('../../context/ToastContext', () => ({
-  useToast: () => ({ push: jest.fn(), remove: jest.fn(), toasts: [] })
+vi.mock('../../context/ToastContext', () => ({
+  useToast: () => ({ push: vi.fn(), remove: vi.fn(), toasts: [] })
 }));
 
 // Avoid importing real axios (ESM) via api/client
-jest.mock('axios', () => {
-  const axiosMock: any = { get: jest.fn(), post: jest.fn(), patch: jest.fn(), delete: jest.fn() };
-  axiosMock.create = jest.fn(() => axiosMock);
+vi.mock('axios', () => {
+  const axiosMock: any = { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() };
+  axiosMock.create = vi.fn(() => axiosMock);
   return { __esModule: true, default: axiosMock };
 }, { virtual: true });
 
 // Stub ChatPanel to avoid deep imports
-jest.mock('../../components/ChatPanel', () => () => <div data-testid="chat" />);
+vi.mock('../../components/ChatPanel', () => ({
+  default: () => <div data-testid="chat" />,
+}));
 
 // Mock services used by the page
-jest.mock('../../services/contracts', () => ({
+vi.mock('../../services/contracts', () => ({
   __esModule: true,
-  getContract: jest.fn(),
-  createSignSession: jest.fn(),
+  getContract: vi.fn(),
+  createSignSession: vi.fn(),
 }));
 
 import ContractDetail from '../ContractDetail';
@@ -43,14 +46,14 @@ function setAuth(user: any) {
 
 describe('ContractDetail', () => {
   beforeEach(() => {
-    jest.resetAllMocks();
+    vi.resetAllMocks();
     (global as any).__mockAuth = { token: 't', user: null };
     (global as any).__mockId = 'c1';
   });
 
   test('Muestra boton de firma para tenant cuando esta pendiente de firma', async () => {
     setAuth({ _id: 'u2', role: 'tenant' });
-    (contracts.getContract as jest.Mock).mockResolvedValue({
+    (contracts.getContract as Mock).mockResolvedValue({
       _id: 'c1',
       tenant: 'u2',
       status: 'pending_signature',
@@ -69,7 +72,7 @@ describe('ContractDetail', () => {
 
   test('No muestra boton de firma para landlord', async () => {
     setAuth({ _id: 'u1', role: 'landlord' });
-    (contracts.getContract as jest.Mock).mockResolvedValue({
+    (contracts.getContract as Mock).mockResolvedValue({
       _id: 'c1',
       landlord: 'u1',
       status: 'pending_signature',
@@ -89,7 +92,7 @@ describe('ContractDetail', () => {
 
   test('Render defensivo: contrato cargado muestra accion de descarga', async () => {
     setAuth({ _id: 'u1', role: 'landlord' });
-    (contracts.getContract as jest.Mock).mockResolvedValue({
+    (contracts.getContract as Mock).mockResolvedValue({
       _id: 'c1',
       status: 'pending_signature',
       rentAmount: 900,

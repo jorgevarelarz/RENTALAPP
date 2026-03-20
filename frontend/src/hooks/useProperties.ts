@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { searchProperties, type SearchParams } from '../services/properties';
+import type { PropertyListResponse } from '../types/property';
 
 function toNum(v: string | null | undefined): number | undefined {
   if (!v) return undefined;
@@ -53,10 +54,8 @@ export function usePropertyFilters() {
   return { filters, setFilters };
 }
 
-type SearchResponse = { items: any[]; page: number; limit: number; total: number };
-
 export function usePropertiesQuery(filters: SearchParams & { onlyTenantPro?: boolean }) {
-  return useQuery<SearchResponse, Error>({
+  return useQuery<PropertyListResponse, Error>({
     queryKey: ['properties', filters],
     queryFn: async () => searchProperties(filters),
     placeholderData: keepPreviousData,
