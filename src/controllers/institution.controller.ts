@@ -4,8 +4,17 @@ import { PipelineStage } from 'mongoose';
 import { ComplianceStatus } from '../modules/rentalPublic/models/complianceStatus.model';
 import { parseDateRange } from '../utils/dateRange';
 
-const CASEID_SALT =
-  process.env.INSTITUTION_CASEID_SALT || process.env.JWT_SECRET || 'insecure-institution-salt';
+const CASEID_SALT = (() => {
+  const salt = process.env.INSTITUTION_CASEID_SALT || process.env.JWT_SECRET;
+  if (!salt) {
+    if (process.env.NODE_ENV === 'production') {
+      throw new Error('INSTITUTION_CASEID_SALT requerido en producción');
+    }
+    console.warn('[institution] INSTITUTION_CASEID_SALT no configurado — usando fallback de desarrollo');
+    return 'dev-institution-salt-change-in-prod';
+  }
+  return salt;
+})();
 
 type InstitutionDashboardData = {
   totals: { evaluated: number; risk: number };

@@ -1,4 +1,5 @@
 import express, { Router } from 'express';
+import { logger } from '../utils/logger';
 import { Types } from 'mongoose';
 import { stripe } from '../utils/stripe';
 import { Contract } from '../models/contract.model';
@@ -151,17 +152,21 @@ async function maybePayAgencyRentFeeShare(params: {
 }
 
 r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req, res) => {
-  const sig = req.headers['stripe-signature'] as string;
-  const secret = process.env.STRIPE_WEBHOOK_SECRET || '';
-  if (process.env.NODE_ENV === 'production' && !secret) {
+  const sig = req.headers['stripe-signature'];
+  const secret = process.env.STRIPE_WEBHOOK_SECRET;
+  if (!secret) {
+    logger.error('[stripe-webhook] STRIPE_WEBHOOK_SECRET no configurado');
     return res.status(500).json({ error: 'stripe_webhook_secret_missing' });
+  }
+  if (!sig) {
+    return res.status(400).json({ error: 'stripe_signature_missing' });
   }
 
   let event: Stripe.Event;
   try {
     event = stripe.webhooks.constructEvent(req.body, sig, secret);
   } catch (err: any) {
-    console.error('Webhook signature verification failed:', err.message);
+    logger.warn('[stripe-webhook] Verificación de firma fallida', { message: err.message });
     return res.status(400).send(`Webhook Error: ${err.message}`);
   }
 

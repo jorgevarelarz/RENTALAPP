@@ -147,7 +147,9 @@ export const streamAuditTrails = async (req: Request, res: Response) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'token_required' });
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'insecure') as any;
+    const jwtSecret = process.env.JWT_SECRET;
+    if (!jwtSecret) return res.status(500).json({ error: 'server_misconfigured' });
+    const decoded = jwt.verify(token, jwtSecret) as any;
     if (decoded?.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
 
     res.setHeader('Content-Type', 'text/event-stream');

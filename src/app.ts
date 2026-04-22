@@ -57,6 +57,7 @@ import testingInboundRoutes from './routes/testingInbound.routes';
 import helmet from 'helmet';
 import hpp from 'hpp';
 import rateLimit from 'express-rate-limit';
+import { logger } from './utils/logger';
 import { requestId } from './middleware/requestId';
 import { adminRateLimit } from './middleware/adminRateLimit';
 import { loadEnv } from './config/env';
@@ -98,7 +99,7 @@ app.use(
                 'https://js.stripe.com',
                 'https://connect-js.stripe.com',
               ],
-              styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com', 'https://unpkg.com'],
+              styleSrc: ["'self'", 'https://fonts.googleapis.com', 'https://unpkg.com'],
               fontSrc: ["'self'", 'data:', 'https://fonts.gstatic.com', 'https://unpkg.com'],
               connectSrc: [
                 "'self'",
@@ -149,7 +150,11 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('dev'));
+  app.use(
+    morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev', {
+      stream: { write: (msg: string) => logger.http(msg.trim()) },
+    }),
+  );
 }
 
 // Stripe webhook BEFORE JSON parser (uses express.raw)
@@ -166,7 +171,7 @@ app.use(cors({
     if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
-    console.warn(`[CORS] Blocked origin: ${origin}`);
+    logger.warn(`[CORS] Blocked origin: ${origin}`);
     return callback(new Error('Not allowed by CORS'));
   },
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
@@ -209,6 +214,22 @@ const tenantProLimiter = rateLimit({
 });
 
 app.use('/api/tenant-pro', tenantProLimiter);
+
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too_many_requests' },
+});
+
+const paymentLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too_many_requests' },
+});
 
 const tenantProConsentVersion = process.env.TENANT_PRO_CONSENT_VERSION || 'v1';
 
@@ -260,7 +281,7 @@ app.get('/connect/refresh', (_req, res) => {
 
 // Public routes
 app.use('/api', testingInboundRoutes);
-app.use('/api/auth', authRoutes);
+app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/kyc', identityRoutes);
 app.use('/api', propertyRoutes);
@@ -286,9 +307,9 @@ app.use('/api/chat', authenticate, requireVerified, chatRoutes);
 app.use('/api/ai', authenticate, requireVerified, aiRoutes);
 app.use('/api/assistant', authenticate, requireVerified, assistantRoutes);
 // Contract-specific payments under /api/contracts require verificación
-app.use('/api/contracts', authenticate, requireVerified, contractPaymentsRoutes);
+app.use('/api/contracts', paymentLimiter, authenticate, requireVerified, contractPaymentsRoutes);
 app.use('/api/agency', authenticate, requireVerified, agencyRoutes);
-app.use('/api', paymentsRoutes);
+app.use('/api', paymentLimiter, paymentsRoutes);
 app.use('/api', authenticate, requireVerified, connectRoutes);
 app.use('/api', authenticate, requireVerified, serviceOfferRoutes);
 app.use('/api/invites', authenticate, invitesRoutes);

@@ -33,8 +33,8 @@ export function loadEnv(): Env {
   // Validaciones estrictas en producción
   if (e.NODE_ENV === 'production') {
     if (!MONGO) throw new Error('MONGO_URL/MONGO_URI requerido en producción');
-    if (!e.JWT_SECRET || e.JWT_SECRET.length < 16) {
-      throw new Error('JWT_SECRET fuerte requerido en producción');
+    if (!e.JWT_SECRET || e.JWT_SECRET.length < 32) {
+      throw new Error('JWT_SECRET debe tener al menos 32 caracteres en producción');
     }
     if (!e.INSTITUTION_CASEID_SALT || e.INSTITUTION_CASEID_SALT.length < 16) {
       throw new Error('INSTITUTION_CASEID_SALT requerido en producción');
