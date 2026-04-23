@@ -57,7 +57,9 @@ import testingInboundRoutes from './routes/testingInbound.routes';
 import helmet from 'helmet';
 import hpp from 'hpp';
 import rateLimit from 'express-rate-limit';
+import swaggerUi from 'swagger-ui-express';
 import { logger } from './utils/logger';
+import { swaggerSpec } from './config/swagger';
 import { requestId } from './middleware/requestId';
 import { adminRateLimit } from './middleware/adminRateLimit';
 import { loadEnv } from './config/env';
@@ -254,6 +256,12 @@ app.get('/api/legal/privacy-policy', (_req, res) => {
     res.status(500).json({ error: 'privacy-policy-unavailable' });
   }
 });
+
+// API Docs — deshabilitado en producción por seguridad
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(swaggerSpec));
+  app.get('/api/docs.json', (_req, res) => res.json(swaggerSpec));
+}
 
 app.get('/health', (_req, res) =>
   res.json({ ok: true, env: process.env.NODE_ENV, mongo: { state: mongoose.connection.readyState } }),

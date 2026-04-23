@@ -11,7 +11,7 @@ export const requireVerified = async (
   res: Response,
   next: NextFunction,
 ) => {
-  const user: any = (req as any).user;
+  const user = req.user;
   if (user) {
     if (user.role === 'admin') return next();
     if (user.isVerified) return next();
@@ -25,8 +25,9 @@ export const requireVerified = async (
           return next();
         }
       }
-    } catch (err: any) {
-      return res.status(500).json({ error: err.message || 'verification_check_failed' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'verification_check_failed';
+      return res.status(500).json({ error: msg });
     }
     return res.status(403).json({ error: 'owner_not_verified' });
   }
@@ -38,20 +39,20 @@ export const requireVerified = async (
   let userId: string;
   try {
     userId = getUserId(req);
-  } catch (err: any) {
-    return res.status(err.status || 400).json({ error: err.message });
+  } catch (err: unknown) {
+    const e = err as { status?: number; message?: string };
+    return res.status(e.status || 400).json({ error: e.message });
   }
 
   try {
     const verification = await Verification.findOne({ userId }).lean();
     if (!verification || verification.status !== 'verified') {
       const detail = verification?.status || 'unverified';
-      return res
-        .status(403)
-        .json({ error: 'user_not_verified', detail });
+      return res.status(403).json({ error: 'user_not_verified', detail });
     }
     next();
-  } catch (err: any) {
-    res.status(500).json({ error: err.message || 'verification_check_failed' });
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : 'verification_check_failed';
+    res.status(500).json({ error: msg });
   }
 };

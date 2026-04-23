@@ -1,8 +1,9 @@
-import { Router } from 'express';
+import { Router, Request, Response } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
 import { authenticate } from '../middleware/auth.middleware';
+import { logger } from '../utils/logger';
 
 const router = Router();
 
@@ -21,7 +22,7 @@ const storage = multer.diskStorage({
   },
 });
 
-function fileFilter(_req: any, file: Express.Multer.File, cb: multer.FileFilterCallback) {
+function fileFilter(_req: Request, file: Express.Multer.File, cb: multer.FileFilterCallback) {
   const ok = ALLOWED_MIME.has(file.mimetype);
   if (ok) cb(null, true);
   else cb(new Error('invalid_file_type'));
@@ -35,18 +36,22 @@ const upload = multer({
 });
 
 // POST /api/uploads/images
-router.post('/uploads/images', authenticate as any, (req, res) => {
-  upload.array('files', 6)(req as any, res as any, (err: any) => {
+router.post('/uploads/images', authenticate, (req: Request, res: Response) => {
+  upload.array('files', 6)(req, res, (err: unknown) => {
     if (err) {
-      const code = err?.message === 'invalid_file_type' ? 415 : 400;
-      return res.status(code).json({ error: err.message || 'upload_error' });
+      const multerErr = err as { message?: string };
+      const code = multerErr?.message === 'invalid_file_type' ? 415 : 400;
+      return res.status(code).json({ error: multerErr.message || 'upload_error' });
     }
-    const files = ((req as any).files as Express.Multer.File[]) || [];
+    const files = (req.files as Express.Multer.File[]) ?? [];
     void (async () => {
       try {
-        const mod: any = await import('file-type');
-        const fileTypeFromFile =
-          mod.fileTypeFromFile || mod.fromFile || mod.default?.fromFile;
+        const mod = await import('file-type') as {
+          fileTypeFromFile?: (p: string) => Promise<{ mime: string; ext: string } | undefined>;
+          fromFile?: (p: string) => Promise<{ mime: string; ext: string } | undefined>;
+          default?: { fromFile?: (p: string) => Promise<{ mime: string; ext: string } | undefined> };
+        };
+        const fileTypeFromFile = mod.fileTypeFromFile ?? mod.fromFile ?? mod.default?.fromFile;
         if (typeof fileTypeFromFile !== 'function') {
           throw new Error('file_type_unavailable');
         }
@@ -62,11 +67,11 @@ router.post('/uploads/images', authenticate as any, (req, res) => {
           await fs.promises.rename(file.path, targetPath);
           renamed.push(targetName);
         }
-        const base = process.env.APP_URL?.replace(/\/$/, '') || '';
+        const base = process.env.APP_URL?.replace(/\/$/, '') ?? '';
         const urls = renamed.map(name => `${base}/uploads/${name}`);
         res.json({ urls });
-      } catch (error: any) {
-        console.error('upload_error', error);
+      } catch (error: unknown) {
+        logger.error('upload_error', { message: error instanceof Error ? error.message : String(error) });
         res.status(500).json({ error: 'upload_error' });
       }
     })();

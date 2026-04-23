@@ -1,6 +1,7 @@
 import { Contract } from '../models/contract.model';
 import { recordContractHistory } from '../utils/history';
 import { v4 as uuidv4 } from 'uuid';
+import { signatureBreaker } from '../utils/circuitBreaker';
 
 export interface SignatureInitResult {
   envelopeId: string;
@@ -21,25 +22,27 @@ export const initSignature = async (contractId: string, userId?: string): Promis
 
   // En un entorno real, aquí iría la llamada al proveedor (Docusign/Signaturit)
   // para generar los URLs personalizados para cada parte.
-  const envelopeId = contract.signature?.envelopeId || uuidv4();
-  const recipientUrls = {
-    landlordUrl: `https://sign.example.com/${envelopeId}?role=landlord`,
-    tenantUrl: `https://sign.example.com/${envelopeId}?role=tenant`,
-  };
+  return signatureBreaker.call(async () => {
+    const envelopeId = contract.signature?.envelopeId || uuidv4();
+    const recipientUrls = {
+      landlordUrl: `https://sign.example.com/${envelopeId}?role=landlord`,
+      tenantUrl: `https://sign.example.com/${envelopeId}?role=tenant`,
+    };
 
-  contract.signature = {
-    ...(contract.signature || {}),
-    provider: provider as any,
-    envelopeId,
-    recipientUrls,
-    status: 'sent',
-    updatedAt: new Date(),
-  };
-  await contract.save();
-  if (userId) {
-    await recordContractHistory(contractId, 'SIGNATURE_INITIATED', userId, { provider, envelopeId });
-  }
-  return { envelopeId, provider, recipientUrls, status: 'sent' };
+    contract.signature = {
+      ...(contract.signature || {}),
+      provider: provider as 'mock' | 'docusign' | 'signaturit',
+      envelopeId,
+      recipientUrls,
+      status: 'sent',
+      updatedAt: new Date(),
+    };
+    await contract.save();
+    if (userId) {
+      await recordContractHistory(contractId, 'SIGNATURE_INITIATED', userId, { provider, envelopeId });
+    }
+    return { envelopeId, provider, recipientUrls, status: 'sent' };
+  });
 };
 
 export const getSignatureStatus = async (contractId: string) => {

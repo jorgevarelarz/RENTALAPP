@@ -10,8 +10,14 @@ declare global {
       isVerified?: boolean;
     }
 
+    interface InstitutionScope {
+      areaKeys: string[];
+    }
+
     interface Request {
       user?: UserPayload;
+      institutionScope?: InstitutionScope;
+      rawBody?: Buffer;
     }
   }
 }

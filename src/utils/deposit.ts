@@ -1,5 +1,8 @@
+import https from 'https';
+import http from 'http';
 import { stripe } from './stripe';
 import { isProd, isMock } from '../config/flags';
+import { logger } from './logger';
 
 /**
  * Creates a Stripe Checkout Session to collect the deposit.
@@ -62,10 +65,60 @@ export const depositToEscrow = async (
  * @param contractId The ID of the contract for which the deposit is paid.
  * @param amount The amount of the deposit in EUR.
  */
+function postJson(url: string, payload: object, apiKey?: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const body = JSON.stringify(payload);
+    const parsed = new URL(url);
+    const options: https.RequestOptions = {
+      method: 'POST',
+      hostname: parsed.hostname,
+      port: parsed.port || (parsed.protocol === 'https:' ? 443 : 80),
+      path: parsed.pathname + parsed.search,
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+      },
+    };
+    const transport = parsed.protocol === 'https:' ? https : http;
+    const req = transport.request(options, res => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 400) {
+          reject(Object.assign(new Error(`Authority API returned ${res.statusCode}`), { status: 502 }));
+        } else {
+          resolve(data);
+        }
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(10_000, () => {
+      req.destroy();
+      reject(Object.assign(new Error('Authority API timeout'), { status: 504 }));
+    });
+    req.write(body);
+    req.end();
+  });
+}
+
 export const depositToAuthority = async (contractId: string, amount: number): Promise<void> => {
-  // TODO: integrate with the public authority's API here
-  console.log(
-    `Simulating deposit of €${amount} for contract ${contractId} to the public authority.`,
-  );
-  await new Promise(resolve => setTimeout(resolve, 500));
+  const authorityUrl = process.env.DEPOSIT_AUTHORITY_API_URL;
+
+  if (!authorityUrl) {
+    if (isProd()) {
+      throw Object.assign(
+        new Error('DEPOSIT_AUTHORITY_API_URL requerido en producción'),
+        { status: 503 },
+      );
+    }
+    logger.warn('[deposit] DEPOSIT_AUTHORITY_API_URL no configurado — simulando depósito', { contractId, amount });
+    await new Promise(resolve => setTimeout(resolve, 200));
+    return;
+  }
+
+  const apiKey = process.env.DEPOSIT_AUTHORITY_API_KEY;
+  logger.info('[deposit] Enviando depósito a autoridad', { contractId, amount });
+  await postJson(authorityUrl, { contractId, amount, currency: 'EUR' }, apiKey);
+  logger.info('[deposit] Depósito enviado correctamente', { contractId });
 };

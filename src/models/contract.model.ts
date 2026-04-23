@@ -38,7 +38,7 @@ export interface IContract extends Document {
   signFeeCollected?: boolean;
   signFeeCollectedAt?: Date;
   signature?: {
-    provider?: 'mock' | 'docusign';
+    provider?: 'mock' | 'docusign' | 'signaturit';
     envelopeId?: string;
     status?: 'none' | 'created' | 'sent' | 'completed' | 'declined' | 'error';
     updatedAt?: Date;

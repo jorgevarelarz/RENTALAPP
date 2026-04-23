@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import { getJwtSecret } from '../utils/getJwtSecret';
 
 const EFFECTIVE_JWT_SECRET = getJwtSecret();
@@ -33,7 +33,7 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
     return res.status(401).json({ error: 'Token requerido' });
   }
   try {
-    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET) as any;
+    const decoded = jwt.verify(token, EFFECTIVE_JWT_SECRET) as JwtPayload;
     const resolvedId = decoded._id || decoded.id;
 
     // Resolver isVerified del token si existe; no asumir false por defecto todavía

@@ -9,7 +9,7 @@ const MAX_REQUESTS = 60;
 const buckets = new Map<string, { count: number; resetAt: number; notified: boolean }>();
 
 function getKey(req: Request) {
-  const userId = (req as any)?.user?.id || (req as any)?.user?._id;
+  const userId = req.user?.id || req.user?._id;
   if (userId) return `user:${userId}`;
   const ip = req.ip || req.headers['x-forwarded-for'] || 'unknown';
   return `ip:${String(ip)}`;
@@ -70,7 +70,7 @@ async function checkRateLimitRedis(req: Request, res: Response, key: string) {
         await emitRateLimitEvent({
           key,
           requestId,
-          userId: (req as any)?.user?.id || null,
+          userId: req.user?.id ?? null,
           ip: req.ip,
           path: req.originalUrl,
           method: req.method,
@@ -82,7 +82,8 @@ async function checkRateLimitRedis(req: Request, res: Response, key: string) {
 
     return { limited: false, supported: true };
   } catch (err) {
-    console.warn('[rate-limit] redis fallback:', (err as any)?.message || err);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn('[rate-limit] redis fallback:', msg);
     return { limited: false, supported: false };
   }
 }
@@ -103,7 +104,7 @@ function checkRateLimitMemory(req: Request, res: Response, key: string) {
       emitRateLimitEvent({
         key,
         requestId,
-        userId: (req as any)?.user?.id || null,
+        userId: req.user?.id ?? null,
         ip: req.ip,
         path: req.originalUrl,
         method: req.method,

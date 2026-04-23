@@ -1,4 +1,6 @@
 import nodemailer from 'nodemailer';
+import { emailBreaker } from './circuitBreaker';
+import { logger } from './logger';
 
 // Transporter SMTP (configurable vía variables de entorno)
 const transporter = nodemailer.createTransport({
@@ -15,20 +17,18 @@ const transporter = nodemailer.createTransport({
 
 export async function sendEmail(to: string, subject: string, html: string) {
   if (!process.env.SMTP_USER) {
-    console.log(`[EMAIL MOCK] To=${to} | ${subject}`);
+    logger.debug('[email] SMTP_USER no configurado — modo mock', { to, subject });
     return;
   }
-  try {
+  await emailBreaker.call(async () => {
     await transporter.sendMail({
       from: `"RentalApp Notificaciones" <${process.env.SMTP_USER}>`,
       to,
       subject,
       html,
     });
-    console.log(`📧 Email enviado a ${to} | ${subject}`);
-  } catch (error) {
-    console.error('Error enviando email:', error);
-  }
+    logger.info('[email] enviado', { to, subject });
+  });
 }
 
 export async function sendPriceAlert(userEmail: string, property: any) {

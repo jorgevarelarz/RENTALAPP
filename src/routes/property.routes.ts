@@ -35,8 +35,60 @@ r.get(
   asyncHandler(ctrl.listMyFavorites),
 );
 
-r.get('/properties/:id', asyncHandler(ctrl.getById));
+/**
+ * @openapi
+ * /api/properties:
+ *   get:
+ *     tags: [Properties]
+ *     summary: Buscar propiedades disponibles
+ *     security: []
+ *     parameters:
+ *       - in: query
+ *         name: city
+ *         schema: { type: string }
+ *       - in: query
+ *         name: minPrice
+ *         schema: { type: number }
+ *       - in: query
+ *         name: maxPrice
+ *         schema: { type: number }
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, default: 1 }
+ *       - in: query
+ *         name: pageSize
+ *         schema: { type: integer, default: 20 }
+ *     responses:
+ *       200:
+ *         description: Lista paginada de propiedades
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 data:  { type: array, items: { $ref: '#/components/schemas/Property' } }
+ *                 total: { type: integer }
+ *                 page:  { type: integer }
+ */
 r.get('/properties', asyncHandler(ctrl.search));
+
+/**
+ * @openapi
+ * /api/properties/{id}:
+ *   get:
+ *     tags: [Properties]
+ *     summary: Obtener propiedad por ID
+ *     security: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema: { type: string }
+ *     responses:
+ *       200: { description: Propiedad encontrada, content: { application/json: { schema: { $ref: '#/components/schemas/Property' } } } }
+ *       404: { description: Propiedad no encontrada }
+ */
+r.get('/properties/:id', asyncHandler(ctrl.getById));
 
 r.post('/properties/:id/apply', ...assertRole('tenant', 'admin'), asyncHandler(ctrl.apply));
 r.get('/properties/:id/applications', authenticate, authorizeRoles('landlord', 'admin'), asyncHandler(ctrl.listApplications));
