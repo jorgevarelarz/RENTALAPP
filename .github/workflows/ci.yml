@@ -49,7 +49,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm --prefix frontend ci
-      - run: npm --prefix frontend test -- --watchAll=false --forceExit
+      - run: npm --prefix frontend test
       - run: npm --prefix frontend run build
         env:
           VITE_API_URL: http://localhost:3000
