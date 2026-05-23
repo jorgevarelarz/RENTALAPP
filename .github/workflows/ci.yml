@@ -9,6 +9,26 @@ on:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      JWT_SECRET: ci-test-secret-32-chars-minimum-ok
+      MONGO_URL: mongodb://localhost:27017/rentalapp_test
+      CORS_ORIGIN: http://localhost:3001
+      ALLOW_TEST_AUTH: "true"
+      ALLOW_UNVERIFIED: "true"
+      SIGN_PROVIDER: mock
+      ESCROW_DRIVER: mock
+      SMS_PROVIDER: mock
+    services:
+      mongo:
+        image: mongo:6
+        ports:
+          - 27017:27017
+        options: >-
+          --health-cmd "mongosh --quiet --eval 'db.runCommand({ping:1}).ok'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -17,6 +37,8 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run test:policies -- --runInBand
+      - run: npm run test:backend -- --runInBand --forceExit
+      - run: npx tsc --noEmit
 
   frontend:
     runs-on: ubuntu-latest
@@ -27,4 +49,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm --prefix frontend ci
-      - run: npm --prefix frontend test -- --watchAll=false --testPathPattern=policy
+      - run: npm --prefix frontend test -- --watchAll=false --forceExit
+      - run: npm --prefix frontend run build
+        env:
+          VITE_API_URL: http://localhost:3000

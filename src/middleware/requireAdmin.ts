@@ -1,7 +1,8 @@
 import { Request, Response, NextFunction } from "express";
 
 export function requireAdmin(req: Request, res: Response, next: NextFunction) {
-  if (req.header("x-admin") !== "true") {
+  const user = (req as any).user;
+  if (!user || user.role !== "admin") {
     return res.status(403).json({ error: "forbidden" });
   }
   next();

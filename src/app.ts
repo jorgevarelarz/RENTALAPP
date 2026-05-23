@@ -155,15 +155,18 @@ if (process.env.NODE_ENV !== 'test') {
 // Stripe webhook BEFORE JSON parser (uses express.raw)
 app.use('/api', stripeWebhookRoutes);
 
-// CORS: configurar orígenes desde CORS_ORIGIN (coma-separado). En producción, sin fallback amplio.
-const allowedOrigins = (process.env.CORS_ORIGIN || (process.env.NODE_ENV === 'production' ? '' : 'http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:5174'))
+// CORS: configurar orígenes desde CORS_ORIGIN (coma-separado).
+if (process.env.NODE_ENV === 'production' && !process.env.CORS_ORIGIN) {
+  throw new Error('CORS_ORIGIN is required in production. Set it to your frontend domain(s).');
+}
+const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000,http://localhost:3001,http://localhost:5173,http://localhost:5174')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin) return callback(null, true);
-    if (allowedOrigins.length > 0 && allowedOrigins.includes(origin)) {
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     console.warn(`[CORS] Blocked origin: ${origin}`);
@@ -208,7 +211,18 @@ const tenantProLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too_many_requests', message: 'Demasiados intentos. Espera 15 minutos.' },
+});
+
 app.use('/api/tenant-pro', tenantProLimiter);
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/request-reset', authLimiter);
 
 const tenantProConsentVersion = process.env.TENANT_PRO_CONSENT_VERSION || 'v1';
 
