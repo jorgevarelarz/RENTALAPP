@@ -8,7 +8,7 @@ module.exports = {
   // Frontend tests should run with the frontend tooling/config instead.
   testPathIgnorePatterns: ['/node_modules/', '<rootDir>/frontend/'],
   transform: {
-    '^.+\\.(t|j)sx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json' }],
+    '^.+\\.(t|j)sx?$': ['ts-jest', { tsconfig: '<rootDir>/tsconfig.spec.json', diagnostics: false }],
   },
   setupFiles: ['<rootDir>/jest.setup.ts'],
 };

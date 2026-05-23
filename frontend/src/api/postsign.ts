@@ -1,4 +1,4 @@
-import { api } from './axios';
+import { api } from './client';
 
 export type UpsellService = { id?: string; _id?: string; name: string; logo: string; url: string; description?: string; type: string };
 export type UpsellState = {
