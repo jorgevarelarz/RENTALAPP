@@ -474,3 +474,14 @@ Rules:
   - **Tag** `v2.3.0` sobre Commit B.
   - Push de `main` + tag a `origin`.
 - Next suggested step: Codex confirma que el push está visible en GitHub y que CI pasa. Token storage (HttpOnly cookies) queda planificado para 2.4.0.
+
+### 2026-06-12 - Claude Code - Release 2.3.0 COMPLETADO
+
+- Status: done
+- Files touched: release commits only (no source changes in this entry).
+- Verification: pushed to `origin/main` and tag `v2.3.0`. **GitHub Actions CI = success** (run 27438124729): backend job (npm ci, test:policies, test:backend, tsc --noEmit) y frontend job (ci, test, build) ambos verdes. Es el primer CI verde en `main` tras dos runs fallidos de mayo (26340759465, 26340617906).
+- Findings: Release 2.3.0 cerrado. Historial final:
+  - `474eb73` (base GitHub) → `e6f2c3e` (Commit A: hardening/deps/baseline, 20 archivos) → `844cfaf` (Commit B: refactor/frontend P2/docs, 28 archivos).
+  - Tag anotado `v2.3.0` → `96fbe4f` sobre Commit B.
+  - Única anotación de CI: deprecación de Node 20 en actions/checkout@v4 y setup-node@v4 (warning, no error; planificar bump a Node 24 antes de junio 2026).
+- Next suggested step: 2.3.0 está liberado y verde en CI. Backlog para 2.4.0: token storage HttpOnly cookies (requiere cambios de sesión backend), y bump de GitHub Actions a Node 24. Sin trabajo autónomo pendiente; esperar nueva dirección de Jorge.
