@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { getMyInvites } from '../controllers/contract.controller';
+import { getMyInvites } from '../controllers/contract.cotenant.controller';
 import { listMyFavorites } from '../controllers/property.controller';
 
 const r = Router();

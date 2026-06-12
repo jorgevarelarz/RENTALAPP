@@ -1,6 +1,6 @@
 // src/hooks/usePolicyAcceptance.ts
 import { useEffect, useMemo, useState } from "react";
-import axios from "axios";
+import { api as axios } from "../api/client";
 
 const REQUIRED_TYPES = [
   "privacy_policy",

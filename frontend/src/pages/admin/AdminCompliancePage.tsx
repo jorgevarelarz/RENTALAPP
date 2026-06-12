@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import axios from 'axios';
+import { api as axios } from '../../api/client';
 import { Link } from 'react-router-dom';
 
 type Acceptance = {

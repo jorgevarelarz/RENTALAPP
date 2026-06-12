@@ -36,8 +36,7 @@ const emptyDashboard: ComplianceDashboardData = {
 };
 
 const isDemoMode =
-  String(process.env.REACT_APP_RENTAL_PUBLIC_DEMO_MODE || (process.env as any).VITE_RENTAL_PUBLIC_DEMO_MODE || '')
-    .toLowerCase() === 'true';
+  appEnv.rentalPublicDemoMode.toLowerCase() === 'true';
 
 export default function ComplianceDashboard() {
   const [data, setData] = useState<ComplianceDashboardData>(emptyDashboard);
@@ -351,3 +350,4 @@ const loadingPill: React.CSSProperties = {
   background: '#e5e7eb',
   borderRadius: 999,
 };
+import { appEnv } from '../../config/env';

@@ -3,13 +3,14 @@ import { useAuth } from '../context/AuthContext';
 import { devVerifyMe, getMyVerification } from '../services/verification';
 import Badge from '../components/ui/Badge';
 import PageHeader from '../components/ui/PageHeader';
+import { appEnv } from '../config/env';
 
 const Verification: React.FC = () => {
   const { user } = useAuth();
   const [status, setStatus] = useState<string>('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const isProd = process.env.NODE_ENV === 'production';
+  const isProd = appEnv.isProduction;
 
   const fetchStatus = useCallback(async () => {
     if (!user) return;

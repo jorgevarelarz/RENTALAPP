@@ -3,8 +3,9 @@ import { loadStripe } from '@stripe/stripe-js';
 import { Elements } from '@stripe/react-stripe-js';
 import Modal from '../ui/Modal';
 import CheckoutForm from './CheckoutForm';
+import { appEnv } from '../../config/env';
 
-const stripeKey = process.env.REACT_APP_STRIPE_KEY || (process.env as any).REACT_APP_STRIPE_PK;
+const stripeKey = appEnv.stripeKey;
 const stripePromise = stripeKey ? loadStripe(stripeKey) : null;
 
 interface Props {
@@ -22,7 +23,7 @@ export default function PaymentModal({ open, onClose, amountEUR, onSuccess, titl
     return (
       <Modal open={open} onClose={onClose} title="Error de Configuración">
         <div className="p-4 text-red-600">
-          Falta la clave pública de Stripe (REACT_APP_STRIPE_KEY o REACT_APP_STRIPE_PK).
+          Falta la clave pública de Stripe (VITE_STRIPE_KEY).
         </div>
       </Modal>
     );

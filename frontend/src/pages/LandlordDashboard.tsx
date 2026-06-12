@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import axios from 'axios';
+import { api as axios } from '../api/client';
 import { Link } from 'react-router-dom';
 import { createProperty, listProperties } from '../services/properties';
 import { listContracts } from '../services/contracts';
@@ -14,8 +14,6 @@ import PropertyFormRHF, { PropertyFormData } from '../components/PropertyFormRHF
 import ApplicantsModal from '../components/ApplicantsModal';
 import { Building2, Plus, Home, BarChart3, Image as ImageIcon, Users } from 'lucide-react';
 import { toAbsoluteUrl } from '../utils/media';
-
-const API_BASE = process.env.REACT_APP_API_URL || (process.env as any).VITE_API_URL || 'http://localhost:3000';
 
 const IconCash = () => (
   <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -89,7 +87,7 @@ const LandlordDashboard: React.FC = () => {
     if (!token || !files.length) return [];
     const form = new FormData();
     files.forEach(f => form.append('files', f));
-    const res = await axios.post(`${API_BASE}/api/uploads/images`, form, { headers: { Authorization: `Bearer ${token}` } });
+    const res = await axios.post('/api/uploads/images', form, { headers: { Authorization: `Bearer ${token}` } });
     return res.data.urls || [];
   };
 
@@ -98,7 +96,7 @@ const LandlordDashboard: React.FC = () => {
     try {
       const payload: any = { ...data, owner: user?._id };
       if (editingProperty) {
-        await axios.patch(`${API_BASE}/api/properties/${editingProperty._id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+        await axios.patch(`/api/properties/${editingProperty._id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
         push({ title: 'Propiedad actualizada', tone: 'success' });
       } else {
         await createProperty(token, payload);
@@ -328,7 +326,7 @@ const LandlordDashboard: React.FC = () => {
                       onClick={async () => {
                         if (!token) return;
                         try {
-                          await axios.post(`${API_BASE}/api/properties/${p._id}/publish`, {}, { headers: { Authorization: `Bearer ${token}` } });
+                          await axios.post(`/api/properties/${p._id}/publish`, {}, { headers: { Authorization: `Bearer ${token}` } });
                           await refresh();
                           push({ title: 'Propiedad publicada', tone: 'success' });
                         } catch (e: any) {
@@ -348,7 +346,7 @@ const LandlordDashboard: React.FC = () => {
                   <Button variant="secondary" size="sm" onClick={() => openEdit(p)}>Editar</Button>
                   <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={async () => {
                     if (!window.confirm('¿Estás seguro de eliminar este borrador?')) return;
-                    await axios.delete(`${API_BASE}/api/properties/${p._id}`, { headers: { Authorization: `Bearer ${token}` } });
+                    await axios.delete(`/api/properties/${p._id}`, { headers: { Authorization: `Bearer ${token}` } });
                     await refresh();
                     push({ title: 'Eliminada', tone: 'success' });
                   }}>Borrar</Button>

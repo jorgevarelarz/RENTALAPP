@@ -1,5 +1,9 @@
 import { Router } from 'express';
 import * as contractController from '../controllers/contract.controller';
+import * as earningsCtrl from '../controllers/contract.earnings.controller';
+import * as cotenantCtrl from '../controllers/contract.cotenant.controller';
+import * as paymentCtrl from '../controllers/contract.payment.controller';
+import * as notifyCtrl from '../controllers/contract.notify.controller';
 import * as lifeCtrl from '../controllers/contract.lifecycle.controller';
 import * as signCtrl from '../controllers/contract.signature.controller';
 import * as termCtrl from '../controllers/contract.terminate.controller';
@@ -16,8 +20,8 @@ const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
 router.get('/', authenticate, contractController.listContracts);
 
 // Estadísticas de ingresos landlord
-router.get('/earnings/stats', ...assertRole('landlord'), contractController.getLandlordEarnings);
-router.get('/earnings/export', ...assertRole('landlord'), contractController.exportEarningsReport);
+router.get('/earnings/stats', ...assertRole('landlord'), earningsCtrl.getLandlordEarnings);
+router.get('/earnings/export', ...assertRole('landlord'), earningsCtrl.exportEarningsReport);
 
 // Crear contrato
 router.post(
@@ -44,18 +48,18 @@ router.get('/:id/audit-trail', authenticate, signCtrl.getAuditTrail);
 
 // Firmar contrato
 router.patch('/:id/sign', authenticate, requirePolicies(REQUIRED_POLICIES), contractController.signContract);
-router.get('/:id/parties', authenticate, contractController.getContractParties);
-router.post('/:id/tenants/invite', ...assertRole('tenant'), contractController.inviteCoTenant);
-router.post('/:id/tenants/:partyId/sign', ...assertRole('tenant'), contractController.signCoTenant);
-router.post('/:id/tenants/:partyId/remove-request', ...assertRole('tenant', 'landlord'), contractController.removeCoTenantRequest);
+router.get('/:id/parties', authenticate, cotenantCtrl.getContractParties);
+router.post('/:id/tenants/invite', ...assertRole('tenant'), cotenantCtrl.inviteCoTenant);
+router.post('/:id/tenants/:partyId/sign', ...assertRole('tenant'), cotenantCtrl.signCoTenant);
+router.post('/:id/tenants/:partyId/remove-request', ...assertRole('tenant', 'landlord'), cotenantCtrl.removeCoTenantRequest);
 
 // Pagos de renta (Stripe Card)
-router.get('/:id/payments', authenticate, contractController.getContractPayments);
-router.post('/:id/pay-rent', ...assertRole('tenant'), contractController.createRentPaymentIntent);
-router.post('/:id/payments/:period/pay', ...assertRole('tenant'), contractController.payRentForPeriod);
+router.get('/:id/payments', authenticate, earningsCtrl.getContractPayments);
+router.post('/:id/pay-rent', ...assertRole('tenant'), paymentCtrl.createRentPaymentIntent);
+router.post('/:id/payments/:period/pay', ...assertRole('tenant'), paymentCtrl.payRentForPeriod);
 
 // Iniciar pago por SEPA con Stripe
-router.post('/:id/pay', ...assertRole('tenant'), contractController.initiatePayment);
+router.post('/:id/pay', ...assertRole('tenant'), paymentCtrl.initiatePayment);
 
 // Iniciar firma electrónica de contrato
 router.post(
@@ -83,16 +87,16 @@ router.get('/:id/signature/status', authenticate, signCtrl.getSignature);
 router.post('/:id/activate', authenticate, lifeCtrl.activate);
 
 // Enviar recordatorio de pago de renta
-router.post('/:id/remind', authenticate, contractController.sendRentReminder);
+router.post('/:id/remind', authenticate, notifyCtrl.sendRentReminder);
 
 // Enviar notificación de renovación
-router.post('/:id/renew', authenticate, contractController.sendRenewalNotification);
+router.post('/:id/renew', authenticate, notifyCtrl.sendRenewalNotification);
 
 // Terminar contrato
 router.post('/:id/terminate', authenticate, termCtrl.terminate);
 
 // Pagar fianza
-router.post('/:id/deposit', ...assertRole('tenant'), contractController.payDeposit);
+router.post('/:id/deposit', ...assertRole('tenant'), paymentCtrl.payDeposit);
 
 // Obtener contrato con reputación
 router.get('/:id', authenticate, contractController.getContract);

@@ -2,6 +2,7 @@ import React from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { appEnv } from '../config/env';
 
 const NavBar: React.FC = () => {
   const navigate = useNavigate();
@@ -13,7 +14,7 @@ const NavBar: React.FC = () => {
     navigate('/');
   };
 
-  const logoSrc = `${process.env.PUBLIC_URL || ''}/rental-logo.png`;
+  const logoSrc = `${appEnv.baseUrl}/rental-logo.png`;
   const linkClass = ({ isActive }: any) => `nav-link${isActive ? ' active' : ''}`;
   return (
     <nav className="navbar-inner">
@@ -21,7 +22,7 @@ const NavBar: React.FC = () => {
         <img
           src={logoSrc}
           alt="Rental"
-          onError={(e: any) => { e.currentTarget.src = `${process.env.PUBLIC_URL || ''}/logo512.png`; }}
+          onError={(e: any) => { e.currentTarget.src = `${appEnv.baseUrl}/logo512.png`; }}
           className="nav-logo"
         />
         <span>Rental</span>

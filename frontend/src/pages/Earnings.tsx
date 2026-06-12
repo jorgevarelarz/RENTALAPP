@@ -1,11 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import axios from 'axios';
+import { api as axios } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import Card from '../components/ui/Card';
 import { TrendingUp, DollarSign, Calendar, ArrowUpRight, Wallet, DownloadCloud } from 'lucide-react';
 import Button from '../components/ui/Button';
-
-const API_URL = process.env.REACT_APP_API_URL || '/api';
 
 export default function Earnings() {
   const { token } = useAuth();
@@ -22,7 +20,7 @@ export default function Earnings() {
 
   const loadEarnings = async () => {
     try {
-      const res = await axios.get(`${API_URL}/contracts/earnings/stats`, {
+      const res = await axios.get('/api/contracts/earnings/stats', {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       setData(res.data);
@@ -37,7 +35,7 @@ export default function Earnings() {
     if (!token) return;
     try {
       setExporting(true);
-      const response = await axios.get(`${API_URL}/contracts/earnings/export`, {
+      const response = await axios.get('/api/contracts/earnings/export', {
         headers: { Authorization: `Bearer ${token}` },
         responseType: 'blob',
       });

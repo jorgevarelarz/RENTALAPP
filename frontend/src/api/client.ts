@@ -1,6 +1,7 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
+import { appEnv } from '../config/env';
 
-const API_BASE = process.env.REACT_APP_API_URL || (process.env as any).VITE_API_URL || '';
+const API_BASE = appEnv.apiUrl;
 
 export const api = axios.create({ baseURL: API_BASE });
 
@@ -19,7 +20,7 @@ api?.interceptors?.request?.use?.((config: InternalAxiosRequestConfig) => {
         (config.headers as any) = { ...(config.headers || {}), Authorization: `Bearer ${u.token}` };
       }
       // Dev-only admin header for admin routes
-      const isDev = process.env.NODE_ENV !== 'production';
+      const isDev = !appEnv.isProduction;
       if (isDev && u?.role === 'admin' && config.url && /\/api\/admin\//.test(config.url)) {
         (config.headers as any) = { ...(config.headers || {}), 'x-admin': 'true' };
       }

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { CardElement, useElements, useStripe } from '@stripe/react-stripe-js';
-import axios from 'axios';
+import { api as axios } from '../../api/client';
 import Button from '../ui/Button';
 import { Lock } from 'lucide-react';
 

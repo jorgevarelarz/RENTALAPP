@@ -1,17 +1,22 @@
 import { renderHook, act, waitFor } from '@testing-library/react';
-import axios from 'axios';
 import { vi } from 'vitest';
+import { api } from '../../api/client';
 import { usePolicyAcceptance } from '../usePolicyAcceptance';
 
-vi.mock('axios');
-const mockedAxios = vi.mocked(axios, { partial: false });
+vi.mock('../../api/client', () => ({
+  api: {
+    get: vi.fn(),
+    post: vi.fn(),
+  },
+}));
+const mockedApi = vi.mocked(api, { partial: false });
 
 describe('usePolicyAcceptance', () => {
   beforeEach(() => {
     localStorage.clear();
     vi.clearAllMocks();
-    mockedAxios.get.mockReset();
-    mockedAxios.post.mockReset();
+    mockedApi.get.mockReset();
+    mockedApi.post.mockReset();
     vi.spyOn(console, 'error').mockImplementation(() => {});
   });
 
@@ -21,14 +26,14 @@ describe('usePolicyAcceptance', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.hasAccepted).toBe(true);
     expect(result.current.needsAcceptance).toBe(false);
-    expect(mockedAxios.get).not.toHaveBeenCalled();
+    expect(mockedApi.get).not.toHaveBeenCalled();
   });
 
   it('marks as accepted when active versions match all required types', async () => {
     localStorage.setItem('token', 't');
     localStorage.setItem('policy_version_privacy_policy', 'v1.0');
     localStorage.setItem('policy_version_terms_of_service', 'v2.0');
-    mockedAxios.get.mockResolvedValueOnce({
+    mockedApi.get.mockResolvedValueOnce({
       data: {
         data: [
           { policyType: 'privacy_policy', version: 'v1.0' },
@@ -44,7 +49,7 @@ describe('usePolicyAcceptance', () => {
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.needsAcceptance).toBe(false);
     expect(result.current.hasAccepted).toBe(true);
-    expect(mockedAxios.get).toHaveBeenCalledWith('/api/policies/active', {
+    expect(mockedApi.get).toHaveBeenCalledWith('/api/policies/active', {
       headers: { Authorization: 'Bearer t' },
     });
   });
@@ -53,7 +58,7 @@ describe('usePolicyAcceptance', () => {
     localStorage.setItem('token', 't');
     localStorage.setItem('policy_version_privacy_policy', 'v1.0');
     localStorage.setItem('policy_version_terms_of_service', 'v2.0');
-    mockedAxios.get.mockResolvedValueOnce({
+    mockedApi.get.mockResolvedValueOnce({
       data: {
         data: [
           { policyType: 'privacy_policy', version: 'v1.0' },
@@ -61,7 +66,7 @@ describe('usePolicyAcceptance', () => {
         ],
       },
     } as any);
-    mockedAxios.post.mockResolvedValueOnce({ data: {} } as any);
+    mockedApi.post.mockResolvedValueOnce({ data: {} } as any);
 
     const { result } = renderHook(() =>
       usePolicyAcceptance(undefined, ['privacy_policy', 'terms_of_service'])
@@ -77,7 +82,7 @@ describe('usePolicyAcceptance', () => {
       await result.current.acceptPolicy();
     });
 
-    expect(mockedAxios.post).toHaveBeenCalledWith(
+    expect(mockedApi.post).toHaveBeenCalledWith(
       '/api/policies/accept',
       { policyType: 'terms_of_service', policyVersion: 'v2.1' },
       { headers: { Authorization: 'Bearer t' } }
