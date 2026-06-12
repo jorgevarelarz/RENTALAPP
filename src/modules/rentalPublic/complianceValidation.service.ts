@@ -57,7 +57,10 @@ export async function evaluateAndPersist(contractId: string, opts: EvaluateCompl
       ? opts.previousRent
       : typeof contractPreviousRent === 'number'
         ? contractPreviousRent
-        : await getPreviousRent(property._id as any, undefined);
+        : await getPreviousRent(
+            property._id as any,
+            typeof property.price === 'number' ? property.price : undefined,
+          );
 
   const resolvedPreviousRent = typeof previousRent === 'number' ? previousRent : newRent;
 

@@ -89,6 +89,6 @@ describe('Institution compliance API', () => {
       .set('Authorization', `Bearer ${token}`)
       .expect(200);
 
-    expect(res.text).toContain('case_id,areaKey,previousRent,newRent,status,checkedAt');
+    expect(res.text).toContain('"case_id","areaKey","previousRent","newRent","status","checkedAt"');
   });
 });

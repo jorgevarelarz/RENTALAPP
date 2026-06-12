@@ -1,6 +1,6 @@
+import { randomUUID } from 'crypto';
 import { Contract } from '../models/contract.model';
 import { recordContractHistory } from '../utils/history';
-import { v4 as uuidv4 } from 'uuid';
 
 export interface SignatureInitResult {
   envelopeId: string;
@@ -21,7 +21,7 @@ export const initSignature = async (contractId: string, userId?: string): Promis
 
   // En un entorno real, aquí iría la llamada al proveedor (Docusign/Signaturit)
   // para generar los URLs personalizados para cada parte.
-  const envelopeId = contract.signature?.envelopeId || uuidv4();
+  const envelopeId = contract.signature?.envelopeId || randomUUID();
   const recipientUrls = {
     landlordUrl: `https://sign.example.com/${envelopeId}?role=landlord`,
     tenantUrl: `https://sign.example.com/${envelopeId}?role=tenant`,

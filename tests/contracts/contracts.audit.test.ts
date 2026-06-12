@@ -73,7 +73,7 @@ describe('Contract signature audit trail', () => {
         contractId: String(contract._id),
         userId: null,
         envelopeId: 'env_123',
-        provider: (process.env.SIGN_PROVIDER || 'mock').toLowerCase(),
+        provider: (process.env.SIGN_PROVIDER || 'signaturit').toLowerCase(),
         eventType: evt.eventType,
         timestamp: new Date(evt.timestamp).toISOString(),
         ip: evt.ip ?? null,

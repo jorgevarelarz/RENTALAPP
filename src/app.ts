@@ -201,7 +201,9 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 // Proteger contra HTTP Parameter Pollution en query; no tocar body JSON para evitar falsos positivos
 app.use(hpp({ checkBody: false, checkQuery: true }));
-// Serve uploaded files
+// Contract PDFs must go through authenticated contract routes, not public static files.
+app.use('/uploads/contracts', (_req, res) => res.status(404).json({ error: 'not_found' }));
+// Serve non-sensitive uploaded files
 app.use('/uploads', express.static('uploads'));
 
 const tenantProLimiter = rateLimit({
@@ -340,7 +342,7 @@ app.get('/', (_req, res) => {
 });
 
 if (process.env.NODE_ENV === 'production') {
-  const frontendDist = path.resolve(process.cwd(), 'frontend/build');
+  const frontendDist = path.resolve(process.cwd(), 'frontend/dist');
   const institutionDist = path.resolve(process.cwd(), 'institution-frontend/dist');
 
   if (fs.existsSync(institutionDist)) {

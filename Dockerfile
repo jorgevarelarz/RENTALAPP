@@ -3,8 +3,12 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
+COPY frontend/package*.json ./frontend/
+RUN npm --prefix frontend ci
+COPY institution-frontend/package*.json ./institution-frontend/
+RUN npm --prefix institution-frontend ci
 COPY . .
-RUN npm run build
+RUN npm run build && npm --prefix frontend run build && npm --prefix institution-frontend run build
 
 # ----- Runner -----
 FROM node:20-alpine AS runner
@@ -23,6 +27,8 @@ RUN npm ci --omit=dev
 # Copiar artefactos construidos
 COPY --chown=node:node --from=builder /app/dist ./dist
 COPY --chown=node:node --from=builder /app/legal ./legal
+COPY --chown=node:node --from=builder /app/frontend/dist ./frontend/dist
+COPY --chown=node:node --from=builder /app/institution-frontend/dist ./institution-frontend/dist
 
 # Ejecutar como usuario no-root por seguridad
 USER node

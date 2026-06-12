@@ -39,8 +39,25 @@ export function loadEnv(): Env {
     if (!e.INSTITUTION_CASEID_SALT || e.INSTITUTION_CASEID_SALT.length < 16) {
       throw new Error('INSTITUTION_CASEID_SALT requerido en producción');
     }
+    const ibanKey = process.env.IBAN_ENCRYPTION_KEY || '';
+    if (ibanKey.length < 64) {
+      throw new Error('IBAN_ENCRYPTION_KEY debe ser un hex de 32 bytes (64 chars) en producción');
+    }
+    if (!process.env.STRIPE_WEBHOOK_SECRET) {
+      throw new Error('STRIPE_WEBHOOK_SECRET requerido en producción');
+    }
+    if (!process.env.STRIPE_IDENTITY_WEBHOOK_SECRET) {
+      console.warn('[env] STRIPE_IDENTITY_WEBHOOK_SECRET no definido — KYC webhook sin verificación HMAC');
+    }
     if (!e.CORS_ORIGIN) {
       console.warn('[env] CORS_ORIGIN no definido en producción — se recomienda configurarlo');
+    }
+    // Flags peligrosos que no deben estar activos en producción
+    if (process.env.ALLOW_TEST_AUTH === 'true') {
+      throw new Error('ALLOW_TEST_AUTH=true no está permitido en producción');
+    }
+    if (process.env.ALLOW_UNVERIFIED === 'true') {
+      console.warn('[env] ALLOW_UNVERIFIED=true activo en producción — desactívalo');
     }
   }
 

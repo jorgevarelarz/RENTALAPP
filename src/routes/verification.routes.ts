@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { Verification } from '../models/verification.model';
 import { getUserId } from '../utils/getUserId';
+import { authenticate } from '../middleware/auth.middleware';
 import { requireAdmin } from '../middleware/requireAdmin';
 
 const router = Router();
 
 // Retrieve current verification status for the authenticated user
-router.get('/me', async (req, res) => {
+router.get('/me', authenticate, async (req, res) => {
   try {
     const userId = getUserId(req);
     const v = await Verification.findOne({ userId }).lean();
@@ -18,7 +19,7 @@ router.get('/me', async (req, res) => {
 });
 
 // Submit verification data by the user
-router.post('/submit', async (req, res) => {
+router.post('/submit', authenticate, async (req, res) => {
   try {
     const userId = getUserId(req);
     const { method, files } = req.body || {};

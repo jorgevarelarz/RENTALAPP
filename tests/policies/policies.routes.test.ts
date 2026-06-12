@@ -38,16 +38,19 @@ describe('Policy routes', () => {
   });
 
   test('rejects requests without token (401)', async () => {
-    const prevEnv = process.env.NODE_ENV;
-    process.env.NODE_ENV = 'production';
+    const prevAllowTestAuth = process.env.ALLOW_TEST_AUTH;
+    process.env.ALLOW_TEST_AUTH = 'false';
 
-    const res = await request(app).post('/api/policies/accept').send({
-      policyType: 'privacy_policy',
-      policyVersion: 'v1.0',
-    });
+    try {
+      const res = await request(app).post('/api/policies/accept').send({
+        policyType: 'privacy_policy',
+        policyVersion: 'v1.0',
+      });
 
-    expect(res.status).toBe(401);
-    process.env.NODE_ENV = prevEnv;
+      expect(res.status).toBe(401);
+    } finally {
+      process.env.ALLOW_TEST_AUTH = prevAllowTestAuth;
+    }
   });
 
   test('returns 400 when required fields are missing', async () => {

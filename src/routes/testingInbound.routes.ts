@@ -1,8 +1,13 @@
-import { Router } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import Lead from '../models/lead.model';
 import { analyzeInboundLead } from '../services/inboundLead.service';
 
 const r = Router();
+
+r.use((_req: Request, res: Response, next: NextFunction) => {
+  if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'not_found' });
+  next();
+});
 
 r.post('/testing/inbound/webhook', async (req, res) => {
   try {
