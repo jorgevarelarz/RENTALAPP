@@ -8,6 +8,7 @@ import { Application } from '../models/application.model';
 import { buildAreaKey, TensionedArea } from '../modules/rentalPublic';
 import { SystemEvent } from '../models/systemEvent.model';
 import { emitSystemEvent } from '../events/system.events';
+import { recordFunnelEvent } from '../services/funnelEvents.service';
 
 const tensionedAreaDateQuery = (changeDate: Date) => ({
   active: true,
@@ -338,6 +339,10 @@ export async function search(req: Request, res: Response) {
   const items = await finder.skip((pg - 1) * lim).limit(lim);
   const total = hasGeo ? items.length : await Property.countDocuments({ ...q, ...geo });
 
+  await recordFunnelEvent(req, 'search', {
+    meta: { city, region, priceMin, priceMax, roomsMin, roomsMax, onlyTenantPro: onlyProParam, total },
+  });
+
   res.json({ items, page: pg, limit: lim, total });
 }
 
@@ -414,6 +419,11 @@ export async function apply(req: Request, res: Response) {
 
   const existing = await Application.findOne({ propertyId: property._id, tenantId: userId });
   if (existing) {
+    await recordFunnelEvent(req, 'application', {
+      resourceType: 'application',
+      resourceId: String(existing._id),
+      meta: { propertyId: String(property._id), reused: true },
+    });
     return res.json({ ok: true, applicationId: existing._id });
   }
 
@@ -421,6 +431,12 @@ export async function apply(req: Request, res: Response) {
     propertyId: property._id,
     tenantId: userId,
     status: 'pending',
+  });
+
+  await recordFunnelEvent(req, 'application', {
+    resourceType: 'application',
+    resourceId: String(app._id),
+    meta: { propertyId: String(property._id) },
   });
 
   res.json({ ok: true, propertyId: property._id, applicationId: app._id });

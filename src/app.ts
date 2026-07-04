@@ -64,6 +64,7 @@ import { metricsMiddleware, metricsHandler } from './metrics';
 import { signatureWebhook } from './controllers/contract.signature.controller';
 import { authorizeRoles } from './middleware/role.middleware';
 import { loadInstitutionScope } from './middleware/institutionScope';
+import { recordFunnelEvent } from './services/funnelEvents.service';
 
 // Load environment variables
 const env = loadEnv();
@@ -363,11 +364,16 @@ if (process.env.NODE_ENV === 'production') {
   }
 
   if (fs.existsSync(frontendDist)) {
+    app.get('/', async (req, res) => {
+      await recordFunnelEvent(req, 'visit', { meta: { surface: 'frontend' } });
+      res.sendFile(path.join(frontendDist, 'index.html'));
+    });
     app.use(express.static(frontendDist));
-    app.get(/^\/(?!api\/|institution\/).*/, (req, res) => {
+    app.get(/^\/(?!api\/|institution\/).*/, async (req, res) => {
       if (!shouldServeSpaFallback(req.path)) {
         return res.status(404).json({ error: 'not_found' });
       }
+      await recordFunnelEvent(req, 'visit', { meta: { surface: 'frontend', spaPath: req.path } });
       res.sendFile(path.join(frontendDist, 'index.html'));
     });
   }

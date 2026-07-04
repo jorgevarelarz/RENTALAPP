@@ -543,3 +543,12 @@ Rules:
 - Verification: `npm run roadmap:check` passed with 10,500 generated tasks. `npm run smoke:production` passed against `https://app.rentalapp.es`: `/health`, `/ready`, `/` return 200 and suspicious paths `/.env`, `/backup.sql`, `/wp-config.php` return 404.
 - Findings: Jorge pidió ejecutar el plan anual distribuido en 26 sprints. Se creó una base versionada y verificable del backlog maestro con 20 épicas, prioridades P0-P3, releases por sprint, criterios de aceptación y estado inicial `todo`. La tabla del plan suma 10,500 tareas aunque el texto dice 10,250; se toma la tabla como fuente de verdad porque cumple el objetivo `10.250+`.
 - Next suggested step: empezar Sprint 1 con cambios de producto/operación: rotar Stripe live, configurar SMTP real, mantener `SMS_PROVIDER=disabled`, añadir eventos de funnel, monitor externo, revisión de rutas públicas/rate limits y backup Mongo con restore probado.
+
+### 2026-07-04 - Codex - Sprint 01 package: funnel + smoke + Mongo backup
+
+- Status: in_progress
+- Files touched: `src/services/funnelEvents.service.ts`, `src/controllers/auth.controller.ts`, `src/controllers/property.controller.ts`, `src/controllers/contract.controller.ts`, `src/controllers/contract.payment.controller.ts`, `src/app.ts`, `scripts/smoke_production.js`, `scripts/mongo_backup_valeris.sh`, `docs/ops-mongo-backup.md`, `docs/roadmap/sprint-01.md`, `tests/unit/funnelEvents.test.ts`, `package.json`
+- Verification: `npm run build` passed. `npm run test:backend -- --runInBand --forceExit tests/unit/funnelEvents.test.ts` passed. `npm run roadmap:check` passed.
+- Findings: Funnel events now reuse `SystemEvent` for `FUNNEL_VISIT`, `FUNNEL_REGISTER`, `FUNNEL_LOGIN`, `FUNNEL_SEARCH`, `FUNNEL_APPLICATION`, `FUNNEL_CONTRACT`, and `FUNNEL_PAYMENT`. Mongo backup/restore is documented without storing secrets. Current production returned 404 for `/api/properties?limit=1` before this package was deployed, so the expanded smoke must be rerun after deploy.
+- Blocked/deferred: Stripe live key rotation requires a newly generated Stripe key outside the repo. SMTP requires real credentials. External uptime monitor requires a provider/account. SMS remains `disabled`.
+- Next suggested step: commit, push, deploy to Valeris, then run `npm run smoke:production`; if public property route still returns 404 after deploy, inspect Apache proxy/container routing before continuing to the next Sprint 1 item.

@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { sendEmail } from '../utils/email';
 import { getJwtSecret } from '../utils/getJwtSecret';
+import { recordFunnelEvent } from '../services/funnelEvents.service';
 
 const EFFECTIVE_JWT_SECRET = getJwtSecret();
 
@@ -21,6 +22,11 @@ export const register = async (req: Request, res: Response) => {
     // Save new user with hashed password
     const user = new User({ name, email, passwordHash, role });
     await user.save();
+    await recordFunnelEvent(req, 'register', {
+      resourceType: 'user',
+      resourceId: String(user._id),
+      meta: { userId: String(user._id), role: user.role },
+    });
     const token = jwt.sign({ id: user._id, role: user.role }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
     res.status(201).json({
       token,
@@ -45,6 +51,11 @@ export const login = async (req: Request, res: Response) => {
     // Compare provided password with stored hash
     const isMatch = await bcrypt.compare(password, user.passwordHash as string);
     if (!isMatch) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
+    await recordFunnelEvent(req, 'login', {
+      resourceType: 'user',
+      resourceId: String(user._id),
+      meta: { userId: String(user._id), role: user.role },
+    });
     // Generate and return JWT
     const token = jwt.sign({ id: user._id, role: user.role }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
     res.json({

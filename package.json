@@ -11,6 +11,7 @@
     "roadmap:generate": "node scripts/generate_roadmap_backlog.js",
     "roadmap:check": "node scripts/check_roadmap_backlog.js",
     "smoke:production": "node scripts/smoke_production.js",
+    "backup:mongo:valeris": "bash scripts/mongo_backup_valeris.sh",
     "test": "jest",
     "test:backend": "jest --config jest.config.js",
     "test:frontend": "npm --prefix frontend test",

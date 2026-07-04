@@ -8,6 +8,7 @@ import { stripe } from '../utils/stripe';
 import { createPaymentIntent } from '../utils/payment';
 import { depositToEscrow } from '../utils/deposit';
 import { initiatePaymentAction } from '../services/contract.actions';
+import { recordFunnelEvent } from '../services/funnelEvents.service';
 
 export const initiatePayment = async (req: Request, res: Response) => {
   try {
@@ -19,6 +20,11 @@ export const initiatePayment = async (req: Request, res: Response) => {
     }
     const userRef = { id: String(user.id), role: String(user.role) };
     const clientSecret = await initiatePaymentAction(id, amount, userRef);
+    await recordFunnelEvent(req, 'payment', {
+      resourceType: 'contract',
+      resourceId: id,
+      meta: { amount, phase: 'initiated' },
+    });
     res.json({ message: 'Pago iniciado', clientSecret });
   } catch (error: any) {
     console.error(error);
@@ -52,6 +58,11 @@ export const payDeposit = async (req: Request, res: Response) => {
       successUrl || process.env.DEPOSIT_SUCCESS_URL || 'https://example.com/deposit/success',
       cancelUrl || process.env.DEPOSIT_CANCEL_URL || 'https://example.com/deposit/cancel'
     );
+    await recordFunnelEvent(req, 'payment', {
+      resourceType: 'contract',
+      resourceId: String(contract._id),
+      meta: { amount: depositAmount, phase: 'deposit' },
+    });
     res.json({ message: 'Iniciando pago de fianza', sessionUrl });
   } catch (error: any) {
     console.error(error);
@@ -134,6 +145,12 @@ export const createRentPaymentIntent = async (req: Request, res: Response) => {
       billingYear: now.getFullYear(),
     });
 
+    await recordFunnelEvent(req, 'payment', {
+      resourceType: 'rentPayment',
+      resourceId: String(rentPayment._id),
+      meta: { contractId: String(contract._id), amount, period, phase: 'rent_intent' },
+    });
+
     res.json({ clientSecret: paymentIntent.client_secret, amount });
   } catch (error: any) {
     console.error('Error creando pago de renta:', error);
@@ -204,6 +221,11 @@ export const payRentForPeriod = async (req: Request, res: Response) => {
     rentPayment.providerPaymentId = intent.id;
     rentPayment.paidByUserId = userId ? new Types.ObjectId(userId) : undefined;
     await rentPayment.save();
+    await recordFunnelEvent(req, 'payment', {
+      resourceType: 'rentPayment',
+      resourceId: String(rentPayment._id),
+      meta: { contractId: String(contract._id), amount: contract.rent, period, phase: 'rent_period' },
+    });
     res.json({ clientSecret: intent.client_secret, amount: contract.rent, status: rentPayment.status });
   } catch (err: any) {
     console.error(err);

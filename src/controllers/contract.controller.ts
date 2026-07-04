@@ -16,6 +16,7 @@ import * as docusignProvider from '../services/signature/docusign.provider';
 import { sendContractReadyEmail } from '../utils/email';
 import PDFDocument from 'pdfkit';
 import { createContractAction, signContractAction } from '../services/contract.actions';
+import { recordFunnelEvent } from '../services/funnelEvents.service';
 import type { ResolvedClause } from '../services/clauses.service';
 import { generateContractPdfFile } from '../services/pdfGenerator';
 import { evaluateAndPersist } from '../modules/rentalPublic';
@@ -154,6 +155,12 @@ export async function create(req: Request, res: Response) {
       });
     }
 
+    await recordFunnelEvent(req, 'contract', {
+      resourceType: 'contract',
+      resourceId: String(contract._id),
+      meta: { propertyId: String(contract.property), landlordId: String(contract.landlord), tenantId: String(contract.tenant) },
+    });
+
     return res.status(201).json({ contract: { ...contract.toObject(), pdfPath: publicPath, pdfHash } });
   } catch (error) {
     console.error('Error al crear el contrato:', error);
@@ -192,6 +199,16 @@ export const createContract = async (req: Request, res: Response) => {
       endDate,
       iban,
     });
+    await recordFunnelEvent(req, 'contract', {
+      resourceType: 'contract',
+      resourceId: String((contract as any)._id),
+      meta: {
+        propertyId: String((contract as any).property),
+        landlordId: String((contract as any).landlord),
+        tenantId: String((contract as any).tenant),
+      },
+    });
+
     res.status(201).json({ message: 'Contrato creado', contract });
   } catch (err: any) {
     console.error(err);
