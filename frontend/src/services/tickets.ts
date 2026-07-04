@@ -49,7 +49,7 @@ export async function requestExtra(id: string, amount: number, reason: string) {
 }
 
 export async function decideExtra(id: string, decision: "approved" | "rejected") {
-  const { data } = await axios.post(`/api/tickets/${id}/extra/decide`, { decision });
+  const { data } = await axios.post(`/api/tickets/${id}/extra/decide`, { approve: decision === "approved" });
   return data;
 }
 

@@ -608,4 +608,14 @@ Rules:
 - Verification: `npm --prefix frontend test -- --run src/pages/__tests__/ContractDetail.test.tsx src/pages/__tests__/ContractDetail.polling.test.tsx` passed. `npm --prefix frontend run build` passed.
 - Findings: Contract detail now includes a legal timeline derived from existing contract fields and status: created, PDF prepared, digital signature, deposit payment and activation. This gives tenant/landlord/admin a single visible lifecycle without changing the signature or payment backend.
 - Blocked/deferred: Evidence bundle/download improvements remain pending until backend exposes a stable evidence endpoint beyond the signed PDF URL.
-- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with payments/admin finance and ticket workflow polish.
+- Deploy: commit `3cf23c7` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: continue with payments/admin finance and ticket workflow polish.
+
+### 2026-07-04 - Codex - Sprint unico: ticket extra decision payload fix
+
+- Status: done
+- Files touched: `frontend/src/services/tickets.ts`, `frontend/src/services/tickets.test.ts`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend test -- --run src/services/tickets.test.ts src/pages/tickets/__tests__/TicketDetail.test.tsx` passed. `npm --prefix frontend run build` passed.
+- Findings: Fixed the extra approval/rejection flow for maintenance tickets. The backend expects `{ approve: boolean }`, but the frontend service sent `{ decision: "approved" | "rejected" }`, causing rejected extras and approved extras to be interpreted incorrectly.
+- Blocked/deferred: No broader ticket redesign in this package. Photo evidence and SLA prioritization remain pending for a later ticket workflow package.
+- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with payments/admin finance or pro marketplace polish.
