@@ -5,6 +5,24 @@ const API_BASE = appEnv.apiUrl;
 
 export const api = axios.create({ baseURL: API_BASE });
 
+export function getApiErrorRequestId(err: any) {
+  const headers = err?.response?.headers;
+  return (
+    err?.response?.data?.requestId ||
+    headers?.['x-request-id'] ||
+    headers?.['X-Request-Id'] ||
+    headers?.get?.('x-request-id') ||
+    headers?.get?.('X-Request-Id') ||
+    ''
+  );
+}
+
+export function formatApiError(err: any, fallback = 'Error de red') {
+  const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback;
+  const requestId = getApiErrorRequestId(err);
+  return requestId ? `${msg} (ref: ${requestId})` : msg;
+}
+
 // Request: inject Authorization and dev-only x-admin for admin routes
 // En entorno de test algunos mocks de axios no implementan interceptors;
 // protegemos las llamadas para evitar TypeError en Jest.
@@ -38,9 +56,8 @@ api?.interceptors?.response?.use?.(
     try {
       const url = err?.config?.url || '';
       if (!/\/api\/auth\//.test(url)) {
-        const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || 'Error de red';
         // Lazy require to avoid circular deps
-        require('react-hot-toast').toast.error(msg);
+        require('react-hot-toast').toast.error(formatApiError(err));
       }
     } catch {}
     return Promise.reject(err);

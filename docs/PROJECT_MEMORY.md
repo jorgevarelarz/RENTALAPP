@@ -552,3 +552,11 @@ Rules:
 - Findings: Funnel events now reuse `SystemEvent` for `FUNNEL_VISIT`, `FUNNEL_REGISTER`, `FUNNEL_LOGIN`, `FUNNEL_SEARCH`, `FUNNEL_APPLICATION`, `FUNNEL_CONTRACT`, and `FUNNEL_PAYMENT`. Mongo backup/restore is documented without storing secrets. Production returned 404 for `/api/properties?limit=1` because `testingInboundRoutes` was mounted at `/api` and its production guard intercepted all API paths; fixed by not mounting that test router in production. Production smoke now confirms `/api/properties?limit=1` returns 200.
 - Blocked/deferred: Stripe live key rotation requires a newly generated Stripe key outside the repo. SMTP requires real credentials. External uptime monitor requires a provider/account. SMS remains `disabled`.
 - Next suggested step: continue Sprint 1 with SMTP credentials when available, Stripe key rotation outside repo, and external uptime provider setup; otherwise move to Oleada 2 landing/auth/onboarding.
+
+### 2026-07-04 - Codex - Frontend requestId error references
+
+- Status: done
+- Files touched: `frontend/src/api/client.ts`, `frontend/src/api/client.test.ts`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend test -- --run src/api/client.test.ts` passed. `npm --prefix frontend run build` passed.
+- Findings: API client now formats backend errors as `message (ref: requestId)` using either JSON body `requestId` or `X-Request-Id` response header. The global non-auth error toast uses this formatter. This avoids editing every page-level `catch` at once.
+- Next suggested step: continue Oleada 2 with login/register/forgot/reset page polish and onboarding checklist by role.
