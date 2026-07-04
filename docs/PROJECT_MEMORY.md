@@ -588,4 +588,14 @@ Rules:
 - Verification: `npm --prefix frontend test -- --run src/pages/tenant/__tests__/TenantHome.test.tsx` passed. `npm --prefix frontend run build` passed.
 - Findings: Tenant dashboard now loads existing contract data, local saved favorites and Tenant PRO state to show an actionable summary: active contract, pending contracts, favorites and verification status. It also surfaces an active rental card with direct contract access and request-id formatted errors.
 - Blocked/deferred: Favorite count still uses the current local favorites store because the public Favorites page uses that source today. A server-backed favorites migration can be done later after aligning `/api/me/favorites` behavior with the frontend.
-- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with landlord dashboard reliability and pricing-alert polish.
+- Deploy: commit `5538d77` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: continue with landlord dashboard reliability and pricing-alert polish.
+
+### 2026-07-04 - Codex - Sprint unico: landlord operations alerts package
+
+- Status: done
+- Files touched: `frontend/src/pages/LandlordDashboard.tsx`, `frontend/src/utils/landlordDashboard.ts`, `frontend/src/utils/landlordDashboard.test.ts`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend test -- --run src/utils/landlordDashboard.test.ts` passed. `npm --prefix frontend run build` passed.
+- Findings: Landlord dashboard now shows operational alerts for missing photos, drafts, published vacant listings and price deviations. It adds a transparent first-pass rent estimate by m2/city and fixes publish-button photo gating so it consistently counts both `images` and `photos`.
+- Blocked/deferred: The rent recommendation is intentionally basic and visible as a hint only. A real pricing model remains pending until there is enough market/comparable data.
+- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with contracts/firma timeline and payment/admin finance improvements.

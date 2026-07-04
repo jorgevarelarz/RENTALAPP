@@ -12,9 +12,10 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import PropertyFormRHF, { PropertyFormData } from '../components/PropertyFormRHF';
 import ApplicantsModal from '../components/ApplicantsModal';
-import { Building2, Plus, Home, BarChart3, Image as ImageIcon, Users } from 'lucide-react';
+import { AlertTriangle, Building2, Plus, Home, BarChart3, Image as ImageIcon, Users } from 'lucide-react';
 import { toAbsoluteUrl } from '../utils/media';
 import OnboardingChecklist from '../components/OnboardingChecklist';
+import { buildLandlordAlerts, estimateMonthlyRent, propertyPhotoCount } from '../utils/landlordDashboard';
 
 const IconCash = () => (
   <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -123,6 +124,7 @@ const LandlordDashboard: React.FC = () => {
 
   const activeProps = mine.filter(p => p.status === 'active' && !rentedByProperty[String(p._id)]).length;
   const draftProps = mine.filter(p => p.status !== 'active').length;
+  const landlordAlerts = buildLandlordAlerts(mine);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
@@ -137,6 +139,27 @@ const LandlordDashboard: React.FC = () => {
       </div>
 
       <OnboardingChecklist role="landlord" />
+
+      {landlordAlerts.length > 0 && (
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+          {landlordAlerts.map((alert) => (
+            <div
+              key={alert.id}
+              className={`flex items-start gap-3 rounded-xl border p-4 ${
+                alert.tone === 'warning'
+                  ? 'border-amber-200 bg-amber-50 text-amber-900'
+                  : 'border-blue-200 bg-blue-50 text-blue-900'
+              }`}
+            >
+              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+              <div>
+                <p className="font-semibold">{alert.title}</p>
+                <p className="mt-1 text-sm opacity-80">{alert.detail}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {statsLoading ? (
         <div className="p-6 flex justify-center"><Spinner /></div>
@@ -265,6 +288,11 @@ const LandlordDashboard: React.FC = () => {
           <div className="divide-y divide-gray-100">
             {mine.map((p: any) => {
               const rented = rentedByProperty[String(p._id)];
+              const photoCount = propertyPhotoCount(p);
+              const priceEstimate = estimateMonthlyRent(p);
+              const priceDiff = priceEstimate && p.price
+                ? Math.round(((Number(p.price) - priceEstimate) / priceEstimate) * 100)
+                : null;
               const statusLabel = rented
                 ? 'Alquilado'
                 : p.status === 'active'
@@ -304,6 +332,12 @@ const LandlordDashboard: React.FC = () => {
                     </div>
                     <p className="text-sm text-gray-600">{p.address}, {p.city}</p>
                     <p className="text-sm font-medium text-gray-900 mt-1">{p.price} €/mes</p>
+                    {priceEstimate && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        Estimación inicial: {priceEstimate.toLocaleString('es-ES')} €/mes
+                        {priceDiff !== null && Math.abs(priceDiff) > 20 ? ` · revisar (${priceDiff > 0 ? '+' : ''}${priceDiff}%)` : ''}
+                      </p>
+                    )}
                     {rented && (
                       <p className="text-xs text-gray-500 mt-1">
                         Alquilado por {rented.tenantName || 'Inquilino'}{endLabel ? ` · Hasta ${endLabel}` : ''}
@@ -339,9 +373,9 @@ const LandlordDashboard: React.FC = () => {
                           push({ title: msg, tone: 'error' });
                         }
                       }}
-                      disabled={((p.images?.length || p.photos?.length || 0) < 3)}
-                      className={((p.images?.length || 0) < 3) ? "opacity-50 cursor-not-allowed" : ""}
-                      title={((p.images?.length || 0) < 3) ? "Faltan fotos" : "Publicar ahora"}
+                      disabled={photoCount < 3}
+                      className={photoCount < 3 ? "opacity-50 cursor-not-allowed" : ""}
+                      title={photoCount < 3 ? "Faltan fotos" : "Publicar ahora"}
                     >
                       Publicar
                     </Button>
