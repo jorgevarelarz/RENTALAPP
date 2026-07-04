@@ -568,4 +568,14 @@ Rules:
 - Verification: `npm --prefix frontend run build` passed. `npm --prefix frontend test` passed: 8 files / 19 tests.
 - Findings: Landing now covers tenant, landlord, pro, agency and institution segments with clear CTAs. Auth pages now use the shared API error formatter where relevant and recovery/reset share the existing auth layout. Tenant, landlord and pro dashboards now show a role-specific onboarding checklist without adding dependencies or changing auth storage.
 - Blocked/deferred: Agency/institution dedicated onboarding remains pending because those roles are not currently in the public registration flow. HttpOnly cookies remain deferred until auth tests cover the migration.
-- Next suggested step: deploy this package to Valeris, run smoke production, then continue the sprint unico with panel gaps: admin/support quick actions and tenant/landlord dashboard data polish.
+- Deploy: commit `1f32db9` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: continue the sprint unico with panel gaps: admin/support quick actions and tenant/landlord dashboard data polish.
+
+### 2026-07-04 - Codex - Sprint unico: admin operations dashboard package
+
+- Status: done
+- Files touched: `frontend/src/pages/admin/AdminHome.tsx`, `frontend/src/pages/admin/__tests__/AdminHome.test.tsx`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend test -- --run src/pages/admin/__tests__/AdminHome.test.tsx` passed. `npm --prefix frontend run build` passed.
+- Findings: Admin home is now an operational dashboard instead of a static link list. It loads `/api/admin/stats` and pending `/api/admin/requests`, shows user/property/contract/review metrics, exposes support/compliance/system quick actions, and surfaces request-id formatted errors through the shared API formatter.
+- Blocked/deferred: No backend schema change in this package. Deeper admin support workflows remain pending for later blocks: support ticket queue, user impersonation audit policy, and financial admin panel.
+- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with tenant/landlord dashboard data polish.
