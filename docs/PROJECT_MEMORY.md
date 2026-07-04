@@ -618,4 +618,14 @@ Rules:
 - Verification: `npm --prefix frontend test -- --run src/services/tickets.test.ts src/pages/tickets/__tests__/TicketDetail.test.tsx` passed. `npm --prefix frontend run build` passed.
 - Findings: Fixed the extra approval/rejection flow for maintenance tickets. The backend expects `{ approve: boolean }`, but the frontend service sent `{ decision: "approved" | "rejected" }`, causing rejected extras and approved extras to be interpreted incorrectly.
 - Blocked/deferred: No broader ticket redesign in this package. Photo evidence and SLA prioritization remain pending for a later ticket workflow package.
+- Deploy: commit `3a700f8` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: continue with payments/admin finance or pro marketplace polish.
+
+### 2026-07-04 - Codex - Sprint unico: AI property description package
+
+- Status: done
+- Files touched: `frontend/src/components/PropertyFormRHF.tsx`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend run build` passed.
+- Findings: Property creation/editing now has a description field and a "Generar con IA" action wired to the existing `/api/ai/description` endpoint. The generated copy uses current form data: title, city, rent, size, rooms, bathrooms, furnished state and pet policy.
+- Blocked/deferred: Runtime generation depends on `GOOGLE_API_KEY` being configured in production. If missing, the UI shows the backend error and the landlord can still write the description manually.
 - Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with payments/admin finance or pro marketplace polish.

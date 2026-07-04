@@ -3,14 +3,16 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  MapPin, Home, Image as ImageIcon, Euro, ArrowLeft, ArrowRight, Check, Trash2, UploadCloud,
+  MapPin, Home, Image as ImageIcon, Euro, ArrowLeft, ArrowRight, Check, Trash2, UploadCloud, Sparkles,
 } from 'lucide-react';
 import Dropzone from './ui/Dropzone';
 import Button from './ui/Button';
+import { generateDescription } from '../services/ai';
 
 const schema = z.object({
   title: z.string().min(5, 'El título debe ser descriptivo (min 5 letras)'),
   address: z.string().min(5, 'Dirección obligatoria'),
+  description: z.string().max(1200, 'Descripción demasiado larga').optional().default(''),
   region: z.string().min(2, 'Región obligatoria'),
   city: z.string().min(2, 'Ciudad obligatoria'),
   location: z.object({
@@ -48,6 +50,8 @@ type Props = {
 export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhotos }: Props) {
   const [step, setStep] = useState(0);
   const [uploading, setUploading] = useState(false);
+  const [generatingDescription, setGeneratingDescription] = useState(false);
+  const [descriptionError, setDescriptionError] = useState('');
   const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
   const [isSearchingAddress, setIsSearchingAddress] = useState(false);
 
@@ -64,6 +68,7 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
     defaultValues: {
       title: '',
       address: '',
+      description: '',
       region: '',
       city: '',
       location: { lat: 40.4168, lng: -3.7038 },
@@ -86,6 +91,13 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
   const onlyPro = watch('onlyTenantPro');
   const price = watch('price');
   const addressValue = watch('address');
+  const title = watch('title');
+  const city = watch('city');
+  const sizeM2 = watch('sizeM2');
+  const rooms = watch('rooms');
+  const bathrooms = watch('bathrooms');
+  const furnished = watch('furnished');
+  const petsAllowed = watch('petsAllowed');
 
   useEffect(() => {
     if (onlyPro) setValue('requiredTenantProMaxRent', Number(price) || 0);
@@ -166,6 +178,34 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
       console.error(e);
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleGenerateDescription = async () => {
+    setDescriptionError('');
+    setGeneratingDescription(true);
+    try {
+      const features = [
+        `${Number(sizeM2 || 0)} m²`,
+        `${Number(rooms || 0)} habitaciones`,
+        `${Number(bathrooms || 0)} baños`,
+        furnished ? 'amueblado' : 'sin amueblar',
+        petsAllowed ? 'admite mascotas' : 'no admite mascotas',
+      ];
+      const { description } = await generateDescription({
+        title: title || 'Vivienda en alquiler',
+        city: city || 'España',
+        rent: Number(price || 0),
+        features,
+        tone: 'friendly',
+        language: 'es',
+        maxWords: 120,
+      });
+      setValue('description', description, { shouldValidate: true, shouldDirty: true });
+    } catch (error: any) {
+      setDescriptionError(error?.response?.data?.error || error?.response?.data?.message || 'No se pudo generar la descripción');
+    } finally {
+      setGeneratingDescription(false);
     }
   };
 
@@ -343,6 +383,30 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
                 <span className="absolute left-3 top-3 text-gray-500">€</span>
               </div>
               {errors.price && <p className="text-red-500 text-xs mt-1">{errors.price.message}</p>}
+            </div>
+
+            <div>
+              <div className="mb-1 flex items-center justify-between gap-3">
+                <label className="block text-sm font-medium text-gray-700">Descripción del anuncio</label>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={handleGenerateDescription}
+                  disabled={generatingDescription}
+                  className="flex items-center gap-2"
+                >
+                  <Sparkles size={15} />
+                  {generatingDescription ? 'Generando...' : 'Generar con IA'}
+                </Button>
+              </div>
+              <textarea
+                className="auth-input min-h-[130px] w-full resize-y"
+                placeholder="Describe la vivienda, sus puntos fuertes y el tipo de inquilino ideal."
+                {...register('description')}
+              />
+              {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description.message}</p>}
+              {descriptionError && <p className="text-amber-700 text-xs mt-1">{descriptionError}</p>}
             </div>
 
             <div className="grid grid-cols-2 gap-4">
