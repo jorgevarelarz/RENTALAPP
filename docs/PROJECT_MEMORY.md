@@ -10,7 +10,7 @@ Keep it concise and factual. Add dated entries when the project state changes, w
 - Active repo path: `/Users/jorge/Desktop/02 RentalApp/rentalapp 2.3`
 - GitHub remote: `https://github.com/jorgevarelarz/RENTALAPP.git`
 - Canonical branch: `main`
-- Current GitHub production baseline commit: `3279428`
+- Current GitHub branch state: `main`; use `git log --oneline -3` for the latest commit.
 - Root package version was changed locally from `1.0.0` to `2.3.0`.
 - Frontend package version remains `0.1.0`.
 - Institution frontend package version remains `0.1.0`.
