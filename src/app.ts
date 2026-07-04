@@ -276,7 +276,9 @@ app.get('/connect/refresh', (_req, res) => {
 });
 
 // Public routes
-app.use('/api', testingInboundRoutes);
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api', testingInboundRoutes);
+}
 app.use('/api/auth', authRoutes);
 app.use('/api/verification', verificationRoutes);
 app.use('/api/kyc', identityRoutes);
