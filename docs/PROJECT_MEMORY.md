@@ -638,4 +638,5 @@ Rules:
 - Verification: `npm --prefix frontend run build` passed.
 - Findings: Admin payments page is no longer a placeholder. It now loads platform earnings summary/list data from existing `/api/admin/earnings/*` endpoints, supports date filters, CSV export, totals for gross/fee/net, and a recent movements table.
 - Blocked/deferred: This panel audits platform earnings only. Full Stripe webhook reconciliation and failed-payment dashboards remain pending because they need additional backend aggregation.
-- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with pro marketplace polish or support center.
+- Deploy: commit `4edf0ec` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: continue with pro marketplace polish or support center.
