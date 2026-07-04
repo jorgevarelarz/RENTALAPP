@@ -26,6 +26,14 @@ function requireProductionEnv(name: string) {
   return value;
 }
 
+function requireHex(name: string, length: number) {
+  const value = requireProductionEnv(name);
+  if (!new RegExp(`^[a-fA-F0-9]{${length}}$`).test(value)) {
+    throw new Error(`${name} debe ser un hex de ${length} chars en producción`);
+  }
+  return value;
+}
+
 export function loadEnv(): Env {
   const parsed = EnvSchema.safeParse(process.env);
   if (!parsed.success) {
@@ -45,10 +53,8 @@ export function loadEnv(): Env {
     if (!e.INSTITUTION_CASEID_SALT || e.INSTITUTION_CASEID_SALT.length < 16) {
       throw new Error('INSTITUTION_CASEID_SALT requerido en producción');
     }
-    const ibanKey = process.env.IBAN_ENCRYPTION_KEY || '';
-    if (ibanKey.length < 64) {
-      throw new Error('IBAN_ENCRYPTION_KEY debe ser un hex de 32 bytes (64 chars) en producción');
-    }
+    requireHex('IBAN_ENCRYPTION_KEY', 64);
+    requireHex('TENANT_PRO_UPLOADS_KEY', 64);
     if (!process.env.STRIPE_WEBHOOK_SECRET) {
       throw new Error('STRIPE_WEBHOOK_SECRET requerido en producción');
     }
@@ -72,7 +78,8 @@ export function loadEnv(): Env {
     if ((process.env.SIGN_PROVIDER || 'mock') === 'mock') {
       throw new Error('SIGN_PROVIDER=mock no está permitido en producción');
     }
-    if ((process.env.SMS_PROVIDER || 'mock') === 'mock') {
+    const smsProvider = (process.env.SMS_PROVIDER || 'mock').toLowerCase();
+    if (smsProvider === 'mock') {
       throw new Error('SMS_PROVIDER=mock no está permitido en producción');
     }
 
@@ -90,10 +97,9 @@ export function loadEnv(): Env {
     if (signProvider === 'signaturit') {
       ['SIGNATURE_API_TOKEN', 'SIGNATURE_WEBHOOK_SECRET', 'SIGNATURIT_TOKEN'].forEach(requireProductionEnv);
     }
-    if ((process.env.SMS_PROVIDER || '').toLowerCase() === 'twilio') {
+    if (smsProvider === 'twilio') {
       ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE_NUMBER'].forEach(requireProductionEnv);
     }
-    ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'AWS_S3_BUCKET'].forEach(requireProductionEnv);
   }
 
   return { ...e, MONGO } as Env;

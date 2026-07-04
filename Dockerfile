@@ -8,6 +8,8 @@ RUN npm --prefix frontend ci
 COPY institution-frontend/package*.json ./institution-frontend/
 RUN npm --prefix institution-frontend ci
 COPY . .
+ARG VITE_STRIPE_KEY
+ENV VITE_STRIPE_KEY=$VITE_STRIPE_KEY
 RUN npm run build && npm --prefix frontend run build && npm --prefix institution-frontend run build
 
 # ----- Runner -----

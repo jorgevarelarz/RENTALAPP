@@ -1,6 +1,7 @@
 volumes:
   mongo_data:
   uploads_data:
+  storage_data:
 
 services:
   mongo:
@@ -16,7 +17,10 @@ services:
       retries: 10
 
   api:
-    build: .
+    build:
+      context: .
+      args:
+        VITE_STRIPE_KEY: ${VITE_STRIPE_KEY:-}
     container_name: rental_api
     restart: unless-stopped
     depends_on:
@@ -32,6 +36,7 @@ services:
       - "127.0.0.1:${APP_BIND_PORT:-3100}:3000"
     volumes:
       - uploads_data:/app/uploads
+      - storage_data:/app/storage
     healthcheck:
       test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/ready | grep '\"ready\":true'"]
       interval: 30s

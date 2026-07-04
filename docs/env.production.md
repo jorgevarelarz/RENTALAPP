@@ -95,7 +95,7 @@ Legacy `REACT_APP_*` names are still accepted by the frontend compatibility laye
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `SMS_PROVIDER` | REQUIRED | `twilio` in production. `mock` logs instead of sending. |
+| `SMS_PROVIDER` | REQUIRED | `twilio` in production when SMS sending is enabled. Use `disabled` until Twilio is configured. `mock` is not allowed in production. |
 | `TWILIO_ACCOUNT_SID` | REQUIRED (if provider=twilio) | Twilio account SID. |
 | `TWILIO_AUTH_TOKEN` | REQUIRED (if provider=twilio) | Twilio auth token. |
 | `TWILIO_PHONE_NUMBER` | REQUIRED (if provider=twilio) | Twilio phone number (E.164 format). |
@@ -114,16 +114,12 @@ Legacy `REACT_APP_*` names are still accepted by the frontend compatibility laye
 
 ## TenantPRO (Document Storage)
 
-TenantPRO documents are stored on AWS S3. All three S3 variables are required together.
+TenantPRO documents are stored encrypted on the app storage volume.
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `TENANT_PRO_UPLOADS_KEY` | REQUIRED | AWS S3 key prefix for TenantPRO document uploads. |
+| `TENANT_PRO_UPLOADS_KEY` | REQUIRED | 32-byte hex encryption key for TenantPRO document uploads. Generate with `openssl rand -hex 32`. |
 | `TENANT_PRO_DOCS_TTL_DAYS` | optional | Days before documents are auto-deleted. Default `365`. |
-| `AWS_ACCESS_KEY_ID` | REQUIRED (S3) | AWS access key with S3 write permissions. |
-| `AWS_SECRET_ACCESS_KEY` | REQUIRED (S3) | AWS secret access key. |
-| `AWS_REGION` | REQUIRED (S3) | S3 bucket region (e.g. `eu-west-1`). |
-| `AWS_S3_BUCKET` | REQUIRED (S3) | S3 bucket name. |
 
 ---
 

@@ -47,8 +47,8 @@ openssl rand -hex 16 # INSTITUTION_CASEID_SALT
 Build and start:
 
 ```bash
-docker compose -f docker-compose.valeris.yml up -d --build
-docker compose -f docker-compose.valeris.yml logs -f api
+docker compose --env-file .env.valeris -f docker-compose.valeris.yml up -d --build
+docker compose --env-file .env.valeris -f docker-compose.valeris.yml logs -f api
 ```
 
 Health checks:
@@ -93,8 +93,8 @@ sudo certbot --apache -d app.rentalapp.es
 ```bash
 cd rentalapp
 git pull --ff-only
-docker compose -f docker-compose.valeris.yml up -d --build
-docker compose -f docker-compose.valeris.yml ps
+docker compose --env-file .env.valeris -f docker-compose.valeris.yml up -d --build
+docker compose --env-file .env.valeris -f docker-compose.valeris.yml ps
 curl -fsS https://app.rentalapp.es/ready
 ```
 
@@ -103,7 +103,7 @@ curl -fsS https://app.rentalapp.es/ready
 ```bash
 git log --oneline -5
 git checkout <last-good-commit>
-docker compose -f docker-compose.valeris.yml up -d --build
+docker compose --env-file .env.valeris -f docker-compose.valeris.yml up -d --build
 ```
 
 ## Production rules
@@ -112,4 +112,5 @@ docker compose -f docker-compose.valeris.yml up -d --build
 - Do not set `ALLOW_UNVERIFIED=true`.
 - Do not set `RENTAL_PUBLIC_DEMO_MODE=true`.
 - Do not use `SIGN_PROVIDER=mock`, `SMS_PROVIDER=mock`, or `ESCROW_DRIVER=mock` in production.
+- Use `SMS_PROVIDER=disabled` until Twilio credentials are configured.
 - Keep `.env.valeris` out of Git.

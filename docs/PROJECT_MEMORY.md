@@ -252,6 +252,14 @@ Rules:
 - Verification: `npm --prefix frontend ci`, `npm --prefix frontend run build`, `npm --prefix institution-frontend ci`, `npm --prefix institution-frontend run build`, `npm --prefix frontend audit`, `npm --prefix institution-frontend audit`, and `VALERIS_ENV_FILE=.env.valeris.example docker compose -f docker-compose.valeris.yml build api` on the VPS.
 - Findings: npm 10 on Linux required optional `@emnapi/*` package-lock entries that npm on macOS had not written. Docker image `rentalapp-api:latest` now builds on `valeris-vps`.
 - Next suggested step: create `/opt/rentalapp/.env.valeris` with real production secrets, then run the stack.
+
+### 2026-07-04 - Codex - Valeris env and Stripe webhooks
+
+- Status: partial
+- Files touched: `src/config/env.ts`, `Dockerfile`, `docker-compose.valeris.yml`, `.env.valeris.example`, `docs/env.production.md`, `docs/valeris-vps-deploy.md`, `docs/PROJECT_MEMORY.md`
+- Verification: Stripe live webhook endpoints created for `/api/stripe/webhook` and `/api/kyc/webhook`; production preflight passes with `app.rentalapp.es`, `signaturit`, `ESCROW_DRIVER=real`, and `SMS_PROVIDER=disabled`; `npm run build`; targeted backend tests for Stripe webhook, KYC route protection, and TenantPRO uploads; compose config with real env.
+- Findings: TenantPRO storage is encrypted local disk storage, so AWS/S3 production validation was stricter than the code. Compose now persists `/app/storage` and passes `VITE_STRIPE_KEY` as a build arg.
+- Next suggested step: sync `.env.valeris` to the VPS, start the Docker stack, issue TLS, and verify `https://app.rentalapp.es/ready`.
 | done | Add real signature verification to `/api/kyc/webhook` | Stripe HMAC verification via STRIPE_IDENTITY_WEBHOOK_SECRET; dev/mock path preserved. |
 | done | Rework `/api/verification` mounting | authenticate middleware added to /me and /submit; dev/verify already self-guarded. |
 | done | Review static `/uploads` exposure | Frontends do not use `pdfPath` directly. `/uploads/contracts/*` now returns 404; authenticated contract PDF routes remain green. |
