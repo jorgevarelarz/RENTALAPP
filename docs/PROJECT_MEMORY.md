@@ -119,7 +119,7 @@ Result: 3 test suites passed, 4 tests passed.
 ## Recommended Next Work
 
 1. Configure real `.env.valeris` secrets on the VPS.
-2. Point DNS `app.rentalapp.es` to `5.250.186.153`.
+2. Create real `/opt/rentalapp/.env.valeris` secrets on the VPS.
 3. Deploy with `docker compose -f docker-compose.valeris.yml up -d --build`.
 4. Issue TLS for `app.rentalapp.es`.
 5. Plan P2 architecture work around `contract.controller.ts`.
@@ -236,6 +236,14 @@ Rules:
 - Verification: `certbot --version` reports 3.1.0 on `valeris-vps`; `certbot-renew.timer` is active; `apachectl configtest` reports `Syntax OK`.
 - Findings: Certbot and `python3-certbot-apache` were missing and are now installed. Root `rentalapp.es` A records are provider-managed, `www.rentalapp.es` points to Railway, and `/opt/rentalapp/.env.valeris` is still missing.
 - Next suggested step: create DNS `A app -> 5.250.186.153`, configure real secrets, then start the Docker stack and run `certbot --apache -d app.rentalapp.es`.
+
+### 2026-07-04 - Codex - app.rentalapp.es DNS verified
+
+- Status: partial
+- Files touched: `docs/PROJECT_MEMORY.md`
+- Verification: `dig app.rentalapp.es A` returns `5.250.186.153`; Apache vhost is configured for `app.rentalapp.es`; compose validates on the VPS.
+- Findings: Railway CLI is installed but not authenticated, so existing Railway production variables cannot be pulled automatically. No complete production `.env` exists locally.
+- Next suggested step: add real secrets to `/opt/rentalapp/.env.valeris`, then start Docker and issue TLS.
 | done | Add real signature verification to `/api/kyc/webhook` | Stripe HMAC verification via STRIPE_IDENTITY_WEBHOOK_SECRET; dev/mock path preserved. |
 | done | Rework `/api/verification` mounting | authenticate middleware added to /me and /submit; dev/verify already self-guarded. |
 | done | Review static `/uploads` exposure | Frontends do not use `pdfPath` directly. `/uploads/contracts/*` now returns 404; authenticated contract PDF routes remain green. |
