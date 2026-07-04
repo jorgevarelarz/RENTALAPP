@@ -8,7 +8,7 @@ REMOTE="/tmp/rentalapp-mongo-${STAMP}.archive.gz"
 LOCAL="${OUT_DIR}/rentalapp-mongo-${STAMP}.archive.gz"
 
 mkdir -p "$OUT_DIR"
-ssh "$SERVER" "docker exec rental_mongo mongodump --archive='${REMOTE}' --gzip --db rentalapp"
+ssh "$SERVER" "docker exec rental_mongo mongodump --archive --gzip --db rentalapp > '${REMOTE}'"
 scp "$SERVER:${REMOTE}" "$LOCAL"
 ssh "$SERVER" "rm -f '${REMOTE}'"
 
