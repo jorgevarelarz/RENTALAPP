@@ -628,4 +628,14 @@ Rules:
 - Verification: `npm --prefix frontend run build` passed.
 - Findings: Property creation/editing now has a description field and a "Generar con IA" action wired to the existing `/api/ai/description` endpoint. The generated copy uses current form data: title, city, rent, size, rooms, bathrooms, furnished state and pet policy.
 - Blocked/deferred: Runtime generation depends on `GOOGLE_API_KEY` being configured in production. If missing, the UI shows the backend error and the landlord can still write the description manually.
-- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with payments/admin finance or pro marketplace polish.
+- Deploy: commit `6d0ec08` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: continue with payments/admin finance or pro marketplace polish.
+
+### 2026-07-04 - Codex - Sprint unico: admin finance panel package
+
+- Status: done
+- Files touched: `frontend/src/pages/admin/Payments.tsx`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend run build` passed.
+- Findings: Admin payments page is no longer a placeholder. It now loads platform earnings summary/list data from existing `/api/admin/earnings/*` endpoints, supports date filters, CSV export, totals for gross/fee/net, and a recent movements table.
+- Blocked/deferred: This panel audits platform earnings only. Full Stripe webhook reconciliation and failed-payment dashboards remain pending because they need additional backend aggregation.
+- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with pro marketplace polish or support center.
