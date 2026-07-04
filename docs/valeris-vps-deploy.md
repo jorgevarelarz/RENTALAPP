@@ -25,8 +25,8 @@ httpd -M | grep -E 'proxy|proxy_http|ssl|headers|rewrite'
 ```
 
 Keep the app bound to localhost on `3100` because the VPS already uses host port `3000` for another service.
-`rentalapp.es` must have an A record to `5.250.186.153` before TLS can be issued.
-Optionally point `www.rentalapp.es` to the same IP and add it as a `ServerAlias`.
+`app.rentalapp.es` must have an A record to `5.250.186.153` before TLS can be issued.
+The root `rentalapp.es` A records are provider-managed, and `www`/`api` currently point to Railway.
 
 ## First deploy
 
@@ -64,8 +64,7 @@ Create `/etc/httpd/conf.d/rentalapp.conf`:
 
 ```apache
 <VirtualHost *:80>
-    ServerName rentalapp.es
-    ServerAlias www.rentalapp.es
+    ServerName app.rentalapp.es
 
     ProxyPreserveHost On
     ProxyRequests Off
@@ -80,13 +79,13 @@ Validate and reload:
 ```bash
 sudo apachectl configtest
 sudo systemctl reload httpd
-curl -H 'Host: rentalapp.es' -fsS http://127.0.0.1/ready
+curl -H 'Host: app.rentalapp.es' -fsS http://127.0.0.1/ready
 ```
 
 After DNS resolves, issue TLS with the server's existing certificate tooling or Certbot Apache plugin if available:
 
 ```bash
-sudo certbot --apache -d rentalapp.es -d www.rentalapp.es
+sudo certbot --apache -d app.rentalapp.es
 ```
 
 ## Update deploy
@@ -96,7 +95,7 @@ cd rentalapp
 git pull --ff-only
 docker compose -f docker-compose.valeris.yml up -d --build
 docker compose -f docker-compose.valeris.yml ps
-curl -fsS https://rentalapp.es/ready
+curl -fsS https://app.rentalapp.es/ready
 ```
 
 ## Rollback
