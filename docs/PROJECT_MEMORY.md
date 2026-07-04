@@ -535,3 +535,11 @@ Rules:
   - Tag anotado `v2.3.0` → `96fbe4f` sobre Commit B.
   - Única anotación de CI: deprecación de Node 20 en actions/checkout@v4 y setup-node@v4 (warning, no error; planificar bump a Node 24 antes de junio 2026).
 - Next suggested step: 2.3.0 está liberado y verde en CI. Backlog para 2.4.0: token storage HttpOnly cookies (requiere cambios de sesión backend), y bump de GitHub Actions a Node 24. Sin trabajo autónomo pendiente; esperar nueva dirección de Jorge.
+
+### 2026-07-04 - Codex - Roadmap anual ejecutable RentalApp
+
+- Status: done
+- Files touched: `package.json`, `scripts/generate_roadmap_backlog.js`, `scripts/check_roadmap_backlog.js`, `scripts/smoke_production.js`, `docs/roadmap/backlog.json`, `docs/roadmap/README.md`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm run roadmap:check` passed with 10,500 generated tasks. `npm run smoke:production` passed against `https://app.rentalapp.es`: `/health`, `/ready`, `/` return 200 and suspicious paths `/.env`, `/backup.sql`, `/wp-config.php` return 404.
+- Findings: Jorge pidió ejecutar el plan anual distribuido en 26 sprints. Se creó una base versionada y verificable del backlog maestro con 20 épicas, prioridades P0-P3, releases por sprint, criterios de aceptación y estado inicial `todo`. La tabla del plan suma 10,500 tareas aunque el texto dice 10,250; se toma la tabla como fuente de verdad porque cumple el objetivo `10.250+`.
+- Next suggested step: empezar Sprint 1 con cambios de producto/operación: rotar Stripe live, configurar SMTP real, mantener `SMS_PROVIDER=disabled`, añadir eventos de funnel, monitor externo, revisión de rutas públicas/rate limits y backup Mongo con restore probado.
