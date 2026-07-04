@@ -244,6 +244,14 @@ Rules:
 - Verification: `dig app.rentalapp.es A` returns `5.250.186.153`; Apache vhost is configured for `app.rentalapp.es`; compose validates on the VPS.
 - Findings: Railway CLI is installed but not authenticated, so existing Railway production variables cannot be pulled automatically. No complete production `.env` exists locally.
 - Next suggested step: add real secrets to `/opt/rentalapp/.env.valeris`, then start Docker and issue TLS.
+
+### 2026-07-04 - Codex - Valeris Docker build fixed
+
+- Status: done
+- Files touched: `frontend/package-lock.json`, `institution-frontend/package-lock.json`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend ci`, `npm --prefix frontend run build`, `npm --prefix institution-frontend ci`, `npm --prefix institution-frontend run build`, `npm --prefix frontend audit`, `npm --prefix institution-frontend audit`, and `VALERIS_ENV_FILE=.env.valeris.example docker compose -f docker-compose.valeris.yml build api` on the VPS.
+- Findings: npm 10 on Linux required optional `@emnapi/*` package-lock entries that npm on macOS had not written. Docker image `rentalapp-api:latest` now builds on `valeris-vps`.
+- Next suggested step: create `/opt/rentalapp/.env.valeris` with real production secrets, then run the stack.
 | done | Add real signature verification to `/api/kyc/webhook` | Stripe HMAC verification via STRIPE_IDENTITY_WEBHOOK_SECRET; dev/mock path preserved. |
 | done | Rework `/api/verification` mounting | authenticate middleware added to /me and /submit; dev/verify already self-guarded. |
 | done | Review static `/uploads` exposure | Frontends do not use `pdfPath` directly. `/uploads/contracts/*` now returns 404; authenticated contract PDF routes remain green. |
