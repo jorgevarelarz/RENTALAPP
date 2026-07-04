@@ -53,3 +53,15 @@ jobs:
       - run: npm --prefix frontend run build
         env:
           VITE_API_URL: http://localhost:3000
+
+  institution-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: institution-frontend/package-lock.json
+      - run: npm --prefix institution-frontend ci
+      - run: npm --prefix institution-frontend run build

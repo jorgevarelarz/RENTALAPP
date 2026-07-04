@@ -10,7 +10,7 @@ Keep it concise and factual. Add dated entries when the project state changes, w
 - Active repo path: `/Users/jorge/Desktop/02 RentalApp/rentalapp 2.3`
 - GitHub remote: `https://github.com/jorgevarelarz/RENTALAPP.git`
 - Canonical branch: `main`
-- Current GitHub commit after sync: `474eb73bf5bbcef4efd613f04bae35679a5f2cab`
+- Current local production baseline commit: `b37a993`
 - Root package version was changed locally from `1.0.0` to `2.3.0`.
 - Frontend package version remains `0.1.0`.
 - Institution frontend package version remains `0.1.0`.
@@ -118,10 +118,11 @@ Result: 3 test suites passed, 4 tests passed.
 
 ## Recommended Next Work
 
-1. Decide whether to commit the root version bump to `2.3.0`.
-2. Review `npm audit` fixes without breaking current green baseline.
-3. Document required production env vars.
-4. Plan P2 architecture work around `contract.controller.ts` and frontend API consolidation.
+1. Configure real `.env.valeris` secrets on the VPS.
+2. Point DNS `rental.valerisstudio.es` to `5.250.186.153`.
+3. Deploy with `docker compose -f docker-compose.valeris.yml up -d --build`.
+4. Issue TLS for `rental.valerisstudio.es`.
+5. Plan P2 architecture work around `contract.controller.ts`.
 
 ## Additional Architecture Detail
 
@@ -218,6 +219,15 @@ Rules:
 | --- | --- | --- |
 | done | Protect or disable `/api/testing/inbound/*` outside dev/admin contexts | NODE_ENV guard added; returns 404 in production. |
 | done | Protect `/api/notify/email` and `/api/notify/sms` | NODE_ENV guard + authenticate + requireAdmin added. |
+
+### 2026-07-04 - Codex - Valeris VPS production baseline
+
+- Status: done
+- Files touched: `.gitignore`, `.env.example`, `package.json`, `jest.config.js`, `.env.valeris.example`, `docker-compose.valeris.yml`, `scripts/production_preflight.ts`, `docs/valeris-vps-deploy.md`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm run build`, `npm --prefix frontend run build`, `npm --prefix institution-frontend run build`, `npm run test:backend -- --runInBand --forceExit`, `npm run test:frontend`, production preflight with dummy secrets, and `docker compose -f docker-compose.valeris.yml config` with `VALERIS_ENV_FILE=.env.valeris.example`.
+- Findings: canonical repo is still `/Users/jorge/Desktop/02 RentalApp/rentalapp 2.3`; local untracked garbage (`dist 2`, `node_modules 2`, `institution-frontend/node_modules 2`, `frontend/src/api/axios.ts`, `src/types/uuid.d.ts`) was removed after review because it was generated/stale, not product work. Full `npm audit` is now clean in root, `frontend`, and `institution-frontend`.
+- VPS state: code synced to `/opt/rentalapp` on `valeris-vps` (`panel.valerisstudio.es`) and compose validates with `.env.valeris.example`; Apache vhost `/etc/httpd/conf.d/rentalapp.conf` is installed and config-tested. Service intentionally not started because DNS `rental.valerisstudio.es` is not configured and real `.env.valeris` secrets are missing.
+- Next suggested step: configure real Valeris VPS DNS/secrets, then run first deploy and issue TLS.
 | done | Add real signature verification to `/api/kyc/webhook` | Stripe HMAC verification via STRIPE_IDENTITY_WEBHOOK_SECRET; dev/mock path preserved. |
 | done | Rework `/api/verification` mounting | authenticate middleware added to /me and /submit; dev/verify already self-guarded. |
 | done | Review static `/uploads` exposure | Frontends do not use `pdfPath` directly. `/uploads/contracts/*` now returns 404; authenticated contract PDF routes remain green. |

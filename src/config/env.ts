@@ -20,6 +20,12 @@ const EnvSchema = z.object({
 
 export type Env = z.infer<typeof EnvSchema> & { MONGO: string };
 
+function requireProductionEnv(name: string) {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} requerido en producción`);
+  return value;
+}
+
 export function loadEnv(): Env {
   const parsed = EnvSchema.safeParse(process.env);
   if (!parsed.success) {
@@ -46,8 +52,9 @@ export function loadEnv(): Env {
     if (!process.env.STRIPE_WEBHOOK_SECRET) {
       throw new Error('STRIPE_WEBHOOK_SECRET requerido en producción');
     }
+    requireProductionEnv('STRIPE_SECRET_KEY');
     if (!process.env.STRIPE_IDENTITY_WEBHOOK_SECRET) {
-      console.warn('[env] STRIPE_IDENTITY_WEBHOOK_SECRET no definido — KYC webhook sin verificación HMAC');
+      throw new Error('STRIPE_IDENTITY_WEBHOOK_SECRET requerido en producción');
     }
     if (!e.CORS_ORIGIN) {
       console.warn('[env] CORS_ORIGIN no definido en producción — se recomienda configurarlo');
@@ -57,8 +64,36 @@ export function loadEnv(): Env {
       throw new Error('ALLOW_TEST_AUTH=true no está permitido en producción');
     }
     if (process.env.ALLOW_UNVERIFIED === 'true') {
-      console.warn('[env] ALLOW_UNVERIFIED=true activo en producción — desactívalo');
+      throw new Error('ALLOW_UNVERIFIED=true no está permitido en producción');
     }
+    if ((process.env.ESCROW_DRIVER || 'mock') === 'mock') {
+      throw new Error('ESCROW_DRIVER=mock no está permitido en producción');
+    }
+    if ((process.env.SIGN_PROVIDER || 'mock') === 'mock') {
+      throw new Error('SIGN_PROVIDER=mock no está permitido en producción');
+    }
+    if ((process.env.SMS_PROVIDER || 'mock') === 'mock') {
+      throw new Error('SMS_PROVIDER=mock no está permitido en producción');
+    }
+
+    const signProvider = (process.env.SIGN_PROVIDER || '').toLowerCase();
+    if (signProvider === 'docusign') {
+      [
+        'DOCUSIGN_BASE_URL',
+        'DOCUSIGN_INTEGRATOR_KEY',
+        'DOCUSIGN_USER_ID',
+        'DOCUSIGN_ACCOUNT_ID',
+        'DOCUSIGN_PRIVATE_KEY_BASE64',
+        'DOCUSIGN_WEBHOOK_SECRET',
+      ].forEach(requireProductionEnv);
+    }
+    if (signProvider === 'signaturit') {
+      ['SIGNATURE_API_TOKEN', 'SIGNATURE_WEBHOOK_SECRET', 'SIGNATURIT_TOKEN'].forEach(requireProductionEnv);
+    }
+    if ((process.env.SMS_PROVIDER || '').toLowerCase() === 'twilio') {
+      ['TWILIO_ACCOUNT_SID', 'TWILIO_AUTH_TOKEN', 'TWILIO_PHONE_NUMBER'].forEach(requireProductionEnv);
+    }
+    ['AWS_ACCESS_KEY_ID', 'AWS_SECRET_ACCESS_KEY', 'AWS_REGION', 'AWS_S3_BUCKET'].forEach(requireProductionEnv);
   }
 
   return { ...e, MONGO } as Env;

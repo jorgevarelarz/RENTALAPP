@@ -5,10 +5,13 @@
   "scripts": {
     "dev": "ts-node-dev src/app.ts",
     "build": "tsc",
+    "build:all": "npm run build && npm --prefix frontend run build && npm --prefix institution-frontend run build",
     "start:prod": "node dist/app.js",
+    "preflight:production": "NODE_ENV=production ts-node scripts/production_preflight.ts",
     "test": "jest",
     "test:backend": "jest --config jest.config.js",
-    "test:frontend": "npm test --prefix frontend -- --watchAll=false",
+    "test:frontend": "npm --prefix frontend test",
+    "test:all": "npm run test:backend -- --runInBand --forceExit && npm run test:frontend && npm --prefix institution-frontend run build",
     "dev:all": "concurrently -k -n back,front,institution \"npm run dev\" \"npm --prefix frontend start\" \"npm --prefix institution-frontend run dev\"",
     "dev:institution": "npm --prefix institution-frontend run dev",
     "build:institution": "npm --prefix institution-frontend run build",
@@ -48,7 +51,7 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "node-cron": "^4.2.1",
-    "nodemailer": "^8.0.2",
+    "nodemailer": "^9.0.3",
     "pdfkit": "^0.17.1",
     "stripe": "^12.11.0",
     "twilio": "^5.13.0",
@@ -78,5 +81,8 @@
     "ts-node": "^10.9.2",
     "ts-node-dev": "^2.0.0",
     "typescript": "^5.1.3"
+  },
+  "overrides": {
+    "form-data": "4.0.6"
   }
 }
