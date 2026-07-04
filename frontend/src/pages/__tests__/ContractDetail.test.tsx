@@ -86,7 +86,7 @@ describe('ContractDetail', () => {
 
     render(<ContractDetail />);
 
-    await screen.findByText(/pendiente de firma/i);
+    await screen.findByRole('heading', { name: /pendiente de firma/i });
     expect(screen.queryByRole('button', { name: /firmar con signaturit/i })).toBeNull();
   });
 
@@ -106,5 +106,7 @@ describe('ContractDetail', () => {
     render(<ContractDetail />);
 
     expect(await screen.findByRole('button', { name: /descargar borrador/i })).toBeInTheDocument();
+    expect(screen.getByText(/timeline legal/i)).toBeInTheDocument();
+    expect(screen.getByText(/firma digital/i)).toBeInTheDocument();
   });
 });

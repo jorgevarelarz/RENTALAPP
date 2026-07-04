@@ -8,7 +8,60 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import SignaturitWidget from '../components/SignaturitWidget';
 import { ContractStatusBadge } from '../components/ContractStatusBadge';
-import { FileCheck, User, ShieldCheck, Download, PenTool } from 'lucide-react';
+import { CheckCircle2, Circle, Clock3, FileCheck, User, ShieldCheck, Download, PenTool } from 'lucide-react';
+
+function formatTimelineDate(value?: string) {
+  if (!value) return null;
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed.toLocaleDateString('es-ES');
+}
+
+function buildContractTimeline(contract: any) {
+  const status = contract?.status || 'draft';
+  const completed = new Set(['signed', 'active', 'completed']);
+  const generated = status !== 'draft';
+  const signed = completed.has(status) || !!contract?.signedAt || !!contract?.signature?.signedAt;
+  const depositPaid = !!contract?.depositPaid || status === 'active' || status === 'completed';
+
+  return [
+    {
+      id: 'created',
+      title: 'Contrato creado',
+      detail: 'Borrador inicial generado',
+      state: 'done',
+      date: formatTimelineDate(contract?.createdAt),
+    },
+    {
+      id: 'generated',
+      title: 'PDF preparado',
+      detail: 'Documento listo para revisar',
+      state: generated ? 'done' : 'todo',
+      date: formatTimelineDate(contract?.updatedAt),
+    },
+    {
+      id: 'signature',
+      title: 'Firma digital',
+      detail: signed ? 'Firmas registradas' : 'Pendiente de firma',
+      state: signed ? 'done' : status === 'pending_signature' || status === 'signing' ? 'current' : 'todo',
+      date: formatTimelineDate(contract?.signedAt || contract?.signature?.signedAt),
+    },
+    {
+      id: 'deposit',
+      title: 'Pago de fianza',
+      detail: depositPaid ? 'Fianza marcada como pagada' : 'Pendiente de pago o conciliación',
+      state: depositPaid ? 'done' : signed ? 'current' : 'todo',
+      date: formatTimelineDate(contract?.depositPaidAt),
+    },
+    {
+      id: 'active',
+      title: 'Contrato activo',
+      detail: status === 'active' || status === 'completed' ? 'Alquiler en vigor' : 'Pendiente de activación',
+      state: status === 'active' || status === 'completed' ? 'done' : 'todo',
+      date: formatTimelineDate(contract?.startDate),
+    },
+  ] as Array<{ id: string; title: string; detail: string; state: 'done' | 'current' | 'todo'; date: string | null }>;
+}
 
 export default function ContractDetail() {
   const { id } = useParams();
@@ -100,6 +153,7 @@ export default function ContractDetail() {
   const isActive = contract.status === 'active';
   const hasSignedPdf = !!contract?.signature?.pdfUrl;
   const downloadLabel = isActive || contract.status === 'signed' ? 'Descargar contrato' : 'Descargar borrador';
+  const timeline = buildContractTimeline(contract);
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
@@ -147,6 +201,47 @@ export default function ContractDetail() {
           )}
         </div>
       </div>
+
+      <Card className="border border-gray-200 bg-white p-5">
+        <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Timeline legal</p>
+            <h2 className="text-lg font-bold text-gray-900">Estado del contrato</h2>
+          </div>
+          <p className="text-sm text-gray-500">Firma, pago y activación en una sola vista.</p>
+        </div>
+        <div className="grid gap-3 md:grid-cols-5">
+          {timeline.map((step) => {
+            const isDone = step.state === 'done';
+            const isCurrent = step.state === 'current';
+            return (
+              <div
+                key={step.id}
+                className={`rounded-xl border p-4 ${
+                  isDone
+                    ? 'border-emerald-200 bg-emerald-50'
+                    : isCurrent
+                      ? 'border-blue-200 bg-blue-50'
+                      : 'border-gray-200 bg-gray-50'
+                }`}
+              >
+                <div className="mb-3 flex items-center justify-between">
+                  {isDone ? (
+                    <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+                  ) : isCurrent ? (
+                    <Clock3 className="h-5 w-5 text-blue-700" />
+                  ) : (
+                    <Circle className="h-5 w-5 text-gray-400" />
+                  )}
+                  {step.date && <span className="text-xs text-gray-500">{step.date}</span>}
+                </div>
+                <p className="font-semibold text-gray-900">{step.title}</p>
+                <p className="mt-1 text-sm text-gray-600">{step.detail}</p>
+              </div>
+            );
+          })}
+        </div>
+      </Card>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="space-y-6">

@@ -598,4 +598,14 @@ Rules:
 - Verification: `npm --prefix frontend test -- --run src/utils/landlordDashboard.test.ts` passed. `npm --prefix frontend run build` passed.
 - Findings: Landlord dashboard now shows operational alerts for missing photos, drafts, published vacant listings and price deviations. It adds a transparent first-pass rent estimate by m2/city and fixes publish-button photo gating so it consistently counts both `images` and `photos`.
 - Blocked/deferred: The rent recommendation is intentionally basic and visible as a hint only. A real pricing model remains pending until there is enough market/comparable data.
-- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with contracts/firma timeline and payment/admin finance improvements.
+- Deploy: commit `03bb039` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: continue with contracts/firma timeline and payment/admin finance improvements.
+
+### 2026-07-04 - Codex - Sprint unico: contract legal timeline package
+
+- Status: done
+- Files touched: `frontend/src/pages/ContractDetail.tsx`, `frontend/src/pages/__tests__/ContractDetail.test.tsx`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend test -- --run src/pages/__tests__/ContractDetail.test.tsx src/pages/__tests__/ContractDetail.polling.test.tsx` passed. `npm --prefix frontend run build` passed.
+- Findings: Contract detail now includes a legal timeline derived from existing contract fields and status: created, PDF prepared, digital signature, deposit payment and activation. This gives tenant/landlord/admin a single visible lifecycle without changing the signature or payment backend.
+- Blocked/deferred: Evidence bundle/download improvements remain pending until backend exposes a stable evidence endpoint beyond the signed PDF URL.
+- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with payments/admin finance and ticket workflow polish.
