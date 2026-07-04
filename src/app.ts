@@ -332,14 +332,24 @@ app.use(
   adminTenantProRoutes,
 );
 
-// Root route for health check
-app.get('/', (_req, res) => {
-  res.json({ 
-    status: 'ok', 
-    message: 'RENTALAPP API is running',
-    timestamp: new Date().toISOString()
+const shouldServeSpaFallback = (requestPath: string) => {
+  const normalized = requestPath.replace(/\\/g, '/');
+  const segments = normalized.split('/').filter(Boolean);
+  if (segments.some(segment => segment.startsWith('.'))) return false;
+  if (['actuator', 'backup', 'config', '_vti_pvt'].includes(segments[0] || '')) return false;
+  if (path.posix.extname(normalized)) return false;
+  return true;
+};
+
+if (process.env.NODE_ENV !== 'production') {
+  app.get('/', (_req, res) => {
+    res.json({
+      status: 'ok',
+      message: 'RENTALAPP API is running',
+      timestamp: new Date().toISOString(),
+    });
   });
-});
+}
 
 if (process.env.NODE_ENV === 'production') {
   const frontendDist = path.resolve(process.cwd(), 'frontend/dist');
@@ -354,7 +364,10 @@ if (process.env.NODE_ENV === 'production') {
 
   if (fs.existsSync(frontendDist)) {
     app.use(express.static(frontendDist));
-    app.get(/^\/(?!api\/|institution\/).*/, (_req, res) => {
+    app.get(/^\/(?!api\/|institution\/).*/, (req, res) => {
+      if (!shouldServeSpaFallback(req.path)) {
+        return res.status(404).json({ error: 'not_found' });
+      }
       res.sendFile(path.join(frontendDist, 'index.html'));
     });
   }

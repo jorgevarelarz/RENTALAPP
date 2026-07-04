@@ -260,6 +260,14 @@ Rules:
 - Verification: Stripe live webhook endpoints created for `/api/stripe/webhook` and `/api/kyc/webhook`; production preflight passes with `app.rentalapp.es`, `signaturit`, `ESCROW_DRIVER=real`, and `SMS_PROVIDER=disabled`; `npm run build`; targeted backend tests for Stripe webhook, KYC route protection, and TenantPRO uploads; compose config with real env.
 - Findings: TenantPRO storage is encrypted local disk storage, so AWS/S3 production validation was stricter than the code. Compose now persists `/app/storage` and passes `VITE_STRIPE_KEY` as a build arg.
 - Next suggested step: sync `.env.valeris` to the VPS, start the Docker stack, issue TLS, and verify `https://app.rentalapp.es/ready`.
+
+### 2026-07-04 - Codex - Valeris first live deploy
+
+- Status: partial
+- Files touched: `src/app.ts`, `docs/PROJECT_MEMORY.md`
+- Verification: Docker stack started on `valeris-vps`; `rental_api` and `rental_mongo` are healthy; `https://app.rentalapp.es/health` and `/ready` return OK; HTTP redirects to HTTPS; Let's Encrypt cert is valid until 2026-10-02.
+- Findings: SPA fallback was returning `index.html` for scanner paths such as `/.env` and `/backup.sql`. It now returns 404 for dotfiles, known sensitive prefixes, and unknown extension paths. Production `/` now serves the frontend instead of API JSON.
+- Next suggested step: redeploy the fallback fix and re-check sensitive paths.
 | done | Add real signature verification to `/api/kyc/webhook` | Stripe HMAC verification via STRIPE_IDENTITY_WEBHOOK_SECRET; dev/mock path preserved. |
 | done | Rework `/api/verification` mounting | authenticate middleware added to /me and /submit; dev/verify already self-guarded. |
 | done | Review static `/uploads` exposure | Frontends do not use `pdfPath` directly. `/uploads/contracts/*` now returns 404; authenticated contract PDF routes remain green. |
