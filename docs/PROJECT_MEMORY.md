@@ -578,4 +578,14 @@ Rules:
 - Verification: `npm --prefix frontend test -- --run src/pages/admin/__tests__/AdminHome.test.tsx` passed. `npm --prefix frontend run build` passed.
 - Findings: Admin home is now an operational dashboard instead of a static link list. It loads `/api/admin/stats` and pending `/api/admin/requests`, shows user/property/contract/review metrics, exposes support/compliance/system quick actions, and surfaces request-id formatted errors through the shared API formatter.
 - Blocked/deferred: No backend schema change in this package. Deeper admin support workflows remain pending for later blocks: support ticket queue, user impersonation audit policy, and financial admin panel.
-- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with tenant/landlord dashboard data polish.
+- Deploy: commit `62d5639` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: continue with tenant/landlord dashboard data polish.
+
+### 2026-07-04 - Codex - Sprint unico: tenant dashboard summary package
+
+- Status: done
+- Files touched: `frontend/src/pages/tenant/TenantHome.tsx`, `frontend/src/pages/tenant/__tests__/TenantHome.test.tsx`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend test -- --run src/pages/tenant/__tests__/TenantHome.test.tsx` passed. `npm --prefix frontend run build` passed.
+- Findings: Tenant dashboard now loads existing contract data, local saved favorites and Tenant PRO state to show an actionable summary: active contract, pending contracts, favorites and verification status. It also surfaces an active rental card with direct contract access and request-id formatted errors.
+- Blocked/deferred: Favorite count still uses the current local favorites store because the public Favorites page uses that source today. A server-backed favorites migration can be done later after aligning `/api/me/favorites` behavior with the frontend.
+- Next suggested step: commit, push, deploy to Valeris, smoke production, then continue with landlord dashboard reliability and pricing-alert polish.
