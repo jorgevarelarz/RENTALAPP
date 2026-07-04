@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
+import { formatApiError } from "../../api/client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [err, setErr] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const nav = useNavigate();
   const loc = useLocation();
@@ -14,11 +16,15 @@ export default function LoginPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setErr(null);
+    setLoading(true);
     try {
       await login(email, password);
       nav(next, { replace: true });
     } catch (e: any) {
-      setErr(e?.response?.data?.error || "Error de login");
+      setErr(formatApiError(e, "Error de login"));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -54,8 +60,12 @@ export default function LoginPage() {
           />
         </label>
         {err && <p className="auth-error" style={{ color: '#b91c1c' }}>{err}</p>}
-        <button type="submit" className="auth-button">
-          Entrar
+        <div className="flex items-center justify-between text-sm">
+          <Link to="/forgot-password" className="auth-link text-indigo-700 hover:underline">Recuperar contraseña</Link>
+          <Link to="/register" className="auth-link text-gray-600 hover:underline">Crear cuenta</Link>
+        </div>
+        <button type="submit" className="auth-button" disabled={loading}>
+          {loading ? 'Entrando...' : 'Entrar'}
         </button>
       </form>
       <div className="auth-footer">

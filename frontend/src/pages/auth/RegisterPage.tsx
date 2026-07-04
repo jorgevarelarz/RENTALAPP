@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { register as apiRegister } from "../../services/auth";
 import { useAuth } from "../../context/AuthContext";
+import { formatApiError } from "../../api/client";
 
 export default function RegisterPage() {
   const [searchParams] = useSearchParams();
@@ -33,7 +34,7 @@ export default function RegisterPage() {
 
       nav(path, { replace: true });
     } catch (e: any) {
-      setErr(e?.response?.data?.error || e?.message || "No se pudo registrar");
+      setErr(formatApiError(e, "No se pudo registrar"));
     } finally {
       setLoading(false);
     }

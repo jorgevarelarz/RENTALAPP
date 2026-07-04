@@ -7,6 +7,7 @@ import Button from '../components/ui/Button';
 import { useToast } from '../context/ToastContext';
 import { Link } from 'react-router-dom';
 import { Briefcase, Wallet, Settings, CheckCircle2 } from 'lucide-react';
+import OnboardingChecklist from '../components/OnboardingChecklist';
 
 const ALL_SERVICES = [
   { key: 'plumbing', label: 'Fontanería' },
@@ -79,6 +80,8 @@ const ProDashboard: React.FC = () => {
           )}
         </div>
       </div>
+
+      <OnboardingChecklist role="pro" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <Link to="/pro/tickets" className="block group">

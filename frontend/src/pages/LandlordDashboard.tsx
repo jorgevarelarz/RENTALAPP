@@ -14,6 +14,7 @@ import PropertyFormRHF, { PropertyFormData } from '../components/PropertyFormRHF
 import ApplicantsModal from '../components/ApplicantsModal';
 import { Building2, Plus, Home, BarChart3, Image as ImageIcon, Users } from 'lucide-react';
 import { toAbsoluteUrl } from '../utils/media';
+import OnboardingChecklist from '../components/OnboardingChecklist';
 
 const IconCash = () => (
   <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -134,6 +135,8 @@ const LandlordDashboard: React.FC = () => {
           <Plus size={20} className="mr-2" /> Nueva Propiedad
         </Button>
       </div>
+
+      <OnboardingChecklist role="landlord" />
 
       {statsLoading ? (
         <div className="p-6 flex justify-center"><Spinner /></div>

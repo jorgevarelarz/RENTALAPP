@@ -560,3 +560,12 @@ Rules:
 - Verification: `npm --prefix frontend test -- --run src/api/client.test.ts` passed. `npm --prefix frontend run build` passed.
 - Findings: API client now formats backend errors as `message (ref: requestId)` using either JSON body `requestId` or `X-Request-Id` response header. The global non-auth error toast uses this formatter. This avoids editing every page-level `catch` at once.
 - Next suggested step: continue Oleada 2 with login/register/forgot/reset page polish and onboarding checklist by role.
+
+### 2026-07-04 - Codex - Sprint unico: landing/auth/onboarding package
+
+- Status: done
+- Files touched: `frontend/src/pages/LandingPage.tsx`, `frontend/src/pages/auth/LoginPage.tsx`, `frontend/src/pages/auth/RegisterPage.tsx`, `frontend/src/pages/auth/ForgotPassword.tsx`, `frontend/src/pages/auth/ResetPassword.tsx`, `frontend/src/components/OnboardingChecklist.tsx`, `frontend/src/pages/tenant/TenantHome.tsx`, `frontend/src/pages/LandlordDashboard.tsx`, `frontend/src/pages/ProDashboard.tsx`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend run build` passed. `npm --prefix frontend test` passed: 8 files / 19 tests.
+- Findings: Landing now covers tenant, landlord, pro, agency and institution segments with clear CTAs. Auth pages now use the shared API error formatter where relevant and recovery/reset share the existing auth layout. Tenant, landlord and pro dashboards now show a role-specific onboarding checklist without adding dependencies or changing auth storage.
+- Blocked/deferred: Agency/institution dedicated onboarding remains pending because those roles are not currently in the public registration flow. HttpOnly cookies remain deferred until auth tests cover the migration.
+- Next suggested step: deploy this package to Valeris, run smoke production, then continue the sprint unico with panel gaps: admin/support quick actions and tenant/landlord dashboard data polish.

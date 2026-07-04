@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Card from '../../components/ui/Card';
 import { Search, ShieldCheck, FileSignature, CreditCard } from 'lucide-react';
+import OnboardingChecklist from '../../components/OnboardingChecklist';
 
 export default function TenantHome() {
   const { user } = useAuth();
@@ -21,6 +22,8 @@ export default function TenantHome() {
           ¿En qué podemos ayudarte hoy? Gestiona tu hogar desde aquí.
         </p>
       </div>
+
+      <OnboardingChecklist role="tenant" />
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <Link to="/properties" className="block group">
