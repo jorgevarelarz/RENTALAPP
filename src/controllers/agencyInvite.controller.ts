@@ -211,9 +211,12 @@ export async function acceptInvite(req: Request, res: Response) {
     meta: { agencyId: String(invite.agencyId), inviteId: String(invite._id) },
   });
 
-  const token = jwt.sign({ id: user._id, role: user.role }, getJwtSecret(), { expiresIn: '7d' });
+  const isVerified = Boolean((user as any).isVerified);
+  const tokenPayload: any = { id: user._id, role: user.role };
+  if (isVerified) tokenPayload.isVerified = true;
+  const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '7d' });
   return res.status(201).json({
     token,
-    user: { _id: user._id, email: user.email, role: user.role, name: user.name },
+    user: { _id: user._id, email: user.email, role: user.role, name: user.name, isVerified },
   });
 }

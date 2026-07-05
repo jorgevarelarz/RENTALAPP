@@ -3,11 +3,14 @@ import { User } from '../models/user.model';
 import { Payment } from '../models/payment.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
+import bcrypt from 'bcryptjs';
 
 const toPublicUser = (u: any) => ({
   id: String(u._id),
   name: u.name,
+  email: u.email,
   role: u.role,
+  isVerified: u.isVerified,
   avatar: u.avatar,
   ratingAvg: u.ratingAvg,
   reviewCount: u.reviewCount,
@@ -72,6 +75,38 @@ export const getAllUsers = async (req: Request, res: Response) => {
   ]);
 
   res.json({ items: items.map(toPublicUser), total, page: pg, limit: lim });
+};
+
+export const createUser = async (req: Request, res: Response) => {
+  const requester = (req as any).user;
+  if (requester?.role !== 'admin') {
+    return res.status(403).json({ error: 'No autorizado' });
+  }
+
+  const name = String(req.body?.name || '').trim();
+  const email = String(req.body?.email || '').trim().toLowerCase();
+  const password = String(req.body?.password || '');
+  const role = String(req.body?.role || '');
+  const allowedRoles = ['tenant', 'landlord', 'pro', 'agency'];
+
+  if (!name || !email || password.length < 8 || !allowedRoles.includes(role)) {
+    return res.status(400).json({ error: 'invalid_payload' });
+  }
+
+  const exists = await User.findOne({ email }).select('_id').lean();
+  if (exists) return res.status(409).json({ error: 'email_already_exists' });
+
+  const passwordHash = await bcrypt.hash(password, 10);
+  const user = await User.create({
+    name,
+    email,
+    passwordHash,
+    role,
+    isVerified: role === 'agency' ? true : Boolean(req.body?.isVerified),
+    companyName: req.body?.companyName ? String(req.body.companyName).trim() : undefined,
+  });
+
+  res.status(201).json({ user: toPublicUser(user) });
 };
 
 /**

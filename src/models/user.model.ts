@@ -99,6 +99,7 @@ const userSchema = new Schema(
       enum: ['landlord', 'tenant', 'admin', 'pro', 'agency', 'institution_viewer'],
       required: true,
     },
+    isVerified: { type: Boolean, default: false },
     ratingAvg: { type: Number, default: 0 },
     reviewCount: { type: Number, default: 0 },
     phone: { type: String },

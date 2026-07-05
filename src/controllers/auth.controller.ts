@@ -8,6 +8,11 @@ import { getJwtSecret } from '../utils/getJwtSecret';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 
 const EFFECTIVE_JWT_SECRET = getJwtSecret();
+const authTokenPayload = (user: any) => {
+  const payload: any = { id: user._id, role: user.role };
+  if (user.isVerified) payload.isVerified = true;
+  return payload;
+};
 
 /**
  * Register a new user.
@@ -27,10 +32,11 @@ export const register = async (req: Request, res: Response) => {
       resourceId: String(user._id),
       meta: { userId: String(user._id), role: user.role },
     });
-    const token = jwt.sign({ id: user._id, role: user.role }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
+    const isVerified = Boolean((user as any).isVerified);
+    const token = jwt.sign(authTokenPayload(user), EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
     res.status(201).json({
       token,
-      user: { _id: user._id, email: user.email, role: user.role },
+      user: { _id: user._id, email: user.email, role: user.role, isVerified },
     });
   } catch (error) {
     res.status(400).json({ error: 'Error al registrar' });
@@ -57,10 +63,11 @@ export const login = async (req: Request, res: Response) => {
       meta: { userId: String(user._id), role: user.role },
     });
     // Generate and return JWT
-    const token = jwt.sign({ id: user._id, role: user.role }, EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
+    const isVerified = Boolean((user as any).isVerified);
+    const token = jwt.sign(authTokenPayload(user), EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
     res.json({
       token,
-      user: { _id: user._id, email: user.email, role: user.role },
+      user: { _id: user._id, email: user.email, role: user.role, isVerified },
     });
   } catch (error) {
     res.status(500).json({ message: 'Error del servidor' });

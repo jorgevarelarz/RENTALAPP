@@ -694,3 +694,12 @@ Rules:
 - Blocked/deferred: Agency self-registration and admin-side agency creation UI are still not exposed; agency accounts must be provisioned/admin-created.
 - Deploy: commit `a275a2d` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed (`/health`, `/ready`, `/`, public properties, sensitive route 404 checks).
 - Next suggested step: continue with agency admin provisioning or pro marketplace polish.
+
+### 2026-07-05 - Codex - Admin agency provisioning package
+
+- Status: done
+- Files touched: `src/controllers/user.controller.ts`, `src/routes/user.routes.ts`, `src/models/user.model.ts`, `src/controllers/auth.controller.ts`, `src/controllers/agencyInvite.controller.ts`, `frontend/src/pages/admin/AdminUsersPage.tsx`, `tests/admin/admin.users.test.ts`
+- Verification: `npm run build` passed. `npm --prefix frontend run build` passed. `npm run test:backend -- --runInBand --forceExit src/__tests__/api.test.ts tests/admin/admin.users.test.ts` passed. Full `npm run test:backend -- --runInBand --forceExit` passed: 42 suites / 129 tests.
+- Findings: Admin users page can now create verified agency accounts with a temporary password, filter users by `agency`, and the users API now returns email/id consistently. Agency login tokens include `isVerified` only when true, so admin-provisioned agencies can access `/api/agency/*` without breaking normal tenant/landlord verification fallback.
+- Blocked/deferred: No password delivery email is sent yet; admin must share the temporary password out of band. Full admin user edit/deactivate flow remains pending.
+- Next suggested step: deploy this package to Valeris, then continue with pro marketplace polish or support center.
