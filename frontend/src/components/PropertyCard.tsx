@@ -27,7 +27,7 @@ export default function PropertyCard({ p, onFavToggle }: Props) {
 
         <div className="absolute top-3 left-3 flex flex-col gap-1">
           {p.onlyTenantPro && (
-            <span className="bg-blue-600/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide shadow-sm">
+            <span className="bg-indigo-600/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide shadow-sm">
               Tenant PRO
             </span>
           )}
@@ -49,12 +49,12 @@ export default function PropertyCard({ p, onFavToggle }: Props) {
       </div>
 
       <div className="p-4 flex flex-col flex-1">
-        <div className="flex justify-between items-start mb-2">
-          <h3 className="font-bold text-lg text-gray-900 leading-tight group-hover:text-blue-600 transition-colors line-clamp-1">
+        <div className="flex justify-between items-start gap-2 mb-2">
+          <h3 className="font-bold text-lg text-gray-950 leading-tight group-hover:text-indigo-600 transition-colors line-clamp-1">
             {p.title}
           </h3>
-          <span className="font-bold text-lg text-blue-600 whitespace-nowrap">
-            {p.price?.toLocaleString()} €
+          <span className="font-bold text-lg text-gray-950 whitespace-nowrap">
+            {p.price?.toLocaleString()} €<span className="text-[13px] font-medium text-gray-400">/mes</span>
           </span>
         </div>
 

@@ -63,19 +63,26 @@ export default function PropertiesList() {
   const pages = Math.ceil((total || 0) / (limit || 1)) || 1;
 
   return (
-    <div style={{ padding: '24px', display: 'grid', gap: 16 }}>
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold">Propiedades</h2>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="px-3 py-1.5 rounded border border-gray-300 hover:bg-gray-50 md:hidden"
-            onClick={() => setShowFilters(true)}
-          >
-            Filtros
-          </button>
-          <div className="text-sm text-gray-600">{isFetching ? 'Actualizando…' : null}</div>
+    <div className="py-2 grid gap-4">
+      <div className="flex items-end justify-between gap-3">
+        <div>
+          <h2 className="text-2xl font-bold tracking-tight text-gray-950">Propiedades</h2>
+          <p className="mt-0.5 text-sm text-gray-500">
+            {isLoading
+              ? 'Buscando viviendas…'
+              : total > 0
+                ? `${total.toLocaleString()} ${total === 1 ? 'vivienda disponible' : 'viviendas disponibles'}`
+                : 'Encuentra tu próxima vivienda'}
+            {isFetching && !isLoading ? ' · actualizando…' : ''}
+          </p>
         </div>
+        <button
+          type="button"
+          className="px-3.5 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 md:hidden"
+          onClick={() => setShowFilters(true)}
+        >
+          Filtros
+        </button>
       </div>
       {/* Filtros sticky en desktop */}
       <div className="hidden md:block sticky top-14 z-10">
@@ -93,24 +100,26 @@ export default function PropertiesList() {
         />
       ) : (
         <>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
             {items.map((property) => (
               <PropertyCard key={property._id} p={property} onFavToggle={onFavToggle} />
             ))}
           </div>
-          <nav className="flex items-center justify-center gap-2 mt-3" aria-label="Paginación">
-            <button
-              className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50"
-              onClick={() => setFilters({ page: Math.max(1, page - 1) })}
-              disabled={page <= 1}
-            >Anterior</button>
-            <span className="text-sm text-gray-700">Página {page} / {pages}</span>
-            <button
-              className="px-3 py-1.5 rounded border border-gray-300 disabled:opacity-50"
-              onClick={() => setFilters({ page: Math.min(pages, page + 1) })}
-              disabled={page >= pages}
-            >Siguiente</button>
-          </nav>
+          {pages > 1 && (
+            <nav className="flex items-center justify-center gap-3 mt-4" aria-label="Paginación">
+              <button
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={() => setFilters({ page: Math.max(1, page - 1) })}
+                disabled={page <= 1}
+              >Anterior</button>
+              <span className="text-sm text-gray-500 tabular-nums">Página {page} de {pages}</span>
+              <button
+                className="px-4 py-2 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                onClick={() => setFilters({ page: Math.min(pages, page + 1) })}
+                disabled={page >= pages}
+              >Siguiente</button>
+            </nav>
+          )}
         </>
       )}
 
