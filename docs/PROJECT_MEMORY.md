@@ -635,7 +635,7 @@ Rules:
 
 - Status: done
 - Files touched: `frontend/src/pages/admin/Payments.tsx`, `docs/PROJECT_MEMORY.md`
-- Verification: `npm --prefix frontend run build` passed.
+- Verification: `npm --prefix frontend run build` passed. Docker production build passed for backend, frontend and institution frontend.
 - Findings: Admin payments page is no longer a placeholder. It now loads platform earnings summary/list data from existing `/api/admin/earnings/*` endpoints, supports date filters, CSV export, totals for gross/fee/net, and a recent movements table.
 - Blocked/deferred: This panel audits platform earnings only. Full Stripe webhook reconciliation and failed-payment dashboards remain pending because they need additional backend aggregation.
 - Deploy: commit `4edf0ec` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
@@ -722,4 +722,5 @@ Rules:
 - Verification: `npm --prefix frontend run build` passed.
 - Findings: Admin reports is no longer a thin placeholder. It now loads `/api/admin/stats` and existing earnings summary data, shows executive KPIs, contract status bars, report links and a local CSV summary export.
 - Blocked/deferred: `/api/admin/stats` still does not split agency/pro/institution counts; deeper cohort/retention reports need backend aggregation.
-- Next suggested step: deploy this package to Valeris, then continue with admin settings or support center.
+- Deploy: commit `a33d8f6` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: continue with admin settings or support center.
