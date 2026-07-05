@@ -640,3 +640,15 @@ Rules:
 - Blocked/deferred: This panel audits platform earnings only. Full Stripe webhook reconciliation and failed-payment dashboards remain pending because they need additional backend aggregation.
 - Deploy: commit `4edf0ec` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
 - Next suggested step: continue with pro marketplace polish or support center.
+
+### 2026-07-05 - Claude Code - Code health: dead code, email consolidation, structured logger
+
+- Status: done
+- Files touched: `src/controllers/contract.controller.ts`, `src/utils/email.ts`, `src/utils/notification.ts`, `src/utils/logger.ts` (new), `src/middleware/errorHandler.ts`, `src/metrics.ts`, `tests/properties/property.alerts.test.ts`, `package.json`, `package-lock.json`, `docs/PROJECT_MEMORY.md`
+- Verification: `npx tsc --noEmit` passed. `npm run test:backend` full suite passed (40 suites / 119 tests). `gitnexus detect-changes` reviewed before commit. Note: `property.alerts.test.ts` asserted on the old `console.log` mock-email output; rewritten to `jest.mock` the email module and assert on calls (behavior, not log text).
+- Findings:
+  - Removed dead `createContract` handler in contract.controller.ts (superseded by `create`; zero callers confirmed via GitNexus + grep). Also removed now-unused `createContractAction`/`ResolvedClause` imports.
+  - Consolidated the two parallel email senders: `utils/email.ts` is now the single email module (one transporter, gate `SMTP_HOST || SMTP_USER`, from `SMTP_FROM` fallback). `utils/notification.ts` keeps only Twilio SMS and re-exports email helpers for backward compatibility — no importer changed.
+  - Added `pino` structured logger (`src/utils/logger.ts`, silent in tests via NODE_ENV=test). Wired into errorHandler, metrics HTTP log, email and SMS modules. Remaining ~110 console.* calls are candidates for gradual migration.
+- Blocked/deferred: full console.* → logger sweep; Sentry integration; SMTP env vars still missing in production `.env.valeris` (emails are mock-logged).
+- Next suggested step: configure SMTP_* on the VPS, then Sentry.
