@@ -6,7 +6,7 @@ const segments = [
     title: 'Inquilinos',
     text: 'Busca viviendas, guarda favoritas, solicita visitas y presenta un perfil Tenant PRO verificable.',
     cta: 'Buscar vivienda',
-    to: '/properties',
+    to: '/info/inquilinos',
     icon: Home,
     tone: 'blue',
   },
@@ -14,7 +14,7 @@ const segments = [
     title: 'Propietarios',
     text: 'Publica inmuebles, compara candidatos, firma contratos y centraliza pagos e incidencias.',
     cta: 'Publicar propiedad',
-    to: '/register?role=landlord',
+    to: '/info/propietarios',
     icon: Building2,
     tone: 'emerald',
   },
@@ -22,7 +22,7 @@ const segments = [
     title: 'Profesionales',
     text: 'Recibe trabajos de mantenimiento, envía presupuestos y cobra servicios con trazabilidad.',
     cta: 'Entrar como pro',
-    to: '/register?role=pro',
+    to: '/info/profesionales',
     icon: Wrench,
     tone: 'orange',
   },
@@ -30,7 +30,7 @@ const segments = [
     title: 'Agencias',
     text: 'Opera carteras, delega permisos, invita clientes y controla contratos desde un panel único.',
     cta: 'Programa agencias',
-    to: '/register?role=landlord',
+    to: '/info/agencias',
     icon: ShieldCheck,
     tone: 'slate',
   },
@@ -38,7 +38,7 @@ const segments = [
     title: 'Instituciones',
     text: 'Consulta cumplimiento, zonas tensionadas y métricas agregadas con exportaciones auditables.',
     cta: 'Ver compliance',
-    to: '/login',
+    to: '/info/compliance',
     icon: Landmark,
     tone: 'violet',
   },
@@ -72,10 +72,10 @@ export default function LandingPage() {
               Publicación, candidatos, contratos, firma, pagos, incidencias, profesionales y compliance en una sola app.
             </p>
             <div className="mt-8 flex flex-col sm:flex-row gap-3">
-              <Link to="/properties" className="inline-flex items-center justify-center rounded-md bg-gray-950 px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800">
+              <Link to="/info/inquilinos" className="inline-flex items-center justify-center rounded-md bg-gray-950 px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800">
                 Buscar vivienda
               </Link>
-              <Link to="/register?role=landlord" className="inline-flex items-center justify-center rounded-md border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-900 hover:bg-gray-50">
+              <Link to="/info/propietarios" className="inline-flex items-center justify-center rounded-md border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-900 hover:bg-gray-50">
                 Publicar propiedad
               </Link>
             </div>

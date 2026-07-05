@@ -724,3 +724,12 @@ Rules:
 - Blocked/deferred: `/api/admin/stats` still does not split agency/pro/institution counts; deeper cohort/retention reports need backend aggregation.
 - Deploy: commit `a33d8f6` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
 - Next suggested step: continue with admin settings or support center.
+
+### 2026-07-05 - Codex - Segment landing pages
+
+- Status: done
+- Files touched: `frontend/src/pages/SegmentLanding.tsx`, `frontend/src/pages/LandingPage.tsx`, `frontend/src/AppRoutes.tsx`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend run build` passed.
+- Findings: Added one reusable public segment landing for inquilinos, propietarios, profesionales, agencias and compliance. Home CTAs now go to `/info/inquilinos`, `/info/propietarios`, `/info/profesionales`, `/info/agencias` and `/info/compliance`; each page explains benefits, flow and links to the real action.
+- Blocked/deferred: No CMS/editor; static copy is enough until marketing needs frequent non-dev edits.
+- Next suggested step: deploy this package to Valeris.

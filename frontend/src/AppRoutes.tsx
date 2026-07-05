@@ -36,6 +36,7 @@ const TensionedAreas = lazy(() => import("./pages/admin/TensionedAreas"));
 const SystemEvents = lazy(() => import("./pages/admin/SystemEvents"));
 const AdminAuditDashboard = lazy(() => import("./pages/admin/AdminAuditDashboard"));
 const RedirectHome = lazy(() => import("./pages/RedirectHome"));
+const SegmentLanding = lazy(() => import("./pages/SegmentLanding"));
 const MyContracts = lazy(() => import("./pages/MyContracts"));
 const LandlordDashboard = lazy(() => import("./pages/LandlordDashboard"));
 const ProDashboard = lazy(() => import("./pages/ProDashboard"));
@@ -81,6 +82,7 @@ export default function AppRoutes() {
           <Routes>
             <Route element={<PublicLayout />}>
               <Route path="/" element={<RedirectHome />} />
+              <Route path="/info/:segment" element={<SegmentLanding />} />
               <Route path="/testing/inbound" element={<InboundTestingPage />} />
             </Route>
 
