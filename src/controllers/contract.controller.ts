@@ -15,9 +15,8 @@ import { signaturitProvider } from '../signature/signaturit';
 import * as docusignProvider from '../services/signature/docusign.provider';
 import { sendContractReadyEmail } from '../utils/email';
 import PDFDocument from 'pdfkit';
-import { createContractAction, signContractAction } from '../services/contract.actions';
+import { signContractAction } from '../services/contract.actions';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
-import type { ResolvedClause } from '../services/clauses.service';
 import { generateContractPdfFile } from '../services/pdfGenerator';
 import { evaluateAndPersist } from '../modules/rentalPublic';
 // @ts-ignore
@@ -167,54 +166,6 @@ export async function create(req: Request, res: Response) {
     return res.status(500).json({ error: 'contract_creation_failed' });
   }
 }
-
-export const createContract = async (req: Request, res: Response) => {
-  const {
-    landlord,
-    landlordId,
-    tenant,
-    tenantId,
-    property,
-    propertyId,
-    region,
-    clauses,
-    rent,
-    deposit,
-    startDate,
-    endDate,
-    iban,
-  } = req.body;
-  const resolvedClauses = (req as any).resolvedClauses as ResolvedClause[] | undefined;
-  try {
-    const contract = await createContractAction({
-      landlordId: landlord ?? landlordId,
-      tenantId: tenant ?? tenantId,
-      propertyId: property ?? propertyId,
-      region,
-      clauses,
-      resolvedClauses,
-      rent,
-      deposit,
-      startDate,
-      endDate,
-      iban,
-    });
-    await recordFunnelEvent(req, 'contract', {
-      resourceType: 'contract',
-      resourceId: String((contract as any)._id),
-      meta: {
-        propertyId: String((contract as any).property),
-        landlordId: String((contract as any).landlord),
-        tenantId: String((contract as any).tenant),
-      },
-    });
-
-    res.status(201).json({ message: 'Contrato creado', contract });
-  } catch (err: any) {
-    console.error(err);
-    res.status(400).json({ error: err.message });
-  }
-};
 
 export const getContractPDF = async (req: Request, res: Response) => {
   try {
