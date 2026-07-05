@@ -709,7 +709,7 @@ Rules:
 
 - Status: done
 - Files touched: `frontend/src/pages/pro/Quotes.tsx`, `frontend/src/pages/pro/Billing.tsx`, `docs/PROJECT_MEMORY.md`
-- Verification: `npm --prefix frontend run build` passed.
+- Verification: `npm --prefix frontend run build` passed. Docker production build passed for backend, frontend and institution frontend. `npm run smoke:production` passed and `https://app.rentalapp.es/info/inquilinos` returns 200.
 - Findings: Replaced two thin placeholder-like pro pages with real operational panels backed by existing pro ticket data. Quotes now shows opportunities, sent budgets, approval state and amount totals. Billing now shows billable work, approved extras, CSV export and links to ticket detail.
 - Blocked/deferred: Real invoice upload/payment reconciliation still depends on a backend invoice model or Stripe payout reconciliation endpoint. Current panel is operational reporting from ticket quote data.
 - Deploy: commit `55dba2c` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
@@ -732,4 +732,5 @@ Rules:
 - Verification: `npm --prefix frontend run build` passed.
 - Findings: Added one reusable public segment landing for inquilinos, propietarios, profesionales, agencias and compliance. Home CTAs now go to `/info/inquilinos`, `/info/propietarios`, `/info/profesionales`, `/info/agencias` and `/info/compliance`; each page explains benefits, flow and links to the real action.
 - Blocked/deferred: No CMS/editor; static copy is enough until marketing needs frequent non-dev edits.
-- Next suggested step: deploy this package to Valeris.
+- Deploy: commit `e158414` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: continue with admin settings or support center.
