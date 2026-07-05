@@ -652,3 +652,15 @@ Rules:
   - Added `pino` structured logger (`src/utils/logger.ts`, silent in tests via NODE_ENV=test). Wired into errorHandler, metrics HTTP log, email and SMS modules. Remaining ~110 console.* calls are candidates for gradual migration.
 - Blocked/deferred: full console.* → logger sweep; Sentry integration; SMTP env vars still missing in production `.env.valeris` (emails are mock-logged).
 - Next suggested step: configure SMTP_* on the VPS, then Sentry.
+
+### 2026-07-05 - Claude Code - Landing CTAs fix + production SMTP
+
+- Status: done
+- Files touched: `frontend/src/index.tsx`, `docs/PROJECT_MEMORY.md` (server-only: `/opt/rentalapp/.env.valeris`)
+- Verification: Playwright probe against https://app.rentalapp.es — landing CTA navigates to /properties and the page renders with zero page errors (before: crash "No QueryClient set"). Frontend build passed. Real SMTP test email sent from the production container via Brevo (250 queued, messageId @app.rentalapp.es). smoke:production green.
+- Findings:
+  - Landing buttons "did nothing" because every React Query page crashed on mount: the app root had no QueryClientProvider (lost in an earlier index.tsx rewrite). Fixed in `frontend/src/index.tsx`.
+  - Production emails now go out for real: `.env.valeris` has SMTP_HOST/PORT/SECURE/USER/PASS (Brevo relay, same account MyPetLive uses) + `SMTP_FROM="RentalApp <no-reply@app.rentalapp.es>"`.
+  - NOTE frontend vitest fails locally on Node 24 (`rollup/parseAst` ERR_MODULE_NOT_FOUND) — pre-existing environment issue, CI runs them fine.
+- Blocked/deferred: rentalapp.es domain is NOT verified in Brevo (no DKIM) — deliverability may hit spam until the domain + DKIM records are added in Brevo and GoDaddy DNS.
+- Next suggested step: verify rentalapp.es in Brevo (DKIM/SPF), then Signaturit production plan.
