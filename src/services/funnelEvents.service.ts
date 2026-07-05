@@ -10,7 +10,9 @@ export type FunnelEventType =
   | 'search'
   | 'application'
   | 'contract'
-  | 'payment';
+  | 'payment'
+  | 'agency_invite_created'
+  | 'agency_invite_accepted';
 
 type FunnelEventOptions = {
   resourceType?: string;

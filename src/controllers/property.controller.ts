@@ -104,6 +104,12 @@ export async function create(req: Request, res: Response) {
     payload.agencyId = userId;
     payload.agencyAccess = 'manage';
   }
+  if (user?.role === 'landlord' && userId) {
+    const dbUser: any = await User.findById(userId).select('referredByAgencyId').lean();
+    if (dbUser?.referredByAgencyId) {
+      payload.refAgencyId = dbUser.referredByAgencyId;
+    }
+  }
   if (payload.onlyTenantPro && (!payload.requiredTenantProMaxRent || payload.requiredTenantProMaxRent === 0)) {
     payload.requiredTenantProMaxRent = payload.price;
   }

@@ -7,7 +7,7 @@ import AppShell from "./layout/AppShell";
 import PublicLayout from "./layout/PublicLayout";
 import AuthLayout from "./layout/AuthLayout";
 
-type UserRole = "tenant" | "landlord" | "pro" | "admin";
+type UserRole = "tenant" | "landlord" | "pro" | "admin" | "agency";
 
 const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const ForgotPassword = lazy(() => import("./pages/auth/ForgotPassword"));
@@ -60,6 +60,9 @@ const ProDetail = lazy(() => import("./pages/ProDetail"));
 const ContractDetail = lazy(() => import("./pages/ContractDetail"));
 const AssistantPage = lazy(() => import("./pages/Assistant"));
 const InboundTestingPage = lazy(() => import("./pages/testing/InboundTestingPage"));
+const AgencyHome = lazy(() => import("./pages/agency/AgencyHome"));
+const AgencyLandlords = lazy(() => import("./pages/agency/AgencyLandlords"));
+const InviteAccept = lazy(() => import("./pages/InviteAccept"));
 
 function RouteFallback() {
   return <div className="p-6 text-sm text-gray-500">Cargando...</div>;
@@ -125,6 +128,8 @@ export default function AppRoutes() {
               <Route path="/admin/compliance/tensioned-areas" element={withProtected(<TensionedAreas />, ["admin"])} />
               <Route path="/admin/compliance/audit-trails" element={withProtected(<AdminAuditDashboard />, ["admin"])} />
               <Route path="/admin/system-events" element={withProtected(<SystemEvents />, ["admin"])} />
+              <Route path="/agency" element={withProtected(<AgencyHome />, ["agency"])} />
+              <Route path="/agency/landlords" element={withProtected(<AgencyLandlords />, ["agency"])} />
               <Route path="/pros" element={<ProList />} />
               <Route path="/pros/:id" element={<ProDetail />} />
               <Route path="/profile" element={withProtected(<ProfilePage />)} />
@@ -137,6 +142,7 @@ export default function AppRoutes() {
               <Route path="/register" element={<RegisterPage />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset" element={<ResetPassword />} />
+              <Route path="/invite/:token" element={<InviteAccept />} />
             </Route>
           </Routes>
         </Suspense>

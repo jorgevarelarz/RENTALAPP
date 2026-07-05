@@ -52,6 +52,8 @@ import taxReportRoutes from './routes/taxReport.routes';
 import aiRoutes from './routes/ai.routes';
 import assistantRoutes from './routes/assistant.routes';
 import agencyRoutes from './routes/agency.routes';
+import { getInviteByToken, acceptInvite } from './controllers/agencyInvite.controller';
+import { asyncHandler } from './utils/asyncHandler';
 import testingInboundRoutes from './routes/testingInbound.routes';
 
 import helmet from 'helmet';
@@ -307,6 +309,9 @@ app.use('/api/assistant', authenticate, requireVerified, assistantRoutes);
 // Contract-specific payments under /api/contracts require verificación
 app.use('/api/contracts', authenticate, requireVerified, contractPaymentsRoutes);
 app.use('/api/agency', authenticate, requireVerified, agencyRoutes);
+// Invitaciones de agencia a propietarios: acceso público por token (el invitado aún no tiene cuenta).
+app.get('/api/agency-invites/:token', asyncHandler(getInviteByToken));
+app.post('/api/agency-invites/:token/accept', authLimiter, asyncHandler(acceptInvite));
 app.use('/api', paymentsRoutes);
 app.use('/api', authenticate, requireVerified, connectRoutes);
 app.use('/api', authenticate, requireVerified, serviceOfferRoutes);

@@ -3,7 +3,7 @@ import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 type Props = {
-  roles: Array<"tenant" | "landlord" | "pro" | "admin">;
+  roles: Array<"tenant" | "landlord" | "pro" | "admin" | "agency">;
   children: React.ReactElement;
 };
 
@@ -17,6 +17,7 @@ export default function RoleGuard({ roles, children }: Props) {
       landlord: '/landlord',
       pro: '/pro',
       admin: '/admin',
+      agency: '/agency',
     };
     return <Navigate to={home[user.role] || '/'} replace />;
   }

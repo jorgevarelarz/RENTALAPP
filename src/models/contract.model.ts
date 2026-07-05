@@ -8,6 +8,7 @@ export interface IContract extends Document {
   tenant: Types.ObjectId;
   property: Types.ObjectId;
   agencyId?: Types.ObjectId;
+  refAgencyId?: Types.ObjectId;
   rent: number;
   rentAmount?: number;
   currency?: string;
@@ -92,6 +93,8 @@ const contractSchema = new Schema<IContract>(
     tenant: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     property: { type: Schema.Types.ObjectId, ref: 'Property', required: true },
     agencyId: { type: Schema.Types.ObjectId, ref: 'User' },
+    // Agencia captadora: cobra share de la comisión mientras este contrato pague por la plataforma.
+    refAgencyId: { type: Schema.Types.ObjectId, ref: 'User' },
     rent: { type: Number, required: true },
     rentAmount: { type: Number },
     currency: { type: String, default: 'EUR' },
@@ -197,5 +200,6 @@ contractSchema.index({ 'signature.status': 1 });
 contractSchema.index({ landlord: 1 });
 contractSchema.index({ tenant: 1 });
 contractSchema.index({ agencyId: 1 });
+contractSchema.index({ refAgencyId: 1, status: 1 });
 
 export const Contract = model<IContract>('Contract', contractSchema);

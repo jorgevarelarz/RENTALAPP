@@ -126,6 +126,8 @@ const userSchema = new Schema(
     },
     // Optional Stripe identifiers for payments
     stripeAccountId: { type: String },
+    // Agencia que dio de alta a este propietario (atribución de captación).
+    referredByAgencyId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     stripeCustomerId: { type: String },
     // Password reset support
     resetToken: { type: String },

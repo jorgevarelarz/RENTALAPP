@@ -35,6 +35,7 @@ const iconRules: Array<[RegExp, LucideIcon]> = [
   [/quotes/, FileText],
   [/billing/, Receipt],
   [/admin\/users/, Users],
+  [/agency\/landlords/, Users],
   [/reports/, BarChart3],
   [/settings/, Settings],
   [/tensioned-areas/, MapIcon],
@@ -86,6 +87,7 @@ function Header() {
     : user?.role === 'landlord' ? '/landlord'
     : user?.role === 'pro' ? '/pro'
     : user?.role === 'admin' ? '/admin'
+    : user?.role === 'agency' ? '/agency'
     : '/';
   return (
     <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200">
@@ -156,12 +158,13 @@ function NavItem({ item, unread }: { item: { path: string; label: string }; unre
 function SideNav() {
   const { user } = useAuth();
   const unread = useUnread();
-  const role = user?.role as 'tenant' | 'landlord' | 'pro' | 'admin' | undefined;
+  const role = user?.role as 'tenant' | 'landlord' | 'pro' | 'admin' | 'agency' | undefined;
   const labelFor: Record<string, string> = {
     tenant: 'Inquilino',
     landlord: 'Propietario',
     pro: 'Profesional',
     admin: 'Administración',
+    agency: 'Agencia',
   };
   const guestItems = [{ path: '/properties', label: 'Buscar pisos' }];
   return (

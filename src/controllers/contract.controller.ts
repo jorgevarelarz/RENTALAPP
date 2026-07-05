@@ -95,11 +95,31 @@ export async function create(req: Request, res: Response) {
       agencyIdToAttach = actorIdRaw;
     }
 
+    // Atribución de captación: si la propiedad vino de un propietario dado de alta
+    // por una agencia, esta cobra share del primer contrato y de las renovaciones
+    // con el mismo inquilino. Un inquilino nuevo corta la atribución.
+    let refAgencyIdToAttach: any = undefined;
+    if (!agencyIdToAttach) {
+      const propertyDoc: any = await Property.findById(data.property).select('refAgencyId').lean();
+      if (propertyDoc?.refAgencyId) {
+        const priorContracts = await Contract.find({ property: data.property })
+          .select('tenant')
+          .lean();
+        const sameTenantChain = priorContracts.every(
+          (c: any) => String(c.tenant) === String(data.tenant),
+        );
+        if (sameTenantChain) {
+          refAgencyIdToAttach = propertyDoc.refAgencyId;
+        }
+      }
+    }
+
     const contract = await Contract.create({
       landlord: data.landlord,
       tenant: data.tenant,
       property: data.property,
       agencyId: agencyIdToAttach,
+      refAgencyId: refAgencyIdToAttach,
       region: data.region,
       rent: data.rent,
       deposit: data.deposit,

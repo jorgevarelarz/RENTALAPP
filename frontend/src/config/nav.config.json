@@ -25,6 +25,11 @@
     { "label": "Servicios", "path": "/landlord/services" },
     { "label": "Perfil y cuenta", "path": "/profile" }
   ],
+  "agency": [
+    { "label": "Inicio", "path": "/agency" },
+    { "label": "Propietarios", "path": "/agency/landlords" },
+    { "label": "Perfil y cuenta", "path": "/profile" }
+  ],
   "pro": [
     { "label": "Inicio", "path": "/pro" },
     { "label": "Incidencias asignadas", "path": "/pro/tickets" },

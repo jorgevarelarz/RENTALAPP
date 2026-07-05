@@ -3,7 +3,7 @@ import { api as axios } from "../api/client";
 export type User = {
   _id: string;
   email: string;
-  role: "tenant" | "landlord" | "pro" | "admin";
+  role: "tenant" | "landlord" | "pro" | "admin" | "agency";
   isVerified?: boolean;
   tenantPro?: {
     status?: string;
@@ -33,6 +33,11 @@ export async function register(
 export function logout() {
   localStorage.removeItem("user");
   delete axios.defaults.headers.common["Authorization"];
+}
+
+export function setStoredUser(user: User) {
+  localStorage.setItem("user", JSON.stringify(user));
+  axios.defaults.headers.common["Authorization"] = `Bearer ${user.token}`;
 }
 
 export function getStoredUser(): User | null {

@@ -682,5 +682,14 @@ Rules:
   - AppShell SideNav rebuilt: data-driven lucide icon map over nav.config.json paths, section labels, active item = gray-100 pill + indigo icon, guest "Explorar" section; removed the boxed gray card. Header gains brand mark (same as auth shell), "Crear cuenta" CTA for guests, tidier user chip.
   - PropertiesList: results counter in header, cleaner pagination (hidden when single page), tailwind instead of inline styles.
   - FilterBar/PropertyCard: brand alignment — indigo accents + gray-950 primary button replacing blue-600; price now "X €/mes".
-  - NOTE: production has 0 published properties (`/api/properties` returns empty) — marketplace is empty, seeds exist (`seed:rental-public-demo`) if a demo catalog is ever wanted.
+- NOTE: production has 0 published properties (`/api/properties` returns empty) — marketplace is empty, seeds exist (`seed:rental-public-demo`) if a demo catalog is ever wanted.
 - Next suggested step: dashboards (tenant/landlord home) could inherit the same visual language; consider seeding demo properties.
+
+### 2026-07-05 - Codex - Agency referral and earnings package
+
+- Status: done
+- Files touched: `src/controllers/agencyInvite.controller.ts`, `src/controllers/agencyEarnings.controller.ts`, `src/services/agencyShare.service.ts`, `src/models/agencyInvite.model.ts`, `src/models/user.model.ts`, `src/models/property.model.ts`, `src/models/contract.model.ts`, `src/controllers/property.controller.ts`, `src/controllers/contract.controller.ts`, `src/routes/agency.routes.ts`, `src/routes/stripe.webhook.ts`, `src/services/funnelEvents.service.ts`, `frontend/src/pages/agency/*`, `frontend/src/pages/InviteAccept.tsx`, `frontend/src/services/agency.ts`, `frontend/src/AppRoutes.tsx`, `frontend/src/components/RoleGuard.tsx`, `frontend/src/layout/AppShell.tsx`, `frontend/src/config/nav.config.json`, `tests/agency/agencyReferral.test.ts`
+- Verification: `npm run build` passed. `npm --prefix frontend run build` passed. `npm run test:backend -- --runInBand --forceExit tests/agency/agencyReferral.test.ts` passed. Full `npm run test:backend -- --runInBand --forceExit` passed: 41 suites / 127 tests.
+- Findings: Agency role now has a real dashboard, landlord invite funnel, public invite acceptance flow, captacion attribution on referred landlords/properties/contracts, agency commission summaries/invoice PDF, and Stripe rent-fee share percentages by `AGENCY_SHARE_TIERS` with the existing env share as fallback.
+- Blocked/deferred: Agency self-registration and admin-side agency creation UI are still not exposed; agency accounts must be provisioned/admin-created. Production smoke/deploy pending in this package until commit/push completes.
+- Next suggested step: deploy this package to Valeris, then continue with agency admin provisioning or pro marketplace polish.

@@ -4,6 +4,8 @@ const propertySchema = new Schema(
   {
     owner: { type: Schema.Types.ObjectId, ref: 'User', required: true, index: true },
     agencyId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
+    // Agencia captadora (dio de alta al propietario); no implica permisos de gestión.
+    refAgencyId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     agencyAccess: {
       type: String,
       enum: ['manage', 'status_only'],

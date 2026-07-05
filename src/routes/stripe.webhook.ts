@@ -19,7 +19,8 @@ import { ensureDirectConversation } from '../utils/ensureDirectConversation';
 import { RentPayment } from '../models/rentPayment.model';
 import { PartnerEarning } from '../models/partnerEarning.model';
 import { Property } from '../models/property.model';
-import { calcPartnerShareCents, getAgencySharePctFromEnv, parsePositiveInt } from '../utils/partnerEarnings';
+import { calcPartnerShareCents, parsePositiveInt } from '../utils/partnerEarnings';
+import { getAgencySharePct } from '../services/agencyShare.service';
 
 const r = Router();
 
@@ -52,26 +53,30 @@ async function maybePayAgencyRentFeeShare(params: {
   const rentFeeCents = parsePositiveInt((md as any).rentFeeCents);
   if (!rentFeeCents) return;
 
-  const sharePct = getAgencySharePctFromEnv();
-  if (sharePct <= 0) return;
-
-  const partnerShareCents = calcPartnerShareCents(rentFeeCents, sharePct);
-  if (partnerShareCents <= 0) return;
-
   const existing = await PartnerEarning.findOne({ stripeEventId: eventId, kind: 'rent_fee_share' }).lean();
   if (existing?.stripeTransferId) return;
   if (existing?.status === 'failed') return;
 
-  const contract = await Contract.findById(contractIdStr).select('agencyId property').lean();
+  const contract = await Contract.findById(contractIdStr).select('agencyId refAgencyId property').lean();
   if (!contract) return;
 
+  // Resolución de agencia: gestora (contrato o propiedad) tiene prioridad;
+  // si no hay, cobra la captadora (refAgencyId). Nunca ambas.
   const propertyId = (contract as any).property;
   let agencyId: any = (contract as any).agencyId;
   if (!agencyId) {
     const p = await Property.findById(propertyId).select('agencyId').lean();
     agencyId = (p as any)?.agencyId;
   }
+  if (!agencyId) agencyId = (contract as any).refAgencyId;
   if (!agencyId) return;
+
+  // % por tramos de volumen (AGENCY_SHARE_TIERS) o fijo de env como fallback.
+  const sharePct = await getAgencySharePct(agencyId);
+  if (sharePct <= 0) return;
+
+  const partnerShareCents = calcPartnerShareCents(rentFeeCents, sharePct);
+  if (partnerShareCents <= 0) return;
 
   const agency = await User.findById(agencyId).select('stripeAccountId').lean();
   if (!agency?.stripeAccountId) return;

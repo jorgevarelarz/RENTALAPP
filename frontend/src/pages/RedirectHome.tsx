@@ -18,6 +18,8 @@ export default function RedirectHome() {
           ? '/pro'
           : user.role === 'admin'
           ? '/admin'
+          : user.role === 'agency'
+          ? '/agency'
           : '/properties';
       nav(path, { replace: true });
     }
