@@ -714,3 +714,12 @@ Rules:
 - Blocked/deferred: Real invoice upload/payment reconciliation still depends on a backend invoice model or Stripe payout reconciliation endpoint. Current panel is operational reporting from ticket quote data.
 - Deploy: commit `55dba2c` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
 - Next suggested step: continue with admin reports/settings or support center.
+
+### 2026-07-05 - Codex - Admin reports panel
+
+- Status: done
+- Files touched: `frontend/src/pages/admin/Reports.tsx`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend run build` passed.
+- Findings: Admin reports is no longer a thin placeholder. It now loads `/api/admin/stats` and existing earnings summary data, shows executive KPIs, contract status bars, report links and a local CSV summary export.
+- Blocked/deferred: `/api/admin/stats` still does not split agency/pro/institution counts; deeper cohort/retention reports need backend aggregation.
+- Next suggested step: deploy this package to Valeris, then continue with admin settings or support center.
