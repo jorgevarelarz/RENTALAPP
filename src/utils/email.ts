@@ -1,34 +1,55 @@
 import nodemailer from 'nodemailer';
+import { logger } from './logger';
 
-// Transporter SMTP (configurable vía variables de entorno)
-const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: Number(process.env.SMTP_PORT) || 587,
-  secure: process.env.SMTP_SECURE === 'true',
-  auth: process.env.SMTP_USER
-    ? {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-      }
-    : undefined,
-});
+// Módulo único de email de la plataforma. Cualquier envío debe pasar por
+// deliverEmail para compartir transporter, remitente y manejo de errores.
 
-export async function sendEmail(to: string, subject: string, html: string) {
-  if (!process.env.SMTP_USER) {
-    console.log(`[EMAIL MOCK] To=${to} | ${subject}`);
+const smtpConfigured = Boolean(process.env.SMTP_HOST || process.env.SMTP_USER);
+
+const transporter = smtpConfigured
+  ? nodemailer.createTransport({
+      host: process.env.SMTP_HOST || 'smtp.gmail.com',
+      port: Number(process.env.SMTP_PORT) || 587,
+      secure: process.env.SMTP_SECURE === 'true',
+      auth: process.env.SMTP_USER
+        ? {
+            user: process.env.SMTP_USER,
+            pass: process.env.SMTP_PASS,
+          }
+        : undefined,
+    })
+  : null;
+
+const defaultFrom =
+  process.env.SMTP_FROM ||
+  (process.env.SMTP_USER
+    ? `"RentalApp Notificaciones" <${process.env.SMTP_USER}>`
+    : 'no-reply@localhost');
+
+type EmailOptions = {
+  to: string;
+  subject: string;
+  html?: string;
+  text?: string;
+  from?: string;
+};
+
+async function deliverEmail(options: EmailOptions): Promise<void> {
+  const { to, subject } = options;
+  if (!transporter) {
+    logger.info({ type: 'email_mock', to, subject }, 'SMTP no configurado; email no enviado');
     return;
   }
   try {
-    await transporter.sendMail({
-      from: `"RentalApp Notificaciones" <${process.env.SMTP_USER}>`,
-      to,
-      subject,
-      html,
-    });
-    console.log(`📧 Email enviado a ${to} | ${subject}`);
+    await transporter.sendMail({ from: defaultFrom, ...options });
+    logger.info({ type: 'email_sent', to, subject }, 'Email enviado');
   } catch (error) {
-    console.error('Error enviando email:', error);
+    logger.error({ type: 'email_error', to, subject, err: error }, 'Error enviando email');
   }
+}
+
+export async function sendEmail(to: string, subject: string, html: string) {
+  return deliverEmail({ to, subject, html });
 }
 
 export async function sendPriceAlert(userEmail: string, property: any) {
@@ -57,6 +78,36 @@ export async function sendContractCreatedEmail(to: string, contractId: string) {
     'Nuevo contrato creado',
     `<p>Se ha creado un nuevo contrato con ID ${contractId}.</p>`,
   );
+}
+
+export async function sendRentReminderEmail(to: string, contractId: string, amount: number) {
+  return deliverEmail({
+    to,
+    subject: 'Recordatorio de pago de renta',
+    text: `Le recordamos que la renta de €${amount} correspondiente al contrato ${contractId} vencerá pronto. Por favor, acceda a la plataforma para realizar el pago.`,
+  });
+}
+
+export async function sendContractRenewalNotification(
+  to: string,
+  contractId: string,
+  endDate: string,
+) {
+  return deliverEmail({
+    to,
+    subject: 'Próxima expiración de contrato',
+    text: `Su contrato ${contractId} expirará el ${endDate}. Si desea renovar, póngase en contacto con la otra parte o inicie un nuevo contrato en la plataforma.`,
+  });
+}
+
+export async function notifyTenantProDecision(email: string, decision: 'approved' | 'rejected') {
+  const subject =
+    decision === 'approved' ? 'Validación Tenant PRO aprobada' : 'Validación Tenant PRO rechazada';
+  const text =
+    decision === 'approved'
+      ? 'Tu cuenta Tenant PRO ha sido aprobada. Ya puedes disfrutar de las ventajas de Only PRO.'
+      : 'Tu solicitud Tenant PRO ha sido rechazada. Revisa la documentación y vuelve a intentarlo cuando estés listo.';
+  return deliverEmail({ to: email, subject, text });
 }
 
 export async function sendContractReadyEmail(

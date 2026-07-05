@@ -1,11 +1,18 @@
 import request from "supertest";
+
+jest.mock("../../src/utils/email", () => ({
+  ...jest.requireActual("../../src/utils/email"),
+  sendPriceAlert: jest.fn().mockResolvedValue(undefined),
+  sendAvailabilityAlert: jest.fn().mockResolvedValue(undefined),
+}));
+
 import { app } from "../../src/app";
 import { AlertSubscription } from "../../src/models/alertSubscription.model";
+import { sendPriceAlert, sendAvailabilityAlert } from "../../src/utils/email";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
 
 describe("Property alerts", () => {
   let pid: string;
-  let logSpy: jest.SpyInstance;
 
   beforeAll(async () => {
     await connectDb();
@@ -45,11 +52,7 @@ describe("Property alerts", () => {
   });
 
   beforeEach(() => {
-    logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    logSpy.mockRestore();
+    jest.clearAllMocks();
   });
 
   it("triggers price alert on update", async () => {
@@ -60,13 +63,12 @@ describe("Property alerts", () => {
       .send({ price: 650 })
       .expect(200);
 
-    const priceAlertLogged = logSpy.mock.calls.some(([msg]) =>
-      typeof msg === "string" &&
-      msg.includes("Aviso: cambio de precio en propiedad") &&
-      msg.includes("507f1f77bcf86cd799439099"),
+    const calls = (sendPriceAlert as jest.Mock).mock.calls;
+    const priceAlertSent = calls.some(
+      ([to, property]) => to === "507f1f77bcf86cd799439099" && property.price === 650,
     );
 
-    expect(priceAlertLogged).toBe(true);
+    expect(priceAlertSent).toBe(true);
   });
 
   it("triggers availability alert on update", async () => {
@@ -77,12 +79,9 @@ describe("Property alerts", () => {
       .send({ availableFrom: "2025-12-15", availableTo: "2026-01-10" })
       .expect(200);
 
-    const availabilityAlertLogged = logSpy.mock.calls.some(([msg]) =>
-      typeof msg === "string" &&
-      msg.includes("Aviso: cambio de disponibilidad") &&
-      msg.includes("507f1f77bcf86cd799439098"),
-    );
+    const calls = (sendAvailabilityAlert as jest.Mock).mock.calls;
+    const availabilityAlertSent = calls.some(([to]) => to === "507f1f77bcf86cd799439098");
 
-    expect(availabilityAlertLogged).toBe(true);
+    expect(availabilityAlertSent).toBe(true);
   });
 });
