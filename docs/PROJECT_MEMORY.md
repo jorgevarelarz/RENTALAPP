@@ -704,3 +704,12 @@ Rules:
 - Blocked/deferred: No password delivery email is sent yet; admin must share the temporary password out of band. Full admin user edit/deactivate flow remains pending.
 - Deploy: commit `e9fd38c` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
 - Next suggested step: continue with pro marketplace polish or support center.
+
+### 2026-07-05 - Codex - Pro quotes and billing panels
+
+- Status: done
+- Files touched: `frontend/src/pages/pro/Quotes.tsx`, `frontend/src/pages/pro/Billing.tsx`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend run build` passed.
+- Findings: Replaced two thin placeholder-like pro pages with real operational panels backed by existing pro ticket data. Quotes now shows opportunities, sent budgets, approval state and amount totals. Billing now shows billable work, approved extras, CSV export and links to ticket detail.
+- Blocked/deferred: Real invoice upload/payment reconciliation still depends on a backend invoice model or Stripe payout reconciliation endpoint. Current panel is operational reporting from ticket quote data.
+- Next suggested step: deploy this package to Valeris, then continue with admin reports/settings or support center.
