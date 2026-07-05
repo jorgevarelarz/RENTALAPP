@@ -625,7 +625,7 @@ Rules:
 
 - Status: done
 - Files touched: `frontend/src/components/PropertyFormRHF.tsx`, `docs/PROJECT_MEMORY.md`
-- Verification: `npm --prefix frontend run build` passed.
+- Verification: `npm --prefix frontend run build` passed. Docker production build passed for backend, frontend and institution frontend.
 - Findings: Property creation/editing now has a description field and a "Generar con IA" action wired to the existing `/api/ai/description` endpoint. The generated copy uses current form data: title, city, rent, size, rooms, bathrooms, furnished state and pet policy.
 - Blocked/deferred: Runtime generation depends on `GOOGLE_API_KEY` being configured in production. If missing, the UI shows the backend error and the landlord can still write the description manually.
 - Deploy: commit `6d0ec08` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
@@ -712,4 +712,5 @@ Rules:
 - Verification: `npm --prefix frontend run build` passed.
 - Findings: Replaced two thin placeholder-like pro pages with real operational panels backed by existing pro ticket data. Quotes now shows opportunities, sent budgets, approval state and amount totals. Billing now shows billable work, approved extras, CSV export and links to ticket detail.
 - Blocked/deferred: Real invoice upload/payment reconciliation still depends on a backend invoice model or Stripe payout reconciliation endpoint. Current panel is operational reporting from ticket quote data.
-- Next suggested step: deploy this package to Valeris, then continue with admin reports/settings or support center.
+- Deploy: commit `55dba2c` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: continue with admin reports/settings or support center.
