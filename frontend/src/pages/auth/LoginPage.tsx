@@ -1,11 +1,13 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../api/client";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const { login } = useAuth();
@@ -39,37 +41,58 @@ export default function LoginPage() {
             id="email"
             type="email"
             required
+            autoFocus
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => { setEmail(e.target.value); if (err) setErr(null); }}
             className="auth-input"
             placeholder="correo@dominio.com"
             autoComplete="email"
+            disabled={loading}
           />
         </label>
         <label className="auth-label" htmlFor="password">
-          Contraseña
-          <input
-            id="password"
-            type="password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            className="auth-input"
-            placeholder="••••••••"
-            autoComplete="current-password"
-          />
+          <span className="auth-label-row">
+            Contraseña
+            <Link to="/forgot-password" className="auth-link-muted" tabIndex={-1}>
+              ¿La has olvidado?
+            </Link>
+          </span>
+          <span className="auth-input-wrap">
+            <input
+              id="password"
+              type={showPassword ? "text" : "password"}
+              required
+              value={password}
+              onChange={(e) => { setPassword(e.target.value); if (err) setErr(null); }}
+              className="auth-input"
+              placeholder="••••••••"
+              autoComplete="current-password"
+              disabled={loading}
+            />
+            <button
+              type="button"
+              className="auth-eye"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+              tabIndex={-1}
+            >
+              {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </span>
         </label>
-        {err && <p className="auth-error" style={{ color: '#b91c1c' }}>{err}</p>}
-        <div className="flex items-center justify-between text-sm">
-          <Link to="/forgot-password" className="auth-link text-indigo-700 hover:underline">Recuperar contraseña</Link>
-          <Link to="/register" className="auth-link text-gray-600 hover:underline">Crear cuenta</Link>
-        </div>
+        {err && (
+          <div className="auth-alert" role="alert">
+            <AlertCircle size={17} className="auth-alert-icon" />
+            <span>{err}</span>
+          </div>
+        )}
         <button type="submit" className="auth-button" disabled={loading}>
-          {loading ? 'Entrando...' : 'Entrar'}
+          {loading && <span className="auth-spinner" aria-hidden="true" />}
+          {loading ? 'Entrando…' : 'Entrar'}
         </button>
       </form>
       <div className="auth-footer">
-        ¿No tienes cuenta? <Link to="/register" className="auth-link">Regístrate</Link>
+        ¿No tienes cuenta? <Link to="/register" className="auth-link">Crea una gratis</Link>
       </div>
     </>
   );

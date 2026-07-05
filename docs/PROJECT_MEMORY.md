@@ -664,3 +664,11 @@ Rules:
   - NOTE frontend vitest fails locally on Node 24 (`rollup/parseAst` ERR_MODULE_NOT_FOUND) — pre-existing environment issue, CI runs them fine.
 - Blocked/deferred: rentalapp.es domain is NOT verified in Brevo (no DKIM) — deliverability may hit spam until the domain + DKIM records are added in Brevo and GoDaddy DNS.
 - Next suggested step: verify rentalapp.es in Brevo (DKIM/SPF), then Signaturit production plan.
+
+### 2026-07-05 - Claude Code - Login/auth shell redesign
+
+- Status: done
+- Files touched: `frontend/src/pages/auth/LoginPage.tsx`, `frontend/src/layout/AuthLayout.tsx`, `frontend/src/index.css`
+- Verification: frontend build passed. Playwright: password show/hide toggles input type, failed login renders `.auth-alert`, /register inherits the new shell correctly. Screenshots before/after compared.
+- Findings: auth pages had no way back to home, no password visibility toggle, bare-text errors and a loud gradient shell inconsistent with the landing. New light shell (radial indigo glow) with RentalApp brand mark linking to `/`, white bordered card, inline "¿La has olvidado?" next to the password label, alert box for errors, spinner + disabled states, autofocus email. All `auth-*` class names kept so Register/Forgot/Reset inherit without changes.
+- Next suggested step: same polish pass on RegisterPage copy/fields if desired; HttpOnly cookie session (backlog 2.4).
