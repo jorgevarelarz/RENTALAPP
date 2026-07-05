@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
+import { logger } from '../utils/logger';
 
 interface AppError extends Error {
   status?: number;
@@ -15,12 +16,13 @@ export function errorHandler(err: AppError, req: Request, res: Response, _next: 
   // 1. Logging para el desarrollador (Server Side)
   // Solo loguear stack trace si es error 500 o error desconocido
   if (status >= 500) {
-    console.error(`[Error] Request ${requestId} ${req.method} ${req.url}`);
-    console.error('UserId:', req.user?.id || 'Guest');
-    console.error(err);
+    logger.error(
+      { requestId, method: req.method, url: req.url, userId: req.user?.id || 'Guest', err },
+      err.message,
+    );
   } else {
     // Para errores 4xx, un warning suele ser suficiente
-    console.warn(`[Warn] ${requestId} ${status} - ${err.message}`);
+    logger.warn({ requestId, status }, err.message);
   }
 
   // 2. Respuesta al Cliente (Client Side)

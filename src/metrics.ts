@@ -1,4 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
+import { logger } from './utils/logger';
 
 type Labels = { method: string; status: number };
 
@@ -19,16 +20,14 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
     const rt = Date.now() - started;
     // Log básico estructurado incluyendo requestId si existe
     const requestId = (res.locals as any)?.requestId;
-    console.log(
-      JSON.stringify({
-        type: 'http',
-        requestId,
-        method,
-        url: req.originalUrl,
-        status: res.statusCode,
-        responseTimeMs: rt,
-      }),
-    );
+    logger.info({
+      type: 'http',
+      requestId,
+      method,
+      url: req.originalUrl,
+      status: res.statusCode,
+      responseTimeMs: rt,
+    });
   });
   next();
 }
