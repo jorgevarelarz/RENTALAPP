@@ -764,3 +764,13 @@ Rules:
 - Blocked/deferred: (1) Legal owner identity: pages say "RentalApp" and info@rentalapp.es — confirm razon social/NIF/domicilio and that the mailbox exists (constants in `frontend/src/pages/legal/LegalLayout.tsx`). (2) IMPORTANT: all 10 images in `frontend/public/images/landing/` carry a tiled "Unsplash+" watermark — they are unlicensed Unsplash+ assets and must be replaced or licensed before ads/press. The og-image was made typographic on purpose to avoid inheriting the watermark.
 - Deploy: commit `7a649a4` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
 - Next suggested step: resolve landing image licensing, then admin settings or support center.
+
+### 2026-07-06 - Claude - Landing photos relicensed (Pexels)
+
+- Status: done
+- Files touched: `frontend/public/images/landing/*.webp`, `frontend/src/pages/SegmentLanding.tsx`, `frontend/src/pages/LandingPage.tsx`, `docs/PROJECT_MEMORY.md`
+- Verification: contact-sheet review of the 10 new photos (no watermarks, scenes match); frontend build passed; production serves the new files (byte sizes match) and smoke test passed.
+- Findings: The previous 10 landing images were unlicensed Unsplash+ assets with a tiled watermark. Replaced with Pexels photos (free for commercial use, no attribution required), same filenames, resized to 1600w (aerials 1280w) and converted to webp with sharp. Home claim band now uses the Barcelona aerial. Pexels source IDs: inquilinos-hero 4245908, inquilinos-app 4247819, propietarios-hero 7641899, propietarios-edificio 31281970, profesionales-hero 6419128, profesionales-trabajo 257736, agencias-hero 7937330, agencias-firma 5673489, compliance-hero 9255685, compliance-ciudad 9255680.
+- Blocked/deferred: compliance aerials are detail-dense and still ~330-420 KB; fine for now, consider srcset if mobile weight becomes an issue.
+- Deploy: commit `a308178` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and smoke passed.
+- Next suggested step: fill legal owner data in LegalLayout.tsx, then admin settings or support center.
