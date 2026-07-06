@@ -734,3 +734,13 @@ Rules:
 - Blocked/deferred: No CMS/editor; static copy is enough until marketing needs frequent non-dev edits.
 - Deploy: commit `e158414` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
 - Next suggested step: continue with admin settings or support center.
+
+### 2026-07-06 - Claude - Segment landings redesign
+
+- Status: done
+- Files touched: `frontend/src/pages/SegmentLanding.tsx`, `frontend/src/pages/NotFound.tsx`, `frontend/index.html`, `frontend/public/images/landing/*.webp`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend run build` passed. `npm run smoke:production` passed, `https://app.rentalapp.es/` serves the new title/meta, `/info/inquilinos` returns 200 and `/images/landing/inquilinos-hero.webp` returns 200.
+- Findings: The 5 segment landings (inquilinos, propietarios, profesionales, agencias, compliance) went from text-only cards to full pages with hero imagery, per-segment color tones, use-case stories, 3-step flows, benefit grids and claim bands. `index.html` now has Spanish lang, real SEO title/description and complete Open Graph tags pointing at `https://app.rentalapp.es/`. NotFound is a styled 404 with links back to home and properties.
+- Blocked/deferred: Images are static local `.webp` (~1.7 MB total); if more segments/images land, consider an image CDN or responsive `srcset`.
+- Deploy: commit `da7216e` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed. Note: `/opt/rentalapp` on the VPS is not a git checkout — deploys must rsync files, `git pull` there does not work.
+- Next suggested step: continue with admin settings or support center.
