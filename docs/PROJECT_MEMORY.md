@@ -754,3 +754,13 @@ Rules:
 - Blocked/deferred: Claims are qualitative on purpose; swap in real metrics (viviendas publicadas, contratos firmados) when there is enough volume.
 - Deploy: commit `602bb61` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed. Note: local and VPS builds produce different Vite chunk hashes (VITE_STRIPE_KEY build arg) — verify deploys by following `index-*.js` → chunk from the served HTML, not by comparing local hashes.
 - Next suggested step: continue with admin settings or support center.
+
+### 2026-07-06 - Claude - Public footer, legal pages, sitemap, social card
+
+- Status: done
+- Files touched: `frontend/src/components/PublicFooter.tsx`, `frontend/src/components/Footer.tsx`, `frontend/src/pages/legal/*`, `frontend/src/AppRoutes.tsx`, `frontend/src/layout/PublicLayout.tsx`, `frontend/public/sitemap.xml`, `frontend/public/robots.txt`, `frontend/public/og-image.jpg`, `frontend/index.html`, `docs/PROJECT_MEMORY.md`
+- Verification: frontend build passed; Playwright screenshots of footer and /legal/privacidad reviewed; in production /legal/*, /sitemap.xml, /robots.txt and /og-image.jpg return 200 and the served bundle contains the new footer.
+- Findings: PublicLayout had no footer at all and the internal footer said "Demo UI". Added PublicFooter (segments/platform/legal columns), three legal pages under /legal/* (privacidad, terminos, cookies) with shared LegalLayout, sitemap.xml + robots Sitemap line, and a typographic 1200x630 og-image.jpg. Cookies policy reflects audited reality: localStorage only (token/user/theme/policy_version_*), no third-party analytics, Stripe technical cookies in payment flows.
+- Blocked/deferred: (1) Legal owner identity: pages say "RentalApp" and info@rentalapp.es — confirm razon social/NIF/domicilio and that the mailbox exists (constants in `frontend/src/pages/legal/LegalLayout.tsx`). (2) IMPORTANT: all 10 images in `frontend/public/images/landing/` carry a tiled "Unsplash+" watermark — they are unlicensed Unsplash+ assets and must be replaced or licensed before ads/press. The og-image was made typographic on purpose to avoid inheriting the watermark.
+- Deploy: commit `7a649a4` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed.
+- Next suggested step: resolve landing image licensing, then admin settings or support center.
