@@ -73,7 +73,7 @@ const pages: Record<string, SegmentPage> = {
       'El domingo envías la solicitud desde el móvil. El martes firmas el contrato digitalmente, pagas la fianza de forma segura y descargas tu copia con evidencias legales. Cuando semanas después gotea el termo, abres una incidencia con fotos y sigues el arreglo — presupuesto, profesional y fecha — sin perseguir a nadie por teléfono.',
     ],
     storyImg: '/images/landing/inquilinos-app.webp',
-    storyAlt: 'Pareja sentada en el suelo de su nueva casa consultando una tablet entre cajas de mudanza',
+    storyAlt: 'Pareja sonriente consultando un portátil en su nueva casa durante la mudanza',
     steps: [
       { title: 'Crea tu Tenant PRO', text: 'Sube nómina, contrato o declaración una única vez. Se verifica y sirve para todas tus solicitudes, sin reenviar documentos a desconocidos.' },
       { title: 'Busca y solicita', text: 'Filtra por zona y precio, guarda favoritos y presenta tu candidatura completa con un clic. El propietario recibe un perfil ordenado, no un correo suelto.' },

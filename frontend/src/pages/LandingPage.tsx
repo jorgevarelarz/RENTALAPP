@@ -230,7 +230,7 @@ export default function LandingPage() {
       {/* Banda con imagen */}
       <section className="relative overflow-hidden">
         <img
-          src="/images/landing/propietarios-edificio.webp"
+          src="/images/landing/compliance-ciudad.webp"
           alt=""
           width={1400}
           height={500}
