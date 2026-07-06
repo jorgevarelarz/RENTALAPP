@@ -744,3 +744,13 @@ Rules:
 - Blocked/deferred: Images are static local `.webp` (~1.7 MB total); if more segments/images land, consider an image CDN or responsive `srcset`.
 - Deploy: commit `da7216e` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed. Note: `/opt/rentalapp` on the VPS is not a git checkout — deploys must rsync files, `git pull` there does not work.
 - Next suggested step: continue with admin settings or support center.
+
+### 2026-07-06 - Claude - Home landing aligned with segment landings
+
+- Status: done
+- Files touched: `frontend/src/pages/LandingPage.tsx`, `docs/PROJECT_MEMORY.md`
+- Verification: `npm --prefix frontend run build` passed; full-page Playwright screenshot reviewed locally via `vite preview`. In production, `npm run smoke:production` passed and the served `RedirectHome-*.js` chunk contains the new copy.
+- Findings: Home now shares the segment landings' visual language: hero with keys-handover photo and floating trust chip, feature trio as indigo benefit cards, segment cards with hero imagery and tone-colored icons (plus a register CTA card), dark claim band over building imagery (100% digital / 5 perfiles / 0 papeles), numbered how-it-works steps and final CTA. Route `/` renders LandingPage via `RedirectHome`.
+- Blocked/deferred: Claims are qualitative on purpose; swap in real metrics (viviendas publicadas, contratos firmados) when there is enough volume.
+- Deploy: commit `602bb61` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and `npm run smoke:production` passed. Note: local and VPS builds produce different Vite chunk hashes (VITE_STRIPE_KEY build arg) — verify deploys by following `index-*.js` → chunk from the served HTML, not by comparing local hashes.
+- Next suggested step: continue with admin settings or support center.
