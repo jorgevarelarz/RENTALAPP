@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link, Outlet } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import PublicFooter from '../components/PublicFooter';
 
 export default function PublicLayout() {
   const { user } = useAuth();
@@ -40,6 +41,7 @@ export default function PublicLayout() {
       <main className="flex-1">
         <Outlet />
       </main>
+      <PublicFooter />
     </div>
   );
 }
