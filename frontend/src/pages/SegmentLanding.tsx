@@ -264,7 +264,7 @@ export default function SegmentLanding() {
   const tone = tones[page.tone];
 
   return (
-    <main className="bg-white">
+    <main className={`ra-segment ra-segment-${page.tone} bg-white`}>
       {/* Hero */}
       <section className="mx-auto max-w-7xl px-4 pb-14 pt-12 sm:px-6 lg:px-8">
         <div className="grid items-center gap-10 lg:grid-cols-[1fr_1fr]">
