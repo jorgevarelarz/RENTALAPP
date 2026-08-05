@@ -3,6 +3,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../api/client";
+import SocialAuthButtons from "../../components/SocialAuthButtons";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -15,6 +16,10 @@ export default function LoginPage() {
   const loc = useLocation();
   const sp = new URLSearchParams(loc.search);
   const next = sp.get('redirect') || (loc.state as any)?.from || "/";
+  const oauthError = sp.get('oauth_error');
+  const socialError = oauthError === 'access_failed'
+    ? 'No se pudo completar el acceso con Google o Apple. Inténtalo de nuevo.'
+    : null;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -24,7 +29,7 @@ export default function LoginPage() {
       await login(email, password);
       nav(next, { replace: true });
     } catch (e: any) {
-      setErr(formatApiError(e, "Error de login"));
+      setErr(formatApiError(e, "Error de login", { includeRequestId: false }));
     } finally {
       setLoading(false);
     }
@@ -34,6 +39,7 @@ export default function LoginPage() {
     <>
       <h1 className="auth-title">Inicia sesión</h1>
       <p className="auth-subtitle">Gestiona propiedades, contratos e incidencias en un único lugar.</p>
+      <SocialAuthButtons mode="login" redirect={next} />
       <form className="auth-form" onSubmit={submit} noValidate>
         <label className="auth-label" htmlFor="email">
           Correo electrónico
@@ -80,10 +86,10 @@ export default function LoginPage() {
             </button>
           </span>
         </label>
-        {err && (
+        {(err || socialError) && (
           <div className="auth-alert" role="alert">
             <AlertCircle size={17} className="auth-alert-icon" />
-            <span>{err}</span>
+            <span>{err || socialError}</span>
           </div>
         )}
         <button type="submit" className="auth-button" disabled={loading}>

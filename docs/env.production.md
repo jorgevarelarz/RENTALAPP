@@ -16,6 +16,31 @@ Variables marked **REQUIRED** will cause the server to refuse to start if absent
 | `JWT_SECRET` | REQUIRED | Minimum 16 chars. Used to sign all user sessions. Generate with `openssl rand -hex 32`. |
 | `CORS_ORIGIN` | RECOMMENDED | Allowed frontend origin (e.g. `https://app.rentalapp.es`). If absent, CORS falls back to permissive defaults — a warning is logged. |
 | `APP_URL` | RECOMMENDED | Public base URL of the API (e.g. `https://api.rentalapp.es`). Used in Stripe return URLs and email links. |
+| `FRONTEND_URL` | RECOMMENDED | Public frontend origin. For the current single-origin deployment use `https://app.rentalapp.es`. |
+
+---
+
+## Social login — Google and Apple
+
+Providers are independent and optional. RentalApp only displays a provider button when its complete credential set is present. Both use the server-side authorization-code flow, a browser-bound state cookie, PKCE, verified OIDC identity tokens, and a single-use two-minute exchange code.
+
+Production callback URLs:
+
+- Google: `https://app.rentalapp.es/api/auth/oauth/google/callback`
+- Apple: `https://app.rentalapp.es/api/auth/oauth/apple/callback`
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `GOOGLE_OAUTH_CLIENT_ID` | REQUIRED for Google | OAuth 2.0 web client ID from Google Auth Platform. |
+| `GOOGLE_OAUTH_CLIENT_SECRET` | REQUIRED for Google | OAuth 2.0 web client secret. Store only on the server. |
+| `APPLE_OAUTH_CLIENT_ID` | REQUIRED for Apple | Apple Services ID configured for Sign in with Apple on the web. |
+| `APPLE_OAUTH_TEAM_ID` | REQUIRED for Apple | Apple Developer Team ID. |
+| `APPLE_OAUTH_KEY_ID` | REQUIRED for Apple | ID of the private key enabled for Sign in with Apple. |
+| `APPLE_OAUTH_PRIVATE_KEY_BASE64` | REQUIRED for Apple | Contents of the Apple `.p8` private key encoded as one base64 string. Never commit it. |
+
+Google must allow `https://app.rentalapp.es` as an authorized JavaScript origin and the exact Google callback above as an authorized redirect URI. Apple must associate the Services ID with the app, register `app.rentalapp.es`, and allow the exact Apple callback above as a return URL.
+
+Social email verification does not set RentalApp's KYC `isVerified` flag. Existing accounts keep their role when a verified provider is linked, and new accounts can only be created from the registration screen after choosing tenant, landlord, or pro.
 
 ---
 

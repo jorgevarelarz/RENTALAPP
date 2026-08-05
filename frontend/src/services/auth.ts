@@ -30,6 +30,13 @@ export async function register(
   await axios.post("/api/auth/register", { name, email, password, role });
 }
 
+export async function exchangeOAuthCode(code: string): Promise<{ user: User; redirect: string }> {
+  const { data } = await axios.post('/api/auth/oauth/exchange', { code });
+  const user: User = { ...data.user, token: data.token };
+  setStoredUser(user);
+  return { user, redirect: data.redirect || '/' };
+}
+
 export function logout() {
   localStorage.removeItem("user");
   delete axios.defaults.headers.common["Authorization"];

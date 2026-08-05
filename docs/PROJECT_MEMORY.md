@@ -295,6 +295,7 @@ Rules:
 
 | Status | Task | Notes |
 | --- | --- | --- |
+| in_progress | Google / Apple social account access | Backend and UI complete; Google production project/client configured. Apple credentials pending successful Apple Developer login. |
 | todo | Decide whether to tag version `2.3.0` | Root package is bumped locally, no tag/commit yet. |
 | done | Improve test coverage around auth/verification/webhooks | tests/security/route-protection.test.ts added: 10 tests covering testingInbound (non-prod access), notify (401/403), verification /me+/submit (401), kyc /start (401) and /webhook (HMAC 400 when secret set, 200 in mock mode). |
 | done | Document required production env vars | Created docs/env.production.md with all vars categorized. env.ts now enforces IBAN_ENCRYPTION_KEY, STRIPE_WEBHOOK_SECRET in production and blocks ALLOW_TEST_AUTH=true. |
@@ -774,3 +775,41 @@ Rules:
 - Blocked/deferred: compliance aerials are detail-dense and still ~330-420 KB; fine for now, consider srcset if mobile weight becomes an issue.
 - Deploy: commit `a308178` pushed to `origin/main`, synced to Valeris with `rsync -avR`, Docker rebuild completed and smoke passed.
 - Next suggested step: fill legal owner data in LegalLayout.tsx, then admin settings or support center.
+
+### 2026-07-31 - Codex - RentalApp 2026 visual system
+
+- Status: done.
+- Files touched: `frontend/src/components/Brand.tsx`, `frontend/src/components/PublicFooter.tsx`, `frontend/src/layout/PublicLayout.tsx`, `frontend/src/layout/AuthLayout.tsx`, `frontend/src/layout/AppShell.tsx`, `frontend/src/pages/LandingPage.tsx`, `frontend/src/pages/SegmentLanding.tsx`, `frontend/src/index.css`, `docs/PROJECT_MEMORY.md`.
+- Verification: GitNexus upstream impact was LOW for the public layouts and app shell; `npm --prefix frontend run build` passed; frontend tests passed (12 files / 25 tests); browser review passed for desktop home, login, owner landing and 390px mobile home with zero console errors and no horizontal overflow.
+- Findings: introduced the approved navy/cobalt/lime visual system and home-shaped RentalApp mark across public, auth and functional shells; rebuilt the home landing around the approved composition; retained the real application routes and API behavior; added accessible count-up animations for the impact values (`100%`, `5`, `1`) with reduced-motion support; removed “fricción” from public copy.
+- Deploy: application commit `0f2a2dc` synced to Valeris through the MacBook de Jorge, with pre-deploy backup at `/opt/rentalapp/backups/rentalapp-ui-20260731-000343`; Docker rebuild completed; `/health`, `/ready`, `/`, `/login` and `/info/propietarios` return 200; `npm run smoke:production` passed; the live container contains the new home copy and visual-system CSS.
+- Next suggested step: measure conversion on the main home CTAs and replace qualitative impact values with verified production metrics when volume supports them.
+
+### 2026-07-31 - Codex - Clean login credential error
+
+- Status: done.
+- Files touched: `frontend/src/api/client.ts`, `frontend/src/api/client.test.ts`, `frontend/src/pages/auth/LoginPage.tsx`, `docs/PROJECT_MEMORY.md`.
+- Verification: frontend production build passed; focused API error tests passed (3/3); Docker rebuild and `npm run smoke:production` passed; Chrome confirmed the invalid-credential alert contains `Usuario o contraseña incorrectos` and no `(ref: ...)`.
+- Findings: the shared API formatter appended `requestId` references to every error. Added an opt-out that preserves the existing diagnostic reference everywhere by default, while the login form now shows the expected clean message `Usuario o contraseña incorrectos`.
+- Deploy: commit `3d1eb9d` synced to Valeris through the MacBook de Jorge, with pre-deploy backup at `/opt/rentalapp/backups/login-error-20260731-001543`; Docker rebuild completed and the production smoke test passed.
+
+### 2026-07-31 - Codex - Production profile QA and protected API routing fix
+
+- Status: done.
+- Files touched: `frontend/src/index.tsx`, `src/routes/notify.routes.ts`, `tests/security/notify.production-scope.test.ts`, `docs/PROJECT_MEMORY.md`.
+- Verification: GitNexus upstream impact was LOW for the notification router and toast provider; targeted backend security/institution tests passed (3 suites, 14 tests); backend TypeScript build passed; frontend tests passed (12 files, 26 tests); frontend and institution production builds passed. After deployment, Chrome covered 49 routes across tenant, landlord, pro, agency, admin and institution profiles with zero visible failures and zero console errors; invalid login remained clean without a request reference.
+- Findings: Chrome QA with isolated verified accounts covered tenant, landlord, pro, agency, admin and institution profiles. A production-only `router.use` in `notify.routes.ts`, mounted at `/api`, returned `404 not_found` for every protected route registered after it (contracts, chat, agency, admin and institution). Separately, the app root did not mount `ToastProvider`, causing profile, tenant payments, landlord dashboard and pro dashboard to crash with `useToast must be used within ToastProvider`.
+- Fix: scope the production notification guard to `/notify` only, preserving the intentional `404` for `/api/notify/*` while allowing later API routers to execute; mount `ToastProvider` at the frontend root; add a regression test proving the production notification guard does not swallow a later API route.
+- QA accounts: six production users prefixed `qa.*.20260731@rentalapp.es` were created for repeatable role testing. The institution QA user received an isolated Galicia/Oleiros scope and the pro QA user received an active test profile; no existing users or business records were modified.
+- Deploy: commit `b38d167` synced to Valeris through the MacBook de Jorge, with pre-deploy backup at `/opt/rentalapp/backups/protected-routes-20260731-003300`; Docker rebuild completed, API and MongoDB remained healthy, and the production smoke test passed.
+
+### 2026-07-31 - Codex - Google and Apple social account access
+
+- Status: partial; implementation and Google provider complete, Apple provider activation pending.
+- Files touched: `src/controllers/oauth.controller.ts`, `src/services/oauth.service.ts`, `src/models/oauthLoginCode.model.ts`, `src/models/user.model.ts`, `src/routes/auth.routes.ts`, `src/controllers/auth.controller.ts`, `src/app.ts`, `frontend/src/components/SocialAuthButtons.tsx`, `frontend/src/pages/auth/OAuthCallbackPage.tsx`, `frontend/src/pages/auth/LoginPage.tsx`, `frontend/src/pages/auth/RegisterPage.tsx`, `frontend/src/services/auth.ts`, `frontend/src/AppRoutes.tsx`, `frontend/src/index.css`, environment examples/docs, package manifests, tests and this memory.
+- Verification: GitNexus impact was LOW for the existing auth and frontend symbols. Backend build passed; 4 focused backend suites passed (20 tests); all frontend tests passed (13 files, 28 tests); frontend and institution production builds passed; production dependency audit is 0 after a compatible `brace-expansion` security override.
+- Findings: implemented server-side OIDC authorization-code flows for Google and Apple with PKCE, browser-bound signed state, verified provider tokens and single-use two-minute app login codes. New social accounts preserve the chosen public role and never receive KYC verification from provider email verification. Existing accounts can be safely linked by verified email without changing their role. Password login remains available.
+- External setup: created the isolated Google Cloud project `RentalApp Production` (`rentalapp-production-2026`), configured the production origin and callback, and published its basic-profile OAuth client. Google credentials are stored only in the production secret path, never in Git. Apple Developer remained blocked by an unsuccessful login and has no production credentials yet.
+- Production: commit `2678f3a` was backed up and deployed to the Valeris VPS through Jorge's MacBook. The API container remained healthy, `/ready` and the production smoke test passed, and the public provider endpoint reports Google enabled and Apple disabled.
+- Browser verification: Chrome completed the live Google authorization flow with consent, callback and successful entry into the existing tenant profile. The verified Google email was linked without changing the account role or KYC status. The dashboard warning observed afterward belongs to the pre-existing unverified tenant account, not to OAuth.
+- Next suggested step: once Jorge successfully signs in to Apple Developer, create the Services ID linked to an eligible App ID, configure the production domain/return URL and private key, then activate and browser-test Apple.

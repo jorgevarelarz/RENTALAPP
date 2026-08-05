@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { register as apiRegister } from "../../services/auth";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../api/client";
+import SocialAuthButtons from "../../components/SocialAuthButtons";
 
 export default function RegisterPage() {
   const [searchParams] = useSearchParams();
@@ -20,6 +21,7 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const nav = useNavigate();
   const { login } = useAuth();
+  const oauthError = searchParams.get('oauth_error');
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,45 +50,9 @@ export default function RegisterPage() {
         {role === 'landlord' && "Gestiona tus propiedades con total tranquilidad."}
         {role === 'pro' && "Únete a nuestra red de profesionales certificados."}
       </p>
-      <form className="auth-form" onSubmit={submit} noValidate>
-        <label className="auth-label" htmlFor="name">
-          Nombre completo
-          <input
-            id="name"
-            required
-            className="auth-input"
-            value={name}
-            onChange={e=>setName(e.target.value)}
-            placeholder="Ej. Juan Pérez"
-          />
-        </label>
-        <label className="auth-label" htmlFor="email">
-          Correo electrónico
-          <input
-            id="email"
-            type="email"
-            required
-            className="auth-input"
-            value={email}
-            onChange={e=>setEmail(e.target.value)}
-            placeholder="nombre@ejemplo.com"
-          />
-        </label>
-        <label className="auth-label" htmlFor="password">
-          Contraseña
-          <input
-            id="password"
-            type="password"
-            required
-            className="auth-input"
-            value={password}
-            onChange={e=>setPassword(e.target.value)}
-            placeholder="Mínimo 8 caracteres"
-          />
-        </label>
-        <fieldset className="mt-4 p-4 border border-gray-200 rounded-lg bg-gray-50">
-          <legend className="text-sm font-semibold text-gray-700 px-1">Selecciona tu perfil</legend>
-          <div className="flex flex-col gap-3 mt-2">
+      <fieldset className="auth-role-picker">
+        <legend>Selecciona tu perfil</legend>
+        <div className="auth-role-options">
             <label className={`flex items-center gap-3 p-3 rounded-md cursor-pointer border transition-all ${role === 'tenant' ? 'bg-blue-50 border-blue-200 shadow-sm' : 'border-transparent hover:bg-gray-100'}`}>
               <input type="radio" name="role" value="tenant" checked={role==='tenant'} onChange={()=>setRole('tenant')} className="text-blue-600 focus:ring-blue-500" />
               <div>
@@ -110,8 +76,60 @@ export default function RegisterPage() {
                 <span className="block text-xs text-gray-500">Ofrezco servicios de mantenimiento</span>
               </div>
             </label>
-          </div>
-        </fieldset>
+        </div>
+      </fieldset>
+
+      {oauthError === 'account_not_found' && (
+        <div className="auth-alert" role="alert">
+          Esa cuenta todavía no existe. Elige tu perfil y continúa con Google o Apple para crearla.
+        </div>
+      )}
+
+      <SocialAuthButtons
+        mode="register"
+        role={role}
+        redirect={role === 'tenant' ? '/tenant' : role === 'landlord' ? '/landlord' : '/pro'}
+      />
+
+      <form className="auth-form" onSubmit={submit} noValidate>
+        <label className="auth-label" htmlFor="name">
+          Nombre completo
+          <input
+            id="name"
+            required
+            className="auth-input"
+            value={name}
+            onChange={e=>setName(e.target.value)}
+            placeholder="Ej. Juan Pérez"
+            autoComplete="name"
+          />
+        </label>
+        <label className="auth-label" htmlFor="email">
+          Correo electrónico
+          <input
+            id="email"
+            type="email"
+            required
+            className="auth-input"
+            value={email}
+            onChange={e=>setEmail(e.target.value)}
+            placeholder="nombre@ejemplo.com"
+            autoComplete="email"
+          />
+        </label>
+        <label className="auth-label" htmlFor="password">
+          Contraseña
+          <input
+            id="password"
+            type="password"
+            required
+            className="auth-input"
+            value={password}
+            onChange={e=>setPassword(e.target.value)}
+            placeholder="Mínimo 8 caracteres"
+            autoComplete="new-password"
+          />
+        </label>
 
         {err && <div className="mt-4 p-3 bg-red-50 text-red-700 text-sm rounded border border-red-100">{err}</div>}
 

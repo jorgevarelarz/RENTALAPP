@@ -224,10 +224,19 @@ const authLimiter = rateLimit({
   message: { error: 'too_many_requests', message: 'Demasiados intentos. Espera 15 minutos.' },
 });
 
+const oauthLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'too_many_requests', message: 'Demasiados intentos. Espera 15 minutos.' },
+});
+
 app.use('/api/tenant-pro', tenantProLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/request-reset', authLimiter);
+app.use('/api/auth/oauth', oauthLimiter);
 
 const tenantProConsentVersion = process.env.TENANT_PRO_CONSENT_VERSION || 'v1';
 
