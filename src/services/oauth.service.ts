@@ -36,7 +36,9 @@ const OAUTH_COOKIE_AUDIENCE = 'rentalapp-oauth';
 
 export function sanitizeOAuthRedirect(value: unknown, role: PublicRole = 'tenant') {
   const fallback = role === 'landlord' ? '/landlord' : role === 'pro' ? '/pro' : '/tenant';
-  if (typeof value !== 'string' || !value.startsWith('/') || value.startsWith('//')) return fallback;
+  // Browsers normalise backslashes to slashes, so "/\evil.com" resolves as the
+  // protocol-relative "//evil.com". Reject both separators after the leading slash.
+  if (typeof value !== 'string' || !value.startsWith('/') || /^\/[/\\]/.test(value)) return fallback;
   return value;
 }
 
