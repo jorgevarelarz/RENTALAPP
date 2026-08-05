@@ -11,6 +11,8 @@ import { requireVerified } from '../middleware/requireVerified';
 const r = Router();
 
 r.post('/properties', ...assertRole('landlord', 'admin', 'agency'), validate(propertyCreateSchema), asyncHandler(ctrl.create));
+// Declared before any '/properties/:id' route so the dynamic segment cannot swallow it.
+r.post('/properties/price-suggestion', ...assertRole('landlord', 'admin', 'agency'), asyncHandler(ctrl.suggestPrice));
 r.put('/properties/:id', ...assertRole('landlord', 'admin', 'agency'), validate(propertyUpdateSchema), asyncHandler(ctrl.update));
 r.post('/properties/:id/publish', ...assertRole('landlord', 'admin', 'agency'), asyncHandler(ctrl.publish));
 r.post('/properties/:id/archive', ...assertRole('landlord', 'admin', 'agency'), asyncHandler(ctrl.archive));

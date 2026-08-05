@@ -813,3 +813,20 @@ Rules:
 - Production: commit `2678f3a` was backed up and deployed to the Valeris VPS through Jorge's MacBook. The API container remained healthy, `/ready` and the production smoke test passed, and the public provider endpoint reports Google enabled and Apple disabled.
 - Browser verification: Chrome completed the live Google authorization flow with consent, callback and successful entry into the existing tenant profile. The verified Google email was linked without changing the account role or KYC status. The dashboard warning observed afterward belongs to the pre-existing unverified tenant account, not to OAuth.
 - Next suggested step: once Jorge successfully signs in to Apple Developer, create the Services ID linked to an eligible App ID, configure the production domain/return URL and private key, then activate and browser-test Apple.
+
+### 2026-08-05 - Claude Code - Recovery of unversioned production work
+
+- Status: done.
+- Findings: the visual system and the social login described in the two entries above were never committed to this repository. Commits `2678f3a` and `b38d167` do not exist here or on the remote, and the copy on the VPS (`/opt/rentalapp`) is not a git checkout, so the only surviving copy of ~33 files was the production server itself.
+- Fix: recovered on branch `rescate/produccion-31jul` and merged to `main` in four commits (dependencies and env vars, visual system, OAuth, security fix).
+- Verification: backend build passed; the frontend build reproduced the exact bundles served by `app.rentalapp.es`, byte-identical once the chunk name hashes are normalised, which proves the recovery is faithful; full backend suite passed (45 suites, 149 tests) and frontend tests passed (13 files, 28 tests).
+- Security: `sanitizeOAuthRedirect` rejected `//host` but not `/\host`, which browsers normalise into a protocol-relative URL, so `OAuthCallbackPage` could bounce an authenticated user to an external site. Fixed with a regression test. Production still runs the vulnerable build until the next deploy.
+
+### 2026-08-05 - Claude Code - Suggested rent for landlords
+
+- Status: done, pending the official reference dataset.
+- Files touched: `src/services/rentSuggestion.service.ts`, `src/modules/rentalPublic/models/zoneRentReference.model.ts`, `src/models/property.model.ts`, `src/validators/property.schema.ts`, `src/controllers/property.controller.ts`, `src/routes/property.routes.ts`, `scripts/import_zone_rent_reference.ts`, `frontend/src/components/RentSuggestionCard.tsx`, `frontend/src/components/PropertyFormRHF.tsx`, `frontend/src/services/properties.ts`, tests and this memory.
+- Behaviour: `POST /api/properties/price-suggestion` returns a suggested monthly rent from the zone's €/m². It prefers our own active listings within 2, 5 or 10 km (falling back to the whole city) once there are at least 5 comparables, using a trimmed mean so a single mispriced listing cannot drag the average; below that threshold it falls back to the official municipal reference index. The base price is adjusted by condition, furnishing, floor and lift, and construction year, with the combined factor clamped to [0.75, 1.25]. In a tensioned area the suggestion and the upper end of its range are capped at the legal `maxRent`. When neither source can back a number it returns `null` rather than inventing one.
+- New property fields: `condition` (obra_nueva, reformado, buen_estado, a_reformar), `floor`, `hasElevator`, `yearBuilt`.
+- Pending: production holds zero properties and zero `ZoneRentReference` documents, so every landlord currently gets `not_enough_data`. Load the official index with `scripts/import_zone_rent_reference.ts --file <csv> --source <label>` before announcing the feature.
+- Findings: the landlord dashboard edited properties with `axios.patch` while the API only registers `PUT`, so saving an edit returned 404. Pre-existing and unrelated to this feature, fixed here because the new fields were unreachable on existing listings.
