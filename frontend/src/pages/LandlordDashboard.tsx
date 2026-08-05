@@ -98,7 +98,7 @@ const LandlordDashboard: React.FC = () => {
     try {
       const payload: any = { ...data, owner: user?._id };
       if (editingProperty) {
-        await axios.patch(`/api/properties/${editingProperty._id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
+        await axios.put(`/api/properties/${editingProperty._id}`, payload, { headers: { Authorization: `Bearer ${token}` } });
         push({ title: 'Propiedad actualizada', tone: 'success' });
       } else {
         await createProperty(token, payload);
