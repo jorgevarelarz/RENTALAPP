@@ -77,12 +77,27 @@ const institutionScopeSchema = new Schema(
   { _id: false },
 );
 
+const socialIdentitySchema = new Schema(
+  {
+    subject: { type: String, required: true },
+    email: { type: String },
+    linkedAt: { type: Date, default: Date.now },
+  },
+  { _id: false },
+);
+
 const userSchema = new Schema(
   {
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true },
     // Passwords are stored hashed; see controllers/auth.controller.ts
-    passwordHash: { type: String, required: true, select: false },
+    // Social-only accounts do not have a local password.
+    passwordHash: { type: String, select: false },
+    emailVerifiedAt: { type: Date },
+    socialAuth: {
+      google: { type: socialIdentitySchema, default: undefined },
+      apple: { type: socialIdentitySchema, default: undefined },
+    },
     /**
      * Role assigned to the user. Supported values include:
      *  - tenant: standard renter of properties.
@@ -141,5 +156,7 @@ const userSchema = new Schema(
 userSchema.add({ tenantPro: { type: tenantProSchema, default: () => ({}) } });
 
 userSchema.index({ 'tenantPro.status': 1, 'tenantPro.maxRent': -1 });
+userSchema.index({ 'socialAuth.google.subject': 1 }, { unique: true, sparse: true });
+userSchema.index({ 'socialAuth.apple.subject': 1 }, { unique: true, sparse: true });
 
 export const User = model('User', userSchema);

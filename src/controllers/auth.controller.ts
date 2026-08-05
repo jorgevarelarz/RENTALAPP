@@ -54,6 +54,11 @@ export const login = async (req: Request, res: Response) => {
     // Find the user by email
     const user = await User.findOne({ email }).select('+passwordHash');
     if (!user) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
+    if (!user.passwordHash) {
+      return res.status(400).json({
+        message: 'Esta cuenta utiliza Google o Apple. Accede con el mismo proveedor.',
+      });
+    }
     // Compare provided password with stored hash
     const isMatch = await bcrypt.compare(password, user.passwordHash as string);
     if (!isMatch) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });

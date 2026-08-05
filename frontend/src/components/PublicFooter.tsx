@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom';
+import Brand from './Brand';
 
 const columns: { title: string; links: { label: string; to: string }[] }[] = [
   {
@@ -31,14 +32,13 @@ const columns: { title: string; links: { label: string; to: string }[] }[] = [
 
 export default function PublicFooter() {
   return (
-    <footer className="border-t border-gray-100 bg-gray-50">
+    <footer className="ra-footer">
       <div className="mx-auto max-w-7xl px-4 py-12 sm:px-6 lg:px-8">
         <div className="grid gap-10 md:grid-cols-[1.2fr_repeat(3,1fr)]">
           <div>
-            <p className="text-lg font-bold text-gray-950">RentalApp</p>
-            <p className="mt-3 max-w-xs text-sm text-gray-600">
-              El alquiler sin fricción: contratos digitales, solvencia verificada, pagos protegidos e incidencias
-              resueltas en una sola app.
+            <Brand />
+            <p className="mt-4 max-w-xs text-sm text-gray-600">
+              Contratos digitales, solvencia verificada, pagos protegidos e incidencias resueltas en una sola app.
             </p>
           </div>
           {columns.map(({ title, links }) => (

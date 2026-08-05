@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import navConfig from '../config/nav.config.json';
 import Breadcrumbs from '../components/Breadcrumbs';
 import Badge from '../components/ui/Badge';
+import Brand from '../components/Brand';
 import { listConversations } from '../services/chat';
 
 type LucideIcon = React.ComponentType<{ size?: number | string; className?: string }>;
@@ -90,17 +91,12 @@ function Header() {
     : user?.role === 'agency' ? '/agency'
     : '/';
   return (
-    <header className="sticky top-0 z-20 bg-white/90 backdrop-blur border-b border-gray-200">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 h-14 flex items-center gap-3">
-        <Link to={roleHome} className="flex items-center gap-2.5 font-semibold text-[1.05rem] tracking-tight text-gray-950 hover:text-indigo-600">
-          <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-gray-950 text-white">
-            <Building2 size={17} />
-          </span>
-          RentalApp
-        </Link>
+    <header className="ra-app-header">
+      <div className="ra-app-header-inner">
+        <Brand to={roleHome} />
         <nav className="hidden md:flex items-center gap-1 text-sm ml-2">
           {user && (
-            <Link to="/inbox" className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-gray-600 hover:bg-gray-100 hover:text-gray-950">
+            <Link to="/inbox" className="ra-app-inbox">
               <MessageSquare size={15} />
               Inbox
               {unread > 0 && (
@@ -112,8 +108,8 @@ function Header() {
         <div className="ml-auto flex items-center gap-2.5 text-sm">
           {!user ? (
             <>
-              <Link to="/login" className="px-3.5 py-1.5 rounded-md text-gray-700 border border-gray-300 hover:bg-gray-50 font-medium">Entrar</Link>
-              <Link to="/register" className="hidden sm:inline-flex px-3.5 py-1.5 rounded-md bg-gray-950 text-white font-medium hover:bg-gray-800">Crear cuenta</Link>
+              <Link to="/login" className="ra-app-login">Entrar</Link>
+              <Link to="/register" className="hidden sm:inline-flex ra-button ra-button-blue ra-button-small">Crear cuenta</Link>
             </>
           ) : (
             <>
@@ -121,7 +117,7 @@ function Header() {
               {user?.isVerified && (
                 <Badge tone="highlight">KYC verificado</Badge>
               )}
-              <button onClick={logout} className="px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium">Salir</button>
+              <button onClick={logout} className="ra-app-login">Salir</button>
             </>
           )}
         </div>
@@ -137,7 +133,7 @@ function NavItem({ item, unread }: { item: { path: string; label: string }; unre
       to={item.path}
       end={/^\/(tenant|landlord|pro|admin)$/.test(item.path)}
       className={({ isActive }) =>
-        `group flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors ${
+        `ra-side-link group flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors ${
           isActive
             ? 'bg-gray-100 text-gray-950 font-semibold'
             : 'text-gray-600 hover:bg-gray-50 hover:text-gray-950'
@@ -168,8 +164,8 @@ function SideNav() {
   };
   const guestItems = [{ path: '/properties', label: 'Buscar pisos' }];
   return (
-    <aside className="hidden lg:block w-60 shrink-0">
-      <div className="sticky top-16 pr-2">
+    <aside className="ra-side-nav hidden lg:block w-60 shrink-0">
+      <div className="sticky top-20 pr-2">
         {!role && (
           <>
             <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-3 mb-1.5">Explorar</div>
@@ -201,11 +197,11 @@ function SideNav() {
 
 export default function AppShell() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen ra-app-shell">
       <Header />
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 flex gap-6 h-[calc(100vh-56px)] overflow-hidden">
+      <div className="ra-app-frame mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 flex gap-6 h-[calc(100vh-68px)] overflow-hidden">
         <SideNav />
-        <main className="flex-1 min-w-0 h-full overflow-y-auto pr-2">
+        <main className="ra-app-content flex-1 min-w-0 h-full overflow-y-auto pr-2">
           <Breadcrumbs />
           <Outlet />
         </main>

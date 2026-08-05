@@ -13,6 +13,7 @@ const LoginPage = lazy(() => import("./pages/auth/LoginPage"));
 const ForgotPassword = lazy(() => import("./pages/auth/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/auth/ResetPassword"));
 const RegisterPage = lazy(() => import("./pages/auth/RegisterPage"));
+const OAuthCallbackPage = lazy(() => import("./pages/auth/OAuthCallbackPage"));
 const ForbiddenPage = lazy(() => import("./pages/system/ForbiddenPage"));
 const PropertiesList = lazy(() => import("./pages/properties/PropertiesList"));
 const PropertyDetail = lazy(() => import("./pages/properties/PropertyDetail"));
@@ -148,6 +149,7 @@ export default function AppRoutes() {
             <Route element={<AuthLayout />}>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/register" element={<RegisterPage />} />
+              <Route path="/auth/callback" element={<OAuthCallbackPage />} />
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset" element={<ResetPassword />} />
               <Route path="/invite/:token" element={<InviteAccept />} />

@@ -19,4 +19,15 @@ describe('api client errors', () => {
     const err = { response: { data: { message: 'No autorizado' }, headers: { 'x-request-id': 'req_header' } } };
     expect(formatApiError(err)).toBe('No autorizado (ref: req_header)');
   });
+
+  it('can omit the request id from expected user-facing errors', () => {
+    const err = {
+      response: {
+        data: { message: 'Usuario o contraseña incorrectos', requestId: 'req_login' },
+      },
+    };
+
+    expect(formatApiError(err, 'Error de login', { includeRequestId: false }))
+      .toBe('Usuario o contraseña incorrectos');
+  });
 });

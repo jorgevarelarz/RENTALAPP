@@ -5,7 +5,7 @@ import { requireAdmin } from '../middleware/requireAdmin';
 
 const router = Router();
 
-router.use((_req: Request, res: Response, next: NextFunction) => {
+router.use('/notify', (_req: Request, res: Response, next: NextFunction) => {
   if (process.env.NODE_ENV === 'production') return res.status(404).json({ error: 'not_found' });
   next();
 });

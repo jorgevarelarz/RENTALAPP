@@ -17,10 +17,14 @@ export function getApiErrorRequestId(err: any) {
   );
 }
 
-export function formatApiError(err: any, fallback = 'Error de red') {
+export function formatApiError(
+  err: any,
+  fallback = 'Error de red',
+  options: { includeRequestId?: boolean } = {},
+) {
   const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback;
   const requestId = getApiErrorRequestId(err);
-  return requestId ? `${msg} (ref: ${requestId})` : msg;
+  return requestId && options.includeRequestId !== false ? `${msg} (ref: ${requestId})` : msg;
 }
 
 // Request: inject Authorization and dev-only x-admin for admin routes

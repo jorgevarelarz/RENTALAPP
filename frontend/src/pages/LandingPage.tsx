@@ -1,8 +1,10 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
+  ArrowRight,
   BadgeCheck,
   Building2,
+  Check,
   FileSignature,
   Home,
   Landmark,
@@ -11,281 +13,296 @@ import {
   Wrench,
 } from 'lucide-react';
 
-const segments = [
-  {
-    title: 'Inquilinos',
-    text: 'Busca vivienda, destaca con un perfil Tenant PRO verificado y firma sin reenviar papeles.',
-    cta: 'Buscar vivienda',
-    to: '/info/inquilinos',
-    icon: Home,
-    tone: 'blue',
-    img: '/images/landing/inquilinos-hero.webp',
-    alt: 'Pareja joven desembalando cajas en el salón de su nuevo piso de alquiler',
-  },
-  {
-    title: 'Propietarios',
-    text: 'Publica, compara candidatos con solvencia real y cobra la renta en piloto automático.',
-    cta: 'Publicar propiedad',
-    to: '/info/propietarios',
-    icon: Building2,
-    tone: 'emerald',
-    img: '/images/landing/propietarios-hero.webp',
-    alt: 'Propietario entregando las llaves de la vivienda a una pareja de inquilinos',
-  },
-  {
-    title: 'Profesionales',
-    text: 'Recibe trabajos de mantenimiento, envía presupuestos y cobra con trazabilidad.',
-    cta: 'Entrar como pro',
-    to: '/info/profesionales',
-    icon: Wrench,
-    tone: 'orange',
-    img: '/images/landing/profesionales-hero.webp',
-    alt: 'Profesional de mantenimiento trabajando en una vivienda',
-  },
-  {
-    title: 'Agencias',
-    text: 'Opera carteras completas, delega permisos e invita clientes desde un panel único.',
-    cta: 'Programa agencias',
-    to: '/info/agencias',
-    icon: ShieldCheck,
-    tone: 'slate',
-    img: '/images/landing/agencias-hero.webp',
-    alt: 'Equipo de una agencia inmobiliaria trabajando en la oficina',
-  },
-  {
-    title: 'Instituciones',
-    text: 'Cumplimiento, zonas tensionadas y métricas agregadas con exportaciones auditables.',
-    cta: 'Ver compliance',
-    to: '/info/compliance',
-    icon: Landmark,
-    tone: 'violet',
-    img: '/images/landing/compliance-hero.webp',
-    alt: 'Vista aérea de una ciudad con edificios residenciales',
-  },
-];
-
-const features = [
-  {
-    icon: FileSignature,
-    title: 'Contrato digital',
-    text: 'Plantillas al día con la LAU, firma electrónica con validez legal y evidencias archivadas en el mismo flujo.',
-  },
-  {
-    icon: ShieldCheck,
-    title: 'Alquiler seguro',
-    text: 'KYC, solvencia verificada con Tenant PRO y estados claros para reducir el riesgo antes de firmar.',
-  },
-  {
-    icon: Wallet,
-    title: 'Operación diaria',
-    text: 'Pagos con recibo automático, incidencias con seguimiento, chat y reporting sin hojas sueltas.',
-  },
-];
-
-const steps = [
-  {
-    title: 'Entra con tu perfil',
-    text: 'Publica una vivienda, busca piso o date de alta como profesional o agencia. Cada perfil tiene su panel.',
-  },
-  {
-    title: 'Valida con datos',
-    text: 'Candidatos con solvencia verificada, presupuestos comparables y contratos generados con criterio.',
-  },
-  {
-    title: 'Firma y opera',
-    text: 'Firma digital, cobros automáticos, incidencias resueltas por profesionales y todo el histórico auditable.',
-  },
-];
-
-const toneClass: Record<string, { accent: string; soft: string }> = {
-  blue: { accent: 'text-blue-600', soft: 'bg-blue-50' },
-  emerald: { accent: 'text-emerald-600', soft: 'bg-emerald-50' },
-  orange: { accent: 'text-orange-600', soft: 'bg-orange-50' },
-  slate: { accent: 'text-slate-600', soft: 'bg-slate-100' },
-  violet: { accent: 'text-violet-600', soft: 'bg-violet-50' },
+type CountUpProps = {
+  value: number;
+  suffix?: string;
+  label: string;
+  delay?: number;
 };
 
-export default function LandingPage() {
+function CountUp({ value, suffix = '', label, delay = 0 }: CountUpProps) {
+  const [display, setDisplay] = useState(0);
+  const [visible, setVisible] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
-    document.title = 'RentalApp — Alquiler de viviendas con contratos digitales y pagos protegidos';
+    const element = ref.current;
+    if (!element) return;
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.55 },
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setDisplay(value);
+      return;
+    }
+
+    let frame = 0;
+    const timeout = window.setTimeout(() => {
+      const startedAt = performance.now();
+      const tick = (now: number) => {
+        const progress = Math.min((now - startedAt) / 1450, 1);
+        setDisplay(Math.round(value * (1 - Math.pow(1 - progress, 4))));
+        if (progress < 1) frame = requestAnimationFrame(tick);
+      };
+      frame = requestAnimationFrame(tick);
+    }, delay);
+
+    return () => {
+      window.clearTimeout(timeout);
+      cancelAnimationFrame(frame);
+    };
+  }, [delay, value, visible]);
+
+  return (
+    <div className="ra-stat" ref={ref}>
+      <strong aria-label={`${value}${suffix} ${label}`}>
+        <span aria-hidden="true">{display}{suffix}</span>
+      </strong>
+      <span>{label}</span>
+    </div>
+  );
+}
+
+const profiles = [
+  {
+    id: 'inquilinos',
+    label: 'Inquilinos',
+    eyebrow: 'Encuentra y demuestra',
+    title: 'Tu próximo hogar, sin volver a enviar los mismos papeles.',
+    text: 'Busca vivienda, crea tu perfil Tenant PRO y presenta tu solvencia de forma clara y segura.',
+    image: '/images/landing/inquilinos-hero.webp',
+    alt: 'Pareja joven instalándose en su nuevo hogar',
+    to: '/info/inquilinos',
+    action: 'Buscar vivienda',
+    icon: Home,
+  },
+  {
+    id: 'propietarios',
+    label: 'Propietarios',
+    eyebrow: 'Publica y protege',
+    title: 'Más control sobre tu alquiler, sin convertirlo en otro trabajo.',
+    text: 'Compara candidatos, firma el contrato y automatiza los cobros desde un único panel.',
+    image: '/images/landing/propietarios-hero.webp',
+    alt: 'Propietario entregando las llaves de una vivienda',
+    to: '/info/propietarios',
+    action: 'Publicar propiedad',
+    icon: Building2,
+  },
+  {
+    id: 'profesionales',
+    label: 'Profesionales',
+    eyebrow: 'Resuelve y cobra',
+    title: 'Trabajos claros, presupuestos aprobados y cobros trazables.',
+    text: 'Gestiona incidencias de mantenimiento con toda la información, el historial y los pagos en orden.',
+    image: '/images/landing/profesionales-hero.webp',
+    alt: 'Profesional de mantenimiento trabajando en una vivienda',
+    to: '/info/profesionales',
+    action: 'Entrar como profesional',
+    icon: Wrench,
+  },
+  {
+    id: 'agencias',
+    label: 'Agencias',
+    eyebrow: 'Opera y escala',
+    title: 'Una cartera completa sin hojas sueltas ni procesos duplicados.',
+    text: 'Invita a clientes, delega permisos y supervisa contratos, cobros e incidencias desde un solo lugar.',
+    image: '/images/landing/agencias-hero.webp',
+    alt: 'Equipo de una agencia inmobiliaria trabajando',
+    to: '/info/agencias',
+    action: 'Ver programa de agencias',
+    icon: ShieldCheck,
+  },
+  {
+    id: 'compliance',
+    label: 'Instituciones',
+    eyebrow: 'Audita y comprende',
+    title: 'Datos agregados y cumplimiento para tomar mejores decisiones.',
+    text: 'Controla zonas tensionadas, indicadores y exportaciones auditables con una visión completa.',
+    image: '/images/landing/compliance-hero.webp',
+    alt: 'Vista aérea de una ciudad con edificios residenciales',
+    to: '/info/compliance',
+    action: 'Ver compliance',
+    icon: Landmark,
+  },
+];
+
+const benefits = [
+  'Contratos actualizados a la LAU',
+  'Firma electrónica con evidencias',
+  'Pagos y recibos automáticos',
+  'Solvencia verificada con Tenant PRO',
+];
+
+export default function LandingPage() {
+  const [activeProfile, setActiveProfile] = useState(profiles[0]);
+
+  useEffect(() => {
+    document.title = 'RentalApp — El alquiler completo en una sola plataforma';
     return () => {
       document.title = 'RentalApp';
     };
   }, []);
 
   return (
-    <main className="bg-white">
-      {/* Hero */}
-      <section className="mx-auto max-w-7xl px-4 pb-16 pt-12 sm:px-6 lg:px-8">
-        <div className="grid items-center gap-10 lg:grid-cols-[1.05fr_0.95fr]">
-          <div>
-            <p className="text-sm font-semibold uppercase tracking-widest text-indigo-600">RentalApp</p>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight text-gray-950 sm:text-6xl">
-              El alquiler, sin fricción de principio a fin.
-            </h1>
-            <p className="mt-5 max-w-2xl text-lg text-gray-600">
-              Publicación, candidatos verificados, contrato digital, firma, pagos, incidencias y compliance en una
-              sola app. Para inquilinos, propietarios, profesionales, agencias e instituciones.
-            </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-              <Link
-                to="/info/inquilinos"
-                className="inline-flex items-center justify-center rounded-md bg-gray-950 px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800"
-              >
-                Buscar vivienda
-              </Link>
-              <Link
-                to="/info/propietarios"
-                className="inline-flex items-center justify-center rounded-md border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-900 hover:bg-gray-50"
-              >
-                Publicar propiedad
-              </Link>
-            </div>
+    <main className="ra-landing">
+      <section className="ra-hero" id="inicio">
+        <div className="ra-hero-grid" aria-hidden="true" />
+        <div className="ra-hero-orbit" aria-hidden="true" />
+        <div className="ra-hero-copy">
+          <p className="ra-eyebrow ra-eyebrow-light">La infraestructura del alquiler</p>
+          <h1>Alquilar debería <span>sentirse así de fácil.</span></h1>
+          <p className="ra-hero-intro">
+            Publica, verifica, firma, cobra y resuelve incidencias desde una sola plataforma.
+            Todo claro, conectado y siempre a mano.
+          </p>
+          <div className="ra-hero-actions">
+            <Link className="ra-button ra-button-lime" to="/info/inquilinos">
+              Buscar vivienda <ArrowRight size={17} />
+            </Link>
+            <Link className="ra-button ra-button-ghost" to="/info/propietarios">
+              Publicar propiedad
+            </Link>
           </div>
-          <div className="relative">
+          <div className="ra-hero-proof">
+            <div className="ra-proof-avatars" aria-hidden="true">
+              <span>A</span><span>M</span><span>J</span>
+            </div>
+            <p>Un flujo compartido para todas las personas que hacen posible un alquiler.</p>
+          </div>
+        </div>
+
+        <div className="ra-hero-scene">
+          <div className="ra-hero-photo-wrap">
             <img
-              src="/images/landing/propietarios-hero.webp"
-              alt="Propietario entregando las llaves de la vivienda a una pareja de inquilinos en el salón"
-              width={800}
-              height={533}
-              className="aspect-[3/2] w-full rounded-xl object-cover shadow-lg"
+              className="ra-hero-photo"
+              src="/images/landing/inquilinos-hero.webp"
+              alt="Pareja instalándose en su nueva vivienda de alquiler"
             />
-            <div className="absolute -bottom-5 left-5 flex items-center gap-3 rounded-lg border border-gray-200 bg-white px-4 py-3 shadow-md">
-              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-50">
-                <BadgeCheck className="h-5 w-5 text-indigo-600" />
-              </span>
-              <div>
-                <p className="text-xs font-medium text-gray-500">Contrato firmado</p>
-                <p className="text-sm font-semibold text-gray-950">Fianza y renta protegidas ✓</p>
-              </div>
+          </div>
+          <div className="ra-float-card ra-contract-card">
+            <span className="ra-float-icon"><Check size={18} /></span>
+            <div><small>Estado del contrato</small><strong>Firmado por ambas partes</strong></div>
+          </div>
+          <div className="ra-float-card ra-payment-card">
+            <div className="ra-payment-head"><small>Próximo cobro</small><span>Protegido</span></div>
+            <strong>890,00 €</strong>
+            <div className="ra-payment-track"><span /></div>
+            <small>Programado para el 1 de agosto</small>
+          </div>
+          <div className="ra-mini-badge"><span>TP</span> Perfil verificado</div>
+        </div>
+      </section>
+
+      <section className="ra-trust-strip" aria-label="Ventajas principales">
+        {benefits.map((benefit) => (
+          <div key={benefit}><BadgeCheck size={17} />{benefit}</div>
+        ))}
+      </section>
+
+      <section className="ra-stats-section" aria-label="Impacto de RentalApp">
+        <div className="ra-section-heading">
+          <p className="ra-eyebrow">Todo conectado</p>
+          <h2>Una app. Todo el ciclo del alquiler.</h2>
+        </div>
+        <div className="ra-stats-grid">
+          <CountUp value={100} suffix="%" label="digital de inicio a fin" />
+          <CountUp value={5} label="perfiles, un mismo sistema" delay={120} />
+          <CountUp value={1} label="historial compartido y auditable" delay={240} />
+        </div>
+      </section>
+
+      <section className="ra-product-section" id="producto">
+        <div className="ra-section-intro">
+          <p className="ra-eyebrow">El producto</p>
+          <h2>Menos gestión. Más tranquilidad en cada paso.</h2>
+          <p>RentalApp convierte un proceso fragmentado en un recorrido claro, trazable y compartido.</p>
+        </div>
+        <div className="ra-bento-grid">
+          <article className="ra-bento-card ra-bento-contract">
+            <div>
+              <span className="ra-feature-index">01</span>
+              <h3>Un contrato que no empieza en Word.</h3>
+              <p>Plantillas actualizadas, firma electrónica y evidencias archivadas dentro del mismo flujo.</p>
             </div>
-          </div>
+            <div className="ra-contract-sheet" aria-hidden="true">
+              <div className="ra-sheet-top"><FileSignature size={20} /><span>Listo para firmar</span></div>
+              <i /><i /><i />
+              <div className="ra-signatures"><span>Propietario ✓</span><span>Inquilino ✓</span></div>
+            </div>
+          </article>
+          <article className="ra-bento-card ra-bento-verify">
+            <span className="ra-feature-index">02</span>
+            <div className="ra-verify-orbit" aria-hidden="true"><span>✓</span><i /><i /><i /></div>
+            <h3>Solvencia que se verifica una vez.</h3>
+            <p>Tenant PRO transforma documentación dispersa en un perfil claro y reutilizable.</p>
+          </article>
+          <article className="ra-bento-card ra-bento-payments">
+            <span className="ra-feature-index">03</span>
+            <h3>Cobros que se entienden de un vistazo.</h3>
+            <p>Renta, fianza, recibos y estados de pago ordenados para ambas partes.</p>
+            <div className="ra-payment-list" aria-hidden="true">
+              <span><Wallet size={18} /> Julio <strong>Pagado</strong></span>
+              <span><Wallet size={18} /> Agosto <strong>Programado</strong></span>
+            </div>
+          </article>
         </div>
       </section>
 
-      {/* Qué resuelve */}
-      <section className="border-y border-indigo-100 bg-indigo-50/60 py-14">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="grid gap-4 md:grid-cols-3">
-            {features.map(({ icon: FeatureIcon, title, text }) => (
-              <div key={title} className="rounded-xl border border-gray-200 bg-white p-6">
-                <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-indigo-50">
-                  <FeatureIcon className="h-5 w-5 text-indigo-600" />
-                </span>
-                <h2 className="mt-4 font-semibold text-gray-950">{title}</h2>
-                <p className="mt-2 text-sm text-gray-600">{text}</p>
-              </div>
-            ))}
-          </div>
+      <section className="ra-profiles-section" id="perfiles">
+        <div className="ra-section-intro">
+          <p className="ra-eyebrow">Hecha para cada parte</p>
+          <h2>Una plataforma. Tu propio recorrido.</h2>
         </div>
-      </section>
-
-      {/* Segmentos */}
-      <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-        <h2 className="text-2xl font-bold tracking-tight text-gray-950">Una plataforma, cinco perfiles</h2>
-        <p className="mt-2 max-w-2xl text-gray-600">
-          Cada perfil tiene su propio panel y su propia página. Elige el tuyo y mira cómo funciona.
-        </p>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {segments.map(({ title, text, cta, to, icon: Icon, tone, img, alt }) => (
-            <Link
-              key={title}
-              to={to}
-              className="group overflow-hidden rounded-xl border border-gray-200 bg-white transition hover:-translate-y-0.5 hover:shadow-md"
+        <div className="ra-profile-tabs" role="tablist" aria-label="Perfiles de RentalApp">
+          {profiles.map((profile) => (
+            <button
+              key={profile.id}
+              type="button"
+              className={activeProfile.id === profile.id ? 'is-active' : ''}
+              onClick={() => setActiveProfile(profile)}
+              role="tab"
+              aria-selected={activeProfile.id === profile.id}
             >
-              <div className="relative aspect-[5/3] overflow-hidden">
-                <img
-                  src={img}
-                  alt={alt}
-                  width={500}
-                  height={300}
-                  loading="lazy"
-                  className="h-full w-full object-cover transition duration-300 group-hover:scale-105"
-                />
-              </div>
-              <div className="p-5">
-                <div className="flex items-center gap-3">
-                  <span className={`flex h-9 w-9 items-center justify-center rounded-lg ${toneClass[tone].soft}`}>
-                    <Icon className={`h-5 w-5 ${toneClass[tone].accent}`} />
-                  </span>
-                  <h3 className="text-lg font-semibold text-gray-950">{title}</h3>
-                </div>
-                <p className="mt-3 text-sm text-gray-600">{text}</p>
-                <p className="mt-4 text-sm font-semibold text-gray-950 group-hover:underline">{cta} →</p>
-              </div>
-            </Link>
-          ))}
-          <div className="flex flex-col justify-center rounded-xl border border-dashed border-gray-300 bg-gray-50 p-6">
-            <h3 className="text-lg font-semibold text-gray-950">¿No sabes por dónde empezar?</h3>
-            <p className="mt-2 text-sm text-gray-600">
-              Crea tu cuenta gratis y la app te guía según lo que necesites: buscar, publicar o trabajar.
-            </p>
-            <Link to="/register" className="mt-4 text-sm font-semibold text-indigo-600 hover:underline">
-              Crear cuenta gratis →
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Banda con imagen */}
-      <section className="relative overflow-hidden">
-        <img
-          src="/images/landing/compliance-ciudad.webp"
-          alt=""
-          width={1400}
-          height={500}
-          loading="lazy"
-          className="absolute inset-0 h-full w-full object-cover"
-        />
-        <div className="relative bg-gradient-to-r from-gray-950/85 via-gray-950/60 to-gray-950/40 py-14">
-          <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 md:grid-cols-3 lg:px-8">
-            <div>
-              <p className="text-3xl font-bold text-white">100% digital</p>
-              <p className="mt-1 text-sm text-white/80">de la solicitud a la firma y los cobros</p>
-            </div>
-            <div>
-              <p className="text-3xl font-bold text-white">5 perfiles</p>
-              <p className="mt-1 text-sm text-white/80">inquilino, propietario, pro, agencia e institución</p>
-            </div>
-            <div>
-              <p className="text-3xl font-bold text-white">0 papeles</p>
-              <p className="mt-1 text-sm text-white/80">contratos, recibos e incidencias con registro auditable</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Cómo funciona */}
-      <section className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8">
-        <h2 className="text-2xl font-bold tracking-tight text-gray-950">Cómo funciona</h2>
-        <div className="mt-6 grid gap-4 md:grid-cols-3">
-          {steps.map((step, index) => (
-            <div key={step.title} className="rounded-xl border border-gray-200 p-6">
-              <span className="flex h-9 w-9 items-center justify-center rounded-full bg-indigo-600 text-sm font-bold text-white">
-                {index + 1}
-              </span>
-              <h3 className="mt-4 font-semibold text-gray-950">{step.title}</h3>
-              <p className="mt-2 text-sm text-gray-600">{step.text}</p>
-            </div>
+              <profile.icon size={17} />{profile.label}
+            </button>
           ))}
         </div>
+        <div className="ra-profile-stage">
+          <div className="ra-profile-copy">
+            <p className="ra-eyebrow">{activeProfile.eyebrow}</p>
+            <h3>{activeProfile.title}</h3>
+            <p>{activeProfile.text}</p>
+            <Link to={activeProfile.to} className="ra-text-link">
+              {activeProfile.action} <ArrowRight size={17} />
+            </Link>
+          </div>
+          <div className="ra-profile-photo">
+            <img src={activeProfile.image} alt={activeProfile.alt} />
+          </div>
+        </div>
       </section>
 
-      {/* CTA final */}
-      <section className="border-t border-gray-100 bg-gray-50 py-14">
-        <div className="mx-auto flex max-w-7xl flex-col items-start justify-between gap-6 px-4 sm:px-6 md:flex-row md:items-center lg:px-8">
-          <div>
-            <h2 className="text-2xl font-bold tracking-tight text-gray-950">Tu próximo alquiler empieza aquí</h2>
-            <p className="mt-2 text-gray-600">Crea tu cuenta gratis y gestiona todo el alquiler desde un solo sitio.</p>
-          </div>
-          <div className="flex flex-wrap gap-3">
-            <Link to="/register" className="rounded-md bg-gray-950 px-5 py-3 text-sm font-semibold text-white hover:bg-gray-800">
-              Crear cuenta gratis
-            </Link>
-            <Link to="/properties" className="rounded-md border border-gray-300 px-5 py-3 text-sm font-semibold text-gray-900 hover:bg-gray-50">
-              Ver viviendas
-            </Link>
-          </div>
+      <section className="ra-final-cta" id="como-funciona">
+        <div>
+          <p className="ra-eyebrow ra-eyebrow-light">Empieza hoy</p>
+          <h2>Tu próximo alquiler puede ser mucho más sencillo.</h2>
+          <p>Crea tu cuenta gratis y deja que cada paso tenga su sitio.</p>
+        </div>
+        <div className="ra-final-actions">
+          <Link to="/register" className="ra-button ra-button-lime">Crear cuenta <ArrowRight size={17} /></Link>
+          <Link to="/properties" className="ra-button ra-button-ghost">Ver viviendas</Link>
         </div>
       </section>
     </main>

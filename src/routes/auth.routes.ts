@@ -1,10 +1,35 @@
-import { Router } from 'express';
+import { NextFunction, Request, Response, Router } from 'express';
 import { body } from 'express-validator';
 import { register, login, requestPasswordReset, resetPassword } from '../controllers/auth.controller';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
+import {
+  exchangeOAuthCode,
+  finishOAuth,
+  listOAuthProviders,
+  startOAuth,
+} from '../controllers/oauth.controller';
 
 const router = Router();
+router.get('/oauth/providers', asyncHandler(listOAuthProviders));
+router.get(
+  '/oauth/:provider/start',
+  (req: Request, res: Response, next: NextFunction) => {
+    if (!['google', 'apple'].includes(req.params.provider)) {
+      return res.status(404).json({ message: 'Proveedor no disponible' });
+    }
+    next();
+  },
+  asyncHandler(startOAuth),
+);
+router.get('/oauth/:provider/callback', asyncHandler(finishOAuth));
+router.post('/oauth/:provider/callback', asyncHandler(finishOAuth));
+router.post(
+  '/oauth/exchange',
+  [body('code').isString().isLength({ min: 20, max: 200 })],
+  validate,
+  asyncHandler(exchangeOAuthCode),
+);
 router.post(
   '/register',
   [
