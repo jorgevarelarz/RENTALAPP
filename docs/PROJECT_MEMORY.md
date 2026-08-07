@@ -813,3 +813,11 @@ Rules:
 - Production: commit `2678f3a` was backed up and deployed to the Valeris VPS through Jorge's MacBook. The API container remained healthy, `/ready` and the production smoke test passed, and the public provider endpoint reports Google enabled and Apple disabled.
 - Browser verification: Chrome completed the live Google authorization flow with consent, callback and successful entry into the existing tenant profile. The verified Google email was linked without changing the account role or KYC status. The dashboard warning observed afterward belongs to the pre-existing unverified tenant account, not to OAuth.
 - Next suggested step: once Jorge successfully signs in to Apple Developer, create the Services ID linked to an eligible App ID, configure the production domain/return URL and private key, then activate and browser-test Apple.
+
+### 2026-08-07 - Codex - Independent agency demo landing
+
+- Status: done.
+- Files touched: `frontend/src/pages/AgencyDemoPage.tsx`, `frontend/src/pages/__tests__/AgencyDemoPage.test.tsx`, `frontend/src/AppRoutes.tsx`, `docs/PROJECT_MEMORY.md`.
+- Verification: the focused demo test passed (1/1), the full frontend suite passed (14 files / 29 tests), and `npm --prefix frontend run build` passed. Vite preview was checked through a local SSH tunnel at desktop and 390×844: the page had no console errors or horizontal overflow, the responsive hero rendered correctly, and the agency access CTA resolved to `/login`.
+- Findings: `/agencias` is a standalone public commercial route, separate from the authenticated `/agency` portal and the existing `/info/agencias` segment page. Its guided Spanish story mirrors only implemented capabilities: landlord invitation/account activation, agency-managed property setup, handoff to `status_only`, recurring share of the RentalApp rent fee, earnings summary, monthly movements and PDF self-invoice. The CTA goes to `/login` because agency self-registration is not public; accounts are provisioned by administration.
+- Next suggested step: decide later whether the homepage and public footer should promote `/agencias` instead of the older `/info/agencias` overview; no existing links were changed in this isolated addition.

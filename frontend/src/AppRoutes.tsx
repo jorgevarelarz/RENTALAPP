@@ -38,6 +38,7 @@ const SystemEvents = lazy(() => import("./pages/admin/SystemEvents"));
 const AdminAuditDashboard = lazy(() => import("./pages/admin/AdminAuditDashboard"));
 const RedirectHome = lazy(() => import("./pages/RedirectHome"));
 const SegmentLanding = lazy(() => import("./pages/SegmentLanding"));
+const AgencyDemoPage = lazy(() => import("./pages/AgencyDemoPage"));
 const PrivacyPage = lazy(() => import("./pages/legal/PrivacyPage"));
 const TermsPage = lazy(() => import("./pages/legal/TermsPage"));
 const CookiesPage = lazy(() => import("./pages/legal/CookiesPage"));
@@ -84,6 +85,8 @@ export default function AppRoutes() {
       <BrowserRouter>
         <Suspense fallback={<RouteFallback />}>
           <Routes>
+            <Route path="/agencias" element={<AgencyDemoPage />} />
+
             <Route element={<PublicLayout />}>
               <Route path="/" element={<RedirectHome />} />
               <Route path="/info/:segment" element={<SegmentLanding />} />
