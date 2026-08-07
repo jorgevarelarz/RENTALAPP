@@ -830,3 +830,11 @@ Rules:
 - New property fields: `condition` (obra_nueva, reformado, buen_estado, a_reformar), `floor`, `hasElevator`, `yearBuilt`.
 - Pending: production holds zero properties and zero `ZoneRentReference` documents, so every landlord currently gets `not_enough_data`. Load the official index with `scripts/import_zone_rent_reference.ts --file <csv> --source <label>` before announcing the feature.
 - Findings: the landlord dashboard edited properties with `axios.patch` while the API only registers `PUT`, so saving an edit returned 404. Pre-existing and unrelated to this feature, fixed here because the new fields were unreachable on existing listings.
+
+### 2026-08-07 - Codex - Independent agency demo landing
+
+- Status: done.
+- Files touched: `frontend/src/pages/AgencyDemoPage.tsx`, `frontend/src/pages/__tests__/AgencyDemoPage.test.tsx`, `frontend/src/AppRoutes.tsx`, `docs/PROJECT_MEMORY.md`.
+- Verification: the focused demo test passed (1/1), the full frontend suite passed (14 files / 29 tests), and `npm --prefix frontend run build` passed. Vite preview was checked through a local SSH tunnel at desktop and 390×844: the page had no console errors or horizontal overflow, the responsive hero rendered correctly, and the agency access CTA resolved to `/login`.
+- Findings: `/agencias` is a standalone public commercial route, separate from the authenticated `/agency` portal and the existing `/info/agencias` segment page. Its guided Spanish story mirrors only implemented capabilities: landlord invitation/account activation, agency-managed property setup, handoff to `status_only`, recurring share of the RentalApp rent fee, earnings summary, monthly movements and PDF self-invoice. The CTA goes to `/login` because agency self-registration is not public; accounts are provisioned by administration.
+- Next suggested step: decide later whether the homepage and public footer should promote `/agencias` instead of the older `/info/agencias` overview; no existing links were changed in this isolated addition.
