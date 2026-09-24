@@ -1,6 +1,13 @@
 import { Property } from '../models/property.model';
 import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
-import { ZoneRentReference, zoneAreaKey } from '../modules/rentalPublic/models/zoneRentReference.model';
+import {
+  REGION_ALIASES,
+  ZoneRentReference,
+  placeNameVariants,
+  zoneAreaKey,
+} from '../modules/rentalPublic/models/zoneRentReference.model';
+
+const KNOWN_REGION_KEYS = new Set(Object.values(REGION_ALIASES).flat());
 
 export type PropertyCondition = 'obra_nueva' | 'reformado' | 'buen_estado' | 'a_reformar';
 
@@ -164,14 +171,46 @@ function escapeRegExp(value: string) {
 
 async function findOfficialReference(input: SuggestionInput) {
   const now = new Date();
-  return ZoneRentReference.findOne({
-    areaKey: zoneAreaKey(input.region, input.city),
+  const window = {
     active: true,
     effectiveFrom: { $lte: now },
     $or: [{ effectiveTo: { $exists: false } }, { effectiveTo: null }, { effectiveTo: { $gte: now } }],
-  })
+  };
+
+  const exact = await ZoneRentReference.findOne({ ...window, areaKey: zoneAreaKey(input.region, input.city) })
     .sort({ effectiveFrom: -1 })
     .lean();
+  if (exact) return exact;
+
+  // Region and city are free text (or whatever the geocoder returned), so match
+  // on normalised spellings: "Alacant", "Las Palmas", "A Coruña" all resolve.
+  const cityKeys = placeNameVariants(input.city);
+  if (!cityKeys.length) return null;
+  const candidates = await ZoneRentReference.find({ ...window, cityKeys: { $in: cityKeys } })
+    .sort({ effectiveFrom: -1 })
+    .lean();
+  const latest = new Map<string, (typeof candidates)[number]>();
+  for (const candidate of candidates) {
+    const key = candidate.ineCode || candidate.areaKey;
+    if (!latest.has(key)) latest.set(key, candidate);
+  }
+  const places = [...latest.values()];
+  if (!places.length) return null;
+
+  const regionKeys = placeNameVariants(input.region);
+  const inRegion = regionKeys.length
+    ? places.filter(place => (place.regionKeys || []).some(key => regionKeys.includes(key)))
+    : [];
+  if (inRegion.length === 1) return inRegion[0];
+  if (inRegion.length > 1) return null;
+
+  // A region we recognise that matches none of them means a different town with
+  // the same name: better no number than another town's price.
+  const knownRegion =
+    regionKeys.some(key => KNOWN_REGION_KEYS.has(key)) ||
+    (regionKeys.length > 0 && (await ZoneRentReference.exists({ regionKeys: { $in: regionKeys } })));
+  if (knownRegion) return null;
+  return places.length === 1 ? places[0] : null;
 }
 
 async function findRentCap(input: SuggestionInput) {

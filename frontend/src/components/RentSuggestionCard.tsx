@@ -18,7 +18,7 @@ function basisLabel(suggestion: RentSuggestion) {
     return `Media de ${basis.sampleSize} anuncios ${where}`;
   }
   const period = basis.reference?.period ? ` (${basis.reference.period})` : '';
-  return `Índice oficial de referencia${period}`;
+  return `Estimación con datos oficiales${period}`;
 }
 
 export default function RentSuggestionCard({ input, onApply }: Props) {

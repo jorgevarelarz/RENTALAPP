@@ -1,6 +1,6 @@
 import fs from 'fs';
 import mongoose from 'mongoose';
-import { ZoneRentReference, zoneAreaKey } from '../src/modules/rentalPublic/models/zoneRentReference.model';
+import { ZoneRentReference, placeNameVariants, regionKeysFor, zoneAreaKey } from '../src/modules/rentalPublic/models/zoneRentReference.model';
 
 /**
  * Loads the official reference rent (€/m² per month) per municipality.
@@ -85,6 +85,8 @@ async function main() {
       {
         region: region.toLowerCase(),
         city: city.toLowerCase(),
+        cityKeys: placeNameVariants(city),
+        regionKeys: regionKeysFor(region),
         pricePerM2,
         source,
         period,
