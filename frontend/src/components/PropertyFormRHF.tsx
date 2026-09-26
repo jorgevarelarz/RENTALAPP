@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import Dropzone from './ui/Dropzone';
 import Button from './ui/Button';
+import RentSuggestionCard from './RentSuggestionCard';
 import { generateDescription } from '../services/ai';
 
 const schema = z.object({
@@ -24,6 +25,14 @@ const schema = z.object({
   bathrooms: z.coerce.number().min(0, 'Baños inválidos'),
   furnished: z.boolean().default(false),
   petsAllowed: z.boolean().default(false),
+  condition: z.enum(['obra_nueva', 'reformado', 'buen_estado', 'a_reformar']).default('buen_estado'),
+  floor: z.coerce.number().min(0, 'Planta inválida').max(60).optional(),
+  hasElevator: z.boolean().optional(),
+  yearBuilt: z.coerce
+    .number()
+    .min(1800, 'Año inválido')
+    .max(new Date().getFullYear() + 2)
+    .optional(),
   images: z.array(z.string().url()).min(3, 'Sube al menos 3 fotos para publicar').max(20),
   price: z.coerce.number().min(100, 'Renta mínima 100€'),
   deposit: z.coerce.number().min(0, 'Depósito inválido'),
@@ -79,6 +88,7 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
       bathrooms: 1,
       furnished: false,
       petsAllowed: false,
+      condition: 'buen_estado',
       availableFrom: new Date().toISOString().slice(0, 10),
       images: [],
       onlyTenantPro: false,
@@ -98,6 +108,13 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
   const bathrooms = watch('bathrooms');
   const furnished = watch('furnished');
   const petsAllowed = watch('petsAllowed');
+  const region = watch('region');
+  const condition = watch('condition');
+  const floor = watch('floor');
+  const hasElevator = watch('hasElevator');
+  const yearBuilt = watch('yearBuilt');
+  const locationLat = watch('location.lat');
+  const locationLng = watch('location.lng');
 
   useEffect(() => {
     if (onlyPro) setValue('requiredTenantProMaxRent', Number(price) || 0);
@@ -318,6 +335,51 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
               </div>
             </div>
 
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Estado de la vivienda</label>
+              <select className="auth-input w-full" {...register('condition')}>
+                <option value="obra_nueva">Obra nueva</option>
+                <option value="reformado">Reformado</option>
+                <option value="buen_estado">Buen estado</option>
+                <option value="a_reformar">A reformar</option>
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Se usa para ajustar el precio sugerido al estado real de la vivienda.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Planta</label>
+                <input
+                  className="auth-input w-full"
+                  type="number"
+                  min={0}
+                  placeholder="Opcional"
+                  {...register('floor', { setValueAs: v => (v === '' ? undefined : Number(v)) })}
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Año construcción</label>
+                <input
+                  className="auth-input w-full"
+                  type="number"
+                  placeholder="Opcional"
+                  {...register('yearBuilt', { setValueAs: v => (v === '' ? undefined : Number(v)) })}
+                />
+              </div>
+              <div className="flex items-end pb-1">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                    {...register('hasElevator')}
+                  />
+                  <span className="text-sm font-medium text-gray-700">Ascensor</span>
+                </label>
+              </div>
+            </div>
+
             <div className="space-y-3">
               <label className="flex items-center justify-between p-4 border rounded-xl hover:bg-gray-50 cursor-pointer transition-colors">
                 <span className="font-medium text-gray-700">¿Está amueblado?</span>
@@ -376,6 +438,25 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
 
         {step === 3 && (
           <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+            <RentSuggestionCard
+              input={{
+                region: String(region || ''),
+                city: String(city || ''),
+                sizeM2: Number(sizeM2) || 0,
+                location:
+                  Number.isFinite(Number(locationLat)) && Number.isFinite(Number(locationLng))
+                    ? { lat: Number(locationLat), lng: Number(locationLng) }
+                    : undefined,
+                condition,
+                furnished,
+                floor: Number.isFinite(Number(floor)) ? Number(floor) : undefined,
+                hasElevator,
+                yearBuilt: Number.isFinite(Number(yearBuilt)) ? Number(yearBuilt) : undefined,
+                propertyId: (defaultValues as any)?._id,
+              }}
+              onApply={value => setValue('price', value, { shouldValidate: true, shouldDirty: true })}
+            />
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Precio Mensual</label>
               <div className="relative">

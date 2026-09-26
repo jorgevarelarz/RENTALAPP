@@ -9,6 +9,7 @@ import { buildAreaKey, TensionedArea } from '../modules/rentalPublic';
 import { SystemEvent } from '../models/systemEvent.model';
 import { emitSystemEvent } from '../events/system.events';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
+import { suggestRent } from '../services/rentSuggestion.service';
 
 const tensionedAreaDateQuery = (changeDate: Date) => ({
   active: true,
@@ -481,4 +482,40 @@ export async function listApplications(req: Request, res: Response) {
   }));
 
   res.json({ items });
+}
+
+export async function suggestPrice(req: Request, res: Response) {
+  const body = req.body || {};
+  const sizeM2 = Number(body.sizeM2);
+  const region = String(body.region || '').trim();
+  const city = String(body.city || '').trim();
+
+  if (!region || !city) {
+    return res.status(400).json({ error: 'region_and_city_required' });
+  }
+  if (!Number.isFinite(sizeM2) || sizeM2 <= 0) {
+    return res.status(400).json({ error: 'size_required' });
+  }
+
+  const lat = Number(body?.location?.lat);
+  const lng = Number(body?.location?.lng);
+
+  const suggestion = await suggestRent({
+    region,
+    city,
+    sizeM2,
+    location: Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : undefined,
+    condition: body.condition,
+    furnished: Boolean(body.furnished),
+    floor: Number.isFinite(Number(body.floor)) ? Number(body.floor) : undefined,
+    hasElevator: typeof body.hasElevator === 'boolean' ? body.hasElevator : undefined,
+    yearBuilt: Number.isFinite(Number(body.yearBuilt)) ? Number(body.yearBuilt) : undefined,
+    excludePropertyId: typeof body.propertyId === 'string' ? body.propertyId : undefined,
+  });
+
+  if (!suggestion) {
+    return res.json({ suggestion: null, reason: 'not_enough_data' });
+  }
+
+  return res.json({ suggestion });
 }

@@ -94,3 +94,39 @@ export async function listMyFavorites() {
   const res = await client.get('/api/properties/favorites');
   return res.data as PropertyFavoritesResponse;
 }
+
+export type PropertyCondition = 'obra_nueva' | 'reformado' | 'buen_estado' | 'a_reformar';
+
+export type RentSuggestion = {
+  suggested: number;
+  range: { min: number; max: number };
+  pricePerM2: number;
+  basePricePerM2: number;
+  adjustments: { key: string; label: string; factor: number }[];
+  basis: {
+    source: 'own_listings' | 'official_reference';
+    sampleSize: number;
+    radiusKm?: number;
+    scope: 'radius' | 'city' | 'municipality';
+    reference?: { source: string; period?: string };
+  };
+  cap?: { maxRent: number; applied: boolean; areaKey: string };
+};
+
+export type RentSuggestionInput = {
+  region: string;
+  city: string;
+  sizeM2: number;
+  location?: { lat: number; lng: number };
+  condition?: PropertyCondition;
+  furnished?: boolean;
+  floor?: number;
+  hasElevator?: boolean;
+  yearBuilt?: number;
+  propertyId?: string;
+};
+
+export async function getRentSuggestion(input: RentSuggestionInput) {
+  const { data } = await client.post('/api/properties/price-suggestion', input);
+  return data as { suggestion: RentSuggestion | null; reason?: string };
+}
