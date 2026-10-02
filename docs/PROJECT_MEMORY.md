@@ -213,6 +213,16 @@ Rules:
 
 ## Active Backlog
 
+### 2026-10-01 - Production readiness review
+
+| Status | Task | Notes |
+| --- | --- | --- |
+| done | Prioritized commercial-launch checklist | 50 actionable items with evidence and acceptance criteria in `docs/production-readiness-2026-10-01.md`; replaces the generated annual backlog as the scope for this launch review. |
+| done | Authenticate signature callbacks before side effects | Generic callback/webhook require `x-signature` HMAC (`SIGNATURE_WEBHOOK_SECRET`); DocuSign length-mismatch fixed; Firma.dev webhook verifies its own `t=,v1=` HMAC. Consolidated on 2026-10-02. |
+| in_progress | Switch signature provider to Firma.dev and verify it live | Decided with Jorge on 2026-10-01 (cost: 0,049 €/envelope, advanced e-signature). Code + tests merged; production still runs `SIGN_PROVIDER=signaturit` (never worked: `SIGN_WEBHOOK_URL` unset). To go live: Firma.dev account, `FIRMA_API_KEY`, `FIRMA_WEBHOOK_SECRET`, webhook URL `https://app.rentalapp.es/api/contracts/signature/firma`, `SIGN_PROVIDER=firma`, then one real end-to-end signature. Per-contract authorization of `initiateSignature`/`getSignature` still open (item 12). |
+| todo | Repair password reset URL and verify SMTP delivery | Reset currently links to `https://frontend/reset`; email helper swallows delivery failures. |
+| todo | Resolve current production dependency advisories | Audit on 2026-10-01: root 8, frontend 9, institution 2; these are per-package totals, not deduplicated vulnerabilities. |
+
 ### P0 - Security / Production Safety
 
 | Status | Task | Notes |
@@ -903,3 +913,36 @@ Rules:
 - Galicia validation (new-contract rents, IGVS deposits via observatoriodavivenda.gal "Fianzas en <ciudad> por códigos postales y mapas | Octubre 2025", Nov 2024–Oct 2025, 23,676 contracts): new-contract mean rent / SERPAVI 2024 median rent per home = 1.26 (Vigo) – 1.39 (Lugo). Our p75×IPC €/m² implies a premium within ±4% of that in 6 of 7 cities; Vigo overshoots ~10%. In € per home, new contracts ≈ SERPAVI p75 × IPC (0.98–1.07).
 - Half done (safe to leave): `serpavi_extract.py` now also emits `medianRentEur` (ALQTBID12_M) and `ine_rent_update.py` includes the full monthly series (`months`). NEXT STEP: for the 7 Galician cities (15030, 15036, 15078, 27028, 32054, 36038, 36057) set €/m² = SERPAVI median €/m² × (deposit mean € / SERPAVI median €) × IPC(Galicia, mean Nov24–Oct25 → latest). Observatory pages have no downloadable file; the per-postal-code table must be parsed from HTML. Postal-code rents could also feed a finer, sub-municipal suggestion later.
 - Not pushed: push `feat/precio-sugerido` and merge into `main` so `main` matches production again.
+
+### 2026-09-28 - Codex - Progress review
+
+- Status: done; review only, no application code changed. Files touched: this memory.
+- Git verified against live `git ls-remote`: `main` is `726bf6f` (26 Sep merge of `feat/precio-sugerido`); feature branch is `b5d9a3f`. Their tracked trees are identical. The 24 Sep note saying the feature was not pushed/merged is superseded. Working tree was clean before this note.
+- Verification today: `npm run smoke:production` passed health, readiness, homepage, public properties API and all five sensitive-path 404 checks. Authenticated login was skipped because no smoke credentials were supplied; no full suite or transaction flow was rerun.
+- Latest Claude activity (28 Sep): documentation only, adding Dashboard, Escrow, Hooks, Jobs and Landlord in the Obsidian vault. Its index reports 17/31 current-graph modules documented; 14 remain.
+- Remaining recorded work: finer Galicia rent calibration, offsite Mongo backups, Apple login activation. Latest recorded full backend run (24 Sep) was 148/151 with appointment tests failing in the combined run, passing alone; frontend was 29/29. These are historical results, not today's verification.
+- Next suggested step: finish the Galicia calibration already started and resolve the appointment test instability before expanding scope.
+
+### 2026-09-28 - Codex - Galicia calibration and rental flow verification
+
+- Status: implemented and verified locally; production data has not been changed. Jorge approved the follow-up work.
+- Files touched: `scripts/import_zone_rent_reference.ts`, `scripts/data/igvs-cities-2026-q2.csv`, `docs/galicia-rent-reference.md`, `tests/properties/property.referenceImport.test.ts`, `tests/e2e/smoke.e2e.test.ts`, and this memory. Application request handlers and UI are unchanged.
+- Galicia: verified the IGVS/Observatorio report published 13 Aug 2026, PDF pages 11/13 (city bars, not surrounding areas). It directly provides municipal €/m² for 2T 2026, so it supersedes the proposed ratio of mean rent per dwelling to SERPAVI median. References: A Coruña 7.9, Ferrol 6.4, Lugo 5.5, Ourense 6.4, Pontevedra 6.8, Santiago 8.0, Vigo 7.7 €/m²; 4,104 deposits in total. No additional CPI uplift was applied. These are observed contract averages, not current asking prices. Provenance and exact import/rollback procedure are in `docs/galicia-rent-reference.md`.
+- Import: reuse the existing municipal CSV importer with optional INE code/sample count, validation before DB writes, repeatable upserts, dry-run and guaranteed disconnect. The test runs the actual CLI twice against disposable Mongo and checks newer references, name variants and preserved older records. INE codes prevent old/new references being treated as different municipalities when matching aliases.
+- Verification: backend build passed; existing full backend suite passed 45/45 suites and 151/151 tests sequentially. In a second full run with two parallel workers, all 151 existing tests passed again (appointments 3/3); the new importer test initially failed because its child process lacked the temporary Mongo URI. Fixed the test to forward `process.env.MONGO_URL`; targeted rerun passed both new tests (2/2). No appointment product fix was made because the historical failure was not reproduced.
+- E2E: 2 suites / 10 tests passed, without automatic retries. Real registration/login JWTs and verification checks, active policy acceptance, listing creation/publication/search, both-party signing, PDF retrieval, activation, rent receipt generation, simulated payment intent, cryptographically signed Stripe success webhook/replay, paid-state persistence and double-payment rejection, then incident/escrow/archive/password-reset flows. External KYC, signature and payment processing remain simulated; this does not certify live provider transactions or browser interactions. Removed token logging and arbitrary sleeps from registration setup.
+- Remaining release step: back up production, then import the seven references using the documented command; no runtime rebuild is required for this data change. No commit, push or production import was performed in this task.
+- Final check: appointments plus the corrected reference importer passed together with two workers (2 suites / 5 tests). GitNexus `detect-changes --scope all` reported medium risk confined to the importer execution flow; new untracked data/test/doc files were reviewed separately. `git diff --check` passed.
+
+### 2026-10-02 - Claude Code - Consolidation of parallel work into one main
+
+- Why: on 1-2 Oct three sessions worked in three different checkouts without seeing each other: Claude (Firma.dev integration in `~/Projects/rentalapp-firma`, cut off by usage limit, untested, uncommitted), Codex (50-item readiness plan + webhook HMAC in the canonical checkout, uncommitted) and Codex+Claude (recovery of the March copy `~/RentalAPP2.3`, merged as PR #44). This branch merges all of it into `main`.
+- **Canonical checkout is `~/Desktop/02 RentalApp/rentalapp 2.3`.** `~/RentalAPP2.3`, `~/Desktop/02 RentalApp/RentalApp2.3`, `~/RENTALAPP*`, `~/rentalapp-clean`, `~/Projects/rentalapp-firma` are stale copies: do not work there. Always start by `git pull` on main and read this file.
+- Production check: `/opt/rentalapp` compared by checksum with `726bf6f` (src, frontend/src, institution-frontend/src, scripts, tests): identical except two production-only tests, now added (`tests/auth/oauth.service.test.ts`, `tests/security/notify.production-scope.test.ts`).
+- Decisions while merging:
+  - Contract status: single table in `src/domain/contracts/status.ts`; partial signatures always store `pending_signature`; `signing` stays readable as legacy. The Firma.dev draft that added `signing` as a new canonical state was adapted to this.
+  - Firma.dev webhook mounted at app level (`POST /api/contracts/signature/firma`) because the contracts router sits behind `authenticate, requireVerified` (the draft route would have answered 401 to Firma.dev).
+  - Firma.dev signing opens via redirect (`provider: 'firma'` from sign-session); the Signaturit widget is only used for Signaturit.
+  - Signature anchors `[[firma_*]]` are only printed in the PDF sent to Firma.dev, not in draft downloads.
+  - Frontend-only analytics dropped (nothing consumed them; backend already records funnel events).
+- Tests added: `tests/contracts/signature.firma.test.ts` (HMAC verification, public reachability, completion → signed + PDF hash, replay idempotency, retry after failed download, legacy `signing`, one envelope per contract).

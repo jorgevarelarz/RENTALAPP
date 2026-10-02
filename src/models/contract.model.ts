@@ -40,7 +40,7 @@ export interface IContract extends Document {
   signFeeCollected?: boolean;
   signFeeCollectedAt?: Date;
   signature?: {
-    provider?: 'mock' | 'docusign';
+    provider?: 'mock' | 'docusign' | 'signaturit' | 'firma';
     envelopeId?: string;
     status?: 'none' | 'created' | 'sent' | 'completed' | 'declined' | 'error';
     updatedAt?: Date;
@@ -121,7 +121,7 @@ const contractSchema = new Schema<IContract>(
       generatedAt: { type: Date },
     },
     signature: {
-      provider: { type: String, enum: ['mock', 'docusign', 'signaturit'] },
+      provider: { type: String, enum: ['mock', 'docusign', 'signaturit', 'firma'] },
       envelopeId: { type: String },
       status: { type: String, enum: ['none', 'created', 'sent', 'completed', 'declined', 'error'], default: 'none' },
       updatedAt: { type: Date },

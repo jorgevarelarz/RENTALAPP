@@ -1,0 +1,8 @@
+region,city,pricePerM2,period,ineCode,sampleSize
+galicia,A Coruña,7.9,IGVS contratos 2T 2026,15030,1048
+galicia,Ferrol,6.4,IGVS contratos 2T 2026,15036,238
+galicia,Lugo,5.5,IGVS contratos 2T 2026,27028,418
+galicia,Ourense,6.4,IGVS contratos 2T 2026,32054,380
+galicia,Pontevedra,6.8,IGVS contratos 2T 2026,36038,253
+galicia,Santiago de Compostela,8.0,IGVS contratos 2T 2026,15078,685
+galicia,Vigo,7.7,IGVS contratos 2T 2026,36057,1082

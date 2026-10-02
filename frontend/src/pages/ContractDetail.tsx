@@ -95,8 +95,13 @@ export default function ContractDetail() {
     if (!contract) return;
     setIsSigning(true);
     try {
-      const { signingUrl } = await createSignSession(contract._id);
+      const { signingUrl, provider } = await createSignSession(contract._id);
       if (!signingUrl) throw new Error('No se recibió URL de firma');
+      // Firma.dev firma en su propia página y vuelve aquí al terminar (completion_redirect_url)
+      if (provider === 'firma') {
+        window.location.assign(signingUrl);
+        return;
+      }
       setSigningUrl(signingUrl);
     } catch (error) {
       console.error(error);

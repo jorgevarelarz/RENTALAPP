@@ -13,6 +13,7 @@ import { ContractSignatureEvent } from "../models/contractSignatureEvent.model";
 import { generateAuditTrailPdf } from "../services/auditTrailPdf";
 import { emitAuditTrailUpdate } from "../events/auditTrail.events";
 import { normalizeContractStatus } from "../domain/contracts/status";
+import { firmaProvider, verifyFirmaSignature } from "../signature/firma";
 
 type KnownStatuses = "signed" | "active" | "terminated";
 
@@ -22,12 +23,12 @@ const isDuplicateKeyError = (error: unknown) => {
   return typeof error === "object" && error !== null && (error as any).code === 11000;
 };
 
-const verifyGenericHmac = (raw: string | undefined, signatureHeader: string | string[] | undefined, secret?: string) => {
-  if (!secret) return true;
-  const signature = Array.isArray(signatureHeader) ? signatureHeader[0] : signatureHeader;
-  if (!signature) return false;
-  const computed = crypto.createHmac('sha256', secret).update(raw || '').digest('hex');
-  return signature === computed;
+const verifyGenericHmac = (raw: Buffer | undefined, signature: string | undefined) => {
+  const secret = process.env.SIGNATURE_WEBHOOK_SECRET || process.env.SIGN_WEBHOOK_SECRET;
+  if (!secret) return !isProd() && isMock(process.env.SIGN_PROVIDER || 'mock');
+  if (!raw || !signature || !/^[a-fA-F0-9]{64}$/.test(signature)) return false;
+  const computed = crypto.createHmac('sha256', secret).update(raw).digest();
+  return crypto.timingSafeEqual(Buffer.from(signature, 'hex'), computed);
 };
 
 const stableStringify = (value: unknown): string => {
@@ -129,6 +130,10 @@ export async function signatureCallback(req: Request, res: Response) {
     }
   }
 
+  if (!verifyGenericHmac((req as any).rawBody, req.header('x-signature'))) {
+    return res.status(400).json({ error: 'invalid_hmac' });
+  }
+
   const { eventId, provider = "mock", status = "signed" } = (req.body || {}) as any;
 
   if (!eventId || typeof eventId !== "string") {
@@ -177,8 +182,14 @@ export async function signatureCallback(req: Request, res: Response) {
 }
 
 export async function signatureWebhook(req: Request, res: Response) {
+  if ((process.env.SIGN_PROVIDER || '').toLowerCase() === 'docusign') {
+    return signatureCallback(req, res);
+  }
   if (isProd() && isMock(process.env.SIGN_PROVIDER)) {
     return res.status(403).json({ error: 'signature_mock_not_allowed_in_prod' });
+  }
+  if (!verifyGenericHmac((req as any).rawBody, req.header('x-signature'))) {
+    return res.status(400).json({ error: 'invalid_hmac' });
   }
 
   const body = req.body || {};
@@ -301,5 +312,89 @@ export async function getAuditTrail(req: Request, res: Response) {
     return res.json({ contractId: id, events });
   } catch (e: any) {
     return res.status(500).json({ error: e?.message || 'audit_trail_failed' });
+  }
+}
+
+/**
+ * Webhook de Firma.dev (público, verificado con HMAC). Evento clave: signing_request.completed →
+ * descarga el PDF firmado, lo guarda con su hash y pasa el contrato a "signed".
+ */
+export async function firmaWebhook(req: Request, res: Response) {
+  const raw: Buffer | undefined = (req as any).rawBody;
+  const secret = process.env.FIRMA_WEBHOOK_SECRET;
+  const valid =
+    verifyFirmaSignature(raw, req.header('x-firma-signature'), secret) ||
+    verifyFirmaSignature(raw, req.header('x-firma-signature-old'), secret);
+  if (!valid) return res.status(401).json({ error: 'invalid_signature' });
+
+  const body: any = req.body || {};
+  const { requestId, status, evidence } = firmaProvider.parseWebhook(body);
+  if (!requestId) return res.status(200).json({ ignored: true });
+
+  const contract = await Contract.findOne({ 'signature.envelopeId': requestId });
+  if (!contract) return res.status(200).json({ error: 'contract_not_found_but_ack' });
+
+  const eventId = String(body.id || req.header('x-firma-delivery') || `${requestId}_${body.type}`);
+  try {
+    await ProcessedEvent.create({ provider: 'firma', eventId, contractId: contract._id });
+  } catch (error) {
+    if (isDuplicateKeyError(error)) return res.status(200).json({ ok: true, idempotent: true });
+    throw error;
+  }
+
+  const now = new Date();
+  await recordSignatureEvent({
+    contractId: String(contract._id),
+    envelopeId: requestId,
+    provider: 'firma',
+    eventType: String(body.type || status),
+    timestamp: now,
+    ip: getClientIp(req),
+    userAgent: req.header('user-agent') || undefined,
+  });
+
+  const updates: any = {
+    'signature.updatedAt': now,
+    'signature.events': [...(contract.signature?.events || []), { at: now, type: String(body.type || status), meta: evidence }],
+  };
+  if (['completed', 'declined', 'sent'].includes(status)) updates['signature.status'] = status;
+  if (status === 'expired') updates['signature.status'] = 'error';
+
+  if (status !== 'completed') {
+    await Contract.findByIdAndUpdate(contract._id, { $set: updates });
+    return res.status(200).json({ ok: true, status });
+  }
+
+  try {
+    const pdf = await firmaProvider.downloadFinalPdf(requestId);
+    const dir = path.resolve(process.cwd(), 'storage/contracts-signed');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${String(contract._id)}-${requestId}.pdf`), pdf);
+    updates['signature.pdfUrl'] = `/api/contracts/${String(contract._id)}/pdf/signed`;
+    updates['signature.pdfHash'] = crypto.createHash('sha256').update(pdf).digest('hex');
+    await Contract.findByIdAndUpdate(contract._id, { $set: updates });
+
+    if (!FINAL_STATES.includes(normalizeContractStatus(contract.status) as KnownStatuses)) {
+      await transitionContract(String(contract._id), 'signed');
+      await recordContractHistory(String(contract._id), 'SIGNED', null, { provider: 'firma', externalId: requestId });
+    }
+    try {
+      const audit = await generateAuditTrailPdf(String(contract._id));
+      await Contract.findByIdAndUpdate(contract._id, {
+        $set: {
+          'signature.auditPdfUrl': `/api/contracts/${String(contract._id)}/audit-trail?format=pdf`,
+          'signature.auditPdfHash': audit.sha256,
+        },
+      });
+    } catch (pdfErr) {
+      console.error('Error generando audit trail interno:', pdfErr);
+    }
+    emitAuditTrailUpdate({ contractId: String(contract._id), status, at: now.toISOString() });
+    return res.status(200).json({ ok: true, status: 'signed' });
+  } catch (error: any) {
+    // Se libera el evento para que el reintento de Firma.dev vuelva a intentarlo
+    await ProcessedEvent.deleteOne({ provider: 'firma', eventId }).catch(() => {});
+    console.error('Firma.dev webhook error:', error);
+    return res.status(500).json({ error: 'firma_webhook_failed' });
   }
 }

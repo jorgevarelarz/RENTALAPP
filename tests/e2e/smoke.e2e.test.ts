@@ -1,13 +1,16 @@
 import request from "supertest";
-// Retries are optional; only used if supported by the environment
-// @ts-ignore
-jest.retryTimes?.(2);
 import { app } from "../../src/app";
 import { User } from "../../src/models/user.model";
 import { Property } from "../../src/models/property.model";
 import { Contract } from "../../src/models/contract.model";
 import ProModel from "../../src/models/pro.model";
 import { AlertSubscription } from "../../src/models/alertSubscription.model";
+import { Verification } from "../../src/models/verification.model";
+import { PolicyVersion } from "../../src/models/policy.model";
+import { Payment } from "../../src/models/payment.model";
+import { RentPayment } from "../../src/models/rentPayment.model";
+import { runRentGeneration } from "../../src/jobs/rentGeneration.job";
+import { stripe } from "../../src/utils/stripe";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
 
 const PASSWORD = "Passw0rd!";
@@ -16,13 +19,10 @@ const NEW_PASSWORD = "NewPassw0rd!";
 type Role = "landlord" | "tenant" | "pro";
 
 async function register(email: string, role: Role, name = role.toUpperCase()) {
-  const res = await request(app)
+  await request(app)
     .post("/api/auth/register")
     .send({ name, email, password: PASSWORD, role })
     .expect(201);
-
-  console.log(res.body);
-  await new Promise(resolve => setTimeout(resolve, 2000));
 
   const user = await User.findOne({ email }).lean();
   if (!user) {
@@ -58,9 +58,17 @@ jest.setTimeout(180_000);
 
   beforeAll(async () => {
     process.env.ESCROW_DRIVER = "mock";
+    process.env.SIGN_PROVIDER = "mock";
+    process.env.STRIPE_WEBHOOK_SECRET = "whsec_e2e_local_only";
     process.env.PLATFORM_MIN_FEE_CENTS = "0";
     await connectDb();
+    process.env.ALLOW_TEST_AUTH = "false";
+    process.env.ALLOW_UNVERIFIED = "false";
+    process.env.ALLOW_POLICY_BYPASS = "false";
     await clearDb();
+    await PolicyVersion.insertMany(['terms_of_service', 'data_processing'].map(policyType => ({
+      policyType, version: 'v1.0', isActive: true,
+    })));
   });
 
   afterAll(async () => {
@@ -87,6 +95,16 @@ jest.setTimeout(180_000);
     const proToken = await login("pro@test.com");
 
     expect(landlordToken && tenantToken && proToken).toBeTruthy();
+    await request(app).get('/api/contracts').expect(401);
+    await request(app).get('/api/contracts').set(asUser(landlordToken)).expect(403);
+    // The external KYC provider is simulated; subsequent requests use real JWTs and DB verification.
+    await Verification.insertMany([landlord, tenant, pro].map(user => ({ userId: String(user._id), status: 'verified' })));
+    for (const token of [landlordToken, tenantToken, proToken]) {
+      for (const policyType of ['terms_of_service', 'data_processing']) {
+        await request(app).post('/api/policies/accept').set(asUser(token))
+          .send({ policyType, policyVersion: 'v1.0' }).expect(201);
+      }
+    }
   });
 
   it("clauses catalog multi-region (Galicia)", async () => {
@@ -171,7 +189,7 @@ jest.setTimeout(180_000);
         rent: 750,
         deposit: 750,
         startDate: new Date(Date.now() - 86_400_000).toISOString(),
-        endDate: "2026-09-30",
+        endDate: new Date(Date.now() + 365 * 86_400_000).toISOString(),
         clauses: [
           { id: "duracion_prorroga", params: { mesesIniciales: 12, mesesProrroga: 12 } },
           { id: "fianza_autonomica", params: {} },
@@ -182,15 +200,24 @@ jest.setTimeout(180_000);
     contractId = create.body.contract._id;
     expect(create.body.contract.pdfHash).toMatch(/^[a-f0-9]{64}$/);
 
+    const tenantToken = await login("tenant@test.com");
+    for (const token of [landlordToken, tenantToken]) {
+      await request(app).patch(`/api/contracts/${contractId}/sign`).set(asUser(token)).send().expect(200);
+    }
+    await request(app).get(`/api/contracts/${contractId}/pdf`).set(asUser(tenantToken))
+      .expect(200).expect('Content-Type', /pdf/);
+
     const evt = { eventId: "evt_e2e_1", provider: "mock", status: "signed" };
     const first = await request(app)
       .post(`/api/contracts/${contractId}/signature/callback`)
+      .set(asUser(landlordToken))
       .send(evt)
       .expect(200);
     expect(first.body.status).toBe("signed");
 
     const second = await request(app)
       .post(`/api/contracts/${contractId}/signature/callback`)
+      .set(asUser(landlordToken))
       .send(evt)
       .expect(200);
     expect(second.body.idempotent || second.body.alreadyFinalized).toBeTruthy();
@@ -204,6 +231,39 @@ jest.setTimeout(180_000);
 
     const stored = await Contract.findById(contractId).lean();
     expect(stored?.status).toBe("active");
+  });
+
+  it("generates one rent receipt, pays it and handles a signed Stripe callback without duplicate charges", async () => {
+    const tenantToken = await login("tenant@test.com");
+    await runRentGeneration();
+    await runRentGeneration();
+    expect(await RentPayment.countDocuments({ contractId })).toBe(1);
+    const createIntent = jest.spyOn(stripe.paymentIntents, 'create').mockResolvedValue({
+      id: 'pi_e2e_rent', client_secret: 'pi_e2e_rent_secret', status: 'requires_payment_method',
+    } as any);
+    try {
+      const started = await request(app).post(`/api/contracts/${contractId}/pay-rent`)
+        .set(asUser(tenantToken)).send().expect(200);
+      expect(started.body).toMatchObject({ amount: 750, clientSecret: 'pi_e2e_rent_secret' });
+      expect(createIntent).toHaveBeenCalledWith(expect.objectContaining({ amount: 75000, currency: 'eur' }));
+      const params = createIntent.mock.calls[0][0]!;
+      const payload = JSON.stringify({
+        id: 'evt_e2e_rent', type: 'payment_intent.succeeded',
+        data: { object: { ...params, id: 'pi_e2e_rent', status: 'succeeded' } },
+      });
+      const signature = stripe.webhooks.generateTestHeaderString({ payload, secret: process.env.STRIPE_WEBHOOK_SECRET! });
+      const callback = () => request(app).post('/api/stripe/webhook').set('Content-Type', 'application/json')
+        .set('stripe-signature', signature).send(payload);
+      await callback().expect(200);
+      const repeated = await callback().expect(200);
+      expect(repeated.body.duplicate).toBe(true);
+      expect((await RentPayment.findOne({ contractId }))?.status).toBe('PAID');
+      expect(await Payment.countDocuments({ contract: contractId, status: 'succeeded' })).toBe(1);
+      await request(app).post(`/api/contracts/${contractId}/pay-rent`).set(asUser(tenantToken)).send().expect(400);
+      expect(createIntent).toHaveBeenCalledTimes(1);
+    } finally {
+      createIntent.mockRestore();
+    }
   });
 
   it("tenant opens ticket; landlord assigns pro; pro quotes; landlord approves (escrow mock); pro extra flow; complete & close", async () => {
