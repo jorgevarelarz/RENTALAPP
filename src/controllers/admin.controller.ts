@@ -18,6 +18,9 @@ import { buildComplianceCsv, buildComplianceQuery, getComplianceDashboard as get
 import { ComplianceStatus } from '../modules/rentalPublic/models/complianceStatus.model';
 import { buildSystemEventsCsv, listSystemEvents, listSystemEventsAll } from '../services/systemEvents.service';
 import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
+import { getJwtSecret } from '../utils/getJwtSecret';
+
+const ADMIN_JWT_SECRET = getJwtSecret();
 
 /**
  * Returns aggregate statistics about the platform: total number of users
@@ -147,7 +150,7 @@ export const streamAuditTrails = async (req: Request, res: Response) => {
   try {
     const token = req.headers.authorization?.split(' ')[1];
     if (!token) return res.status(401).json({ error: 'token_required' });
-    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'insecure') as any;
+    const decoded = jwt.verify(token, ADMIN_JWT_SECRET) as any;
     if (decoded?.role !== 'admin') return res.status(403).json({ error: 'forbidden' });
 
     res.setHeader('Content-Type', 'text/event-stream');

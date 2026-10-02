@@ -171,7 +171,7 @@ export default function ContractWizard() {
                   </select>
                 </label>
                 <div className="text-sm text-gray-500 flex items-end">
-                  Por defecto 1 ano, prorrogable hasta 5 anos.
+                  La fecha de fin se calcula automaticamente desde la fecha de inicio y la duracion seleccionada.
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -225,6 +225,9 @@ export default function ContractWizard() {
                   <Input label="Nombre Completo" value={formData.tenantName} onChange={e => handleChange('tenantName', e.target.value)} />
                   <Input label="Email (para firma)" value={formData.tenantEmail} disabled />
                 </div>
+                <p className="text-xs text-green-700 mt-3">
+                  El email de firma viene del expediente anterior y se usa para invitar al inquilino a firmar.
+                </p>
                 <div className="mt-4">
                   <Input label="DNI / NIF / Pasaporte del Inquilino" placeholder="Solicitar al inquilino si no lo tienes" value={formData.tenantIdDoc} onChange={e => handleChange('tenantIdDoc', e.target.value)} />
                 </div>
@@ -274,6 +277,11 @@ export default function ContractWizard() {
                 <div>
                   <h4 className="font-bold text-yellow-800">Borrador Listo</h4>
                   <p className="text-sm text-yellow-700">Revisa los datos. Al confirmar, se generará el documento legal y se enviará una notificación al inquilino para su firma digital.</p>
+                  <ul className="mt-3 text-sm text-yellow-800 space-y-1 list-disc pl-5">
+                    <li>Confirma el DNI/NIF del arrendador antes de enviar.</li>
+                    <li>Verifica el email del inquilino porque sera el usado para la firma.</li>
+                    <li>Comprueba renta, fianza y duracion antes de bloquear el borrador.</li>
+                  </ul>
                 </div>
               </div>
 

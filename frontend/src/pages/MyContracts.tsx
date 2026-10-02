@@ -6,6 +6,7 @@ import { Link } from 'react-router-dom';
 import EmptyState from '../components/ui/EmptyState';
 import PageHeader from '../components/ui/PageHeader';
 import type { Contract } from '../types/contract';
+import { getContractActionSummary } from '../utils/contractWorkflow';
 
 const MyContracts: React.FC = () => {
   const { token, user } = useAuth();
@@ -91,6 +92,7 @@ const MyContracts: React.FC = () => {
             };
             const startLabel = formatDate(c.signedAt || c.startDate);
             const endLabel = formatDate(c.endDate);
+            const action = getContractActionSummary(c, user?.role);
             return (
             <div key={c._id} style={{ border: '1px solid var(--border)', borderRadius: 8, padding: 12, display: 'flex', justifyContent: 'space-between' }}>
               <div>
@@ -99,8 +101,21 @@ const MyContracts: React.FC = () => {
                 {(startLabel || endLabel) && (
                   <div style={{ fontSize: 12, opacity: .8 }}>Vigencia: {startLabel || '-'} a {endLabel || '-'}</div>
                 )}
+                <div style={{ marginTop: 8, fontSize: 12, color: '#374151' }}>
+                  <strong>Siguiente acción:</strong> {action.nextAction}
+                </div>
+                <div style={{ marginTop: 4, fontSize: 12, color: '#6b7280' }}>
+                  {action.detail}
+                  {action.blockedReason ? ` · Bloqueo: ${action.blockedReason}` : ''}
+                </div>
               </div>
-              <ContractStatusBadge status={c.status || 'draft'} />
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 8 }}>
+                <ContractStatusBadge status={c.status || 'draft'} />
+                <span style={{ fontSize: 12, color: '#6b7280', maxWidth: 180, textAlign: 'right' }}>
+                  {action.label}
+                  {action.nextDate ? ` · ${action.nextDate}` : ''}
+                </span>
+              </div>
             </div>
           )})}
         </div>

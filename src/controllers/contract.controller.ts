@@ -330,7 +330,7 @@ export const requestSignature = async (req: Request, res: Response) => {
             updatedAt: new Date(),
             events: [{ at: new Date(), type: 'created' }, { at: new Date(), type: env.status }],
           },
-          status: 'signing',
+          status: 'pending_signature',
         },
       });
       await recordContractHistory(contract.id, 'signatureRequested', 'Firma DocuSign solicitada');
@@ -416,7 +416,7 @@ export const createSigningSession = async (req: Request, res: Response) => {
       updatedAt: new Date(),
       recipientUrls: { tenantUrl: signingUrl },
     };
-    contract.status = 'signing';
+    contract.status = 'pending_signature';
     await contract.save();
 
     res.json({ signingUrl });

@@ -8,6 +8,7 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import SignaturitWidget from '../components/SignaturitWidget';
 import { ContractStatusBadge } from '../components/ContractStatusBadge';
+import { getContractActionSummary } from '../utils/contractWorkflow';
 import { CheckCircle2, Circle, Clock3, FileCheck, User, ShieldCheck, Download, PenTool } from 'lucide-react';
 
 function formatTimelineDate(value?: string) {
@@ -149,11 +150,12 @@ export default function ContractDetail() {
   if (!contract) return <div className="p-8 text-center text-red-500">Contrato no encontrado</div>;
 
   const isTenant = user?.role === 'tenant';
-  const needsMySignature = isTenant && contract.status === 'pending_signature';
+  const needsMySignature = isTenant && (contract.status === 'pending_signature' || contract.status === 'signing');
   const isActive = contract.status === 'active';
   const hasSignedPdf = !!contract?.signature?.pdfUrl;
   const downloadLabel = isActive || contract.status === 'signed' ? 'Descargar contrato' : 'Descargar borrador';
   const timeline = buildContractTimeline(contract);
+  const actionSummary = getContractActionSummary(contract, user?.role);
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
@@ -168,9 +170,13 @@ export default function ContractDetail() {
           </div>
           <div>
             <h1 className="text-xl font-bold text-gray-900">
-              {isActive ? 'Contrato Legalizado y Activo' : 'Pendiente de Firma'}
+              {contract.status === 'pending_signature' || contract.status === 'signing'
+                ? `Pendiente de firma · ${actionSummary.label}`
+                : actionSummary.label}
             </h1>
-            <p className="text-sm text-gray-600">ID Referencia: {contract._id?.slice(-6).toUpperCase()}</p>
+            <p className="text-sm text-gray-600">
+              ID Referencia: {contract._id?.slice(-6).toUpperCase()} · {actionSummary.detail}
+            </p>
           </div>
         </div>
 
@@ -240,6 +246,19 @@ export default function ContractDetail() {
               </div>
             );
           })}
+        </div>
+      </Card>
+
+      <Card>
+        <h3 className="font-bold text-gray-400 text-xs uppercase mb-4 tracking-wider">Siguiente acción</h3>
+        <div className="space-y-2">
+          <p className="text-base font-semibold text-gray-900">{actionSummary.nextAction}</p>
+          {actionSummary.blockedReason && (
+            <p className="text-sm text-amber-700">Bloqueo actual: {actionSummary.blockedReason}</p>
+          )}
+          {actionSummary.nextDate && (
+            <p className="text-sm text-gray-600">Próxima fecha clave: {actionSummary.nextDate}</p>
+          )}
         </div>
       </Card>
 

@@ -227,7 +227,7 @@ export default function PropertyDetail() {
                     <span>Solo inquilinos Tenant PRO</span>
                   </div>
                 <p className="text-blue-600/80 text-xs leading-relaxed">
-                  Esta propiedad requiere solvencia verificada. Se recomiendan ingresos aprox. de <strong>{safeRent35.toLocaleString()} €/mes</strong> (35% ratio).
+                  Esta propiedad requiere perfil Tenant PRO con documentación revisada. Como referencia orientativa, se recomiendan ingresos aprox. de <strong>{safeRent35.toLocaleString()} €/mes</strong> (35% ratio).
                 </p>
               </div>
             )}

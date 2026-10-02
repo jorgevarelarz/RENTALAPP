@@ -1,5 +1,6 @@
 import React from 'react';
 import Badge from './ui/Badge';
+import { getStatusLabel, getStatusTone, STATUS_TONE_STYLES } from '../utils/statusBadges';
 
 type ContractStatus =
   | 'draft'
@@ -18,76 +19,26 @@ interface Props {
   style?: React.CSSProperties;
 }
 
-const STATUS_CONFIG: Record<
-  string,
-  { label: string; style: React.CSSProperties }
-> = {
-  draft: {
-    label: 'Borrador',
-    style: { background: '#f3f4f6', borderColor: '#e5e7eb', color: '#374151' },
-  },
-  signing: {
-    label: 'En firma',
-    style: { background: '#fef9c3', borderColor: '#fde047', color: '#92400e' },
-  },
-  pending_signature: {
-    label: 'Pendiente firma',
-    style: { background: '#fef9c3', borderColor: '#fde047', color: '#92400e' },
-  },
-  pending: {
-    label: 'Pendiente',
-    style: { background: '#fef9c3', borderColor: '#fde047', color: '#92400e' },
-  },
-  accepted: {
-    label: 'Visita aceptada',
-    style: { background: '#dcfce7', borderColor: '#bbf7d0', color: '#166534' },
-  },
-  proposed: {
-    label: 'Visita propuesta',
-    style: { background: '#dbeafe', borderColor: '#bfdbfe', color: '#1d4ed8' },
-  },
-  scheduled: {
-    label: 'Visita agendada',
-    style: { background: '#dcfce7', borderColor: '#bbf7d0', color: '#166534' },
-  },
-  rejected: {
-    label: 'Rechazada',
-    style: { background: '#fee2e2', borderColor: '#fecaca', color: '#991b1b' },
-  },
-  signed: {
-    label: 'Firmado (pendiente pago)',
-    style: { background: '#dbeafe', borderColor: '#bfdbfe', color: '#1d4ed8' },
-  },
-  active: {
-    label: 'Activo',
-    style: { background: '#dcfce7', borderColor: '#bbf7d0', color: '#166534' },
-  },
-  completed: {
-    label: 'Finalizado',
-    style: { background: '#f9fafb', borderColor: '#e5e7eb', color: '#6b7280' },
-  },
-  cancelled: {
-    label: 'Cancelado',
-    style: { background: '#fee2e2', borderColor: '#fecaca', color: '#991b1b' },
-  },
-  terminated: {
-    label: 'Rescindido',
-    style: { background: '#fee2e2', borderColor: '#fecaca', color: '#991b1b' },
-  },
+const CONTRACT_BADGE_LABELS: Record<string, string> = {
+  pending: 'Pendiente',
+  accepted: 'Visita aceptada',
+  proposed: 'Visita propuesta',
+  scheduled: 'Visita agendada',
+  rejected: 'Rechazada',
+  pending_signature: 'Pendiente firma',
+  signing: 'Pendiente firma',
+  signed: 'Firmado',
 };
 
 export const ContractStatusBadge: React.FC<Props> = ({ status, className, style }) => {
-  const current = STATUS_CONFIG[status] || {
-    label: String(status || 'Estado'),
-    style: { background: '#f3f4f6', borderColor: '#e5e7eb', color: '#374151' },
-  };
+  const tone = STATUS_TONE_STYLES[getStatusTone(status)];
 
   return (
     <Badge
       className={className}
-      style={{ ...current.style, ...style }}
+      style={{ ...tone, ...style }}
     >
-      {current.label}
+      {CONTRACT_BADGE_LABELS[status] || getStatusLabel(status)}
     </Badge>
   );
 };

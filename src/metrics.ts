@@ -18,6 +18,9 @@ export function metricsMiddleware(req: Request, res: Response, next: NextFunctio
     const key = labelKey({ method, status: res.statusCode });
     httpRequestsByLabel.set(key, (httpRequestsByLabel.get(key) || 0) + 1);
     const rt = Date.now() - started;
+    if (process.env.NODE_ENV === 'test') {
+      return;
+    }
     // Log básico estructurado incluyendo requestId si existe
     const requestId = (res.locals as any)?.requestId;
     logger.info({

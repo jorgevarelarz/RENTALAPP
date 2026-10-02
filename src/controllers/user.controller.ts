@@ -250,7 +250,7 @@ export const getLandlordStats = async (req: Request, res: Response) => {
     });
     const pendingContracts = await Contract.countDocuments({
       landlord: userId,
-      status: { $in: ['draft', 'signing', 'signed'] },
+      status: { $in: ['draft', 'pending_signature', 'signing', 'signed'] },
     });
 
     const recentPayments = await Payment.find({

@@ -32,6 +32,6 @@ export async function startMongoMemoryServer(): Promise<MongoMemoryServer> {
   const version = process.env.MONGOMS_VERSION || '7.0.5';
   return MongoMemoryServer.create({
     binary: { version },
-    instance: { storageEngine: 'wiredTiger' },
+    instance: { storageEngine: 'wiredTiger', launchTimeout: 30000 },
   });
 }

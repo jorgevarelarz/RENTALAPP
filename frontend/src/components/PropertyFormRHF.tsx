@@ -9,6 +9,7 @@ import Dropzone from './ui/Dropzone';
 import Button from './ui/Button';
 import RentSuggestionCard from './RentSuggestionCard';
 import { generateDescription } from '../services/ai';
+import { useToast } from '../context/ToastContext';
 
 const schema = z.object({
   title: z.string().min(5, 'El título debe ser descriptivo (min 5 letras)'),
@@ -61,8 +62,10 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
   const [uploading, setUploading] = useState(false);
   const [generatingDescription, setGeneratingDescription] = useState(false);
   const [descriptionError, setDescriptionError] = useState('');
+  const [uploadError, setUploadError] = useState<string | null>(null);
   const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
   const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  const { push } = useToast();
 
   const {
     register,
@@ -115,6 +118,14 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
   const yearBuilt = watch('yearBuilt');
   const locationLat = watch('location.lat');
   const locationLng = watch('location.lng');
+  const addressQuery = String(addressValue || '').trim();
+  const imageCount = images.length;
+  const publishReadiness = {
+    hasMinPhotos: imageCount >= 3,
+    hasPrice: Number(price || 0) >= 100,
+    hasAddress: Boolean(addressValue && city && region),
+  };
+  const isPublishReady = publishReadiness.hasMinPhotos && publishReadiness.hasPrice && publishReadiness.hasAddress;
 
   useEffect(() => {
     if (onlyPro) setValue('requiredTenantProMaxRent', Number(price) || 0);
@@ -188,11 +199,14 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
   const handleDrop = async (files: File[]) => {
     if (!files.length) return;
     setUploading(true);
+    setUploadError(null);
     try {
       const urls = await onUploadPhotos(files);
       setValue('images', [...images, ...urls], { shouldValidate: true });
     } catch (e) {
-      console.error(e);
+      const message = 'No se pudieron subir las fotos. Prueba de nuevo o guarda el borrador.';
+      setUploadError(message);
+      push({ title: message, tone: 'error' });
     } finally {
       setUploading(false);
     }
@@ -289,6 +303,11 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
                   </div>
                 )}
               </div>
+              {!isSearchingAddress && addressQuery.length >= 4 && addressSuggestions.length === 0 && (
+                <p className="text-xs text-gray-500 mt-2">
+                  Si no aparece una coincidencia, puedes seguir con la direccion manual y ajustar ciudad, region y coordenadas.
+                </p>
+              )}
               {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address.message}</p>}
             </div>
 
@@ -395,6 +414,14 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
 
         {step === 2 && (
           <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+            <div className={`rounded-xl border px-4 py-3 text-sm ${
+              imageCount >= 3 ? 'border-green-200 bg-green-50 text-green-800' : 'border-amber-200 bg-amber-50 text-amber-800'
+            }`}>
+              <div className="font-semibold">
+                {imageCount >= 3 ? 'Galeria lista para publicar' : `Faltan ${Math.max(3 - imageCount, 0)} fotos para publicar`}
+              </div>
+              <div className="mt-1">La publicacion requiere al menos 3 imagenes. La primera imagen se usa como portada.</div>
+            </div>
             <Dropzone
               onFiles={handleDrop}
               className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-400 transition-colors"
@@ -413,6 +440,8 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
             {uploading && (
               <div className="text-center py-2 text-blue-600 animate-pulse text-sm font-medium">Subiendo imágenes...</div>
             )}
+
+            {uploadError && <p className="text-red-500 text-sm text-center">{uploadError}</p>}
 
             {errors.images && <p className="text-red-500 text-sm text-center">{errors.images.message}</p>}
 
@@ -457,6 +486,16 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
               onApply={value => setValue('price', value, { shouldValidate: true, shouldDirty: true })}
             />
 
+            <div className={`rounded-xl border px-4 py-3 text-sm ${
+              isPublishReady ? 'border-green-200 bg-green-50 text-green-800' : 'border-amber-200 bg-amber-50 text-amber-800'
+            }`}>
+              <div className="font-semibold">{isPublishReady ? 'Anuncio listo para publicar' : publishReadiness.hasMinPhotos ? 'Puedes publicar, pero revisa estos datos' : 'Faltan fotos para poder publicar'}</div>
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span>Fotos {imageCount}/3</span>
+                <span>{publishReadiness.hasPrice ? 'Precio ok' : 'Falta precio valido'}</span>
+                <span>{publishReadiness.hasAddress ? 'Ubicacion ok' : 'Falta direccion o ciudad'}</span>
+              </div>
+            </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Precio Mensual</label>
               <div className="relative">
