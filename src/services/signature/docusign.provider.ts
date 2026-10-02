@@ -30,6 +30,7 @@ export function verifyConnectHmac(rawBody: string | Buffer, providedSig: string 
   if (!secret || !providedSig) return false;
   const hmac = crypto.createHmac('sha256', secret).update(rawBody).digest('base64');
   // DocuSign sends base64 HMAC in X-DocuSign-Signature-1
-  return crypto.timingSafeEqual(Buffer.from(hmac), Buffer.from(String(providedSig)));
+  const provided = Buffer.from(providedSig);
+  const expected = Buffer.from(hmac);
+  return provided.length === expected.length && crypto.timingSafeEqual(expected, provided);
 }
-

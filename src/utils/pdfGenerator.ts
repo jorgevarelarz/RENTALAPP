@@ -1,6 +1,7 @@
 import fs from "fs";
 import path from "path";
 import PDFDocument from "pdfkit";
+import { FIRMA_ANCHORS } from "../signature/firma";
 
 interface GenerateContractPDFOptions {
   contract: {
@@ -16,6 +17,8 @@ interface GenerateContractPDFOptions {
     endDate?: Date | string;
   };
   clausesText: string[];
+  /** Text anchors where the signature provider places each signature (Firma.dev only). */
+  signatureAnchors?: boolean;
 }
 
 export interface GenerateContractPDFResult {
@@ -43,6 +46,7 @@ const ensureDirectory = async (dir: string) => {
 export async function generateContractPDF({
   contract,
   clausesText,
+  signatureAnchors = false,
 }: GenerateContractPDFOptions): Promise<GenerateContractPDFResult> {
   await ensureDirectory(CONTRACTS_UPLOAD_DIR);
   const contractId = String(contract._id ?? contract.id ?? "contract");
@@ -90,7 +94,15 @@ export async function generateContractPDF({
   }
 
   doc.moveDown(2);
-  const signatureY = doc.y;
+  let signatureY = doc.y;
+  if (signatureAnchors) {
+    // Marcas donde el proveedor de firma coloca cada firma (Firma.dev las busca y las borra)
+    doc.fontSize(8).fillColor("#999999");
+    doc.text(FIRMA_ANCHORS.owner, 80, signatureY);
+    doc.text(FIRMA_ANCHORS.tenant, 320, signatureY);
+    doc.fillColor("#000000");
+    signatureY += 45;
+  }
   doc.fontSize(10);
   doc.text("__________________________", 80, signatureY);
   doc.text("__________________________", 320, signatureY);

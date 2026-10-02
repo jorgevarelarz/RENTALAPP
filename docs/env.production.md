@@ -91,7 +91,8 @@ Legacy `REACT_APP_*` names are still accepted by the frontend compatibility laye
 | `SIGN_EMBEDDED` | optional | `true` for embedded signing views. Default `false`. |
 | **Signaturit** | | |
 | `SIGNATURE_API_TOKEN` | REQUIRED (if provider=signaturit) | Signaturit API token. |
-| `SIGNATURE_WEBHOOK_SECRET` | REQUIRED (if provider=signaturit) | HMAC secret for Signaturit webhook callbacks. |
+| `SIGNATURE_WEBHOOK_SECRET` | REQUIRED (if provider=signaturit) | RentalApp callback HMAC secret: SHA-256 over the exact request body, hexadecimal `x-signature` header. Validate provider/gateway compatibility before deployment; this header is not established as a native Signaturit feature. |
+| `SIGN_WEBHOOK_SECRET` | legacy alias | Fallback only when `SIGNATURE_WEBHOOK_SECRET` is absent. Prefer the canonical name above. Unsigned requests without either secret are only accepted for mock signing outside production. |
 | `SIGNATURIT_TOKEN` | REQUIRED (if provider=signaturit) | Token for widget URL generation. |
 | `SIGNATURIT_ENV` | optional | `sandbox` or `production`. Default `sandbox`. Set to `production` for live. |
 | **DocuSign** | | |

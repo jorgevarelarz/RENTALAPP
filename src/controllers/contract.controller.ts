@@ -12,6 +12,7 @@ import { computePdfHash } from '../utils/pdfHash';
 import { recordContractHistory } from '../utils/history';
 import { ContractHistory } from '../models/history.model';
 import { signaturitProvider } from '../signature/signaturit';
+import { ensureFirmaSignature } from '../services/signature.service';
 import * as docusignProvider from '../services/signature/docusign.provider';
 import { sendContractReadyEmail } from '../utils/email';
 import PDFDocument from 'pdfkit';
@@ -363,6 +364,17 @@ export const createSigningSession = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
     const user = req.user;
+    const signProvider = (process.env.SIGN_PROVIDER || 'mock').toLowerCase();
+    if (signProvider === 'firma') {
+      const contract = await Contract.findById(id);
+      if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
+      if (String(contract.tenant) !== user?.id) {
+        return res.status(403).json({ error: 'Solo el inquilino puede firmar este contrato' });
+      }
+      const { recipientUrls } = await ensureFirmaSignature(contract);
+      if (!recipientUrls?.tenantUrl) return res.status(502).json({ error: 'Firma.dev no devolvió el enlace de firma' });
+      return res.json({ signingUrl: recipientUrls.tenantUrl, provider: 'firma' });
+    }
     if (!process.env.SIGNATURIT_TOKEN) {
       return res.status(500).json({ error: 'SIGNATURIT_TOKEN no configurado' });
     }

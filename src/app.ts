@@ -63,7 +63,7 @@ import { requestId } from './middleware/requestId';
 import { adminRateLimit } from './middleware/adminRateLimit';
 import { loadEnv } from './config/env';
 import { metricsMiddleware, metricsHandler } from './metrics';
-import { signatureWebhook } from './controllers/contract.signature.controller';
+import { firmaWebhook, signatureWebhook } from './controllers/contract.signature.controller';
 import { authorizeRoles } from './middleware/role.middleware';
 import { loadInstitutionScope } from './middleware/institutionScope';
 import { recordFunnelEvent } from './services/funnelEvents.service';
@@ -193,6 +193,18 @@ app.post(
     },
   }),
   signatureWebhook,
+);
+
+// Webhook de Firma.dev (público, verificado con su propia firma HMAC en el controlador)
+app.post(
+  '/api/contracts/signature/firma',
+  express.json({
+    limit: '1mb',
+    verify: (req: any, _res, buf) => {
+      req.rawBody = buf;
+    },
+  }),
+  firmaWebhook,
 );
 
 app.use(express.json({

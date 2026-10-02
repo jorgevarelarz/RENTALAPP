@@ -107,7 +107,7 @@ export async function createContract(payload: Record<string, unknown>) {
 
 export async function createSignSession(id: string) {
   const { data } = await client.post(`/api/contracts/${id}/sign-session`);
-  return data as { signingUrl?: string };
+  return data as { signingUrl?: string; provider?: string };
 }
 
 export async function initiatePayment(contractId: string, amount: number) {

@@ -1,23 +1,14 @@
 import fs from 'fs';
 import mongoose from 'mongoose';
-import { ZoneRentReference, placeNameVariants, regionKeysFor, zoneAreaKey } from '../src/modules/rentalPublic/models/zoneRentReference.model';
+import { PROVINCE_REGION, ZoneRentReference, placeNameVariants, regionKeysFor, zoneAreaKey } from '../src/modules/rentalPublic/models/zoneRentReference.model';
 
 /**
- * Loads the official reference rent (€/m² per month) per municipality.
+ * Imports municipal reference rents from a simple CSV (no embedded commas):
+ * region,city,pricePerM2[,period,ineCode,sampleSize]
  *
- * The expected CSV has a header and three or four columns:
- *   region,city,pricePerM2[,period]
- *
- * Source: "Sistema estatal de referencia del precio del alquiler de vivienda"
- * (Ministerio de Vivienda y Agenda Urbana). Export the municipalities you need
- * and feed the file here — no figures are bundled with the repo so the data in
- * the database always has a traceable origin.
- *
- * Usage:
- *   npx ts-node scripts/import_zone_rent_reference.ts \
- *     --file data/referencia-2025.csv --source mivau-2025 --from 2025-01-01
+ * Validate every row before connecting. --dry-run never opens a database.
+ * See docs/galicia-rent-reference.md for the sourced IGVS dataset and commands.
  */
-
 function getArg(flag: string) {
   const idx = process.argv.indexOf(flag);
   if (idx === -1) return undefined;
@@ -25,84 +16,89 @@ function getArg(flag: string) {
 }
 
 function splitCsvLine(line: string) {
+  // ponytail: simple CSV only; use a CSV parser if a source needs embedded commas.
   return line.split(',').map(cell => cell.trim().replace(/^"|"$/g, ''));
+}
+
+export function parseReferences(csv: string, source: string, effectiveFrom: Date) {
+  if (!source.trim() || Number.isNaN(effectiveFrom.getTime())) {
+    throw new Error('A source and a valid effective date are required');
+  }
+  const [header, ...rows] = csv.split(/\r?\n/).filter(line => line.trim());
+  if (!header || !rows.length) throw new Error('CSV must contain a header and at least one reference');
+  const columns = splitCsvLine(header).map(name => name.toLowerCase());
+  const regionIdx = columns.indexOf('region');
+  const cityIdx = columns.indexOf('city');
+  const priceIdx = columns.findIndex(name => ['priceperm2', 'pricepersqm', 'eurm2'].includes(name));
+  const periodIdx = columns.indexOf('period');
+  const codeIdx = columns.indexOf('inecode');
+  const sampleIdx = columns.indexOf('samplesize');
+  if (regionIdx === -1 || cityIdx === -1 || priceIdx === -1) {
+    throw new Error('CSV header must contain: region, city, pricePerM2');
+  }
+
+  const seen = new Set<string>();
+  return rows.map((row, index) => {
+    const cells = splitCsvLine(row);
+    const region = cells[regionIdx]?.toLowerCase();
+    const city = cells[cityIdx]?.toLowerCase();
+    const pricePerM2 = Number(cells[priceIdx]);
+    const ineCode = codeIdx >= 0 ? cells[codeIdx] : undefined;
+    const sampleSize = sampleIdx >= 0 ? Number(cells[sampleIdx]) : undefined;
+    if (cells.length !== columns.length || !region || !city || !Number.isFinite(pricePerM2) || pricePerM2 <= 0 ||
+        (codeIdx >= 0 && (!ineCode || !/^\d{5}$/.test(ineCode) || PROVINCE_REGION[ineCode.slice(0, 2)] !== region)) ||
+        (sampleSize !== undefined && (!Number.isInteger(sampleSize) || sampleSize <= 0))) {
+      throw new Error(`Invalid reference at CSV row ${index + 2}`);
+    }
+    const areaKey = zoneAreaKey(region, city);
+    const key = ineCode || areaKey;
+    if (seen.has(key) || seen.has(areaKey)) throw new Error(`Duplicate reference at CSV row ${index + 2}`);
+    seen.add(key);
+    seen.add(areaKey);
+    return {
+      areaKey, region, city, pricePerM2, ineCode, sampleSize,
+      cityKeys: placeNameVariants(city),
+      regionKeys: regionKeysFor(region),
+      source,
+      period: periodIdx >= 0 ? cells[periodIdx] : undefined,
+      effectiveFrom,
+      active: true,
+    };
+  });
 }
 
 async function main() {
   const file = getArg('--file');
   const source = getArg('--source');
   const from = getArg('--from');
-
-  if (!file || !source) {
-    throw new Error('Usage: --file <csv> --source <label> [--from YYYY-MM-DD]');
+  if (!file || !source || !from) {
+    throw new Error('Usage: --file <csv> --source <label> --from YYYY-MM-DD [--dry-run]');
   }
-  if (!fs.existsSync(file)) {
-    throw new Error(`CSV not found: ${file}`);
+  const docs = parseReferences(fs.readFileSync(file, 'utf8'), source, new Date(from));
+  if (process.argv.includes('--dry-run')) {
+    console.log(JSON.stringify(docs, null, 2));
+    return;
   }
-
-  const effectiveFrom = from ? new Date(from) : new Date();
-  if (Number.isNaN(effectiveFrom.getTime())) {
-    throw new Error(`Invalid --from date: ${from}`);
-  }
-
   const uri = process.env.MONGO_URI || process.env.MONGODB_URI;
   if (!uri) throw new Error('MONGO_URI is not set');
-  await mongoose.connect(uri);
-
-  const lines = fs
-    .readFileSync(file, 'utf8')
-    .split(/\r?\n/)
-    .filter(line => line.trim().length > 0);
-
-  const [header, ...rows] = lines;
-  const columns = splitCsvLine(header).map(name => name.toLowerCase());
-  const regionIdx = columns.indexOf('region');
-  const cityIdx = columns.indexOf('city');
-  const priceIdx = columns.findIndex(name => ['priceperm2', 'pricepersqm', 'eurm2'].includes(name));
-  const periodIdx = columns.indexOf('period');
-
-  if (regionIdx === -1 || cityIdx === -1 || priceIdx === -1) {
-    throw new Error('CSV header must contain: region, city, pricePerM2 [, period]');
-  }
-
-  let imported = 0;
-  let skipped = 0;
-
-  for (const row of rows) {
-    const cells = splitCsvLine(row);
-    const region = cells[regionIdx];
-    const city = cells[cityIdx];
-    const pricePerM2 = Number(String(cells[priceIdx]).replace(',', '.'));
-    const period = periodIdx >= 0 ? cells[periodIdx] : undefined;
-
-    if (!region || !city || !Number.isFinite(pricePerM2) || pricePerM2 <= 0) {
-      skipped += 1;
-      continue;
-    }
-
-    await ZoneRentReference.findOneAndUpdate(
-      { areaKey: zoneAreaKey(region, city), effectiveFrom },
-      {
-        region: region.toLowerCase(),
-        city: city.toLowerCase(),
-        cityKeys: placeNameVariants(city),
-        regionKeys: regionKeysFor(region),
-        pricePerM2,
-        source,
-        period,
-        effectiveFrom,
-        active: true,
+  try {
+    await mongoose.connect(uri);
+    const result = await ZoneRentReference.bulkWrite(docs.map(doc => ({
+      updateOne: {
+        filter: { areaKey: doc.areaKey, effectiveFrom: doc.effectiveFrom },
+        update: { $set: doc },
+        upsert: true,
       },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    );
-    imported += 1;
+    })));
+    console.log(`Imported ${docs.length} municipalities: ${result.upsertedCount} added, ${result.modifiedCount} updated.`);
+  } finally {
+    await mongoose.disconnect();
   }
-
-  console.log(`Imported ${imported} municipalities from ${file} (skipped ${skipped}).`);
-  await mongoose.disconnect();
 }
 
-main().catch(error => {
-  console.error(error);
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch(error => {
+    console.error(error.message);
+    process.exitCode = 1;
+  });
+}

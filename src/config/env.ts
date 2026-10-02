@@ -94,6 +94,9 @@ export function loadEnv(): Env {
         'DOCUSIGN_WEBHOOK_SECRET',
       ].forEach(requireProductionEnv);
     }
+    if (signProvider === 'firma') {
+      ['FIRMA_API_KEY', 'FIRMA_WEBHOOK_SECRET'].forEach(requireProductionEnv);
+    }
     if (signProvider === 'signaturit') {
       ['SIGNATURE_API_TOKEN', 'SIGNATURE_WEBHOOK_SECRET', 'SIGNATURIT_TOKEN'].forEach(requireProductionEnv);
     }
