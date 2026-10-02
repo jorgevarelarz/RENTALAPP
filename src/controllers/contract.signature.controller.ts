@@ -12,10 +12,11 @@ import { isMock, isProd } from "../config/flags";
 import { ContractSignatureEvent } from "../models/contractSignatureEvent.model";
 import { generateAuditTrailPdf } from "../services/auditTrailPdf";
 import { emitAuditTrailUpdate } from "../events/auditTrail.events";
+import { normalizeContractStatus } from "../domain/contracts/status";
 
-type KnownStatuses = "signed" | "active" | "terminated" | "completed";
+type KnownStatuses = "signed" | "active" | "terminated";
 
-const FINAL_STATES: KnownStatuses[] = ["signed", "active", "terminated", "completed"];
+const FINAL_STATES: KnownStatuses[] = ["signed", "active", "terminated"];
 
 const isDuplicateKeyError = (error: unknown) => {
   return typeof error === "object" && error !== null && (error as any).code === 11000;
@@ -150,7 +151,7 @@ export async function signatureCallback(req: Request, res: Response) {
     return res.status(500).json({ error: "event_store_failed" });
   }
 
-  if (FINAL_STATES.includes(contract.status as KnownStatuses)) {
+  if (FINAL_STATES.includes(normalizeContractStatus(contract.status) as KnownStatuses)) {
     return res.json({ ok: true, status: contract.status, alreadyFinalized: true });
   }
 

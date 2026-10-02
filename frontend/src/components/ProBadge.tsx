@@ -14,9 +14,9 @@ export default function ProBadge({ maxRent }: { maxRent?: number }) {
         alignItems: 'center',
         gap: 6,
       }}
-      title="Tenant PRO (solvencia verificada)"
+      title="Tenant PRO (perfil revisado)"
     >
-      Tenant PRO {typeof maxRent === 'number' ? `· Hasta ${maxRent} €/mes` : ''}
+      Tenant PRO {typeof maxRent === 'number' ? `· Referencia hasta ${maxRent} €/mes` : ''}
     </span>
   );
 }

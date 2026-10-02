@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import { Types } from 'mongoose';
 import { Contract } from '../models/contract.model';
 import { ContractParty } from '../models/contractParty.model';
+import { getNextSigningStatus } from '../domain/contracts/status';
 import { AdminRequest } from '../models/adminRequest.model';
 import { User } from '../models/user.model';
 import { sendEmail } from '../utils/email';
@@ -104,12 +105,11 @@ export const signCoTenant = async (req: Request, res: Response) => {
     if (allSigned) {
       contract.signedByTenant = true;
     }
-    if (contract.signedByTenant && contract.signedByLandlord) {
-      contract.signedAt = new Date();
-      contract.status = 'signed';
-    } else {
-      contract.status = 'signing';
-    }
+    contract.status = getNextSigningStatus({
+      signedByTenant: contract.signedByTenant,
+      signedByLandlord: contract.signedByLandlord,
+    });
+    if (contract.status === 'signed') contract.signedAt = new Date();
     await contract.save();
     res.json({ ok: true, contractStatus: contract.status });
   } catch (err: any) {

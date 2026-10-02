@@ -3,9 +3,9 @@ import crypto from 'crypto';
 import { PipelineStage } from 'mongoose';
 import { ComplianceStatus } from '../modules/rentalPublic/models/complianceStatus.model';
 import { parseDateRange } from '../utils/dateRange';
+import { getInstitutionCaseIdSalt } from '../utils/getInstitutionCaseIdSalt';
 
-const CASEID_SALT =
-  process.env.INSTITUTION_CASEID_SALT || process.env.JWT_SECRET || 'insecure-institution-salt';
+const CASEID_SALT = getInstitutionCaseIdSalt();
 
 type InstitutionDashboardData = {
   totals: { evaluated: number; risk: number };

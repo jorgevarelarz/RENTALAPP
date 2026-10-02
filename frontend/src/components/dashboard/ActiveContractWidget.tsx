@@ -13,7 +13,7 @@ const pickActiveContract = (contracts: Contract[]) => {
   return (
     contracts.find((c) => c.status === 'active') ||
     contracts.find((c) => c.status === 'signed') ||
-    contracts.find((c) => c.status === 'signing') ||
+    contracts.find((c) => c.status === 'pending_signature' || c.status === 'signing') ||
     null
   );
 };

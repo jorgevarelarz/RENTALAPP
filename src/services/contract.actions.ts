@@ -14,6 +14,7 @@ import { recordContractHistory } from '../utils/history';
 import { sendContractCreatedEmail } from '../utils/email';
 import { normalizeRegion, resolveClauses, type ClauseInput, type ResolvedClause } from './clauses.service';
 import { evaluateAndPersist } from '../modules/rentalPublic';
+import { getNextSigningStatus, normalizeContractStatus } from '../domain/contracts/status';
 
 interface CreateContractParams {
   tenantId: mongoose.Types.ObjectId | string;
@@ -203,7 +204,7 @@ export const signContractAction = async (contractId: string, user: { id: string;
   }
 
   // Validar que el contrato se pueda firmar
-  if (['active', 'completed', 'cancelled', 'terminated'].includes(contract.status)) {
+  if (['active', 'terminated'].includes(normalizeContractStatus(contract.status))) {
     throw new Error(`No se puede firmar un contrato en estado ${contract.status}`);
   }
 
@@ -263,12 +264,14 @@ export const signContractAction = async (contractId: string, user: { id: string;
   }
 
   // Actualización de Estado
-  if (contract.signedByTenant && contract.signedByLandlord) {
+  const nextStatus = getNextSigningStatus({
+    signedByTenant: contract.signedByTenant,
+    signedByLandlord: contract.signedByLandlord,
+  });
+  if (nextStatus === 'signed') {
     contract.signedAt = new Date();
-    contract.status = 'signed';
-  } else {
-    contract.status = 'signing';
   }
+  contract.status = nextStatus;
 
   await contract.save();
 

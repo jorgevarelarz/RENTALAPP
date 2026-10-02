@@ -21,9 +21,9 @@ describe("Contract lifecycle", () => {
       rent: 750,
       deposit: 750,
       startDate: new Date(Date.now() - 86400000).toISOString(),
-      endDate: "2026-09-30",
+      endDate: new Date(Date.now() + 365 * 86400000).toISOString(),
       clauses: [{ id: "duracion_prorroga", params: { mesesIniciales: 12, mesesProrroga: 12 } }],
-    });
+    }).expect(201);
     id = res.body.contract._id;
   });
 

@@ -1,18 +1,15 @@
 import { Contract } from "../models/contract.model";
 import { sendContractActiveEmail } from "../utils/email";
+import {
+  type ContractStatus,
+  canTransitionContract,
+  normalizeContractStatus,
+} from "../domain/contracts/status";
 
-export type ContractState = "draft" | "pending_signature" | "signed" | "active" | "terminated";
+export type ContractState = ContractStatus;
 
-const ALLOWED: Record<ContractState, ContractState[]> = {
-  draft: ["pending_signature", "terminated"],
-  pending_signature: ["signed", "terminated"],
-  signed: ["active", "terminated"],
-  active: ["terminated"],
-  terminated: [],
-};
-
-export function canTransition(from: ContractState, to: ContractState) {
-  return ALLOWED[from]?.includes(to) ?? false;
+export function canTransition(from: string | undefined, to: ContractState) {
+  return canTransitionContract(from, to);
 }
 
 export async function transitionContract(id: string, to: ContractState) {
@@ -20,10 +17,11 @@ export async function transitionContract(id: string, to: ContractState) {
     .populate("property")
     .populate({ path: "tenant", select: "name email" });
   if (!c) throw Object.assign(new Error("contract_not_found"), { status: 404 });
-  if (!canTransition((c.status as ContractState) ?? "draft", to)) {
+  const currentStatus = normalizeContractStatus(c.status as string | undefined);
+  if (!canTransition(c.status, to)) {
     throw Object.assign(new Error("invalid_transition"), { status: 409, from: c.status, to });
   }
-  const previous = c.status as ContractState;
+  const previous = currentStatus;
   c.status = to;
   await c.save();
 

@@ -16,6 +16,7 @@ import { AlertTriangle, Building2, Plus, Home, BarChart3, Image as ImageIcon, Us
 import { toAbsoluteUrl } from '../utils/media';
 import OnboardingChecklist from '../components/OnboardingChecklist';
 import { buildLandlordAlerts, estimateMonthlyRent, propertyPhotoCount } from '../utils/landlordDashboard';
+import { getContractActionSummary } from '../utils/contractWorkflow';
 
 const IconCash = () => (
   <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -36,6 +37,7 @@ const IconDoc = () => (
 const LandlordDashboard: React.FC = () => {
   const { token, user } = useAuth();
   const [mine, setMine] = useState<any[]>([]);
+  const [actionContracts, setActionContracts] = useState<any[]>([]);
   const [rentedByProperty, setRentedByProperty] = useState<Record<string, { tenantName?: string; endDate?: string }>>({});
   const [stats, setStats] = useState<any>(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -54,7 +56,9 @@ const LandlordDashboard: React.FC = () => {
     setMine(myProps);
     if (token) {
       try {
-        const { items } = await listContracts(token, { status: 'active', limit: 500 });
+        const [{ items }, ...inProgress] = await Promise.all(
+          ['active', 'pending_signature', 'signing', 'signed'].map(status => listContracts(token, { status, limit: 50 })),
+        );
         const map: Record<string, { tenantName?: string; endDate?: string }> = {};
         items.forEach((c: any) => {
           const propId = c.property?._id || c.propertyId || c.property;
@@ -64,11 +68,14 @@ const LandlordDashboard: React.FC = () => {
             endDate: c.endDate,
           };
         });
+        setActionContracts([...inProgress.flatMap(r => r.items), ...items]);
         setRentedByProperty(map);
       } catch {
+        setActionContracts([]);
         setRentedByProperty({});
       }
     } else {
+      setActionContracts([]);
       setRentedByProperty({});
     }
   }, [user, token]);
@@ -122,9 +129,36 @@ const LandlordDashboard: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const getPublishReadiness = (property: any) => {
+    const imageCount = propertyPhotoCount(property);
+    const hasMinPhotos = imageCount >= 3;
+    const hasPrice = Number(property.price || 0) >= 100;
+    const hasAddress = Boolean(property.address && property.city);
+    // Only the photo minimum blocks publishing (backend: min_images_3); price/address are advice.
+    const isReady = hasMinPhotos;
+
+    return {
+      imageCount,
+      hasMinPhotos,
+      hasPrice,
+      hasAddress,
+      isReady,
+      label: isReady ? 'Lista para publicar' : 'Faltan fotos para publicar',
+      nextAction: !hasMinPhotos ? 'Subir al menos 3 fotos' : hasPrice && hasAddress ? 'Publicar anuncio' : 'Revisar precio y dirección',
+    };
+  };
+
   const activeProps = mine.filter(p => p.status === 'active' && !rentedByProperty[String(p._id)]).length;
   const draftProps = mine.filter(p => p.status !== 'active').length;
   const landlordAlerts = buildLandlordAlerts(mine);
+  const nextActions = actionContracts
+    .map((contract: any) => ({
+      id: contract._id,
+      propertyTitle: contract.property?.title || contract.propertyAddress || contract.address || 'Contrato',
+      summary: getContractActionSummary(contract, user?.role),
+    }))
+    .filter(({ summary }) => summary.tone !== 'neutral')
+    .slice(0, 3);
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 pb-10">
@@ -244,7 +278,7 @@ const LandlordDashboard: React.FC = () => {
                 <Link to="/contracts" className="block w-full p-3 text-left border rounded hover:border-indigo-500 hover:bg-indigo-50 transition-all">
                   Contratos: revisar borradores y firmas.
                 </Link>
-                <Link to="/incidents" className="block w-full p-3 text-left border rounded hover:border-indigo-500 hover:bg-indigo-50 transition-all">
+                <Link to="/landlord/issues" className="block w-full p-3 text-left border rounded hover:border-indigo-500 hover:bg-indigo-50 transition-all">
                   Mantenimiento: incidencias abiertas.
                 </Link>
               </div>
@@ -270,6 +304,34 @@ const LandlordDashboard: React.FC = () => {
         </div>
       </div>
 
+      <Card className="border border-gray-200 shadow-sm">
+        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
+          <h3 className="font-semibold text-gray-800">Siguiente acción</h3>
+          <p className="text-sm text-gray-500 mt-1">Contratos en curso y sus próximos pasos.</p>
+        </div>
+        {nextActions.length === 0 ? (
+          <div className="p-4 text-sm text-gray-500">No hay contratos con acciones pendientes.</div>
+        ) : (
+          <div className="divide-y divide-gray-100">
+            {nextActions.map(({ id, propertyTitle, summary }) => (
+              <div key={id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-gray-900">{propertyTitle}</div>
+                  <div className="text-sm text-gray-700 mt-1">{summary.nextAction}</div>
+                  <div className="text-xs text-gray-500 mt-1">
+                    {summary.detail}
+                    {summary.blockedReason ? ` · Bloqueo: ${summary.blockedReason}` : ''}
+                  </div>
+                </div>
+                <Link to={`/contracts/${id}`} className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
+                  Abrir contrato
+                </Link>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
       <Card className="overflow-hidden border border-gray-200 shadow-sm">
         <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
           <h3 className="font-semibold text-gray-800">Mis Propiedades</h3>
@@ -288,11 +350,11 @@ const LandlordDashboard: React.FC = () => {
           <div className="divide-y divide-gray-100">
             {mine.map((p: any) => {
               const rented = rentedByProperty[String(p._id)];
-              const photoCount = propertyPhotoCount(p);
               const priceEstimate = estimateMonthlyRent(p);
               const priceDiff = priceEstimate && p.price
                 ? Math.round(((Number(p.price) - priceEstimate) / priceEstimate) * 100)
                 : null;
+              const readiness = getPublishReadiness(p);
               const statusLabel = rented
                 ? 'Alquilado'
                 : p.status === 'active'
@@ -338,6 +400,19 @@ const LandlordDashboard: React.FC = () => {
                         {priceDiff !== null && Math.abs(priceDiff) > 20 ? ` · revisar (${priceDiff > 0 ? '+' : ''}${priceDiff}%)` : ''}
                       </p>
                     )}
+                    {!rented && p.status !== 'active' && (
+                      <div className={`mt-2 inline-flex flex-wrap items-center gap-2 rounded-lg border px-3 py-2 text-xs ${
+                        readiness.isReady
+                          ? 'border-green-200 bg-green-50 text-green-800'
+                          : 'border-amber-200 bg-amber-50 text-amber-800'
+                      }`}>
+                        <span className="font-semibold">{readiness.label}</span>
+                        <span>Fotos {readiness.imageCount}/3</span>
+                        <span>{readiness.hasPrice ? 'Precio ok' : 'Falta precio'}</span>
+                        <span>{readiness.hasAddress ? 'Direccion ok' : 'Falta direccion'}</span>
+                        <span className="font-medium">Siguiente paso: {readiness.nextAction}</span>
+                      </div>
+                    )}
                     {rented && (
                       <p className="text-xs text-gray-500 mt-1">
                         Alquilado por {rented.tenantName || 'Inquilino'}{endLabel ? ` · Hasta ${endLabel}` : ''}
@@ -373,9 +448,9 @@ const LandlordDashboard: React.FC = () => {
                           push({ title: msg, tone: 'error' });
                         }
                       }}
-                      disabled={photoCount < 3}
-                      className={photoCount < 3 ? "opacity-50 cursor-not-allowed" : ""}
-                      title={photoCount < 3 ? "Faltan fotos" : "Publicar ahora"}
+                      disabled={!readiness.isReady}
+                      className={!readiness.isReady ? "opacity-50 cursor-not-allowed" : ""}
+                      title={!readiness.isReady ? readiness.nextAction : "Publicar ahora"}
                     >
                       Publicar
                     </Button>

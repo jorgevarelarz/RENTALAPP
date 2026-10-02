@@ -1,4 +1,5 @@
 import { Schema, model, Document, Types } from 'mongoose';
+import { ALL_CONTRACT_STATUSES, type PersistedContractStatus } from '../domain/contracts/status';
 
 /**
  * Mongoose document type for rental contracts.
@@ -59,16 +60,7 @@ export interface IContract extends Document {
    * early termination, the status can be set to 'terminated'. Legacy
    * workflows may still use 'cancelled' for similar scenarios.
    */
-  status:
-    | 'draft'
-    | 'generated'
-    | 'signing'
-    | 'signed'
-    | 'active'
-    | 'completed'
-    | 'cancelled'
-    | 'pending_signature'
-    | 'terminated';
+  status: PersistedContractStatus;
   /**
    * Indicates whether the deposit (fianza) has been paid. Deposits can be
    * transferred either to a platform escrow account or to a public authority
@@ -162,17 +154,7 @@ const contractSchema = new Schema<IContract>(
     // Current lifecycle status of the contract
     status: {
       type: String,
-      enum: [
-        'draft',
-        'generated',
-        'signing',
-        'signed',
-        'active',
-        'completed',
-        'cancelled',
-        'pending_signature',
-        'terminated',
-      ],
+      enum: ALL_CONTRACT_STATUSES,
       default: 'draft',
     },
     // Deposit paid flag and timestamp
