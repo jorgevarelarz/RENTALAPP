@@ -67,4 +67,9 @@ PaymentSchema.index(
   { unique: true, partialFilterExpression: { type: 'rent' } },
 );
 
+// Listados por usuario (getMyPayments usa $or payer/payee ordenado por fecha) y por contrato
+PaymentSchema.index({ payer: 1, createdAt: -1 });
+PaymentSchema.index({ payee: 1, createdAt: -1 });
+PaymentSchema.index({ contract: 1, status: 1, createdAt: -1 });
+
 export const Payment = mongoose.model<IPayment>('Payment', PaymentSchema);

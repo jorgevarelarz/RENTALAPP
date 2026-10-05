@@ -30,7 +30,7 @@ describe('usePolicyAcceptance', () => {
   });
 
   it('marks as accepted when active versions match all required types', async () => {
-    localStorage.setItem('token', 't');
+    localStorage.setItem('user', JSON.stringify({ token: 't' }));
     localStorage.setItem('policy_version_privacy_policy', 'v1.0');
     localStorage.setItem('policy_version_terms_of_service', 'v2.0');
     mockedApi.get.mockResolvedValueOnce({
@@ -55,7 +55,7 @@ describe('usePolicyAcceptance', () => {
   });
 
   it('sets needsAcceptance when a required policy differs and resolves after POST', async () => {
-    localStorage.setItem('token', 't');
+    localStorage.setItem('user', JSON.stringify({ token: 't' }));
     localStorage.setItem('policy_version_privacy_policy', 'v1.0');
     localStorage.setItem('policy_version_terms_of_service', 'v2.0');
     mockedApi.get.mockResolvedValueOnce({

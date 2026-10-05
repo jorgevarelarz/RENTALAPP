@@ -31,4 +31,9 @@ const s = new Schema<ITicket>({
   history: [{ ts: Date, actor: String, action: String, payload: Schema.Types.Mixed }],
   escrowId: String
 },{timestamps:true});
+// Listados por rol (ticket.routes /my/*), ordenados por fecha
+s.index({ openedBy: 1, createdAt: -1 });
+s.index({ ownerId: 1, createdAt: -1 });
+s.index({ proId: 1, createdAt: -1 });
+s.index({ contractId: 1 });
 export default model<ITicket>('Ticket', s);

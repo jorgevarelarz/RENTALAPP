@@ -971,3 +971,13 @@ Rules:
   - `tests/contracts/contracts.signature.test.ts`
 - Improvement audit (cleanup, scalability, frontend; three read-only agents): backlog in `docs/auditoria-mejoras-2026-10-05.md`, not started. Quick wins first: broken `/tickets/*` pages (missing NotificationsProvider), Mongo indexes for payments/tickets/history/contracts, a TTL on SystemEvent, and checking that `storage/` is mounted as a volume in the production compose.
 - GitNexus: no index in the cloud checkout, so `impact`/`detect_changes` were not run. Callers were checked with grep instead (`ensureFirmaSignature` ← `createSigningSession`, `initSignature`; `initSignature` ← `initiateSignature`, `requestSignature`; `getSignatureStatus` ← `getSignature`).
+
+### 2026-10-05 - Claude Code - Audit quick wins: frontend toasts/links + Mongo indexes
+
+- Status: done on `claude/practical-planck-wizknd`. The list of what was done and what is left is at the end of `docs/auditoria-mejoras-2026-10-05.md`.
+- Files touched:
+  - frontend: `src/utils/notify.tsx`, `src/index.tsx`, `src/api/client.ts`, `src/components/CopyLinkButton.tsx`, `src/components/PolicyModal.tsx`, `src/hooks/usePolicyAcceptance.ts` (+ its test), `src/pages/tickets/TicketCreatePage.tsx`
+  - backend models: `payment`, `ticket`, `history`, `contract` (indexes only)
+  - `docker-compose.yml` (storage volume)
+- Verification: frontend `npm run build` (tsc + vite) OK; `npm test` 15 files / 30 tests passed. Backend `tsc` clean. Backend Jest still cannot run in the cloud session (MongoDB download blocked).
+- Next: the backend should notify the owner on ticket creation; decide the SystemEvent TTL; unify the toast systems; the dead-code cleanup listed in the audit.

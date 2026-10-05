@@ -11,8 +11,16 @@ type PolicyType = (typeof REQUIRED_TYPES)[number];
 
 const storageKey = (type: string) => `policy_version_${type}`;
 
+const storedToken = (): string | null => {
+  try {
+    return JSON.parse(localStorage.getItem("user") || "null")?.token ?? null;
+  } catch {
+    return null;
+  }
+};
+
 export const usePolicyAcceptance = (
-  token: string | null = localStorage.getItem("token"),
+  token: string | null = storedToken(),
   requiredTypes: PolicyType[] = [...REQUIRED_TYPES]
 ) => {
   const [loading, setLoading] = useState(true);

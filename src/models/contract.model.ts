@@ -186,5 +186,7 @@ contractSchema.index({ landlord: 1 });
 contractSchema.index({ tenant: 1 });
 contractSchema.index({ agencyId: 1 });
 contractSchema.index({ refAgencyId: 1, status: 1 });
+contractSchema.index({ property: 1, status: 1 });
+contractSchema.index({ status: 1 });
 
 export const Contract = model<IContract>('Contract', contractSchema);

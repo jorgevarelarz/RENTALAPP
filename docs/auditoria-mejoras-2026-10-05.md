@@ -2,7 +2,7 @@
 
 - Fecha: 2026-10-05
 - Agente: Claude Code (tres agentes de análisis en paralelo, solo lectura)
-- Estado: **backlog sin empezar**. Ninguno de estos puntos se ha corregido todavía. Cada hallazgo se comprobó leyendo el código, pero conviene volver a revisarlo antes de tocarlo.
+- Estado: en curso. Lo ya resuelto está en "Hecho" al final; el resto sigue pendiente. Cada hallazgo se comprobó leyendo el código, pero conviene volver a revisarlo antes de tocarlo.
 - Esfuerzo: S = pequeño, M = medio, L = grande.
 
 ## 1. Fallos reales que se arreglan en minutos (prioridad)
@@ -78,3 +78,22 @@
   - librerías de test y de build en `dependencies`;
   - el lint es un `echo`, así que no hay ESLint.
 - **`institution-frontend/src/App.tsx`:** todo en un solo archivo, no trata el 401 y usa React 18 frente a React 19 en `frontend`. El build no ejecuta `tsc`.
+
+## Hecho (2026-10-05, Claude Code)
+
+- **Avisos del frontend:**
+  - `useNotify` ahora usa el `ToastProvider` ya montado, así que `/tickets/new` y `/tickets/:id` vuelven a abrir;
+  - se monta `<Toaster/>` de react-hot-toast en `index.tsx`;
+  - `CopyLinkButton` usa un `import` normal en vez de `require`;
+  - se ha **eliminado** el aviso global de errores de `api/client.ts`: nunca llegó a funcionar, y activarlo duplicaría los mensajes que ya muestra cada página.
+  - Unificar los dos sistemas de toast sigue pendiente.
+- **`PolicyModal`:** enlaces a `/legal/privacidad` y `/legal/terminos`. La política de datos enlaza a privacidad porque no tiene página propia.
+- **`usePolicyAcceptance`:** el token por defecto sale de `localStorage.user.token`, como en el cliente API. Los tests se han actualizado a esa clave.
+- **`TicketCreatePage`:** ya no llama a `/api/notify/email`, que es solo para admin. **Pendiente:** el backend no avisa al propietario cuando se crea un ticket; debería hacerlo `POST /api/tickets`.
+- **Índices de Mongo** (se crean al arrancar, porque autoIndex está activo):
+  - Payment: `{payer,createdAt}`, `{payee,createdAt}`, `{contract,status,createdAt}`;
+  - Ticket: `{openedBy,createdAt}`, `{ownerId,createdAt}`, `{proId,createdAt}`, `{contractId}`;
+  - ContractHistory: `{contract,timestamp}`;
+  - Contract: `{property,status}`, `{status}`.
+- **`docker-compose.yml`:** volumen `storage_data:/app/storage`. Producción usa `docker-compose.valeris.yml`, que ya lo tenía.
+- **Sin hacer por ser decisión de datos:** el TTL de `SystemEvent`. Antes hay que elegir cuántos días se conservan las visitas, porque borra datos.
