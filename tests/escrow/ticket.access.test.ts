@@ -44,6 +44,8 @@ describe('Ticket access control', () => {
       .expect(201);
     return { contract, ticketId: res.body._id as string, ticket: res.body };
   };
+  // Equivale a que el propietario seleccione al profesional con /assign
+  const selectPro = (ticketId: string, proUserId = PRO) => Ticket.updateOne({ _id: ticketId }, { $set: { proId: proUserId } });
 
   it('takes owner and property from the contract and rejects contracts of other tenants', async () => {
     const { contract, ticket } = await openTicket();
@@ -57,7 +59,12 @@ describe('Ticket access control', () => {
 
   it('only lets the involved parties act on and read the ticket', async () => {
     const { ticketId } = await openTicket();
+    // Sin seleccionar, ningún profesional puede presupuestar ni ver el ticket
+    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', token(PRO, 'pro')).send({ amount: 100 }).expect(403);
+    await request(app).get(`/api/tickets/${ticketId}`).set('Authorization', token(PRO, 'pro')).expect(403);
+    await selectPro(ticketId);
     await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', token(PRO, 'pro')).send({ amount: 100 }).expect(200);
+    await request(app).get(`/api/tickets/${ticketId}`).set('Authorization', token(PRO, 'pro')).expect(200);
 
     // Otro pro no puede re-presupuestar ni completar un ticket ya asignado
     await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', token(OTHER_PRO, 'pro')).send({ amount: 1 }).expect(403);
@@ -72,6 +79,7 @@ describe('Ticket access control', () => {
   it('releases the escrow only once, only by its owner, and only after the work is completed', async () => {
     const { ticketId } = await openTicket();
     const L = token(LANDLORD, 'landlord');
+    await selectPro(ticketId);
     await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', token(PRO, 'pro')).send({ amount: 100 }).expect(200);
     await request(app).post(`/api/tickets/${ticketId}/approve`).set('Authorization', L).send({ customerId: 'cus_mock' }).expect(200);
 

@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
 import { Contract } from '../../src/models/contract.model';
+import Ticket from '../../src/models/ticket.model';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 const signToken = (payload: any) => jwt.sign(payload, JWT_SECRET);
@@ -56,6 +57,9 @@ describe('Escrow flows require policy acceptance', () => {
         description: 'Leak in kitchen',
       })
       .expect(201);
+
+    // El propietario ha seleccionado a este profesional
+    await Ticket.updateOne({ _id: ticket.body._id }, { $set: { proId: '507f1f77bcf86cd799439020' } });
 
     // Pro sends quote
     await request(app)

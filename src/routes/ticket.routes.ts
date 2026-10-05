@@ -93,10 +93,9 @@ r.post('/:id/quote', ...assertRole('pro'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { amount } = req.body || {};
-    const t = await Ticket.findById(req.params.id);
-    if (!t) return res.status(404).json({ error: 'not found', code: 404 });
-    // Solo el pro asignado (o cualquiera si el ticket sigue sin asignar) y antes de retener el pago
-    if (t.proId && t.proId !== userId) return res.status(403).json({ error: 'forbidden', code: 403 });
+    // Solo presupuesta el profesional que el propietario ha seleccionado (/assign), y antes del hold
+    const t = await loadTicketFor(req, res, ['pro']);
+    if (!t) return;
     if (t.escrowId) return res.status(409).json({ error: 'quote_locked', code: 409 });
     if (!(Number(amount) > 0)) return res.status(400).json({ error: 'invalid amount', code: 400 });
 
