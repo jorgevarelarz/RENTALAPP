@@ -8,8 +8,8 @@ const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 const DEFAULT_VERSION = { policyType: 'privacy_policy', version: 'v1.0' };
 const DEFAULT_ACCEPT = { policyType: 'privacy_policy', policyVersion: 'v1.0' };
 
-const signToken = (userId: string) =>
-  jwt.sign({ _id: userId, email: 'user@test.com' }, JWT_SECRET);
+const signToken = (userId: string, role?: string) =>
+  jwt.sign({ _id: userId, email: 'user@test.com', ...(role ? { role } : {}) }, JWT_SECRET);
 
 describe('Policy routes', () => {
   beforeAll(async () => {
@@ -25,7 +25,7 @@ describe('Policy routes', () => {
 
   const createVersion = async () => {
     const userId = new mongoose.Types.ObjectId().toHexString();
-    const token = signToken(userId);
+    const token = signToken(userId, 'admin');
     await request(app)
       .post('/api/policies/version')
       .set('Authorization', `Bearer ${token}`)
@@ -118,5 +118,13 @@ describe('Policy routes', () => {
     expect(Array.isArray(res.body?.data)).toBe(true);
     expect(res.body.data[0]?.policyVersion).toBe('v1.0');
     expect(res.body.data[0]?.policyType).toBe('privacy_policy');
+  });
+  it('only lets admins publish a new policy version', async () => {
+    const token = signToken(new mongoose.Types.ObjectId().toHexString(), 'tenant');
+    await request(app)
+      .post('/api/policies/version')
+      .set('Authorization', `Bearer ${token}`)
+      .send(DEFAULT_VERSION)
+      .expect(403);
   });
 });

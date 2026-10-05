@@ -333,7 +333,8 @@ export const initiatePaymentAction = async (
     await contract.save();
   }
 
-  const payAmount = typeof amount === 'number' && amount > 0 ? amount : contract.rent;
+  // El importe es siempre la renta del contrato: el que manda el cliente se ignora
+  const payAmount = contract.rent;
 
   // Crear el intento de pago
   const paymentIntent = await createPaymentIntent(customerId, payAmount, 'eur');

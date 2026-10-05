@@ -6,6 +6,7 @@ import Message from '../models/message.model';
 import Escrow from '../models/escrow.model';
 import Pro from '../models/pro.model';
 import { User } from '../models/user.model';
+import { Contract } from '../models/contract.model';
 import { getUserId } from '../utils/getUserId';
 import { ensureDirectConversation } from '../utils/ensureDirectConversation';
 import { holdPayment, releasePayment } from '../utils/payment';
@@ -29,15 +30,45 @@ async function publishSystem(conversationId: string, senderId: string, systemCod
   await Conversation.findByIdAndUpdate(conversationId, { lastMessageAt: new Date() });
 }
 
+type TicketParty = 'owner' | 'tenant' | 'pro';
+
+/** Carga el ticket y responde 404/403 si quien llama no es una de las partes indicadas. */
+async function loadTicketFor(req: any, res: any, parties: TicketParty[], opts: { allowAdmin?: boolean } = {}) {
+  const userId = getUserId(req);
+  const t = await Ticket.findById(req.params.id);
+  if (!t) {
+    res.status(404).json({ error: 'not found', code: 404 });
+    return null;
+  }
+  const isAdmin = opts.allowAdmin && req.user?.role === 'admin';
+  const allowed =
+    isAdmin ||
+    (parties.includes('owner') && t.ownerId === userId) ||
+    (parties.includes('tenant') && t.openedBy === userId) ||
+    (parties.includes('pro') && !!t.proId && t.proId === userId);
+  if (!allowed) {
+    res.status(403).json({ error: 'forbidden', code: 403 });
+    return null;
+  }
+  return t;
+}
+
 r.get('/ping', (_req, res) => res.json({ ok: true }));
 
 /** 1) Inquilino abre incidencia */
 r.post('/', ...assertRole('tenant'), async (req, res) => {
   try {
     const userId = getUserId(req);
-    const { contractId, ownerId, propertyId, service, title, description } = req.body || {};
+    const { contractId, service, title, description } = req.body || {};
+    // Propietario e inmueble salen del contrato del inquilino, nunca del body
+    const contract = contractId ? await Contract.findById(String(contractId)).select('tenant landlord property').lean() : null;
+    if (!contract || String(contract.tenant) !== userId) {
+      return res.status(403).json({ error: 'contract_not_owned', code: 403 });
+    }
+    const ownerId = String(contract.landlord);
+    const propertyId = String(contract.property);
     const t = await Ticket.create({
-      contractId,
+      contractId: String(contractId),
       ownerId,
       propertyId,
       openedBy: userId,
@@ -64,6 +95,10 @@ r.post('/:id/quote', ...assertRole('pro'), async (req, res) => {
     const { amount } = req.body || {};
     const t = await Ticket.findById(req.params.id);
     if (!t) return res.status(404).json({ error: 'not found', code: 404 });
+    // Solo el pro asignado (o cualquiera si el ticket sigue sin asignar) y antes de retener el pago
+    if (t.proId && t.proId !== userId) return res.status(403).json({ error: 'forbidden', code: 403 });
+    if (t.escrowId) return res.status(409).json({ error: 'quote_locked', code: 409 });
+    if (!(Number(amount) > 0)) return res.status(400).json({ error: 'invalid amount', code: 400 });
 
     t.quote = { amount: Number(amount), currency: 'EUR', proId: userId, ts: new Date() };
     t.proId = userId;
@@ -80,11 +115,17 @@ r.post('/:id/quote', ...assertRole('pro'), async (req, res) => {
 r.post('/:id/approve', ...assertRole('landlord'), requirePolicies(REQUIRED_POLICIES), async (req, res) => {
   try {
     const userId = getUserId(req);
-    const t = await Ticket.findById(req.params.id);
-    if (!t?.quote) return res.status(400).json({ error: 'quote required', code: 400 });
+    const t = await loadTicketFor(req, res, ['owner']);
+    if (!t) return;
+    if (!t.quote) return res.status(400).json({ error: 'quote required', code: 400 });
+    if (t.escrowId) return res.status(409).json({ error: 'already approved', code: 409 });
 
-    const { customerId } = req.body as { customerId?: string };
-    if (!customerId) return res.status(400).json({ error: 'customerId (Stripe) is required', code: 400 });
+    // El cargo va contra el cliente Stripe del propietario autenticado, no contra uno del body.
+    // Con el driver mock (bloqueado en producción por env.ts) se admite el del body para pruebas.
+    const owner = await User.findById(userId).select('stripeCustomerId').lean();
+    const isMockEscrow = (process.env.ESCROW_DRIVER || 'mock').toLowerCase() === 'mock';
+    const customerId = (owner as any)?.stripeCustomerId || (isMockEscrow ? (req.body as any)?.customerId : undefined);
+    if (!customerId) return res.status(409).json({ error: 'owner_no_stripe_customer', code: 409 });
 
     const pay = await holdPayment({
       customerId,
@@ -120,8 +161,9 @@ r.post('/:id/extra', ...assertRole('pro'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { amount, reason } = req.body || {};
-    const t = await Ticket.findById(req.params.id);
-    if (!t) return res.status(404).json({ error: 'not found', code: 404 });
+    const t = await loadTicketFor(req, res, ['pro']);
+    if (!t) return;
+    if (!(Number(amount) > 0)) return res.status(400).json({ error: 'invalid amount', code: 400 });
 
     t.extra = { amount: Number(amount), reason, status: 'pending' };
     t.history.push({ ts: new Date(), actor: userId, action: 'extra_requested', payload: { amount: Number(amount), reason } });
@@ -137,8 +179,9 @@ r.post('/:id/extra/decide', ...assertRole('landlord'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { approve } = req.body || {};
-    const t = await Ticket.findById(req.params.id);
-    if (!t?.extra) return res.status(400).json({ error: 'no extra pending', code: 400 });
+    const t = await loadTicketFor(req, res, ['owner']);
+    if (!t) return;
+    if (!t.extra || t.extra.status !== 'pending') return res.status(400).json({ error: 'no extra pending', code: 400 });
 
     t.extra.status = approve ? 'approved' : 'rejected';
     t.history.push({ ts: new Date(), actor: userId, action: approve ? 'extra_approved' : 'extra_rejected' });
@@ -154,8 +197,8 @@ r.post('/:id/complete', ...assertRole('pro'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const { invoiceUrl } = req.body || {};
-    const t = await Ticket.findById(req.params.id);
-    if (!t) return res.status(404).json({ error: 'not found', code: 404 });
+    const t = await loadTicketFor(req, res, ['pro']);
+    if (!t) return;
 
     t.invoiceUrl = invoiceUrl;
     t.status = 'awaiting_validation';
@@ -168,7 +211,7 @@ r.post('/:id/complete', ...assertRole('pro'), async (req, res) => {
 });
 
 // Pro solicita cierre
-r.post('/:id/request-close', ...assertRole('landlord'), async (req, res) => {
+r.post('/:id/request-close', ...assertRole('pro'), async (req, res) => {
   try {
     const userId = getUserId(req);
     const t = await Ticket.findById(req.params.id);
@@ -186,22 +229,46 @@ r.post('/:id/request-close', ...assertRole('landlord'), async (req, res) => {
   }
 });
 
+/**
+ * Libera el escrow una sola vez: el paso held → releasing es atómico, así que dos peticiones
+ * simultáneas (o una repetida) no capturan el pago ni crean la ganancia dos veces.
+ */
+async function releaseTicketEscrow(t: any, userId: string, action: string) {
+  const esc = await Escrow.findOneAndUpdate(
+    { _id: t.escrowId, status: 'held' },
+    { $set: { status: 'releasing' } },
+    { new: true },
+  );
+  if (!esc) throw Object.assign(new Error('escrow_not_held'), { status: 409 });
+
+  const gross = (t.quote?.amount ?? 0) + ((t.extra && t.extra.status === 'approved') ? t.extra.amount : 0);
+  const breakdown = calcPlatformFee(gross);
+  let rel: any;
+  try {
+    rel = await releasePayment({ ref: esc.paymentRef!, amount: breakdown.gross, currency: 'eur', fee: breakdown.fee, meta: { ticketId: String(t._id) } });
+  } catch (err) {
+    await Escrow.updateOne({ _id: esc._id, status: 'releasing' }, { $set: { status: 'held' } });
+    throw err;
+  }
+  esc.status = 'released';
+  esc.breakdown = breakdown;
+  esc.ledger.push({ ts: new Date(), type: 'release', payload: { ...rel, breakdown } });
+  await esc.save();
+  await PlatformEarning.create({ kind: 'rent', ticketId: String(t._id), escrowId: String(esc._id), gross: breakdown.gross, fee: breakdown.fee, netToPro: breakdown.netToPro, currency: esc.currency || 'EUR', releaseRef: rel.ref, proId: t.proId, serviceKey: t.service });
+  t.status = 'closed';
+  t.history.push({ ts: new Date(), actor: userId, action, payload: breakdown });
+  await t.save();
+  return esc;
+}
+
 // Tenant confirma solucionado → release
 r.post('/:id/resolve', ...assertRole('tenant'), requirePolicies(REQUIRED_POLICIES), async (req, res) => {
   try {
     const userId = getUserId(req);
-    const t = await Ticket.findById(req.params.id);
-    if (!t?.escrowId) return res.status(400).json({ error: 'no escrow', code: 400 });
-    if (t.openedBy !== userId) return res.status(403).json({ error: 'forbidden', code: 403 });
-    const esc = await Escrow.findById(t.escrowId);
-    if (!esc) return res.status(404).json({ error: 'escrow not found', code: 404 });
-
-    const gross = (t.quote?.amount ?? 0) + ((t.extra && t.extra.status === 'approved') ? t.extra.amount : 0);
-    const breakdown = calcPlatformFee(gross);
-    const rel = await releasePayment({ ref: esc.paymentRef!, amount: breakdown.gross, currency: 'eur', fee: breakdown.fee, meta: { ticketId: String(t._id) } });
-    esc.status = 'released'; esc.breakdown = breakdown; esc.ledger.push({ ts: new Date(), type: 'release', payload: { ...rel, breakdown } }); await esc.save();
-    await PlatformEarning.create({ kind: 'rent', ticketId: String(t._id), escrowId: String(esc._id), gross: breakdown.gross, fee: breakdown.fee, netToPro: breakdown.netToPro, currency: esc.currency || 'EUR', releaseRef: rel.ref, proId: t.proId, serviceKey: t.service });
-    t.status = 'closed'; t.history.push({ ts: new Date(), actor: userId, action: 'resolved_by_tenant', payload: breakdown }); await t.save();
+    const t = await loadTicketFor(req, res, ['tenant']);
+    if (!t) return;
+    if (!t.escrowId) return res.status(400).json({ error: 'no escrow', code: 400 });
+    const esc = await releaseTicketEscrow(t, userId, 'resolved_by_tenant');
     const conv = await Conversation.findOne({ kind: 'appointment', 'meta.ticketId': String(t._id) });
     if (conv) await publishSystem(conv.id, userId, 'CLOSED_BY_TENANT', { ticketId: String(t._id) });
     res.json({ ticket: t, escrow: esc });
@@ -211,51 +278,14 @@ r.post('/:id/resolve', ...assertRole('tenant'), requirePolicies(REQUIRED_POLICIE
 });
 
 /** 7) Propietario valida → release (escrow + earnings + breakdown) */
-r.post('/:id/validate', async (req, res) => {
+r.post('/:id/validate', ...assertRole('landlord'), requirePolicies(REQUIRED_POLICIES), async (req, res) => {
   try {
     const userId = getUserId(req);
-    const t = await Ticket.findById(req.params.id);
-    if (!t?.escrowId) return res.status(400).json({ error: 'no escrow', code: 400 });
-
-    const esc = await Escrow.findById(t.escrowId);
-    if (!esc) return res.status(404).json({ error: 'escrow not found', code: 404 });
-
-    const gross =
-      (t.quote?.amount ?? 0) +
-      ((t.extra && t.extra.status === 'approved') ? t.extra.amount : 0);
-
-    const breakdown = calcPlatformFee(gross);
-
-    const rel = await releasePayment({
-      ref: esc.paymentRef!,
-      amount: breakdown.gross,
-      currency: 'eur',
-      fee: breakdown.fee,
-      meta: { ticketId: String(t._id) }
-    });
-
-    esc.status = 'released';
-    esc.breakdown = breakdown;
-    esc.ledger.push({ ts: new Date(), type: 'release', payload: { ...rel, breakdown } });
-    await esc.save();
-
-    await PlatformEarning.create({
-      kind: 'rent',
-      ticketId: String(t._id),
-      escrowId: String(esc._id),
-      gross: breakdown.gross,
-      fee: breakdown.fee,
-      netToPro: breakdown.netToPro,
-      currency: esc.currency || 'EUR',
-      releaseRef: rel.ref,
-      proId: t.proId,
-      serviceKey: t.service
-    });
-
-    t.status = 'closed';
-    t.history.push({ ts: new Date(), actor: userId, action: 'validated_and_released', payload: breakdown });
-    await t.save();
-
+    const t = await loadTicketFor(req, res, ['owner']);
+    if (!t) return;
+    if (!t.escrowId) return res.status(400).json({ error: 'no escrow', code: 400 });
+    if (t.status !== 'awaiting_validation') return res.status(409).json({ error: 'work_not_completed', code: 409 });
+    const esc = await releaseTicketEscrow(t, userId, 'validated_and_released');
     res.json({ ticket: t, escrow: esc });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
@@ -269,8 +299,9 @@ r.post('/:id/assign', async (req, res) => {
     const { proId } = req.body || {};
     if (!proId) return res.status(400).json({ error: 'proId required', code: 400 });
 
-    const ticket = await Ticket.findById(req.params.id);
-    if (!ticket) return res.status(404).json({ error: 'ticket not found', code: 404 });
+    const ticket = await loadTicketFor(req, res, ['owner'], { allowAdmin: true });
+    if (!ticket) return;
+    if (ticket.escrowId) return res.status(409).json({ error: 'ticket already approved', code: 409 });
 
     const pro = await Pro.findById(proId);
     if (!pro || !pro.active) return res.status(404).json({ error: 'pro not found', code: 404 });
@@ -293,8 +324,9 @@ r.post('/:id/assign', async (req, res) => {
 r.post('/:id/unassign', async (req, res) => {
   try {
     const userId = getUserId(req);
-    const ticket = await Ticket.findById(req.params.id);
-    if (!ticket) return res.status(404).json({ error: 'ticket not found', code: 404 });
+    const ticket = await loadTicketFor(req, res, ['owner'], { allowAdmin: true });
+    if (!ticket) return;
+    if (ticket.escrowId) return res.status(409).json({ error: 'ticket already approved', code: 409 });
     if (!ticket.proId) return res.status(400).json({ error: 'ticket has no pro assigned', code: 400 });
 
     ticket.proId = undefined;
@@ -481,8 +513,9 @@ async function publishSystem(conversationId: string, senderId: string, systemCod
 /** Detalle con hidratado */
 r.get('/:id', async (req, res) => {
   try {
-    const t = await Ticket.findById(req.params.id).lean();
-    if (!t) return res.status(404).json({ error: 'not found', code: 404 });
+    const doc = await loadTicketFor(req, res, ['owner', 'tenant', 'pro'], { allowAdmin: true });
+    if (!doc) return;
+    const t = doc.toObject() as any;
 
     const userIds = [t.ownerId, t.openedBy];
     const proIds = t.proId ? [t.proId] : [];

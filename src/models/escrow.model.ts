@@ -5,7 +5,7 @@ export interface IEscrow extends Document {
   ticketId: string;
   amount: number;
   currency: 'EUR';
-  status: 'held' | 'released' | 'disputed';
+  status: 'held' | 'releasing' | 'released' | 'disputed';
   breakdown?: { gross: number; fee: number; netToPro: number };
   ledger: { ts: Date; type: 'hold' | 'release' | 'refund'; payload?: any }[];
   provider: 'stripe' | 'mock';

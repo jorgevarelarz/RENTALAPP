@@ -6,8 +6,8 @@ import { connectDb, clearDb, disconnectDb } from '../utils/db';
 let app: any;
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 
-const signToken = (userId: string) =>
-  jwt.sign({ _id: userId, email: 'user@test.com' }, JWT_SECRET);
+const signToken = (userId: string, role?: string) =>
+  jwt.sign({ _id: userId, email: 'user@test.com', ...(role ? { role } : {}) }, JWT_SECRET);
 
 const createVersion = (
   token: string,
@@ -42,7 +42,7 @@ describe('Policy versioning and expiration', () => {
   it('rejects acceptance of obsolete version (409) and returns latest active', async () => {
     const adminId = new mongoose.Types.ObjectId().toHexString();
     const userId = new mongoose.Types.ObjectId().toHexString();
-    const adminToken = signToken(adminId);
+    const adminToken = signToken(adminId, 'admin');
     const userToken = signToken(userId);
 
     // Create v1.0 active
@@ -84,7 +84,7 @@ describe('Policy versioning and expiration', () => {
   it('treats expired policies as inactive', async () => {
     const adminId = new mongoose.Types.ObjectId().toHexString();
     const userId = new mongoose.Types.ObjectId().toHexString();
-    const adminToken = signToken(adminId);
+    const adminToken = signToken(adminId, 'admin');
     const userToken = signToken(userId);
 
     // Create version that is already expired

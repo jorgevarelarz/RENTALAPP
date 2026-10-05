@@ -981,3 +981,22 @@ Rules:
   - `docker-compose.yml` (storage volume)
 - Verification: frontend `npm run build` (tsc + vite) OK; `npm test` 15 files / 30 tests passed. Backend `tsc` clean. Backend Jest still cannot run in the cloud session (MongoDB download blocked).
 - Next: the backend should notify the owner on ticket creation; decide the SystemEvent TTL; unify the toast systems; the dead-code cleanup listed in the audit.
+
+### 2026-10-05 - Claude Code - Security audit (5 agents) + first batch of fixes
+
+- Status: 15 critical/high findings fixed on `claude/practical-planck-wizknd` (PR #46). The full list, with what is done and what is left, is in `docs/auditoria-seguridad-2026-10-05.md`.
+- Fixed:
+  - ticket escrow released by anyone, and with no ownership checks on any ticket route;
+  - anyone could publish or expire legal policies;
+  - anyone could terminate or activate other people's contracts;
+  - contract responses leaked the other party's signing link and the IBAN;
+  - public property search: unescaped regex (ReDoS) and drafts visible to everyone;
+  - DNI contract PDF left behind in `/uploads`;
+  - landlords received the full Tenant PRO file of each applicant;
+  - OAuth open redirect;
+  - client-chosen payment amount.
+- Waiting on Jorge's decision:
+  - P1: `/pay-rent` resolves to the flow that does not pay out to the landlord;
+  - D2: user files committed to git, including a real iPhone photo;
+  - the escrow redesign for real Stripe.
+- Verification: `tsc` clean for src and the touched tests. Backend Jest only runs in CI. New tests: `tests/escrow/ticket.access.test.ts`, plus cases in lifecycle, policies, property routes and oauthRedirect.

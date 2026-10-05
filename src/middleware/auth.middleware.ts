@@ -63,3 +63,12 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
     res.status(401).json({ error: 'Token inválido' });
   }
 };
+
+/**
+ * Para rutas públicas que muestran más a usuarios identificados: con token válido se comporta
+ * como `authenticate`; sin token sigue como anónimo (sin el bypass de tests).
+ */
+export const optionalAuthenticate = (req: Request, res: Response, next: NextFunction) => {
+  if (!req.headers.authorization) return next();
+  return authenticate(req, res, next);
+};

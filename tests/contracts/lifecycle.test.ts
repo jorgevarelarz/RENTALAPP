@@ -2,6 +2,8 @@ import request from "supertest";
 import { app } from "../../src/app";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
 
+const LANDLORD = "507f1f77bcf86cd799439011";
+
 describe("Contract lifecycle", () => {
   let id: string;
 
@@ -40,7 +42,7 @@ describe("Contract lifecycle", () => {
       .post(`/api/contracts/${id}/signature/callback`)
       .send({ eventId: `evt_${Date.now()}_activate`, provider: "mock", status: "signed" })
       .expect(200);
-    const res = await request(app).post(`/api/contracts/${id}/activate`).send().expect(200);
+    const res = await request(app).post(`/api/contracts/${id}/activate`).set('x-user-id', LANDLORD).send().expect(200);
     expect(res.body.status).toBe("active");
   });
 
@@ -49,11 +51,18 @@ describe("Contract lifecycle", () => {
       .post(`/api/contracts/${id}/signature/callback`)
       .send({ eventId: `evt_${Date.now()}_terminate`, provider: "mock", status: "signed" })
       .expect(200);
-    await request(app).post(`/api/contracts/${id}/activate`).send().expect(200);
+    await request(app).post(`/api/contracts/${id}/activate`).set('x-user-id', LANDLORD).send().expect(200);
     const res = await request(app)
-      .post(`/api/contracts/${id}/terminate`)
+      .post(`/api/contracts/${id}/terminate`).set('x-user-id', LANDLORD)
       .send({ reason: "mutuo_acuerdo" })
       .expect(200);
     expect(res.body.status).toBe("terminated");
+  });
+  it("no deja terminar el contrato a quien no es parte", async () => {
+    await request(app)
+      .post(`/api/contracts/${id}/terminate`)
+      .set('x-user-id', '507f1f77bcf86cd799439099')
+      .send({ reason: "ajeno" })
+      .expect(403);
   });
 });

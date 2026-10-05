@@ -39,6 +39,9 @@ export function sanitizeOAuthRedirect(value: unknown, role: PublicRole = 'tenant
   // Browsers normalise backslashes to slashes, so "/\evil.com" resolves as the
   // protocol-relative "//evil.com". Reject both separators after the leading slash.
   if (typeof value !== 'string' || !value.startsWith('/') || /^\/[/\\]/.test(value)) return fallback;
+  // Los navegadores ignoran tabuladores y saltos de línea en URLs: "/\t/evil.com" acaba siendo
+  // "//evil.com". Cualquier carácter de control o barra invertida invalida el destino.
+  if (/[\u0000-\u001f\u007f\\]/.test(value)) return fallback;
   return value;
 }
 

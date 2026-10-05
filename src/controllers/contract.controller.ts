@@ -12,7 +12,7 @@ import { computePdfHash } from '../utils/pdfHash';
 import { recordContractHistory } from '../utils/history';
 import { ContractHistory } from '../models/history.model';
 import { signaturitProvider } from '../signature/signaturit';
-import { ensureFirmaSignature, initSignature, renderClausesForSignature } from '../services/signature.service';
+import { ensureFirmaSignature, ensureLandlordOrAdmin, initSignature, renderClausesForSignature, toContractView, urlsVisibleTo } from '../services/signature.service';
 import * as docusignProvider from '../services/signature/docusign.provider';
 import { sendContractReadyEmail } from '../utils/email';
 import PDFDocument from 'pdfkit';
@@ -294,6 +294,7 @@ export const requestSignature = async (req: Request, res: Response) => {
     const { id } = req.params;
     const contract = await Contract.findById(id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
+    ensureLandlordOrAdmin(contract, req.user as any);
     const landlord = await User.findById(contract.landlord);
     const tenant = await User.findById(contract.tenant);
     const property = await Property.findById(contract.property);
@@ -324,7 +325,7 @@ export const requestSignature = async (req: Request, res: Response) => {
         },
       });
       await recordContractHistory(contract.id, 'signatureRequested', 'Firma DocuSign solicitada');
-      return res.json({ envelopeId: env.envelopeId, status: env.status, recipientUrls: env.recipientUrls });
+      return res.json({ envelopeId: env.envelopeId, status: env.status, recipientUrls: urlsVisibleTo(contract, req.user as any, env.recipientUrls) });
     }
 
     // Mock/default flow (signaturit stub)
@@ -397,22 +398,27 @@ export const createSigningSession = async (req: Request, res: Response) => {
       depositAmount: contract.deposit ?? (contract as any).depositAmount,
     });
 
-    const { requestId, signerLinks } = await signaturitProvider.createSignatureFlow({
-      contractId: String(contract._id),
-      pdfPath,
-      signers: [
-        {
-          role: 'tenant',
-          userId: String(tenant?._id || contract.tenant),
-          name: tenant?.name || (contract as any).tenantName || 'Inquilino',
-          email: tenant?.email || (contract as any).tenantEmail || 'email@test.com',
-        },
-      ],
-      returnUrl: process.env.SIGN_REDIRECT_URL || 'https://example.com/signing-complete',
-      webhookUrl: process.env.SIGN_WEBHOOK_URL || 'https://api.example.com/webhook/signature',
-    });
-
-    await fs.unlink(pdfPath).catch(() => {});
+    let flow: Awaited<ReturnType<typeof signaturitProvider.createSignatureFlow>>;
+    try {
+      flow = await signaturitProvider.createSignatureFlow({
+        contractId: String(contract._id),
+        pdfPath,
+        signers: [
+          {
+            role: 'tenant',
+            userId: String(tenant?._id || contract.tenant),
+            name: tenant?.name || (contract as any).tenantName || 'Inquilino',
+            email: tenant?.email || (contract as any).tenantEmail || 'email@test.com',
+          },
+        ],
+        returnUrl: process.env.SIGN_REDIRECT_URL || 'https://example.com/signing-complete',
+        webhookUrl: process.env.SIGN_WEBHOOK_URL || 'https://api.example.com/webhook/signature',
+      });
+    } finally {
+      // El PDF lleva DNI: se borra también si el proveedor falla
+      await fs.unlink(pdfPath).catch(() => {});
+    }
+    const { requestId, signerLinks } = flow;
 
     const signingUrl = signerLinks.tenant;
 
@@ -493,7 +499,7 @@ export const listContracts = async (req: Request, res: Response) => {
       const ownerId = getId(c.landlord);
       const tenantId = getId(c.tenant);
       return {
-        ...c,
+        ...toContractView(c as any, user as any),
         ownerId,
         tenantId,
         landlordName: landlord?.name,
@@ -562,7 +568,7 @@ export const getContract = async (req: Request, res: Response) => {
     }
 
     const result: any = {
-      ...c,
+      ...toContractView(c as any, user as any),
       ownerId,
       tenantId,
       landlordName: landlord?.name,

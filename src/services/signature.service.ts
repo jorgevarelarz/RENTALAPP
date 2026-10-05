@@ -26,7 +26,7 @@ const userIdOf = (user?: AuthUserLike | null) => {
 };
 
 /** Cada parte solo ve su propio enlace de firma; el admin no recibe ninguno. */
-const urlsVisibleTo = (contract: any, user: AuthUserLike | undefined | null, urls?: RecipientUrls): RecipientUrls => {
+export const urlsVisibleTo = (contract: any, user: AuthUserLike | undefined | null, urls?: RecipientUrls): RecipientUrls => {
   const userId = userIdOf(user);
   if (!urls || !userId) return {};
   if (String(contract.landlord) === userId) return urls.landlordUrl ? { landlordUrl: urls.landlordUrl } : {};
@@ -34,10 +34,23 @@ const urlsVisibleTo = (contract: any, user: AuthUserLike | undefined | null, url
   return {};
 };
 
-const ensureLandlordOrAdmin = (contract: any, user: AuthUserLike | undefined | null) => {
+export const ensureLandlordOrAdmin = (contract: any, user: AuthUserLike | undefined | null) => {
   const userId = userIdOf(user);
   if ((user as any)?.role === 'admin') return;
   if (!userId || String(contract.landlord) !== userId) throw httpError('forbidden', 403);
+};
+
+/**
+ * Vista de un contrato para quien lo pide: quita el IBAN cifrado y el bloqueo interno, y deja
+ * solo el enlace de firma propio (el de la otra parte permitiría firmar en su nombre).
+ */
+export const toContractView = <T extends Record<string, any>>(contract: T, user: AuthUserLike | undefined | null): T => {
+  const { ibanEncrypted: _iban, ...rest } = contract as any;
+  if (rest.signature) {
+    const { lockedAt: _lock, recipientUrls, ...signature } = rest.signature;
+    rest.signature = { ...signature, recipientUrls: urlsVisibleTo(contract, user, recipientUrls) };
+  }
+  return rest as T;
 };
 
 export const initSignature = async (

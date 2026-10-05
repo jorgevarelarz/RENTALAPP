@@ -119,6 +119,29 @@ describe("Properties (minimal)", () => {
     expect(res.body.items.length).toBeGreaterThan(0);
   });
 
+  it("anonymous search never lists drafts and treats q as plain text", async () => {
+    const draft = await request(app)
+      .post("/api/properties")
+      .set("x-user-id", ownerId)
+      .set("x-user-role", "landlord")
+      .set("x-user-verified", "true")
+      .send({
+        owner: ownerId, title: "Borrador oculto", address: "C/ Real 2",
+        region: "galicia", city: "A Coruña", location: { lng: -8.409, lat: 43.362 },
+        price: 800, deposit: 800, sizeM2: 60, rooms: 2, bathrooms: 1, furnished: false,
+        petsAllowed: false, availableFrom: "2025-10-01",
+        images: ["https://cdn/y1.jpg", "https://cdn/y2.jpg", "https://cdn/y3.jpg"],
+      })
+      .expect(201);
+    const drafts = await request(app).get("/api/properties?status=draft").expect(200);
+    expect(drafts.body.items).toHaveLength(0);
+    await request(app).get(`/api/properties/${draft.body._id}`).expect(404);
+    // Una regex patológica se busca como texto literal en vez de ejecutarse
+    const res = await request(app).get("/api/properties?q=" + encodeURIComponent("^(a+)+$")).expect(200);
+    expect(res.body.items).toHaveLength(0);
+    await request(app).get("/api/properties?q=" + encodeURIComponent("[")).expect(200);
+  });
+
   it("favorite/unfavorite", async () => {
     await request(app).post(`/api/properties/${pid}/favorite`).send().expect(200);
     await request(app).delete(`/api/properties/${pid}/favorite`).send().expect(200);
