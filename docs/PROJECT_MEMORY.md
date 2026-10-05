@@ -946,3 +946,28 @@ Rules:
   - Signature anchors `[[firma_*]]` are only printed in the PDF sent to Firma.dev, not in draft downloads.
   - Frontend-only analytics dropped (nothing consumed them; backend already records funnel events).
 - Tests added: `tests/contracts/signature.firma.test.ts` (HMAC verification, public reachability, completion → signed + PDF hash, replay idempotency, retry after failed download, legacy `signing`, one envelope per contract).
+
+### 2026-10-05 - Claude Code - Review of the Firma.dev merge + fixes, and improvement audit
+
+- Status: fixes done on branch `claude/practical-planck-wizknd` (not merged). **Backend tests could not run in the cloud session** (its network blocks the MongoDB binary download for `mongodb-memory-server`); `tsc` is clean, including the new tests. Run `npx jest tests/contracts/signature.firma.test.ts tests/contracts/contracts.signature.test.ts --runInBand` locally or in CI before merging.
+- Decision (Jorge): the signature provider is Firma.dev. The API key goes in the `FIRMA_API_KEY` env var on the server, never in the repo; `FIRMA_WEBHOOK_SECRET` is also needed.
+- Review of `7051df5`: 15 findings, 14 fixed. Details and status in `docs/review-firma-2026-10-05.md`. Main ones:
+  - `signature/init` was missing a party check and leaked the tenant's link;
+  - a signed contract could be re-signed;
+  - a late Firma event undid `completed`;
+  - webhook with no try/catch;
+  - duplicate envelopes on concurrent calls (now locked with `signature.lockedAt`);
+  - duplicated audit trail on retries.
+- Still open: #9 (generic HMAC webhook; decide whether to remove it now that Firma has its own).
+- Files touched:
+  - `src/services/signature.service.ts`
+  - `src/controllers/contract.signature.controller.ts`
+  - `src/controllers/contract.controller.ts`
+  - `src/signature/firma.ts`
+  - `src/utils/pdfGenerator.ts`
+  - `src/models/contract.model.ts` (`signature.lockedAt`)
+  - `scripts/import_zone_rent_reference.ts`
+  - `tests/contracts/signature.firma.test.ts`
+  - `tests/contracts/contracts.signature.test.ts`
+- Improvement audit (cleanup, scalability, frontend; three read-only agents): backlog in `docs/auditoria-mejoras-2026-10-05.md`, not started. Quick wins first: broken `/tickets/*` pages (missing NotificationsProvider), Mongo indexes for payments/tickets/history/contracts, a TTL on SystemEvent, and checking that `storage/` is mounted as a volume in the production compose.
+- GitNexus: no index in the cloud checkout, so `impact`/`detect_changes` were not run. Callers were checked with grep instead (`ensureFirmaSignature` ← `createSigningSession`, `initSignature`; `initSignature` ← `initiateSignature`, `requestSignature`; `getSignatureStatus` ← `getSignature`).

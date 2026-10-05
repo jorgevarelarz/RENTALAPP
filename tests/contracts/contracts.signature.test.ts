@@ -42,7 +42,8 @@ describe('Contract signature flow', () => {
       .expect(201);
 
     expect(initRes.body).toHaveProperty('recipientUrls.landlordUrl');
-    expect(initRes.body).toHaveProperty('recipientUrls.tenantUrl');
+    // Cada parte solo recibe su propio enlace de firma
+    expect(initRes.body).not.toHaveProperty('recipientUrls.tenantUrl');
     const envelopeId = initRes.body.envelopeId;
 
     const webhookPayload = { envelopeId, status: 'signed', provider: 'mock' };

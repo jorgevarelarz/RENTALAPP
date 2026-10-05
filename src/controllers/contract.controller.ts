@@ -12,7 +12,7 @@ import { computePdfHash } from '../utils/pdfHash';
 import { recordContractHistory } from '../utils/history';
 import { ContractHistory } from '../models/history.model';
 import { signaturitProvider } from '../signature/signaturit';
-import { ensureFirmaSignature } from '../services/signature.service';
+import { ensureFirmaSignature, initSignature, renderClausesForSignature } from '../services/signature.service';
 import * as docusignProvider from '../services/signature/docusign.provider';
 import { sendContractReadyEmail } from '../utils/email';
 import PDFDocument from 'pdfkit';
@@ -300,25 +300,14 @@ export const requestSignature = async (req: Request, res: Response) => {
     if (!landlord || !tenant || !property) {
       return res.status(404).json({ error: 'Datos incompletos para el contrato' });
     }
-    const catalogForSignature = contract.region ? getCatalogByRegion(contract.region) : null;
-    const clausesText = Array.isArray(contract.clauses)
-      ? contract.clauses.map(clause => {
-          const current = clause as any;
-          const definition = catalogForSignature?.[current.id];
-          if (definition) {
-            try {
-              return `• ${definition.label}\n${definition.render(current.params ?? {})}`; 
-            } catch (err) {
-              console.error('Error renderizando cláusula para firma:', err);
-            }
-          }
-          const paramsText = current?.params ? JSON.stringify(current.params) : '';
-          return paramsText ? `• ${current.id}\n${paramsText}` : `• ${current.id}`;
-        })
-      : [];
+    const provider = (process.env.SIGN_PROVIDER || 'mock').toLowerCase();
+    if (provider === 'firma') {
+      const result = await initSignature(id, req.user as any);
+      return res.json({ envelopeId: result.envelopeId, status: result.status, recipientUrls: result.recipientUrls });
+    }
+    const clausesText = renderClausesForSignature(contract);
     const { absolutePath: signaturePdfPath } = await generateContractPDF({ contract, clausesText });
 
-    const provider = (process.env.SIGN_PROVIDER || 'mock').toLowerCase();
     if (provider === 'docusign') {
       const embedded = String(process.env.SIGN_EMBEDDED || 'false').toLowerCase() === 'true';
       const env = await docusignProvider.createEnvelope({ contract, landlord, tenant, embedded });
@@ -356,6 +345,7 @@ export const requestSignature = async (req: Request, res: Response) => {
     res.json({ message: 'Firma electrónica iniciada', signerLinks, requestId });
   } catch (error: any) {
     console.error(error);
+    if (error?.status && error.status < 500) return res.status(error.status).json({ error: error.message });
     res.status(500).json({ error: 'Error iniciando la firma', details: error.message });
   }
 };
@@ -371,9 +361,15 @@ export const createSigningSession = async (req: Request, res: Response) => {
       if (String(contract.tenant) !== user?.id) {
         return res.status(403).json({ error: 'Solo el inquilino puede firmar este contrato' });
       }
-      const { recipientUrls } = await ensureFirmaSignature(contract);
-      if (!recipientUrls?.tenantUrl) return res.status(502).json({ error: 'Firma.dev no devolvió el enlace de firma' });
-      return res.json({ signingUrl: recipientUrls.tenantUrl, provider: 'firma' });
+      try {
+        const { recipientUrls } = await ensureFirmaSignature(contract);
+        if (!recipientUrls?.tenantUrl) return res.status(502).json({ error: 'Firma.dev no devolvió el enlace de firma' });
+        return res.json({ signingUrl: recipientUrls.tenantUrl, provider: 'firma' });
+      } catch (error: any) {
+        console.error('Error Firma.dev:', error);
+        const status = error?.status || 502;
+        return res.status(status).json({ error: status === 502 ? 'Error al conectar con Firma.dev' : error.message });
+      }
     }
     if (!process.env.SIGNATURIT_TOKEN) {
       return res.status(500).json({ error: 'SIGNATURIT_TOKEN no configurado' });

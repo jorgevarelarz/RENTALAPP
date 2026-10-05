@@ -4,8 +4,10 @@ import { app } from '../../src/app';
 import { Contract } from '../../src/models/contract.model';
 import { ProcessedEvent } from '../../src/models/processedEvent.model';
 import { User } from '../../src/models/user.model';
+import * as firma from '../../src/signature/firma';
 import { firmaProvider, verifyFirmaSignature } from '../../src/signature/firma';
-import { ensureFirmaSignature } from '../../src/services/signature.service';
+import { ensureFirmaSignature, initSignature } from '../../src/services/signature.service';
+import { ContractSignatureEvent } from '../../src/models/contractSignatureEvent.model';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
 
 const SECRET = 'firma-secret';
@@ -128,5 +130,102 @@ describe('Firma.dev integration', () => {
     const second = await ensureFirmaSignature(saved);
     expect(second).toMatchObject({ envelopeId: 'req_new', created: false });
     expect(create).toHaveBeenCalledTimes(1);
+  });
+  const LANDLORD = '507f1f77bcf86cd799439011';
+  const TENANT = '507f1f77bcf86cd799439012';
+  const mockParties = () =>
+    jest.spyOn(User, 'findById').mockImplementation(((id: string) =>
+      Promise.resolve({ _id: id, name: 'Ana Pérez', email: `${id}@example.com` })) as any);
+  const mockCreate = (links = { owner: 'https://app.firma.dev/signing/o', tenant: 'https://app.firma.dev/signing/t' }) =>
+    jest.spyOn(firmaProvider, 'createSignatureFlow').mockResolvedValue({ requestId: 'req_new', signerLinks: links as any });
+  const resetToDraft = (status = 'draft') =>
+    Contract.updateOne({ _id: contractId }, { $set: { status }, $unset: { signature: 1 } });
+
+  it('only lets the contract landlord (or an admin) start signing, and only returns their own link', async () => {
+    await resetToDraft();
+    mockParties();
+    const create = mockCreate();
+
+    await expect(initSignature(contractId, { id: '507f1f77bcf86cd799439099', role: 'landlord' }))
+      .rejects.toMatchObject({ status: 403 });
+    expect(create).not.toHaveBeenCalled();
+
+    const landlord = await initSignature(contractId, { id: LANDLORD, role: 'landlord' });
+    expect(landlord.recipientUrls).toEqual({ landlordUrl: 'https://app.firma.dev/signing/o' });
+    const admin = await initSignature(contractId, { id: '507f1f77bcf86cd799439098', role: 'admin' });
+    expect(admin.recipientUrls).toEqual({});
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses to create a new envelope for an already signed contract', async () => {
+    await Contract.updateOne({ _id: contractId }, { $set: { status: 'signed', 'signature.status': 'completed' } });
+    const create = mockCreate();
+    await expect(ensureFirmaSignature(await Contract.findById(contractId)))
+      .rejects.toMatchObject({ status: 409, message: 'contract_already_signed' });
+    expect(create).not.toHaveBeenCalled();
+    expect((await Contract.findById(contractId))?.signature?.envelopeId).toBe('req_123');
+  });
+
+  it('does not create a second envelope while another request holds the lock', async () => {
+    await resetToDraft();
+    await Contract.updateOne({ _id: contractId }, { $set: { 'signature.lockedAt': new Date() } });
+    mockParties();
+    const create = mockCreate();
+    await expect(ensureFirmaSignature(await Contract.findById(contractId)))
+      .rejects.toMatchObject({ status: 409, message: 'signature_in_progress' });
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('releases the lock and promotes legacy "generated" contracts', async () => {
+    await resetToDraft('generated');
+    mockParties();
+    mockCreate();
+    await ensureFirmaSignature(await Contract.findById(contractId));
+    const saved = await Contract.findById(contractId).lean();
+    expect(saved?.status).toBe('pending_signature');
+    expect((saved?.signature as any)?.lockedAt).toBeUndefined();
+  });
+
+  it('repairs a missing signer link on the next call instead of reusing it empty', async () => {
+    await resetToDraft();
+    mockParties();
+    const create = mockCreate({ owner: 'https://app.firma.dev/signing/o' } as any);
+    await ensureFirmaSignature(await Contract.findById(contractId));
+    expect((await Contract.findById(contractId))?.signature?.recipientUrls?.tenantUrl).toBeUndefined();
+
+    const links = jest.spyOn(firma, 'fetchFirmaSignerLinks').mockResolvedValue({ tenant: 'https://app.firma.dev/signing/t' });
+    const again = await ensureFirmaSignature(await Contract.findById(contractId));
+    expect(again.recipientUrls.tenantUrl).toBe('https://app.firma.dev/signing/t');
+    expect(links).toHaveBeenCalledWith('req_new', expect.any(Array));
+    expect(create).toHaveBeenCalledTimes(1);
+    expect((await Contract.findById(contractId))?.signature?.recipientUrls?.tenantUrl).toBe('https://app.firma.dev/signing/t');
+  });
+
+  it('keeps a completed signature when a late non-final event arrives', async () => {
+    jest.spyOn(firmaProvider, 'downloadFinalPdf').mockResolvedValue(Buffer.from('%PDF-1.4'));
+    const done = { id: 'evt_done2', type: 'signing_request.completed', data: { signing_request: { id: 'req_123' } } };
+    await post(done, signHeader(JSON.stringify(done))).expect(200);
+    const late = { id: 'evt_late', type: 'signing_request.viewed', data: { signing_request: { id: 'req_123' } } };
+    await post(late, signHeader(JSON.stringify(late))).expect(200);
+    const contract = await Contract.findById(contractId);
+    expect(contract?.signature?.status).toBe('completed');
+    expect(contract?.status).toBe('signed');
+  });
+
+  it('writes the audit event once even when the first delivery fails', async () => {
+    const download = jest.spyOn(firmaProvider, 'downloadFinalPdf').mockRejectedValueOnce(new Error('not ready'));
+    const body = { id: 'evt_audit', type: 'signing_request.completed', data: { signing_request: { id: 'req_123' } } };
+    await post(body, signHeader(JSON.stringify(body))).expect(500);
+    expect(await ContractSignatureEvent.countDocuments({ contractId })).toBe(0);
+    download.mockResolvedValueOnce(Buffer.from('%PDF-1.4'));
+    await post(body, signHeader(JSON.stringify(body))).expect(200);
+    expect(await ContractSignatureEvent.countDocuments({ contractId })).toBe(1);
+  });
+
+  it('answers 500 and releases the event when the database fails mid-processing', async () => {
+    jest.spyOn(Contract, 'findByIdAndUpdate').mockRejectedValueOnce(new Error('mongo timeout') as never);
+    const body = { id: 'evt_dbfail', type: 'signing_request.viewed', data: { signing_request: { id: 'req_123' } } };
+    await post(body, signHeader(JSON.stringify(body))).expect(500);
+    expect(await ProcessedEvent.countDocuments({ eventId: 'evt_dbfail' })).toBe(0);
   });
 });

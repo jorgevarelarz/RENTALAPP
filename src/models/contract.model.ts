@@ -44,6 +44,8 @@ export interface IContract extends Document {
     envelopeId?: string;
     status?: 'none' | 'created' | 'sent' | 'completed' | 'declined' | 'error';
     updatedAt?: Date;
+    /** Bloqueo mientras se crea el sobre de firma (evita sobres duplicados). */
+    lockedAt?: Date;
     events?: { at: Date; type: string; meta?: Record<string, unknown> }[];
     providerEventId?: string;
     pdfUrl?: string;
@@ -125,6 +127,7 @@ const contractSchema = new Schema<IContract>(
       envelopeId: { type: String },
       status: { type: String, enum: ['none', 'created', 'sent', 'completed', 'declined', 'error'], default: 'none' },
       updatedAt: { type: Date },
+      lockedAt: { type: Date },
       recipientUrls: {
         landlordUrl: { type: String },
         tenantUrl: { type: String },
