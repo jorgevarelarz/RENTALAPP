@@ -2,11 +2,13 @@ import { Request, Response } from "express";
 import { Contract } from "../models/contract.model";
 import { transitionContract } from "../services/contractState";
 import { recordContractHistory } from "../utils/history";
+import { ensureCanReadContract } from "../utils/contractAccess";
 
 export async function activate(req: Request, res: Response) {
   const { id } = req.params;
 
   try {
+    await ensureCanReadContract({ contractId: id, user: (req as any).user });
     const c = await Contract.findById(id);
     if (!c) {
       return res.status(404).json({ error: "contract_not_found" });

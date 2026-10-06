@@ -213,16 +213,6 @@ export async function signatureWebhook(req: Request, res: Response) {
   console.log(`Webhook recibido para contrato ${contract._id}. Estado: ${status}`);
   const now = new Date();
 
-  await recordSignatureEvent({
-    contractId: String(contract._id),
-    envelopeId: incomingId,
-    provider: (process.env.SIGN_PROVIDER || 'signaturit').toLowerCase(),
-    eventType: status,
-    timestamp: now,
-    ip: getClientIp(req),
-    userAgent: req.header('user-agent') || undefined,
-  });
-
   const eventUniqueId = (body as any).eventId || `${incomingId}_${status}`;
   if (eventUniqueId) {
     try {
@@ -235,6 +225,17 @@ export async function signatureWebhook(req: Request, res: Response) {
       }
     }
   }
+
+  // Después de deduplicar: un reenvío del mismo evento no duplica la cadena de auditoría
+  await recordSignatureEvent({
+    contractId: String(contract._id),
+    envelopeId: incomingId,
+    provider: (process.env.SIGN_PROVIDER || 'signaturit').toLowerCase(),
+    eventType: status,
+    timestamp: now,
+    ip: getClientIp(req),
+    userAgent: req.header('user-agent') || undefined,
+  });
 
   const updates: any = {
     'signature.updatedAt': now,
@@ -269,8 +270,7 @@ export async function signatureWebhook(req: Request, res: Response) {
 export async function initiateSignature(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const userId = (req as any).user?._id || (req as any).user?.id;
-    const result = await initSignature(id, userId);
+    const result = await initSignature(id, (req as any).user);
     res.status(201).json(result);
   } catch (error: any) {
     const code = error?.status || 500;
@@ -281,7 +281,7 @@ export async function initiateSignature(req: Request, res: Response) {
 export async function getSignature(req: Request, res: Response) {
   try {
     const { id } = req.params;
-    const status = await getSignatureStatus(id);
+    const status = await getSignatureStatus(id, (req as any).user);
     res.json(status);
   } catch (error: any) {
     const code = error?.status || 500;
@@ -331,65 +331,75 @@ export async function firmaWebhook(req: Request, res: Response) {
   const { requestId, status, evidence } = firmaProvider.parseWebhook(body);
   if (!requestId) return res.status(200).json({ ignored: true });
 
-  const contract = await Contract.findOne({ 'signature.envelopeId': requestId });
-  if (!contract) return res.status(200).json({ error: 'contract_not_found_but_ack' });
-
   const eventId = String(body.id || req.header('x-firma-delivery') || `${requestId}_${body.type}`);
+  let contract: any;
   try {
+    contract = await Contract.findOne({ 'signature.envelopeId': requestId });
+    if (!contract) return res.status(200).json({ error: 'contract_not_found_but_ack' });
     await ProcessedEvent.create({ provider: 'firma', eventId, contractId: contract._id });
   } catch (error) {
     if (isDuplicateKeyError(error)) return res.status(200).json({ ok: true, idempotent: true });
-    throw error;
-  }
-
-  const now = new Date();
-  await recordSignatureEvent({
-    contractId: String(contract._id),
-    envelopeId: requestId,
-    provider: 'firma',
-    eventType: String(body.type || status),
-    timestamp: now,
-    ip: getClientIp(req),
-    userAgent: req.header('user-agent') || undefined,
-  });
-
-  const updates: any = {
-    'signature.updatedAt': now,
-    'signature.events': [...(contract.signature?.events || []), { at: now, type: String(body.type || status), meta: evidence }],
-  };
-  if (['completed', 'declined', 'sent'].includes(status)) updates['signature.status'] = status;
-  if (status === 'expired') updates['signature.status'] = 'error';
-
-  if (status !== 'completed') {
-    await Contract.findByIdAndUpdate(contract._id, { $set: updates });
-    return res.status(200).json({ ok: true, status });
+    console.error('Firma.dev webhook error:', error);
+    return res.status(500).json({ error: 'firma_webhook_failed' });
   }
 
   try {
+    const now = new Date();
+    const eventType = String(body.type || status);
+    const contractId = String(contract._id);
+    // El audit trail con hash encadenado solo se escribe cuando el evento se ha procesado bien,
+    // para que un reintento no deje entradas duplicadas.
+    const recordEvent = () =>
+      recordSignatureEvent({
+        contractId,
+        envelopeId: requestId,
+        provider: 'firma',
+        eventType,
+        timestamp: now,
+        ip: getClientIp(req),
+        userAgent: req.header('user-agent') || undefined,
+      });
+
+    const $set: any = { 'signature.updatedAt': now };
+    const $push = { 'signature.events': { at: now, type: eventType, meta: evidence } };
+    // Firma.dev no garantiza el orden: un evento tardío no puede deshacer una firma completada
+    if (contract.signature?.status !== 'completed') {
+      if (['completed', 'declined', 'sent'].includes(status)) $set['signature.status'] = status;
+      if (status === 'expired') $set['signature.status'] = 'error';
+    }
+
+    if (status !== 'completed') {
+      await Contract.findByIdAndUpdate(contract._id, { $set, $push });
+      await recordEvent();
+      return res.status(200).json({ ok: true, status });
+    }
+
     const pdf = await firmaProvider.downloadFinalPdf(requestId);
     const dir = path.resolve(process.cwd(), 'storage/contracts-signed');
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, `${String(contract._id)}-${requestId}.pdf`), pdf);
-    updates['signature.pdfUrl'] = `/api/contracts/${String(contract._id)}/pdf/signed`;
-    updates['signature.pdfHash'] = crypto.createHash('sha256').update(pdf).digest('hex');
-    await Contract.findByIdAndUpdate(contract._id, { $set: updates });
+    fs.writeFileSync(path.join(dir, `${contractId}-${requestId}.pdf`), pdf);
+    $set['signature.status'] = 'completed';
+    $set['signature.pdfUrl'] = `/api/contracts/${contractId}/pdf/signed`;
+    $set['signature.pdfHash'] = crypto.createHash('sha256').update(pdf).digest('hex');
+    await Contract.findByIdAndUpdate(contract._id, { $set, $push });
 
     if (!FINAL_STATES.includes(normalizeContractStatus(contract.status) as KnownStatuses)) {
-      await transitionContract(String(contract._id), 'signed');
-      await recordContractHistory(String(contract._id), 'SIGNED', null, { provider: 'firma', externalId: requestId });
+      await transitionContract(contractId, 'signed');
+      await recordContractHistory(contractId, 'SIGNED', null, { provider: 'firma', externalId: requestId });
     }
+    await recordEvent();
     try {
-      const audit = await generateAuditTrailPdf(String(contract._id));
+      const audit = await generateAuditTrailPdf(contractId);
       await Contract.findByIdAndUpdate(contract._id, {
         $set: {
-          'signature.auditPdfUrl': `/api/contracts/${String(contract._id)}/audit-trail?format=pdf`,
+          'signature.auditPdfUrl': `/api/contracts/${contractId}/audit-trail?format=pdf`,
           'signature.auditPdfHash': audit.sha256,
         },
       });
     } catch (pdfErr) {
       console.error('Error generando audit trail interno:', pdfErr);
     }
-    emitAuditTrailUpdate({ contractId: String(contract._id), status, at: now.toISOString() });
+    emitAuditTrailUpdate({ contractId, status, at: now.toISOString() });
     return res.status(200).json({ ok: true, status: 'signed' });
   } catch (error: any) {
     // Se libera el evento para que el reintento de Firma.dev vuelva a intentarlo

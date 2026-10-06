@@ -19,6 +19,8 @@ interface GenerateContractPDFOptions {
   clausesText: string[];
   /** Text anchors where the signature provider places each signature (Firma.dev only). */
   signatureAnchors?: boolean;
+  /** Writes `<id>-<suffix>.pdf` instead of `<id>.pdf`, so the stored contract PDF is not overwritten. */
+  fileSuffix?: string;
 }
 
 export interface GenerateContractPDFResult {
@@ -47,10 +49,11 @@ export async function generateContractPDF({
   contract,
   clausesText,
   signatureAnchors = false,
+  fileSuffix,
 }: GenerateContractPDFOptions): Promise<GenerateContractPDFResult> {
   await ensureDirectory(CONTRACTS_UPLOAD_DIR);
   const contractId = String(contract._id ?? contract.id ?? "contract");
-  const filename = `${contractId}.pdf`;
+  const filename = fileSuffix ? `${contractId}-${fileSuffix}.pdf` : `${contractId}.pdf`;
   const absolutePath = path.join(CONTRACTS_UPLOAD_DIR, filename);
   const publicPath = `/uploads/contracts/${filename}`;
 
@@ -94,6 +97,11 @@ export async function generateContractPDF({
   }
 
   doc.moveDown(2);
+  // Anclas, líneas y nombres deben quedar en la misma página
+  const signatureBlockHeight = (signatureAnchors ? 45 : 0) + 30;
+  if (doc.y + signatureBlockHeight > doc.page.height - doc.page.margins.bottom) {
+    doc.addPage();
+  }
   let signatureY = doc.y;
   if (signatureAnchors) {
     // Marcas donde el proveedor de firma coloca cada firma (Firma.dev las busca y las borra)

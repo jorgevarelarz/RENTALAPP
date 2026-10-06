@@ -55,8 +55,8 @@ r.get('/', async (req, res) => {
     const limit = Math.min(50, Math.max(1, parseInt((req.query.limit as string) || '10', 10)));
 
     const q: any = { active: true };
-    if (service) q['services.key'] = service;
-    if (city) q.city = new RegExp(`^${city}$`, 'i');
+    if (service) q['services.key'] = String(service);
+    if (city) q.city = new RegExp(`^${String(city).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
 
     const [items, total] = await Promise.all([
       Pro.find(q)

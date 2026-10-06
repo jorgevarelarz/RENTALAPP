@@ -15,4 +15,6 @@ const historySchema = new Schema(
   { timestamps: false },
 );
 
+historySchema.index({ contract: 1, timestamp: 1 });
+
 export const ContractHistory = model('ContractHistory', historySchema);

@@ -260,9 +260,27 @@ export async function handoffToOwner(req: Request, res: Response) {
   res.json({ ok: true, propertyId: String(p._id), agencyAccess: p.agencyAccess, transferredAt: p.agencyTransferredAt });
 }
 
+const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const SORTABLE_FIELDS = new Set(['createdAt', 'price', 'sizeM2', 'rooms', 'availableFrom']);
+
+/** Quién ve qué: admin todo; con sesión, los activos y los propios; anónimo, solo los activos. */
+const visibilityFilter = (req: Request): Record<string, unknown> | null => {
+  const user: any = (req as any).user;
+  if (user?.role === 'admin') return null;
+  const userId = user?.id || user?._id;
+  if (!userId) return { status: 'active' };
+  return { $or: [{ status: 'active' }, { owner: userId }, { agencyId: userId }] };
+};
+
 export async function getById(req: Request, res: Response) {
   const p = await Property.findById(req.params.id);
   if (!p) return res.status(404).json({ error: 'not_found' });
+  const visibility = visibilityFilter(req);
+  if (visibility && p.status !== 'active') {
+    const userId = String((req as any).user?.id || '');
+    const isOwner = userId && (String(p.owner) === userId || String((p as any).agencyId || '') === userId);
+    if (!isOwner) return res.status(404).json({ error: 'not_found' });
+  }
   res.json(p);
 }
 
@@ -293,7 +311,8 @@ export async function search(req: Request, res: Response) {
   } = req.query as any;
 
   if (region) q.region = String(region).toLowerCase();
-  if (city) q.city = city;
+  // Valores de query forzados a string: ?city[$regex]=. no debe llegar como operador
+  if (city) q.city = String(city);
   if (priceMin || priceMax) q.price = { ...(priceMin ? { $gte: +priceMin } : {}), ...(priceMax ? { $lte: +priceMax } : {}) };
   if (roomsMin || roomsMax) q.rooms = { ...(roomsMin ? { $gte: +roomsMin } : {}), ...(roomsMax ? { $lte: +roomsMax } : {}) };
   if (bathMin) q.bathrooms = { $gte: +bathMin };
@@ -306,16 +325,23 @@ export async function search(req: Request, res: Response) {
     q.onlyTenantPro = ['true', '1', 'yes', 'on'].includes(String(onlyProParam).toLowerCase());
   }
   if (status) q.status = String(status);
+  const and: Record<string, unknown>[] = [];
+  const visibility = visibilityFilter(req);
+  if (visibility) and.push(visibility);
   if (text) {
-    const safe = String(text).trim();
+    // Texto escapado y acotado: sin esto, ?q=(a+)+$ es una regex arbitraria contra toda la colección
+    const safe = escapeRegExp(String(text).trim().slice(0, 100));
     if (safe) {
-      q.$or = [
-        { title: { $regex: safe, $options: 'i' } },
-        { city: { $regex: safe, $options: 'i' } },
-        { address: { $regex: safe, $options: 'i' } },
-      ];
+      and.push({
+        $or: [
+          { title: { $regex: safe, $options: 'i' } },
+          { city: { $regex: safe, $options: 'i' } },
+          { address: { $regex: safe, $options: 'i' } },
+        ],
+      });
     }
   }
+  if (and.length) q.$and = and;
 
   let geo: any = {};
   if (nearLng && nearLat && maxKm) {
@@ -329,9 +355,10 @@ export async function search(req: Request, res: Response) {
     };
   }
 
-  const sortSpec: [string, 1 | -1][] = [[String(sort), String(dir).toLowerCase() === 'asc' ? 1 : -1]];
-  const pg = Math.max(1, parseInt(String(page)));
-  const lim = Math.min(50, Math.max(1, parseInt(String(limit))));
+  const sortField = SORTABLE_FIELDS.has(String(sort)) ? String(sort) : 'createdAt';
+  const sortSpec: [string, 1 | -1][] = [[sortField, String(dir).toLowerCase() === 'asc' ? 1 : -1]];
+  const pg = Math.max(1, parseInt(String(page)) || 1);
+  const lim = Math.min(50, Math.max(1, parseInt(String(limit)) || 20));
 
   const hasGeo = Boolean((geo as any).location);
   if (hasGeo) {
@@ -462,7 +489,7 @@ export async function listApplications(req: Request, res: Response) {
 
   const apps = await Application.find({ propertyId: property._id })
     .sort({ createdAt: -1 })
-    .populate('tenantId', 'name email tenantPro')
+    .populate('tenantId', 'name email tenantPro.status tenantPro.maxRent tenantPro.isActive')
     .lean();
 
   const items = apps.map((a: any) => ({
@@ -477,7 +504,10 @@ export async function listApplications(req: Request, res: Response) {
       _id: a.tenantId._id,
       name: a.tenantId.name,
       email: a.tenantId.email,
-      tenantPro: a.tenantId.tenantPro,
+      // Solo el resultado de la verificación; los documentos y la auditoría no son para el arrendador
+      tenantPro: a.tenantId.tenantPro
+        ? { status: a.tenantId.tenantPro.status, maxRent: a.tenantId.tenantPro.maxRent, isActive: a.tenantId.tenantPro.isActive }
+        : undefined,
     } : undefined,
   }));
 

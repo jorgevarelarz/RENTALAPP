@@ -63,3 +63,19 @@ export const authenticate = (req: Request, res: Response, next: NextFunction) =>
     res.status(401).json({ error: 'Token inválido' });
   }
 };
+
+/**
+ * Para rutas públicas que muestran más a usuarios identificados: con token válido se comporta
+ * como `authenticate`; sin token, o con uno caducado o inválido, sigue como anónimo (sin el
+ * bypass de tests). Un token viejo en el navegador no debe romper el listado público.
+ */
+export const optionalAuthenticate = (req: Request, res: Response, next: NextFunction) => {
+  const token = req.headers.authorization?.split(' ')[1];
+  if (!token) return next();
+  try {
+    jwt.verify(token, EFFECTIVE_JWT_SECRET);
+  } catch {
+    return next();
+  }
+  return authenticate(req, res, next);
+};

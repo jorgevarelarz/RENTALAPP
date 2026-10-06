@@ -45,6 +45,7 @@ import { purgeOldTenantProDocs } from './jobs/tenantProRetention';
 import { startContractActivationJob } from './jobs/contractActivation.job';
 import { startRentGenerationJob } from './jobs/rentGeneration.job';
 import { startLauUpdateJob } from './jobs/lauUpdate.job';
+import { startEscrowRecoveryJob } from './jobs/escrowRecovery.job';
 import applicationsRoutes from './routes/applications.routes';
 import invitesRoutes from './routes/invites.routes';
 import meRoutes from './routes/me.routes';
@@ -149,6 +150,7 @@ if (process.env.NODE_ENV !== 'test') {
   startContractActivationJob();
   startRentGenerationJob();
   startLauUpdateJob();
+  startEscrowRecoveryJob();
 }
 
 if (process.env.NODE_ENV !== 'test') {

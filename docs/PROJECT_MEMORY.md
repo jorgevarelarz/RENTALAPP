@@ -946,3 +946,57 @@ Rules:
   - Signature anchors `[[firma_*]]` are only printed in the PDF sent to Firma.dev, not in draft downloads.
   - Frontend-only analytics dropped (nothing consumed them; backend already records funnel events).
 - Tests added: `tests/contracts/signature.firma.test.ts` (HMAC verification, public reachability, completion → signed + PDF hash, replay idempotency, retry after failed download, legacy `signing`, one envelope per contract).
+
+### 2026-10-05 - Claude Code - Review of the Firma.dev merge + fixes, and improvement audit
+
+- Status: fixes done on branch `claude/practical-planck-wizknd` (not merged). **Backend tests could not run in the cloud session** (its network blocks the MongoDB binary download for `mongodb-memory-server`); `tsc` is clean, including the new tests. Run `npx jest tests/contracts/signature.firma.test.ts tests/contracts/contracts.signature.test.ts --runInBand` locally or in CI before merging.
+- Decision (Jorge): the signature provider is Firma.dev. The API key goes in the `FIRMA_API_KEY` env var on the server, never in the repo; `FIRMA_WEBHOOK_SECRET` is also needed.
+- Review of `7051df5`: 15 findings, 14 fixed. Details and status in `docs/review-firma-2026-10-05.md`. Main ones:
+  - `signature/init` was missing a party check and leaked the tenant's link;
+  - a signed contract could be re-signed;
+  - a late Firma event undid `completed`;
+  - webhook with no try/catch;
+  - duplicate envelopes on concurrent calls (now locked with `signature.lockedAt`);
+  - duplicated audit trail on retries.
+- Still open: #9 (generic HMAC webhook; decide whether to remove it now that Firma has its own).
+- Files touched:
+  - `src/services/signature.service.ts`
+  - `src/controllers/contract.signature.controller.ts`
+  - `src/controllers/contract.controller.ts`
+  - `src/signature/firma.ts`
+  - `src/utils/pdfGenerator.ts`
+  - `src/models/contract.model.ts` (`signature.lockedAt`)
+  - `scripts/import_zone_rent_reference.ts`
+  - `tests/contracts/signature.firma.test.ts`
+  - `tests/contracts/contracts.signature.test.ts`
+- Improvement audit (cleanup, scalability, frontend; three read-only agents): backlog in `docs/auditoria-mejoras-2026-10-05.md`, not started. Quick wins first: broken `/tickets/*` pages (missing NotificationsProvider), Mongo indexes for payments/tickets/history/contracts, a TTL on SystemEvent, and checking that `storage/` is mounted as a volume in the production compose.
+- GitNexus: no index in the cloud checkout, so `impact`/`detect_changes` were not run. Callers were checked with grep instead (`ensureFirmaSignature` ← `createSigningSession`, `initSignature`; `initSignature` ← `initiateSignature`, `requestSignature`; `getSignatureStatus` ← `getSignature`).
+
+### 2026-10-05 - Claude Code - Audit quick wins: frontend toasts/links + Mongo indexes
+
+- Status: done on `claude/practical-planck-wizknd`. The list of what was done and what is left is at the end of `docs/auditoria-mejoras-2026-10-05.md`.
+- Files touched:
+  - frontend: `src/utils/notify.tsx`, `src/index.tsx`, `src/api/client.ts`, `src/components/CopyLinkButton.tsx`, `src/components/PolicyModal.tsx`, `src/hooks/usePolicyAcceptance.ts` (+ its test), `src/pages/tickets/TicketCreatePage.tsx`
+  - backend models: `payment`, `ticket`, `history`, `contract` (indexes only)
+  - `docker-compose.yml` (storage volume)
+- Verification: frontend `npm run build` (tsc + vite) OK; `npm test` 15 files / 30 tests passed. Backend `tsc` clean. Backend Jest still cannot run in the cloud session (MongoDB download blocked).
+- Next: the backend should notify the owner on ticket creation; decide the SystemEvent TTL; unify the toast systems; the dead-code cleanup listed in the audit.
+
+### 2026-10-05 - Claude Code - Security audit (5 agents) + first batch of fixes
+
+- Status: 15 critical/high findings fixed on `claude/practical-planck-wizknd` (PR #46). The full list, with what is done and what is left, is in `docs/auditoria-seguridad-2026-10-05.md`.
+- Fixed:
+  - ticket escrow released by anyone, and with no ownership checks on any ticket route;
+  - anyone could publish or expire legal policies;
+  - anyone could terminate or activate other people's contracts;
+  - contract responses leaked the other party's signing link and the IBAN;
+  - public property search: unescaped regex (ReDoS) and drafts visible to everyone;
+  - DNI contract PDF left behind in `/uploads`;
+  - landlords received the full Tenant PRO file of each applicant;
+  - OAuth open redirect;
+  - client-chosen payment amount.
+- Waiting on Jorge's decision:
+  - P1: `/pay-rent` resolves to the flow that does not pay out to the landlord;
+  - D2: user files committed to git, including a real iPhone photo;
+  - the escrow redesign for real Stripe.
+- Verification: `tsc` clean for src and the touched tests. Backend Jest only runs in CI. New tests: `tests/escrow/ticket.access.test.ts`, plus cases in lifecycle, policies, property routes and oauthRedirect.

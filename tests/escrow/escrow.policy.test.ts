@@ -2,6 +2,8 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { Contract } from '../../src/models/contract.model';
+import Ticket from '../../src/models/ticket.model';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 const signToken = (payload: any) => jwt.sign(payload, JWT_SECRET);
@@ -35,18 +37,29 @@ describe('Escrow flows require policy acceptance', () => {
     const tenantToken = signToken({ _id: '507f1f77bcf86cd799439010', role: 'tenant' });
     const proToken = signToken({ _id: '507f1f77bcf86cd799439020', role: 'pro' });
 
+    // El ticket se abre sobre un contrato real del inquilino (propietario e inmueble salen de ahí)
+    const contract = await Contract.create({
+      landlord: '507f1f77bcf86cd799439011',
+      tenant: '507f1f77bcf86cd799439010',
+      property: '507f1f77bcf86cd799439012',
+      rent: 700, deposit: 700,
+      startDate: new Date(), endDate: new Date(Date.now() + 365 * 86400000),
+      region: 'general', clauses: [], status: 'active',
+    });
+
     const ticket = await request(app)
       .post('/api/tickets')
       .set('Authorization', `Bearer ${tenantToken}`)
       .send({
-        contractId: '507f1f77bcf86cd799439099',
-        ownerId: '507f1f77bcf86cd799439011',
-        propertyId: '507f1f77bcf86cd799439012',
+        contractId: String(contract._id),
         service: 'maintenance',
         title: 'Fix sink',
         description: 'Leak in kitchen',
       })
       .expect(201);
+
+    // El propietario ha seleccionado a este profesional
+    await Ticket.updateOne({ _id: ticket.body._id }, { $set: { proId: '507f1f77bcf86cd799439020' } });
 
     // Pro sends quote
     await request(app)

@@ -51,21 +51,4 @@ api?.interceptors?.request?.use?.((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-// Response: toast errors globally (excluding auth endpoints)
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-api?.interceptors?.response?.use?.(
-  (res) => res,
-  (err) => {
-    try {
-      const url = err?.config?.url || '';
-      if (!/\/api\/auth\//.test(url)) {
-        // Lazy require to avoid circular deps
-        require('react-hot-toast').toast.error(formatApiError(err));
-      }
-    } catch {}
-    return Promise.reject(err);
-  }
-);
-
 export default api;
