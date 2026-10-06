@@ -114,6 +114,7 @@ export interface ReleaseArgs {
   currency: 'eur';
   fee?: number;                   // platform fee (EUR units) -> application_fee_amount
   meta?: Record<string, any>;     // metadata to attach to the capture
+  idempotencyKey?: string;        // same key on retry → Stripe returns the original capture
 }
 export interface ReleaseResult {
   provider: 'stripe' | 'mock';
@@ -163,11 +164,24 @@ export async function releasePayment(args: ReleaseArgs): Promise<ReleaseResult> 
     return { provider: 'mock', ref: `mock_release_${Date.now()}` };
   }
 
-  const captured = await stripe.paymentIntents.capture(args.ref, {
-    amount_to_capture: Math.round(args.amount * 100),
-    application_fee_amount: args.fee ? Math.round(args.fee * 100) : undefined,
-    metadata: args.meta,
-  });
-
-  return { provider: 'stripe', ref: captured.id };
+  try {
+    const captured = await stripe.paymentIntents.capture(
+      args.ref,
+      {
+        amount_to_capture: Math.round(args.amount * 100),
+        application_fee_amount: args.fee ? Math.round(args.fee * 100) : undefined,
+        metadata: args.meta,
+      },
+      args.idempotencyKey ? { idempotencyKey: args.idempotencyKey } : undefined,
+    );
+    return { provider: 'stripe', ref: captured.id };
+  } catch (err: any) {
+    // Reintento de una captura que sí se hizo (la clave de idempotencia de Stripe dura 24 h):
+    // si el PaymentIntent ya está cobrado, la liberación cuenta como hecha.
+    if (err?.code === 'payment_intent_unexpected_state') {
+      const intent = await stripe.paymentIntents.retrieve(args.ref);
+      if (intent.status === 'succeeded') return { provider: 'stripe', ref: intent.id };
+    }
+    throw err;
+  }
 }

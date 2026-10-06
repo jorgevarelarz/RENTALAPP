@@ -10,6 +10,11 @@ export interface IEscrow extends Document {
   ledger: { ts: Date; type: 'hold' | 'release' | 'refund'; payload?: any }[];
   provider: 'stripe' | 'mock';
   paymentRef?: string; // Stripe PaymentIntent id o mock ref
+  /** Liberación en curso (ver services/ticketEscrow.service.ts) */
+  releasingAt?: Date;
+  releaseRef?: string;
+  releaseActor?: string;
+  releaseAction?: string;
 }
 
 const s = new Schema<IEscrow>(
@@ -27,11 +32,17 @@ const s = new Schema<IEscrow>(
     }],
     provider: { type: String, default: 'mock' },
     paymentRef: String,
+    releasingAt: Date,
+    releaseRef: String,
+    releaseActor: String,
+    releaseAction: String,
   },
   { timestamps: true }
 );
 
 // Índice para búsquedas rápidas por ticket
 s.index({ ticketId: 1 });
+// Job de recuperación de liberaciones a medias
+s.index({ status: 1, releasingAt: 1 });
 
 export default model<IEscrow>('Escrow', s);

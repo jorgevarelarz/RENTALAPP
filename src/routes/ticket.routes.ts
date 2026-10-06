@@ -9,9 +9,8 @@ import { User } from '../models/user.model';
 import { Contract } from '../models/contract.model';
 import { getUserId } from '../utils/getUserId';
 import { ensureDirectConversation } from '../utils/ensureDirectConversation';
-import { holdPayment, releasePayment } from '../utils/payment';
-import { calcPlatformFee } from '../utils/calcFee';
-import PlatformEarning from '../models/platformEarning.model';
+import { holdPayment } from '../utils/payment';
+import { releaseTicketEscrow } from '../services/ticketEscrow.service';
 import { assertRole } from '../middleware/assertRole';
 import { requirePolicies } from '../middleware/requirePolicies';
 import type { PolicyType } from '../models/policy.model';
@@ -228,38 +227,6 @@ r.post('/:id/request-close', ...assertRole('pro'), async (req, res) => {
   }
 });
 
-/**
- * Libera el escrow una sola vez: el paso held → releasing es atómico, así que dos peticiones
- * simultáneas (o una repetida) no capturan el pago ni crean la ganancia dos veces.
- */
-async function releaseTicketEscrow(t: any, userId: string, action: string) {
-  const esc = await Escrow.findOneAndUpdate(
-    { _id: t.escrowId, status: 'held' },
-    { $set: { status: 'releasing' } },
-    { new: true },
-  );
-  if (!esc) throw Object.assign(new Error('escrow_not_held'), { status: 409 });
-
-  const gross = (t.quote?.amount ?? 0) + ((t.extra && t.extra.status === 'approved') ? t.extra.amount : 0);
-  const breakdown = calcPlatformFee(gross);
-  let rel: any;
-  try {
-    rel = await releasePayment({ ref: esc.paymentRef!, amount: breakdown.gross, currency: 'eur', fee: breakdown.fee, meta: { ticketId: String(t._id) } });
-  } catch (err) {
-    await Escrow.updateOne({ _id: esc._id, status: 'releasing' }, { $set: { status: 'held' } });
-    throw err;
-  }
-  esc.status = 'released';
-  esc.breakdown = breakdown;
-  esc.ledger.push({ ts: new Date(), type: 'release', payload: { ...rel, breakdown } });
-  await esc.save();
-  await PlatformEarning.create({ kind: 'rent', ticketId: String(t._id), escrowId: String(esc._id), gross: breakdown.gross, fee: breakdown.fee, netToPro: breakdown.netToPro, currency: esc.currency || 'EUR', releaseRef: rel.ref, proId: t.proId, serviceKey: t.service });
-  t.status = 'closed';
-  t.history.push({ ts: new Date(), actor: userId, action, payload: breakdown });
-  await t.save();
-  return esc;
-}
-
 // Tenant confirma solucionado → release
 r.post('/:id/resolve', ...assertRole('tenant'), requirePolicies(REQUIRED_POLICIES), async (req, res) => {
   try {
@@ -267,10 +234,10 @@ r.post('/:id/resolve', ...assertRole('tenant'), requirePolicies(REQUIRED_POLICIE
     const t = await loadTicketFor(req, res, ['tenant']);
     if (!t) return;
     if (!t.escrowId) return res.status(400).json({ error: 'no escrow', code: 400 });
-    const esc = await releaseTicketEscrow(t, userId, 'resolved_by_tenant');
+    const { ticket, escrow } = await releaseTicketEscrow(String(t._id), userId, 'resolved_by_tenant');
     const conv = await Conversation.findOne({ kind: 'appointment', 'meta.ticketId': String(t._id) });
     if (conv) await publishSystem(conv.id, userId, 'CLOSED_BY_TENANT', { ticketId: String(t._id) });
-    res.json({ ticket: t, escrow: esc });
+    res.json({ ticket, escrow });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
@@ -284,8 +251,8 @@ r.post('/:id/validate', ...assertRole('landlord'), requirePolicies(REQUIRED_POLI
     if (!t) return;
     if (!t.escrowId) return res.status(400).json({ error: 'no escrow', code: 400 });
     if (t.status !== 'awaiting_validation') return res.status(409).json({ error: 'work_not_completed', code: 409 });
-    const esc = await releaseTicketEscrow(t, userId, 'validated_and_released');
-    res.json({ ticket: t, escrow: esc });
+    const { ticket, escrow } = await releaseTicketEscrow(String(t._id), userId, 'validated_and_released');
+    res.json({ ticket, escrow });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
