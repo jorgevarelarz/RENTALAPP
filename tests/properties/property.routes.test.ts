@@ -142,6 +142,14 @@ describe("Properties (minimal)", () => {
     await request(app).get("/api/properties?q=" + encodeURIComponent("[")).expect(200);
   });
 
+  it("a stale or invalid token on public search is treated as anonymous", async () => {
+    const res = await request(app)
+      .get("/api/properties")
+      .set("Authorization", "Bearer token-caducado")
+      .expect(200);
+    expect(res.body.items.every((p: any) => p.status === "active")).toBe(true);
+  });
+
   it("favorite/unfavorite", async () => {
     await request(app).post(`/api/properties/${pid}/favorite`).send().expect(200);
     await request(app).delete(`/api/properties/${pid}/favorite`).send().expect(200);

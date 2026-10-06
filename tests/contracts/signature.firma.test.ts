@@ -6,7 +6,7 @@ import { ProcessedEvent } from '../../src/models/processedEvent.model';
 import { User } from '../../src/models/user.model';
 import * as firma from '../../src/signature/firma';
 import { firmaProvider, verifyFirmaSignature } from '../../src/signature/firma';
-import { ensureFirmaSignature, initSignature } from '../../src/services/signature.service';
+import { ensureFirmaSignature, initSignature, toContractView } from '../../src/services/signature.service';
 import { ContractSignatureEvent } from '../../src/models/contractSignatureEvent.model';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
 
@@ -28,6 +28,26 @@ describe('verifyFirmaSignature', () => {
     expect(verifyFirmaSignature(raw, signHeader(raw, Math.floor(Date.now() / 1000) - 3600), SECRET)).toBe(false);
     expect(verifyFirmaSignature(raw, 't=1,v1=abc', SECRET)).toBe(false);
     expect(verifyFirmaSignature(raw, signHeader(raw), undefined)).toBe(false);
+  });
+});
+
+describe('toContractView', () => {
+  const urls = { landlordUrl: 'https://app.firma.dev/signing/o', tenantUrl: 'https://app.firma.dev/signing/t' };
+
+  it('keeps each party\'s own link when landlord and tenant come populated', () => {
+    // GET /api/contracts y /api/contracts/:id hacen populate de landlord y tenant
+    const contract = {
+      landlord: { _id: '507f1f77bcf86cd799439011', name: 'Ana' },
+      tenant: { _id: '507f1f77bcf86cd799439012', name: 'Luis' },
+      ibanEncrypted: 'secret',
+      signature: { status: 'sent', recipientUrls: urls, lockedAt: new Date() },
+    };
+    const forLandlord: any = toContractView(contract, { id: '507f1f77bcf86cd799439011', role: 'landlord' });
+    expect(forLandlord.signature.recipientUrls).toEqual({ landlordUrl: urls.landlordUrl });
+    expect(forLandlord.ibanEncrypted).toBeUndefined();
+    expect(forLandlord.signature.lockedAt).toBeUndefined();
+    const forTenant: any = toContractView(contract, { id: '507f1f77bcf86cd799439012', role: 'tenant' });
+    expect(forTenant.signature.recipientUrls).toEqual({ tenantUrl: urls.tenantUrl });
   });
 });
 

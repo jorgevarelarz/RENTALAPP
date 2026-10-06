@@ -25,12 +25,15 @@ const userIdOf = (user?: AuthUserLike | null) => {
   return id ? String(id) : undefined;
 };
 
+/** Id de una referencia, venga como ObjectId/string o poblada con `.populate()`. */
+const refId = (value: any) => String(value && typeof value === 'object' && '_id' in value ? value._id : value ?? '');
+
 /** Cada parte solo ve su propio enlace de firma; el admin no recibe ninguno. */
 export const urlsVisibleTo = (contract: any, user: AuthUserLike | undefined | null, urls?: RecipientUrls): RecipientUrls => {
   const userId = userIdOf(user);
   if (!urls || !userId) return {};
-  if (String(contract.landlord) === userId) return urls.landlordUrl ? { landlordUrl: urls.landlordUrl } : {};
-  if (String(contract.tenant) === userId) return urls.tenantUrl ? { tenantUrl: urls.tenantUrl } : {};
+  if (refId(contract.landlord) === userId) return urls.landlordUrl ? { landlordUrl: urls.landlordUrl } : {};
+  if (refId(contract.tenant) === userId) return urls.tenantUrl ? { tenantUrl: urls.tenantUrl } : {};
   return {};
 };
 
