@@ -6,7 +6,7 @@ import { Types } from 'mongoose';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { generateContractPDF } from '../utils/pdfGenerator';
-import { getCatalogByRegion } from '../policies/clauses';
+import { contractRegionKey, getCatalogByRegion } from '../policies/clauses';
 import { CLAUSE_POLICY_VERSION } from '../policies/clauses/catalog.v1';
 import { computePdfHash } from '../utils/pdfHash';
 import { recordContractHistory } from '../utils/history';
@@ -30,7 +30,8 @@ const createContractSchema = z.object({
   landlord: objectId,
   tenant: objectId,
   property: objectId,
-  region: z.string().toLowerCase(),
+  // Opcional: la región sale del inmueble; si viene, tiene que coincidir con la suya.
+  region: z.string().toLowerCase().optional(),
   rent: z.number().positive(),
   deposit: z.number().min(0),
   startDate: z.string().transform((s: string) => new Date(s)),
@@ -54,7 +55,7 @@ async function checkContractParties(
   data: { landlord: string; tenant: string; property: string },
 ): Promise<{ status: number; error: string; property?: any }> {
   const property: any = await Property.findById(data.property)
-    .select('owner agencyId agencyAccess refAgencyId')
+    .select('owner agencyId agencyAccess refAgencyId region')
     .lean();
   if (!property) return { status: 404, error: 'property_not_found' };
 
@@ -92,7 +93,26 @@ export async function create(req: Request, res: Response) {
     return res.status(400).json({ error: 'invalid_date_range' });
   }
 
-  const catalog = getCatalogByRegion(data.region);
+  const actor: any = req.user;
+  let parties: Awaited<ReturnType<typeof checkContractParties>>;
+  try {
+    parties = await checkContractParties(actor, data);
+  } catch (error) {
+    console.error('Error al crear el contrato:', error);
+    return res.status(500).json({ error: 'contract_creation_failed' });
+  }
+  if (parties.status !== 200) return res.status(parties.status).json({ error: parties.error });
+
+  // La región (y con ella la fianza autonómica) es la del inmueble, no la que diga el cuerpo.
+  const region = contractRegionKey(parties.property?.region);
+  if (data.region && contractRegionKey(data.region) !== data.region) {
+    return res.status(400).json({ error: 'region_not_supported' });
+  }
+  if (!region) return res.status(400).json({ error: 'region_not_supported' });
+  if (data.region && data.region !== region) {
+    return res.status(400).json({ error: 'region_mismatch', propertyRegion: region });
+  }
+  const catalog = getCatalogByRegion(region);
   if (!catalog || Object.keys(catalog).length === 0) {
     return res.status(400).json({ error: 'region_not_supported' });
   }
@@ -119,9 +139,6 @@ export async function create(req: Request, res: Response) {
   }
 
   try {
-    const actor: any = req.user;
-    const parties = await checkContractParties(actor, data);
-    if (parties.status !== 200) return res.status(parties.status).json({ error: parties.error });
     const actorIdRaw = actor?._id ?? actor?.id;
     const isAgency = actor?.role === 'agency';
 
@@ -155,7 +172,7 @@ export async function create(req: Request, res: Response) {
       property: data.property,
       agencyId: agencyIdToAttach,
       refAgencyId: refAgencyIdToAttach,
-      region: data.region,
+      region,
       rent: data.rent,
       deposit: data.deposit,
       startDate: data.startDate,
@@ -177,7 +194,7 @@ export async function create(req: Request, res: Response) {
 
     const actorId = req.user?.id;
     await recordContractHistory(contract._id, 'CREATED', actorId, {
-      region: data.region,
+      region,
       clausePolicyVersion: CLAUSE_POLICY_VERSION,
     });
     await recordContractHistory(contract._id, 'PDF_GENERATED', actorId, { pdfPath: publicPath, pdfHash });

@@ -38,6 +38,7 @@ describe("Contracts API (multi-región)", () => {
   });
 
   it("rechaza contrato con región inválida", async () => {
+    await seedContractParties();
     const payload = {
       landlord: "507f1f77bcf86cd799439011",
       tenant: "507f1f77bcf86cd799439012",
@@ -50,6 +51,11 @@ describe("Contracts API (multi-región)", () => {
       clauses: []
     };
 
-    await request(app).post("/api/contracts").send(payload).expect(400);
+    const res = await request(app)
+      .post("/api/contracts")
+      .set("x-user-id", LANDLORD_ID)
+      .send(payload)
+      .expect(400);
+    expect(res.body.error).toBe("region_not_supported");
   });
 });

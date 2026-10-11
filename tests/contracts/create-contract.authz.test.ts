@@ -102,3 +102,40 @@ describe("POST /api/contracts: quién puede crear el contrato (A2)", () => {
     await createAs(TENANT_ID, "tenant", payload()).expect(403);
   });
 });
+
+describe("POST /api/contracts: la región sale del inmueble", () => {
+  beforeAll(connectDb);
+  afterAll(disconnectDb);
+  beforeEach(() => seedContractParties());
+  afterEach(clearDb);
+
+  it("sin región en el cuerpo usa la del inmueble", async () => {
+    const { region, ...body } = payload();
+    const res = await createAs(LANDLORD_ID, "landlord", body).expect(201);
+    expect(res.body.contract.region).toBe("galicia");
+  });
+
+  it("traduce la región en texto libre del inmueble a la clave del catálogo", async () => {
+    await Property.updateOne({ _id: PROPERTY_ID }, { region: "A Coruña, Galicia" });
+    const res = await createAs(LANDLORD_ID, "landlord", payload()).expect(201);
+    expect(res.body.contract.region).toBe("galicia");
+  });
+
+  it("rechaza una región distinta de la del inmueble (no se elige otra fianza autonómica)", async () => {
+    const res = await createAs(LANDLORD_ID, "landlord", payload({ region: "madrid" })).expect(400);
+    expect(res.body).toMatchObject({ error: "region_mismatch", propertyRegion: "galicia" });
+    expect(await Contract.countDocuments()).toBe(0);
+  });
+
+  it("inmueble de una comunidad sin catálogo: region_not_supported aunque el cuerpo diga otra", async () => {
+    await Property.updateOne({ _id: PROPERTY_ID }, { region: "Andalucía" });
+    const res = await createAs(LANDLORD_ID, "landlord", payload()).expect(400);
+    expect(res.body.error).toBe("region_not_supported");
+    expect(await Contract.countDocuments()).toBe(0);
+  });
+
+  it("región inexistente en el cuerpo: region_not_supported", async () => {
+    const res = await createAs(LANDLORD_ID, "landlord", payload({ region: "andromeda" })).expect(400);
+    expect(res.body.error).toBe("region_not_supported");
+  });
+});

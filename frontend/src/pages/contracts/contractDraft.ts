@@ -98,6 +98,7 @@ const CREATE_ERRORS: Record<string, string> = {
   tenant_not_found: 'La cuenta del inquilino ya no existe.',
   tenant_is_landlord: 'El inquilino no puede ser el propio arrendador.',
   region_not_supported: 'Todavía no generamos contratos para la comunidad autónoma de este inmueble.',
+  region_mismatch: 'La comunidad autónoma del inmueble ha cambiado. Vuelve a abrir el asistente.',
   invalid_date_range: 'La fecha de fin tiene que ser posterior a la de inicio.',
   invalid_payload: 'Revisa los datos: falta alguno o no es válido.',
   invalid_clause_params: 'Alguna cláusula tiene un valor fuera de rango.',
