@@ -1136,3 +1136,9 @@ Rules:
 - Frontend `refreshStoredUser` (`services/auth.ts`), called by `AuthProvider` on mount: GET `/api/users/me`, merges `email/role/isVerified/tenantPro` into the stored user (token untouched); 403 `owner_not_verified` → `isVerified:false`; skips if the stored session changed meanwhile. `/api/users/me` now returns `isVerified` (effective: DB flag or approved `Verification`).
 - `POST /api/contracts/:id/tenants/:partyId/cancel` (`cancelCoTenantInvite`): principal tenant only, INVITED only → `REMOVED`, token/expiry cleared; same email can be re-invited. `CoTenantsCard`: "Cancelar invitación" with inline confirmation.
 - Verification: tsc clean; Jest `--runInBand --forceExit` tests/auth + tests/contracts 22 suites / 99 tests; frontend build + 81 tests; Playwright 390/1280 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 20: contract creation authz (A2) + flaky payments test
+
+- `create` (`src/controllers/contract.controller.ts`) runs `checkContractParties`: property must exist (404), actor must be owner / managing agency (`agencyAccess: 'manage'`) / admin (403), body `landlord` must be the property owner, tenant an existing other user (400). IDs lowercased by zod. `WizardStep3Review` maps these codes to Spanish messages.
+- Tests creating contracts now seed parties via `tests/utils/contractParties.ts` and send `x-user-id`. `payments.duplicates` awaits `RentPayment.init()/Payment.init()` (flaky because the unique index wasn't built yet).
+- Verification: tsc clean; Jest `--runInBand` 7 contract-creating suites 32/32, new authz suite 9/9, full suite 288/289 (payments.duplicates, fixed → 7/7 ×3); e2e 10/10; frontend build + 83 tests (AppShell timing flake under load, 2/2 alone).

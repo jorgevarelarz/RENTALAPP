@@ -22,6 +22,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 11**: `/metrics` deja de ser público. Si algo lo lee (Prometheus, un panel), hay que poner `METRICS_TOKEN` en el entorno y mandar `Authorization: Bearer <token>`; sin la variable, `/metrics` da 404. `/health` ya no devuelve `env`. Si en producción no está `STRIPE_IDENTITY_WEBHOOK_SECRET`, el webhook de `/api/kyc` responde 503 (hoy la verificación de identidad es un stub y nadie lo usa).
 - **Al desplegar la ronda 15**: cada petición autenticada hace una consulta más a Mongo (`tokenVersion` del usuario, por `_id`). Los JWT ya emitidos siguen valiendo (cuentan como versión 0); no hace falta migración. Quien restablezca la contraseña cierra todas sus sesiones abiertas, también la del propio dispositivo.
 - **Al desplegar la ronda 17**: rol e `isVerified` salen de la base en cada petición, no del token. Un administrador degradado o una cuenta a la que se retira la verificación lo nota en la siguiente petición. No hay migración ni consulta extra (es la misma de `tokenVersion`).
+- **Al desplegar la ronda 20**: crear un contrato exige ser el propietario del inmueble, su agencia gestora (`agencyAccess: 'manage'`) o administrador, y que el arrendador sea el dueño del inmueble. Quien antes creaba contratos con IDs a mano sobre inmuebles ajenos recibirá 403/400. Conviene comprobar también, con una consulta de solo lectura, que en producción existe el índice único `contractId_1_period_1` de `rentpayments`. Si había recibos duplicados, Mongoose no lo habrá podido crear, y la protección contra el doble cobro de la renta (P3) depende de él.
 - **Co-titulares (ronda 12), dos decisiones de producto:**
   - «Firmar como co-titular» solo cambia el estado en la base (`POST /tenants/:partyId/sign`, backend de antes); no es una firma electrónica con proveedor. ¿Vale así o el co-titular debe firmar con Firma.dev como el inquilino principal?
   - Aceptar la invitación exige tener la identidad verificada (`requireVerified` está en toda `/api`). La página lo explica y enlaza a `/tenant/kyc`, pero ¿debe poder unirse antes y verificar después?
@@ -702,3 +703,37 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - Pendientes anteriores: correos de contrato, recibos y recordatorios sin aviso si fallan; `request-reset` con enumeración por tiempo; email sin normalizar a minúsculas en registro y login; media de reseñas sin `$inc`.
 
 **Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: rechazar en `authenticate` el token de un usuario que ya no existe (401 `session_expired`), ajustando los tests que usan identificadores inventados con el atajo de cabeceras. En la misma ronda, normalizar el email a minúsculas y sin espacios en registro, login y recuperación, sin migrar producción. Habría que comprobar antes con una consulta de solo lectura en local si el código asume mayúsculas en algún sitio. Si se prefiere interfaz: «Cancelar invitación» para la agencia en «Propietarios», con el mismo patrón.
+
+### Ronda 20 — 2026-10-11 15:29
+
+**Qué y por qué.** Seguridad. La ronda 19 proponía rechazar tokens de usuarios borrados y normalizar emails, pero al releer la auditoría quedaba pendiente algo más grave: **A2**. Cualquier casero o agencia podía crear un contrato sobre un inmueble ajeno, a nombre de otro propietario y con cualquier inquilino. Estaba aplazado porque «toca muchos tests», y resultaron ser solo 7 ficheros. Al verificar salió además la causa del test intermitente `payments.duplicates`.
+
+1. **A2 en `create` (`src/controllers/contract.controller.ts`).** Nueva función `checkContractParties`, que se ejecuta antes de crear nada:
+   - el inmueble tiene que existir (404 `property_not_found`);
+   - solo pueden crearlo el dueño del inmueble, la agencia que lo gestiona con `agencyAccess: 'manage'` o un administrador (403 `forbidden`). Una agencia con el inmueble ya traspasado (`status_only`) no puede;
+   - el arrendador del contrato tiene que ser el dueño (400 `landlord_not_owner`), y el inquilino, otra cuenta que exista (400 `tenant_not_found` y `tenant_is_landlord`);
+   - los IDs se pasan a minúsculas al validar, para que la comparación con el dueño no falle por mayúsculas. La atribución a la agencia captadora reutiliza el inmueble ya leído.
+2. **Asistente de contratos** (`WizardStep3Review.tsx`): cada uno de esos códigos se muestra con un mensaje en español en vez del código en crudo.
+3. **Test intermitente `payments.duplicates`.** Hoy fallaba incluso suelto (2 de 7). El índice único `(contractId, period)` de `RentPayment` se crea en segundo plano al conectar. Con la máquina cargada, el primer test de concurrencia corría antes de que existiera, y dos `upsert` simultáneos creaban dos recibos y dos PaymentIntent. El test espera ahora a `RentPayment.init()` y `Payment.init()`. El código no cambia, pero en producción la protección P3 depende de que ese índice exista (anotado en «Para Jorge»).
+
+**Commits.**
+- `7dd24b8` Contratos: solo el propietario del inmueble, su agencia gestora o un administrador pueden crearlos (A2)
+- `842a53e` Tests: payments.duplicates espera a los índices únicos antes de probar la concurrencia (era el intermitente)
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - nuevo `tests/contracts/create-contract.authz.test.ts`: 9 OK. Cubre dueño (201), IDs en mayúsculas, otro casero (403, sin contrato creado), administrador con arrendador que no es el dueño (400), inquilino inexistente o igual al arrendador (400), inmueble inexistente (404), agencia gestora (201, con `agencyId`), agencia ajena o `status_only` (403), administrador (201) e inquilino (403);
+  - los 6 ficheros que crean contratos, ajustados con el helper `tests/utils/contractParties.ts` (siembra casero, inquilina e inmueble): 7 suites y 32 tests OK, incluido `agencyReferral`;
+  - suite completa con `--forceExit`: 68 suites y 289 tests, 288 OK. El que falló fue `payments.duplicates`; suelto falló dos veces (1 y 2 tests) y, tras el arreglo, pasó 7 de 7 tres veces seguidas;
+  - e2e (`jest.config.e2e.js`): 10 OK.
+- Frontend: build OK. `npm test`: 26 ficheros y 83 tests, 82 OK. El que falló fue `AppShell` (menú móvil, 2,7 s, con la suite de Jest corriendo a la vez); suelto pasa 2 de 2. Nuevo `WizardStep3Review.test.tsx` (2).
+- GitNexus: `impact` LOW en `create` y `WizardStep3Review`. `detect_changes` sale medio: solo afecta a `create`, `createContractSchema` y al asistente.
+
+**Qué queda.**
+- La región del contrato no se contrasta con la del inmueble.
+- El asistente `/contracts/new` sigue pidiendo IDs a mano y muestra un JSON en la revisión. Además, tras crear el contrato manda un correo de prueba a `notificaciones@rental-app.test` por `/api/notify/email`.
+- Lo propuesto en la ronda 19 sigue pendiente: token de usuario borrado y email sin normalizar a minúsculas. También la agencia sin «Cancelar invitación».
+
+**Siguiente mejora propuesta.** Interfaz, que hace tres rondas que no hay una solo de interfaz: rehacer el asistente de contratos con el sistema visual RentalApp 2026. Que elija el inmueble entre los propios (o los gestionados, si es agencia) y busque al inquilino por email en vez de pedir IDs, que la revisión sea un resumen legible en vez de JSON y que se quite el correo de prueba. Si se prefiere seguridad: rechazar el token de un usuario borrado y normalizar el email.
+
