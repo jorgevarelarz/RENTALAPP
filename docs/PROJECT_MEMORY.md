@@ -1017,3 +1017,9 @@ Rules:
 - Files: `src/controllers/contract.payment.controller.ts`, `src/controllers/payment.controller.ts`, `src/routes/stripe.webhook.ts`, `src/utils/deposit.ts`, `src/models/contract.model.ts`, `frontend/src/services/contracts.ts`, `tests/contracts/payments.duplicates.test.ts`.
 - Verification: tsc clean; Jest `tests/contracts` + `tests/jobs` 57/57, e2e smoke 9/9 (`--runInBand`); frontend build + 30 tests OK.
 - Deploy note: `DEPOSIT_SUCCESS_URL`/`DEPOSIT_CANCEL_URL`, if set in production, override the new URLs.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 3: deposit payment UI
+
+- `ContractDetail`: tenant "Pagar fianza" button (POST `/contracts/:id/deposit` → Stripe Checkout), return notices for `?deposit=success|cancel`, real `rent`/`deposit` amounts (was reading missing `rentAmount`/`depositAmount` → "undefined €"), property city/address, fake Wikimedia signature image removed, "Firmar contrato" label.
+- Files: `frontend/src/pages/ContractDetail.tsx`, its two tests, `frontend/src/components/dashboard/ActiveContractWidget.tsx`.
+- Verification: frontend build OK, 34/34 tests; Playwright screenshots with mocked API.
