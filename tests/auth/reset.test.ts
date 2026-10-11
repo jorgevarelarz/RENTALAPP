@@ -138,7 +138,7 @@ describe('Password reset flow', () => {
 
     const res = await request(app)
       .post('/api/auth/reset')
-      .send({ token: 'expiredtoken', password: 'newpass' });
+      .send({ token: 'expiredtoken', password: 'newpassword' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBeDefined();
   });

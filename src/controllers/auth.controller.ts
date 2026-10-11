@@ -15,6 +15,14 @@ const authTokenPayload = (user: any) => {
   return payload;
 };
 
+export const INVALID_CREDENTIALS = 'Usuario o contraseña incorrectos';
+
+let cachedDummyHash: string | null = null;
+const dummyPasswordHash = () => {
+  if (!cachedDummyHash) cachedDummyHash = bcrypt.hashSync(crypto.randomBytes(16).toString('hex'), 10);
+  return cachedDummyHash;
+};
+
 /**
  * Register a new user.
  *
@@ -54,15 +62,13 @@ export const login = async (req: Request, res: Response) => {
     const { email, password } = req.body;
     // Find the user by email
     const user = await User.findOne({ email }).select('+passwordHash');
-    if (!user) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
-    if (!user.passwordHash) {
-      return res.status(400).json({
-        message: 'Esta cuenta utiliza Google o Apple. Accede con el mismo proveedor.',
-      });
+    // Misma respuesta y mismo coste (un bcrypt) si la cuenta no existe, es solo de Google/Apple
+    // o la contraseña no coincide: el login no revela qué correos están registrados.
+    const storedHash = (user?.passwordHash as string | undefined) || dummyPasswordHash();
+    const isMatch = await bcrypt.compare(String(password), storedHash);
+    if (!user || !user.passwordHash || !isMatch) {
+      return res.status(400).json({ message: INVALID_CREDENTIALS });
     }
-    // Compare provided password with stored hash
-    const isMatch = await bcrypt.compare(password, user.passwordHash as string);
-    if (!isMatch) return res.status(400).json({ message: 'Usuario o contraseña incorrectos' });
     await recordFunnelEvent(req, 'login', {
       resourceType: 'user',
       resourceId: String(user._id),
