@@ -897,3 +897,43 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - La agencia gestora sigue sin ver candidatos ni crear contratos desde la interfaz (propuesta de la ronda 23).
 
 **Siguiente mejora propuesta.** La de la ronda 23, que es de interfaz y lleva tres rondas sin tocarse: «Inmuebles» en el panel de la agencia gestora. Incluye `GET /api/agency/properties` con `agencyAccess: 'manage'`, abrir los candidatos y la propuesta de visitas a esa agencia y llevar al asistente reutilizando `ApplicantsModal`. Si se prefiere algo más corto: «Cancelar invitación» de propietario en «Propietarios».
+
+### Ronda 25 — 2026-10-11 16:42
+
+**Qué y por qué.** Seguridad de cuentas e interfaz, que llevaba dos rondas sin tocarse. La auditoría tenía pendiente «Cambio de contraseña desde la cuenta». El botón «Cambiar contraseña» del perfil solo llevaba a `/forgot-password`: había que pedir un correo de recuperación para cambiarla. Además, no había forma de echar a alguien que tuviera la contraseña sin pasar por ese correo. La funcionalidad de agencia que proponía la ronda 24 es más larga y queda para otra ronda.
+
+1. **`POST /api/auth/change-password`** (`changePassword` en `auth.controller.ts`):
+   - exige sesión (`authenticate`) pero no identidad verificada, y usa el limitador de login (20 cada 15 minutos);
+   - pide la contraseña actual (400 `wrong_password`) y aplica la política de la nueva (8 a 200 caracteres); repetir la actual da 400 `same_password`;
+   - sube `tokenVersion`, así que se cierran todas las sesiones, y devuelve un token nuevo para que el dispositivo actual siga dentro; anula también un token de recuperación pendiente;
+   - una cuenta de Google o Apple sin contraseña recibe 400 `password_not_set` (la elige por correo, que demuestra que controla el buzón);
+   - avisa al titular por correo («si no has sido tú, recupera tu cuenta»), sin esperar al SMTP.
+2. **Perfil (`/profile`)**:
+   - nueva tarjeta `ChangePasswordCard`: contraseña actual, nueva y repetida, errores en español en la propia tarjeta y aviso de que se cierran las otras sesiones; el token nuevo se guarda con `changePassword` de `AuthContext`;
+   - la página adopta el estilo de las rondas 12 y 21: sin la banda con degradado azul, con la cabecera en una línea de texto («Inquilino · Identidad verificada») en lugar de las pegatinas en mayúsculas «KYC VERIFICADO»;
+   - la puntuación ya no sale duplicada en la cabecera y la tarjeta;
+   - las secciones de solvencia y perfil profesional ya no van en cajas azul y naranja;
+   - se han puesto tildes y eñes («Teléfono», «Puntuación», «Fontanería»…), y la etiqueta «Nombre personal (verificado)», que se mostraba aunque no lo estuviera, ahora es «Nombre».
+
+**Commits.**
+- `55ebdaa` Auth: cambiar la contraseña con la sesión iniciada (pide la actual, cierra las demás sesiones y avisa por correo)
+- `2120eca` Perfil: cambiar la contraseña desde la cuenta (antes enviaba a la recuperación por correo) y la página sin degradado, con tildes y sin pegatinas
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand` `tests/auth`: 7 suites y 45 tests OK. El nuevo `change-password.test.ts` tiene 5 casos:
+  - el cambio revoca los tokens de los dos dispositivos y el token devuelto sigue valiendo;
+  - la contraseña actual incorrecta no toca ni el hash ni `tokenVersion`;
+  - la contraseña corta y la repetida se rechazan;
+  - una cuenta de Google recibe `password_not_set`;
+  - sin sesión da 401.
+- Frontend: build OK; `npm test` 29 ficheros y 98 tests OK (antes 28 y 94). El nuevo `ChangePasswordCard.test.tsx` tiene 4 casos: guarda el token nuevo; no envía una contraseña corta ni una que no coincide; muestra `wrong_password` en español sin tocar la sesión; y la cuenta de Google ve el enlace a `/forgot-password`.
+- Playwright (vite local, `/api/*` simulado, sesión de inquilina) a 390 y 1280 px (`/tmp/ra-shots25`): perfil completo, error de contraseña actual y cambio correcto. El token guardado pasa a ser el nuevo.
+- GitNexus: `impact` LOW en `ProfilePage` y `resetPassword`. `detect_changes` sale bajo en los dos commits, sin flujos afectados.
+
+**Qué queda.**
+- La barra superior (`AppShell`) sigue mostrando la pegatina «KYC VERIFICADO» en mayúsculas.
+- El perfil no deja cambiar el correo; las cuentas de Google y Apple no pueden añadir contraseña desde la cuenta, solo por correo.
+- Pendientes anteriores: «Inmuebles» de la agencia gestora, enumeración por tiempo en `request-reset` y «Cancelar invitación» de propietario para la agencia.
+
+**Siguiente mejora propuesta.** La de las rondas 23 y 24: «Inmuebles» en el panel de la agencia gestora, con `GET /api/agency/properties` filtrado a `agencyAccess: 'manage'`, candidatos y propuesta de visitas abiertos a esa agencia y `ApplicantsModal` hasta el asistente. Si se prefiere algo corto: quitar la pegatina «KYC VERIFICADO» de la barra superior y cerrar la enumeración por tiempo de `request-reset` enviando el correo sin esperar.

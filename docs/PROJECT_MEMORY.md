@@ -1167,3 +1167,9 @@ Rules:
 
 - New `src/utils/rentPeriod.ts` (`rentPeriodOf` Europe/Madrid, `checkRentPeriod` start month..current month, `billableRent`). `payRentForPeriod` now requires contract `active|signed` (400 `contract_not_active`) and period in range (400 `period_before_start|period_in_future`); `/pay-rent` rejects contracts not started yet. `runRentGeneration(now?)`: per-contract atomic upsert + isolated errors, no 0 € receipts, returns `{period, created, failed}`. Receipts after `endDate` intentionally unchanged (LAU prórroga → decision for Jorge).
 - Verification: tsc clean; Jest `--runInBand` tests/contracts 19 suites / 87 tests (new `rent-periods.test.ts` 7), e2e 10/10; frontend build + 94 tests.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 25: change password from the account + profile page restyle
+
+- `POST /api/auth/change-password` (`changePassword`, `authenticate` only, `authLimiter`): requires `currentPassword` (400 `wrong_password`), new password policy, 400 `same_password`, 400 `password_not_set` for Google/Apple-only accounts; bumps `tokenVersion` (other sessions closed), clears reset token, returns a new `token`; fire-and-forget notice email.
+- Frontend: `changePassword` in `services/auth.ts` and `AuthContext` (stores the new token); `pages/profile/ChangePasswordCard.tsx`; `ProfilePage` without gradient banner/uppercase badges, accents fixed.
+- Verification: tsc clean; Jest `--runInBand` tests/auth 7 suites / 45 tests (new `change-password.test.ts` 5); frontend build + 98 tests (new `ChangePasswordCard.test.tsx` 4); Playwright 390/1280 px.

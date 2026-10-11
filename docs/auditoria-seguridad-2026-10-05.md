@@ -68,4 +68,4 @@
 | Recibos PDF de renta | No existen, aunque el art. 17.4 de la LAU los exige. `receiptUrl` usa `intent.charges`, que es un campo obsoleto. | S-M |
 | Impagos | No hay estado `OVERDUE` ni recordatorios automáticos. | S-M |
 | Notificaciones dentro de la app | No existen. Ni el pago de la renta ni el de la fianza avisan al arrendador. | M |
-| Cambio de contraseña desde la cuenta | No implementado. | S |
+| Cambio de contraseña desde la cuenta | Hecho (2026-10-11, ronda 25): `POST /api/auth/change-password` pide la actual, cierra las demás sesiones y avisa por correo; tarjeta «Contraseña» en el perfil. | S |
