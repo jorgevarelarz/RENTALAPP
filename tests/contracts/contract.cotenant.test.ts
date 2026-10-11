@@ -245,4 +245,51 @@ describe('Co-tenants flows', () => {
       else process.env.FRONTEND_URL = prevFrontend;
     }
   });
+  it('shows a public preview of the invite and lets the joined co-tenant read the contract', async () => {
+    const tenantId = '507f1f77bcf86cd799439061';
+    const coId = '507f1f77bcf86cd799439062';
+    const landlordId = '507f1f77bcf86cd799439063';
+    await makeUser(tenantId, 'tenant', 'main6@test.com');
+    await makeUser(coId, 'tenant', 'co6@test.com');
+    await makeUser(landlordId, 'landlord', 'owner6@test.com');
+    const property = await makeProperty(landlordId);
+    const contract = await makeContract(landlordId, tenantId, String(property._id));
+    const token = 'invite-token-6';
+    await ContractParty.create({
+      contractId: contract._id,
+      role: 'TENANT',
+      email: 'co6@test.com',
+      status: 'INVITED',
+      invitedByUserId: new mongoose.Types.ObjectId(tenantId),
+      inviteTokenHash: crypto.createHash('sha256').update(token).digest('hex'),
+      inviteExpiresAt: new Date(Date.now() + 1000 * 60 * 60),
+    });
+    const asCo = (req: request.Test) =>
+      req.set('x-user-id', coId).set('x-user-role', 'tenant').set('x-user-verified', 'true');
+
+    expect((await request(app).get('/api/invites/preview')).status).toBe(400);
+    expect((await request(app).get('/api/invites/preview').query({ token: 'otro' })).status).toBe(404);
+    const preview = await request(app).get('/api/invites/preview').query({ token });
+    expect(preview.status).toBe(200);
+    expect(preview.body).toEqual({
+      email: 'co6@test.com',
+      expired: false,
+      inviterName: `tenant-${tenantId.slice(-4)}`,
+      property: { title: 'Piso Test', address: 'Calle 1', city: 'Madrid' },
+    });
+
+    expect((await asCo(request(app).get(`/api/contracts/${contract._id}`))).status).toBe(403);
+    expect((await asCo(request(app).get(`/api/contracts/${contract._id}/pdf`))).status).toBe(403);
+
+    const accepted = await asCo(request(app).post('/api/invites/accept')).send({ token });
+    expect(accepted.status).toBe(200);
+    expect(String(accepted.body.contractId)).toBe(String(contract._id));
+
+    const detail = await asCo(request(app).get(`/api/contracts/${contract._id}`));
+    expect(detail.status).toBe(200);
+    expect(detail.body.ibanEncrypted).toBeUndefined();
+    expect((await asCo(request(app).get(`/api/contracts/${contract._id}/pdf`))).status).toBe(200);
+    // La invitación ya usada no se puede volver a previsualizar.
+    expect((await request(app).get('/api/invites/preview').query({ token })).status).toBe(404);
+  });
 });

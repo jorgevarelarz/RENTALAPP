@@ -54,6 +54,7 @@ import aiRoutes from './routes/ai.routes';
 import assistantRoutes from './routes/assistant.routes';
 import agencyRoutes from './routes/agency.routes';
 import { getInviteByToken, acceptInvite } from './controllers/agencyInvite.controller';
+import { getInvitePreview } from './controllers/contract.cotenant.controller';
 import { asyncHandler } from './utils/asyncHandler';
 import testingInboundRoutes from './routes/testingInbound.routes';
 
@@ -339,6 +340,8 @@ app.use('/api/agency', authenticate, requireVerified, agencyRoutes);
 // Invitaciones de agencia a propietarios: acceso público por token (el invitado aún no tiene cuenta).
 app.get('/api/agency-invites/:token', asyncHandler(getInviteByToken));
 app.post('/api/agency-invites/:token/accept', authLimiter, asyncHandler(acceptInvite));
+// Invitación de co-titular: vista previa pública (antes de los routers montados en /api con authenticate).
+app.get('/api/invites/preview', asyncHandler(getInvitePreview));
 app.use('/api', paymentsRoutes);
 app.use('/api', authenticate, requireVerified, connectRoutes);
 app.use('/api', authenticate, requireVerified, serviceOfferRoutes);

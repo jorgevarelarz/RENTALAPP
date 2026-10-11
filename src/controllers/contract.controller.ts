@@ -21,7 +21,7 @@ import { recordFunnelEvent } from '../services/funnelEvents.service';
 import { generateContractPdfFile } from '../services/pdfGenerator';
 import { evaluateAndPersist } from '../modules/rentalPublic';
 // @ts-ignore
-import { ensureCanReadContract } from '../utils/contractAccess';
+import { ensureCanReadContract, isActiveCoTenant } from '../utils/contractAccess';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i);
 
@@ -190,7 +190,9 @@ export async function create(req: Request, res: Response) {
 
 export const getContractPDF = async (req: Request, res: Response) => {
   try {
-    await ensureCanReadContract({ contractId: req.params.id, user: req.user as any });
+    if (!(await isActiveCoTenant(req.params.id, req.user?.id))) {
+      await ensureCanReadContract({ contractId: req.params.id, user: req.user as any });
+    }
     const contract = await Contract.findById(req.params.id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
 
@@ -256,6 +258,8 @@ export const getContractPDF = async (req: Request, res: Response) => {
     doc.end();
 
   } catch (err: any) {
+    // Los errores de acceso de ensureCanReadContract traen su estado (400/403/404).
+    if (err?.status) return res.status(err.status).json({ error: err.message });
     console.error(err);
     res.status(500).json({ error: 'Error generando el PDF' });
   }
@@ -562,8 +566,10 @@ export const getContract = async (req: Request, res: Response) => {
     const isLandlord = ownerId === user.id;
     const isTenant = tenantId === user.id;
     const isAdmin = user.role === 'admin';
+    // Co-titular que ya aceptó la invitación: puede ver el contrato que va a firmar.
+    const isCoTenant = !isLandlord && !isTenant && !isAdmin && (await isActiveCoTenant(c._id, user.id));
 
-    if (!isLandlord && !isTenant && !isAdmin) {
+    if (!isLandlord && !isTenant && !isAdmin && !isCoTenant) {
       return res.status(403).json({ error: 'No autorizado' });
     }
 

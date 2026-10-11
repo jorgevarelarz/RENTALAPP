@@ -270,3 +270,27 @@ export const getMyInvites = async (req: Request, res: Response) => {
     res.status(err.status || 500).json({ error: err.message || 'invites_failed' });
   }
 };
+
+/**
+ * Vista previa pública de una invitación de co-titular: quien tiene el enlace aún puede no tener
+ * cuenta. Devuelve solo lo necesario para decidir (email invitado, inmueble y quién invita).
+ * El token va en la query, que no se guarda en los logs.
+ */
+export const getInvitePreview = async (req: Request, res: Response) => {
+  const token = typeof req.query.token === 'string' ? req.query.token : '';
+  if (!token) return res.status(400).json({ error: 'token_required' });
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const party = await ContractParty.findOne({ inviteTokenHash: tokenHash, status: 'INVITED' }).lean();
+  if (!party) return res.status(404).json({ error: 'invite_not_found' });
+  const [contract, inviter]: any[] = await Promise.all([
+    Contract.findById(party.contractId).populate({ path: 'property', select: 'title address city' }).lean(),
+    party.invitedByUserId ? User.findById(party.invitedByUserId).select('name').lean() : null,
+  ]);
+  const property = contract?.property;
+  res.json({
+    email: party.email,
+    expired: !!party.inviteExpiresAt && party.inviteExpiresAt < new Date(),
+    inviterName: inviter?.name,
+    property: property ? { title: property.title, address: property.address, city: property.city } : undefined,
+  });
+};
