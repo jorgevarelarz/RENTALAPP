@@ -42,10 +42,10 @@
 
 ## Medios y bajos (pendientes)
 
-- **Emails:** HTML con datos de usuario sin escapar (`utils/email.ts`; ~~invitaciones de agencia~~ corregido el 2026-10-11 con `utils/escapeHtml.ts`). Permite phishing con el remitente de la app.
+- ~~**Emails:** HTML con datos de usuario sin escapar (`utils/email.ts`; invitaciones de agencia).~~ Corregido el 2026-10-11 con `utils/escapeHtml.ts` en todas las plantillas; los enlaces salen de `frontendUrl()`. De paso: las alertas de precio y disponibilidad se mandaban al id del usuario en lugar de a su email.
 - ~~**Exportaciones CSV:** inyección de fórmulas (`=HYPERLINK(...)`) en los CSV de ganancias, fiscal, admin e institución.~~ Corregido el 2026-10-11 con `utils/csv.ts` en los siete exportadores.
 - **IA:** asistente y `/api/ai/*` sin límite de peticiones ni `maxOutputTokens`. `/api/ai/health?test=true` está abierto a cualquier usuario verificado.
-- **Reseñas:** `relatedId` libre, así que se puede manipular la reputación de cualquiera.
+- ~~**Reseñas:** `relatedId` libre, así que se puede manipular la reputación de cualquiera.~~ Corregido el 2026-10-11: `relatedId` debe ser un contrato firmado entre las dos partes (con el `roleContext` que corresponde) o un servicio pagado/incidencia cerrada del profesional.
 - **Stripe, eventos:** reembolsos y disputas sin gestionar. `payment_intent.processing` puede devolver el estado a `PROCESSING`. Importes sin `Math.round` (`deposit.ts`).
 - **Contraseñas:** ~~token de reset en claro en la BD y sin `select:false`; enlace a `https://frontend/reset`~~ corregido el 2026-10-11 (hash SHA-256, `select:false`, `FRONTEND_URL`). Sigue pendiente: enumeración de cuentas en el login ("Esta cuenta utiliza Google o Apple") y contraseña mínima de 6 caracteres.
 - **Ficheros:** adjuntos de chat y avatares públicos y sin caducidad. El nombre se genera con `Math.random` y no se borra el EXIF.

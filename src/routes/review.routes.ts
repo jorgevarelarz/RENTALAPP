@@ -1,7 +1,11 @@
 import { Router } from 'express';
+import { isValidObjectId } from 'mongoose';
 import Review from '../models/review.model';
 import Pro from '../models/pro.model';
 import { User } from '../models/user.model';
+import { Contract } from '../models/contract.model';
+import ServiceOffer from '../models/serviceOffer.model';
+import Ticket from '../models/ticket.model';
 import { getUserId } from '../utils/getUserId';
 
 const r = Router();
@@ -12,10 +16,62 @@ function parsePagination(query: any) {
   return { page, limit };
 }
 
+// Contratos que han llegado a firmarse; un borrador o uno cancelado no da derecho a reseña.
+const REVIEWABLE_CONTRACT_STATUSES = ['signed', 'active', 'terminated', 'completed'];
+const REVIEWABLE_OFFER_STATUSES = ['paid', 'confirmed', 'done'];
+
+/**
+ * Comprueba que `relatedId` es una relación real entre quien reseña y quien
+ * recibe la reseña: un contrato firmado entre casero e inquilino o un servicio
+ * pagado/cerrado del profesional. Sin esto cualquiera podía crear reseñas
+ * ilimitadas sobre cualquier usuario cambiando `relatedId`.
+ */
+async function isReviewableRelation(
+  fromUserId: string,
+  toUserId: string,
+  roleContext: 'tenant' | 'owner' | 'pro',
+  relatedId: string,
+) {
+  if (!isValidObjectId(relatedId)) return false;
+
+  if (roleContext === 'pro') {
+    const offer = await ServiceOffer.findOne({
+      _id: relatedId,
+      proId: toUserId,
+      ownerId: fromUserId,
+      status: { $in: REVIEWABLE_OFFER_STATUSES },
+    }).lean();
+    if (offer) return true;
+    const ticket = await Ticket.findOne({
+      _id: relatedId,
+      proId: toUserId,
+      status: 'closed',
+      $or: [{ openedBy: fromUserId }, { ownerId: fromUserId }],
+    }).lean();
+    return Boolean(ticket);
+  }
+
+  const contract = await Contract.findOne({
+    _id: relatedId,
+    status: { $in: REVIEWABLE_CONTRACT_STATUSES },
+  })
+    .select('landlord tenant')
+    .lean();
+  if (!contract) return false;
+  const landlord = String(contract.landlord);
+  const tenant = String(contract.tenant);
+  return roleContext === 'tenant'
+    ? toUserId === tenant && fromUserId === landlord
+    : toUserId === landlord && fromUserId === tenant;
+}
+
 r.post('/', async (req, res) => {
   try {
     const fromUserId = getUserId(req);
-    const { toUserId, roleContext, relatedId, score, comment } = req.body || {};
+    const body = req.body || {};
+    const { roleContext, score, comment } = body;
+    const toUserId = typeof body.toUserId === 'string' ? body.toUserId : '';
+    const relatedId = typeof body.relatedId === 'string' ? body.relatedId : '';
 
     if (!toUserId || !roleContext || !relatedId || score === undefined) {
       return res.status(400).json({ error: 'missing fields', code: 400 });
@@ -32,6 +88,10 @@ r.post('/', async (req, res) => {
     }
     if (comment && String(comment).length > 1000) {
       return res.status(400).json({ error: 'comment too long', code: 400 });
+    }
+
+    if (!(await isReviewableRelation(fromUserId, toUserId, roleContext, relatedId))) {
+      return res.status(403).json({ error: 'no relation to review', code: 403 });
     }
 
     const existing = await Review.findOne({ fromUserId, toUserId, relatedId });
@@ -72,6 +132,8 @@ r.post('/', async (req, res) => {
 
     res.status(201).json(rev);
   } catch (err: any) {
+    // Dos envíos simultáneos: el índice único deja pasar solo uno.
+    if (err?.code === 11000) return res.status(409).json({ error: 'already reviewed', code: 409 });
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }
 });
@@ -80,7 +142,7 @@ r.get('/user/:userId', async (req, res) => {
   try {
     const { page, limit } = parsePagination(req.query);
     const q: any = { toUserId: req.params.userId };
-    if (req.query.roleContext) q.roleContext = req.query.roleContext;
+    if (typeof req.query.roleContext === 'string') q.roleContext = req.query.roleContext;
     const [items, total] = await Promise.all([
       Review.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
       Review.countDocuments(q)
