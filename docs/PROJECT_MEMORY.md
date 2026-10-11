@@ -1045,3 +1045,11 @@ Rules:
 - Frontend `LandlordDashboard`: duplicate counters row removed, es-ES currency, quick links fixed (no longer to public `/properties`), plural/accents in alerts (`utils/landlordDashboard.ts`), inline icon on "Nueva propiedad".
 - Files: `src/controllers/user.controller.ts`, `tests/contracts/landlordStats.test.ts`, `frontend/src/pages/LandlordDashboard.tsx`, `frontend/src/utils/landlordDashboard.ts`, `frontend/src/pages/__tests__/LandlordDashboard.test.tsx`.
 - Verification: tsc clean; Jest contracts+auth 68/68 (`--runInBand`); frontend build + 35 tests OK; Playwright screenshots 1280/390 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 7: email HTML escaping, price alerts, reviews
+
+- `utils/email.ts`: every template escapes user data with `escapeHtml`; links via `frontendUrl()`; es-ES amounts/dates.
+- Property price/availability alerts were sent to the user id as if it were an address; now resolved to the subscriber's email.
+- `POST /api/reviews`: `relatedId` must be a signed contract between both parties (matching `roleContext`) or a paid/done service offer / closed ticket of the pro; duplicate → 409.
+- Files: `src/utils/email.ts`, `src/controllers/property.controller.ts`, `src/routes/review.routes.ts`, `tests/unit/email.escape.test.ts`, `tests/reviews/review.relation.test.ts`, `tests/properties/property.alerts.test.ts`, `docs/auditoria-seguridad-2026-10-05.md`.
+- Verification: tsc clean; Jest (`--runInBand`) new/updated 11/11, properties+contracts+security+chat+escrow 105/106 (one intermittent failure in untouched `payments.duplicates`, passes 3/3 alone), e2e smoke 9/9; frontend build + 35 tests OK.
