@@ -15,7 +15,7 @@ interface Props {
 const VISIT_ERRORS: Record<string, string> = {
   invalid_visit_date: 'La fecha de la visita no es válida.',
   visitDate_required: 'Elige día y hora para la visita.',
-  forbidden: 'Solo el propietario del inmueble puede proponer visitas.',
+  forbidden: 'Solo el propietario del inmueble o la agencia que lo gestiona pueden proponer visitas.',
   application_not_found: 'Esta solicitud ya no existe.',
   no_proposed_date: 'No hay ninguna fecha propuesta que aceptar.',
 };

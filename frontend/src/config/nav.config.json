@@ -27,6 +27,7 @@
   ],
   "agency": [
     { "label": "Inicio", "path": "/agency" },
+    { "label": "Inmuebles", "path": "/agency/properties" },
     { "label": "Propietarios", "path": "/agency/landlords" },
     { "label": "Perfil y cuenta", "path": "/profile" }
   ],

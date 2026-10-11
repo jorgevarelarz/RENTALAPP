@@ -68,6 +68,7 @@ const AssistantPage = lazy(() => import("./pages/Assistant"));
 const InboundTestingPage = lazy(() => import("./pages/testing/InboundTestingPage"));
 const AgencyHome = lazy(() => import("./pages/agency/AgencyHome"));
 const AgencyLandlords = lazy(() => import("./pages/agency/AgencyLandlords"));
+const AgencyProperties = lazy(() => import("./pages/agency/AgencyProperties"));
 const InviteAccept = lazy(() => import("./pages/InviteAccept"));
 const CoTenantInviteAccept = lazy(() => import("./pages/CoTenantInviteAccept"));
 
@@ -118,7 +119,7 @@ export default function AppRoutes() {
               <Route path="/contracts/:id" element={withProtected(<ContractDetail />, ["tenant", "landlord", "admin"])} />
               <Route path="/contracts/:id/signed" element={<ServiceUpsell />} />
               <Route path="/me/favorites" element={withProtected(<FavoritesPage />, ["tenant", "landlord", "admin"])} />
-              <Route path="/contracts/new" element={withProtected(<ContractWizard />, ["landlord", "admin"])} />
+              <Route path="/contracts/new" element={withProtected(<ContractWizard />, ["landlord", "agency", "admin"])} />
               <Route path="/tickets" element={withProtected(<TicketsList />)} />
               <Route path="/tickets/new" element={withProtected(<TicketCreatePage />, ["tenant", "landlord", "admin"])} />
               <Route path="/tickets/:id" element={withProtected(<TicketDetail />)} />
@@ -143,6 +144,7 @@ export default function AppRoutes() {
               <Route path="/admin/system-events" element={withProtected(<SystemEvents />, ["admin"])} />
               <Route path="/agency" element={withProtected(<AgencyHome />, ["agency"])} />
               <Route path="/agency/landlords" element={withProtected(<AgencyLandlords />, ["agency"])} />
+              <Route path="/agency/properties" element={withProtected(<AgencyProperties />, ["agency"])} />
               <Route path="/pros" element={<ProList />} />
               <Route path="/pros/:id" element={<ProDetail />} />
               <Route path="/profile" element={withProtected(<ProfilePage />)} />

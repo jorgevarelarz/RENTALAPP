@@ -61,6 +61,32 @@ export async function listLandlordInvites(): Promise<LandlordInviteItem[]> {
   return data.items || [];
 }
 
+export type AgencyPropertyItem = {
+  id: string;
+  title?: string;
+  address?: string;
+  city?: string;
+  region?: string;
+  status: 'draft' | 'active' | 'archived';
+  ownerId?: string;
+  ownerName?: string;
+  /** 'manage': la gestiona la agencia; 'status_only': traspasada al propietario, solo el resumen. */
+  agencyAccess: 'manage' | 'status_only';
+  agencyTransferredAt?: string;
+  hasActiveContract: boolean;
+  lastPaidAt?: string;
+  /** Solo mientras la gestiona. */
+  price?: number;
+  deposit?: number;
+  openApplications?: number;
+  updatedAt?: string;
+};
+
+export async function listAgencyProperties(): Promise<AgencyPropertyItem[]> {
+  const { data } = await client.get('/api/agency/properties');
+  return data.items || [];
+}
+
 export async function getEarningsSummary(): Promise<AgencyEarningsSummary> {
   const { data } = await client.get('/api/agency/earnings/summary');
   return data;

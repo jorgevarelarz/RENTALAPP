@@ -9,7 +9,6 @@ import {
 import { useAuth } from '../context/AuthContext';
 import navConfig from '../config/nav.config.json';
 import Breadcrumbs from '../components/Breadcrumbs';
-import Badge from '../components/ui/Badge';
 import Brand from '../components/Brand';
 import Drawer from '../components/ui/Drawer';
 import { listConversations } from '../services/chat';
@@ -30,7 +29,7 @@ const iconRules: Array<[RegExp, LucideIcon]> = [
   [/^\/landlord$/, Home],
   [/^\/pro$/, Home],
   [/^\/admin$/, Home],
-  [/owner\/properties|admin\/properties/, Building2],
+  [/owner\/properties|admin\/properties|agency\/properties/, Building2],
   [/tickets|issues|incidents/, Wrench],
   [/showings/, CalendarDays],
   [/services/, Briefcase],
@@ -125,12 +124,6 @@ function Header({ unread, menuOpen, onOpenMenu }: { unread: number; menuOpen: bo
           ) : (
             <>
               <span className="text-gray-500 hidden sm:inline text-[13px]">{user.email}</span>
-              {user?.isVerified && (
-                // En móvil no cabe junto al logo y «Salir»; el estado está en Verificación.
-                <span className="hidden sm:inline-flex">
-                  <Badge tone="highlight" style={{ whiteSpace: 'nowrap' }}>KYC verificado</Badge>
-                </span>
-              )}
               <button onClick={logout} className="ra-app-login">Salir</button>
             </>
           )}

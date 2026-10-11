@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
+import { useAuth } from '../../context/AuthContext';
 import { createContract } from '../../services/contracts';
 import { getProperty } from '../../services/properties';
 import Button from '../../components/ui/Button';
@@ -96,6 +97,9 @@ export default function ContractWizard() {
   const location = useLocation();
   const state = (location.state || null) as WizardState | null;
   const nav = useNavigate();
+  const user = useAuth()?.user;
+  // La agencia gestora llega desde «Inmuebles» de su panel
+  const propertiesHome = user?.role === 'agency' ? '/agency/properties' : '/landlord';
   const { push } = useToast();
 
   const propertyId = state?.propertyId || '';
@@ -161,7 +165,7 @@ export default function ContractWizard() {
             Los contratos se preparan a partir de un candidato. Abre los candidatos de uno de tus inmuebles y pulsa
             «Crear contrato» junto a la persona elegida.
           </p>
-          <Link to="/landlord" className="inline-block mt-4 font-semibold text-[var(--ra-blue)] hover:underline">
+          <Link to={propertiesHome} className="inline-block mt-4 font-semibold text-[var(--ra-blue)] hover:underline">
             Ir a mis inmuebles
           </Link>
         </Card>
@@ -184,7 +188,7 @@ export default function ContractWizard() {
       const contract: any = await createContract(buildContractPayload(draft, property, tenantId));
       push({ title: 'Contrato creado. Queda pendiente de la firma del inquilino.', tone: 'success' });
       const id = contract?._id || contract?.id;
-      nav(id ? `/contracts/${id}` : '/landlord');
+      nav(id ? `/contracts/${id}` : propertiesHome);
     } catch (e) {
       push({ title: contractCreateError(e), tone: 'error' });
     } finally {

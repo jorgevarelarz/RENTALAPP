@@ -71,7 +71,7 @@ describe('ApplicantsModal', () => {
     await waitFor(() => expect(proposeMock).toHaveBeenCalledTimes(1));
     expect(proposeMock).toHaveBeenCalledWith('a1', new Date('2026-10-12T10:00').toISOString());
     await waitFor(() =>
-      expect(pushMock).toHaveBeenCalledWith({ title: 'Solo el propietario del inmueble puede proponer visitas.', tone: 'error' }),
+      expect(pushMock).toHaveBeenCalledWith({ title: 'Solo el propietario del inmueble o la agencia que lo gestiona pueden proponer visitas.', tone: 'error' }),
     );
     // El formulario sigue abierto para corregir
     expect(screen.getByLabelText('Día y hora de la visita')).toBeTruthy();
