@@ -152,6 +152,66 @@ describe('Agency landlord referral (captación)', () => {
     await request(app).post(`/api/agency-invites/${legacy}/accept`).send({ password: 'supersegura1' }).expect(201);
   });
 
+  describe('correo de la invitación y reenvío', () => {
+    const asAgency = (req: request.Test, id = AGENCY_ID) => req.set('x-user-id', id).set('x-user-role', 'agency');
+    const invite = () =>
+      asAgency(request(app).post('/api/agency/landlords/invite')).send({ landlordName: 'Paco Prop', landlordEmail: 'paco@test.com' });
+
+    it('si el correo falla lo dice la respuesta y la lista, y se puede reenviar sin esperar', async () => {
+      await makeAgency();
+      const sendSpy = spyEmail();
+      sendSpy.mockResolvedValueOnce('failed');
+      const created = await invite().expect(201);
+      expect(created.body.emailStatus).toBe('failed');
+      const oldToken = tokenFromEmail(sendSpy);
+
+      const list = await asAgency(request(app).get('/api/agency/landlords')).expect(200);
+      expect(list.body.items[0]).toMatchObject({ status: 'invited', emailFailed: true });
+
+      sendSpy.mockResolvedValueOnce('sent');
+      const resent = await asAgency(request(app).post(`/api/agency/landlords/invites/${created.body.invite.id}/resend`)).expect(200);
+      expect(resent.body.emailStatus).toBe('sent');
+      expect(JSON.stringify(resent.body)).not.toMatch(/invite\/|token/i);
+      const newToken = tokenFromEmail(sendSpy);
+      expect(newToken).not.toBe(oldToken);
+      await request(app).get(`/api/agency-invites/${oldToken}`).expect(404);
+      await request(app).get(`/api/agency-invites/${newToken}`).expect(200);
+
+      const after = await asAgency(request(app).get('/api/agency/landlords')).expect(200);
+      expect(after.body.items[0].emailFailed).toBe(false);
+      // Con el correo ya enviado y la invitación vigente, espera de 10 minutos.
+      await asAgency(request(app).post(`/api/agency/landlords/invites/${created.body.invite.id}/resend`)).expect(429);
+    });
+
+    it('reenvía una invitación caducada con 30 días nuevos', async () => {
+      await makeAgency();
+      spyEmail().mockResolvedValue('sent');
+      const created = await invite().expect(201);
+      await AgencyInvite.updateOne({ _id: created.body.invite.id }, { expiresAt: new Date(Date.now() - 1000) });
+      const resent = await asAgency(request(app).post(`/api/agency/landlords/invites/${created.body.invite.id}/resend`)).expect(200);
+      expect(new Date(resent.body.invite.expiresAt).getTime()).toBeGreaterThan(Date.now() + 29 * 86400000);
+    });
+
+    it('no reenvía invitaciones ajenas, aceptadas ni de alguien que ya tiene cuenta', async () => {
+      await makeAgency();
+      spyEmail().mockResolvedValue('sent');
+      const created = await invite().expect(201);
+      const url = `/api/agency/landlords/invites/${created.body.invite.id}/resend`;
+      await asAgency(request(app).post(url), '6500000000000000000000a2').expect(404);
+      await asAgency(request(app).post('/api/agency/landlords/invites/nope/resend')).expect(404);
+      await request(app).post(url).set('x-user-id', TENANT_B).set('x-user-role', 'tenant').expect(403);
+
+      await AgencyInvite.updateOne({ _id: created.body.invite.id }, { expiresAt: new Date(Date.now() - 1000) });
+      await User.create({ name: 'Paco', email: 'paco@test.com', passwordHash: 'h', role: 'landlord' });
+      const exists = await asAgency(request(app).post(url)).expect(409);
+      expect(exists.body.error).toBe('landlord_already_exists');
+
+      await AgencyInvite.updateOne({ _id: created.body.invite.id }, { status: 'accepted' });
+      const accepted = await asAgency(request(app).post(url)).expect(400);
+      expect(accepted.body.error).toBe('invite_not_pending');
+    });
+  });
+
   it('no permite invitar a un email ya registrado (primer toque gana)', async () => {
     await makeAgency();
     await User.create({ name: 'Ya Existe', email: 'paco@test.com', passwordHash: 'h', role: 'landlord' });

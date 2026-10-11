@@ -34,19 +34,25 @@ const newInviteToken = () => {
   };
 };
 
-/** El email dice quién invita y qué vivienda es; el token solo viaja en el enlace. */
-const sendInviteEmail = async (to: string, token: string, expiresAt: Date, contract: any, inviterId?: string) => {
+/**
+ * El email dice quién invita y qué vivienda es; el token solo viaja en el enlace.
+ * Guarda en la invitación si el correo salió, para que la interfaz pueda avisar.
+ */
+const sendInviteEmail = async (party: any, token: string, expiresAt: Date, contract: any, inviterId?: string) => {
   const [property, inviter]: any[] = await Promise.all([
     contract.property ? Property.findById(contract.property).select('title address city').lean() : null,
     inviterId ? User.findById(inviterId).select('name').lean() : null,
   ]);
-  await sendCoTenantInviteEmail(to, {
+  const emailStatus = await sendCoTenantInviteEmail(party.email, {
     link: frontendUrl('/invites/accept', { token }),
     inviterName: inviter?.name,
     propertyTitle: property?.title,
     propertyAddress: [property?.address, property?.city].filter(Boolean).join(', '),
     expiresAt,
   });
+  party.inviteEmailStatus = emailStatus;
+  await party.save();
+  return emailStatus;
 };
 
 export const inviteCoTenant = async (req: Request, res: Response) => {
@@ -92,8 +98,8 @@ export const inviteCoTenant = async (req: Request, res: Response) => {
         inviteExpiresAt: expiresAt,
       });
     }
-    await sendInviteEmail(normalizedEmail, token, expiresAt, contract, userId);
-    res.json({ ok: true, partyId: party._id });
+    const emailStatus = await sendInviteEmail(party, token, expiresAt, contract, userId);
+    res.json({ ok: true, partyId: party._id, emailStatus });
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'invite_failed' });
@@ -123,7 +129,9 @@ export const resendCoTenantInvite = async (req: Request, res: Response) => {
     if (party.status !== 'INVITED') return res.status(400).json({ error: 'not_invited' });
     const now = Date.now();
     const stillValid = !!party.inviteExpiresAt && party.inviteExpiresAt.getTime() > now;
-    if (stillValid && party.updatedAt && now - party.updatedAt.getTime() < INVITE_RESEND_COOLDOWN_MS) {
+    // Si el último correo falló no hay espera: el invitado no ha recibido nada.
+    const lastEmailFailed = party.inviteEmailStatus === 'failed';
+    if (stillValid && !lastEmailFailed && party.updatedAt && now - party.updatedAt.getTime() < INVITE_RESEND_COOLDOWN_MS) {
       return res.status(429).json({ error: 'resend_too_soon' });
     }
     const { token, tokenHash, expiresAt } = newInviteToken();
@@ -131,8 +139,8 @@ export const resendCoTenantInvite = async (req: Request, res: Response) => {
     party.inviteExpiresAt = expiresAt;
     party.invitedByUserId = userId ? new Types.ObjectId(userId) : party.invitedByUserId;
     await party.save();
-    await sendInviteEmail(party.email, token, expiresAt, contract, userId);
-    res.json({ ok: true, partyId: party._id, expiresAt });
+    const emailStatus = await sendInviteEmail(party, token, expiresAt, contract, userId);
+    res.json({ ok: true, partyId: party._id, expiresAt, emailStatus });
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'resend_failed' });
@@ -249,7 +257,11 @@ export const getContractParties = async (req: Request, res: Response) => {
       signedAt: p.signedAt,
       invitedAt: p.createdAt,
       ...(p.status === 'INVITED'
-        ? { expiresAt: p.inviteExpiresAt, expired: !!p.inviteExpiresAt && p.inviteExpiresAt < new Date() }
+        ? {
+            expiresAt: p.inviteExpiresAt,
+            expired: !!p.inviteExpiresAt && p.inviteExpiresAt < new Date(),
+            emailFailed: p.inviteEmailStatus === 'failed',
+          }
         : {}),
       email: showFullEmail ? p.email : redactEmail(p.email),
       user: p.userId

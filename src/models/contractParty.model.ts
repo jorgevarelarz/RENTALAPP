@@ -18,6 +18,8 @@ export interface IContractParty extends Document {
   invitedByUserId?: Types.ObjectId;
   inviteTokenHash?: string;
   inviteExpiresAt?: Date;
+  /** Resultado del último envío del email de invitación ('sent' | 'not_configured' | 'failed'). */
+  inviteEmailStatus?: 'sent' | 'not_configured' | 'failed';
   signedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -38,6 +40,7 @@ const contractPartySchema = new Schema<IContractParty>(
     invitedByUserId: { type: Schema.Types.ObjectId, ref: 'User' },
     inviteTokenHash: { type: String },
     inviteExpiresAt: { type: Date },
+    inviteEmailStatus: { type: String, enum: ['sent', 'not_configured', 'failed'] },
     signedAt: { type: Date },
   },
   { timestamps: true },

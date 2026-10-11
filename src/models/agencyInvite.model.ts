@@ -12,6 +12,9 @@ export interface IAgencyInvite {
   landlordId?: Types.ObjectId;
   acceptedAt?: Date;
   expiresAt: Date;
+  /** Resultado y fecha del último envío del email con el enlace. */
+  emailStatus?: 'sent' | 'not_configured' | 'failed';
+  emailSentAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +33,8 @@ const agencyInviteSchema = new Schema<IAgencyInvite>(
     landlordId: { type: Schema.Types.ObjectId, ref: 'User' },
     acceptedAt: { type: Date },
     expiresAt: { type: Date, required: true },
+    emailStatus: { type: String, enum: ['sent', 'not_configured', 'failed'] },
+    emailSentAt: { type: Date },
   },
   { timestamps: true },
 );

@@ -390,6 +390,34 @@ describe('Co-tenants flows', () => {
       expect(preview.body.expired).toBe(false);
     });
 
+    it('reports a failed invite email and lets the tenant resend it at once', async () => {
+      const { sendCoTenantInviteEmail } = jest.requireMock('../../src/utils/email');
+      await makeUser(tenantId, 'tenant', 'main9@test.com');
+      await makeUser(landlordId, 'landlord', 'owner9@test.com');
+      const property = await makeProperty(landlordId);
+      const contract = await makeContract(landlordId, tenantId, String(property._id));
+
+      sendCoTenantInviteEmail.mockResolvedValueOnce('failed');
+      const invited = await asTenant(request(app).post(`/api/contracts/${contract._id}/tenants/invite`)).send({ email: 'co9@test.com' });
+      expect(invited.status).toBe(200);
+      expect(invited.body.emailStatus).toBe('failed');
+
+      const parties = await asTenant(request(app).get(`/api/contracts/${contract._id}/parties`));
+      const pending = parties.body.items.find((p: any) => String(p.partyId) === String(invited.body.partyId));
+      expect(pending).toMatchObject({ status: 'INVITED', expired: false, emailFailed: true });
+
+      // Sin la espera de 10 minutos: el invitado no ha recibido nada.
+      sendCoTenantInviteEmail.mockResolvedValueOnce('sent');
+      const url = `/api/contracts/${contract._id}/tenants/${invited.body.partyId}/resend`;
+      const resent = await asTenant(request(app).post(url));
+      expect(resent.status).toBe(200);
+      expect(resent.body.emailStatus).toBe('sent');
+      const after = await asTenant(request(app).get(`/api/contracts/${contract._id}/parties`));
+      expect(after.body.items.find((p: any) => String(p.partyId) === String(invited.body.partyId)).emailFailed).toBe(false);
+      // Ahora que salió, vuelve la espera.
+      expect((await asTenant(request(app).post(url))).status).toBe(429);
+    });
+
     it('limits resending a still valid invite to once every 10 minutes', async () => {
       const valid = new Date(Date.now() + 60 * 60 * 1000);
       const { contract, party } = await setup(valid);

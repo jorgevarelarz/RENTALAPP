@@ -2,12 +2,13 @@ import type { Request, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { z, ZodError } from 'zod';
+import { Types } from 'mongoose';
 import { AgencyInvite } from '../models/agencyInvite.model';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
 import { Verification } from '../models/verification.model';
-import { sendEmail } from '../utils/email';
+import { sendEmail, type EmailDelivery } from '../utils/email';
 import { signAuthToken } from '../utils/authToken';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 import { logger } from '../utils/logger';
@@ -44,6 +45,38 @@ function requireAgency(req: Request, res: Response): string | null {
   if (!userId) { res.status(401).json({ error: 'unauthorized' }); return null; }
   if (u?.role !== 'agency') { res.status(403).json({ error: 'forbidden' }); return null; }
   return userId;
+}
+
+/** Entre dos envíos de una invitación vigente cuyo correo salió bien. */
+export const LANDLORD_INVITE_RESEND_COOLDOWN_MS = 10 * 60 * 1000;
+
+/**
+ * Manda al propietario el enlace de activación y guarda en la invitación si el
+ * correo salió. Nunca lanza: la agencia ve el resultado en la respuesta y en la lista.
+ */
+async function sendLandlordInviteEmail(invite: any, token: string): Promise<EmailDelivery> {
+  const agency = await User.findById(invite.agencyId).select('name').lean();
+  const agencyName = agency?.name || 'Tu inmobiliaria';
+  const inviteUrl = frontendUrl(`/invite/${token}`);
+  const emailStatus = await sendEmail(
+    invite.landlordEmail,
+    `${agencyName} te invita a gestionar tu alquiler en RentalApp`,
+    `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+      <h2 style="color: #030712;">Hola ${escapeHtml(invite.landlordName)},</h2>
+      <p><strong>${escapeHtml(agencyName)}</strong> ha preparado tu cuenta en RentalApp para que gestiones tu alquiler${invite.propertyAddress ? ` de <strong>${escapeHtml(invite.propertyAddress)}</strong>` : ''}: contratos, firma digital, cobros y recibos en un solo sitio.</p>
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${inviteUrl}" style="background-color: #030712; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">Activar mi cuenta</a>
+      </div>
+      <p style="color: #666; font-size: 12px;">El enlace caduca en ${INVITE_TTL_DAYS} días. Si no esperabas esta invitación puedes ignorar este email.</p>
+    </div>
+    `,
+  );
+  await AgencyInvite.updateOne({ _id: invite._id }, { $set: { emailStatus, emailSentAt: new Date() } });
+  if (emailStatus === 'failed') {
+    logger.warn({ inviteId: String(invite._id) }, 'Email de invitación de agencia no enviado');
+  }
+  return emailStatus;
 }
 
 /** POST /api/agency/landlords/invite — la agencia da de alta a un propietario. */
@@ -87,23 +120,7 @@ export async function createLandlordInvite(req: Request, res: Response) {
     expiresAt: new Date(Date.now() + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000),
   });
 
-  const agency = await User.findById(agencyId).select('name').lean();
-  const agencyName = agency?.name || 'Tu inmobiliaria';
-  const inviteUrl = frontendUrl(`/invite/${token}`);
-  sendEmail(
-    data.landlordEmail,
-    `${agencyName} te invita a gestionar tu alquiler en RentalApp`,
-    `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-      <h2 style="color: #030712;">Hola ${escapeHtml(data.landlordName)},</h2>
-      <p><strong>${escapeHtml(agencyName)}</strong> ha preparado tu cuenta en RentalApp para que gestiones tu alquiler${data.propertyAddress ? ` de <strong>${escapeHtml(data.propertyAddress)}</strong>` : ''}: contratos, firma digital, cobros y recibos en un solo sitio.</p>
-      <div style="text-align: center; margin: 30px 0;">
-        <a href="${inviteUrl}" style="background-color: #030712; color: white; padding: 12px 24px; text-decoration: none; border-radius: 8px; font-weight: bold;">Activar mi cuenta</a>
-      </div>
-      <p style="color: #666; font-size: 12px;">El enlace caduca en ${INVITE_TTL_DAYS} días. Si no esperabas esta invitación puedes ignorar este email.</p>
-    </div>
-    `,
-  ).catch((err) => logger.error({ err }, 'Error enviando email de invitación de agencia'));
+  const emailStatus = await sendLandlordInviteEmail(invite, token);
 
   await recordFunnelEvent(req, 'agency_invite_created', {
     resourceType: 'agencyInvite',
@@ -119,6 +136,7 @@ export async function createLandlordInvite(req: Request, res: Response) {
       status: invite.status,
       expiresAt: invite.expiresAt,
     },
+    emailStatus,
   });
 }
 
@@ -158,6 +176,7 @@ export async function listLandlordInvites(req: Request, res: Response) {
       landlordEmail: i.landlordEmail,
       propertyAddress: i.propertyAddress,
       status: expired ? 'expired' : i.status,
+      emailFailed: i.status === 'invited' && i.emailStatus === 'failed',
       createdAt: i.createdAt,
       acceptedAt: i.acceptedAt,
       steps,
@@ -165,6 +184,53 @@ export async function listLandlordInvites(req: Request, res: Response) {
   });
 
   return res.json({ items });
+}
+
+/**
+ * POST /api/agency/landlords/invites/:id/resend — enlace nuevo para una invitación
+ * sin aceptar (vigente o caducada); el anterior deja de valer y se renuevan los 30 días.
+ * Si el último correo salió bien y la invitación sigue vigente, como mucho uno cada 10 minutos.
+ */
+export async function resendLandlordInvite(req: Request, res: Response) {
+  const agencyId = requireAgency(req, res);
+  if (!agencyId) return;
+
+  const { id } = req.params;
+  const invite = Types.ObjectId.isValid(id) ? await AgencyInvite.findById(id) : null;
+  if (!invite || String(invite.agencyId) !== agencyId) {
+    return res.status(404).json({ error: 'invite_not_found' });
+  }
+  if (invite.status !== 'invited') return res.status(400).json({ error: 'invite_not_pending' });
+
+  const now = Date.now();
+  const stillValid = invite.expiresAt.getTime() > now;
+  if (!stillValid) {
+    // Mientras estaba caducada pudo darse de alta o invitarle otro colaborador.
+    const existingUser = await User.findOne({ email: invite.landlordEmail }).select('_id').lean();
+    if (existingUser) return res.status(409).json({ error: 'landlord_already_exists' });
+    const other = await AgencyInvite.findOne({
+      _id: { $ne: invite._id },
+      landlordEmail: invite.landlordEmail,
+      status: 'invited',
+      expiresAt: { $gt: new Date() },
+    }).select('_id').lean();
+    if (other) return res.status(409).json({ error: 'landlord_already_invited' });
+  }
+  const lastSentAt = (invite.emailSentAt || invite.createdAt)?.getTime() ?? 0;
+  if (stillValid && invite.emailStatus !== 'failed' && now - lastSentAt < LANDLORD_INVITE_RESEND_COOLDOWN_MS) {
+    return res.status(429).json({ error: 'resend_too_soon' });
+  }
+
+  const token = crypto.randomBytes(24).toString('hex');
+  invite.token = hashInviteToken(token);
+  invite.expiresAt = new Date(now + INVITE_TTL_DAYS * 24 * 60 * 60 * 1000);
+  await invite.save();
+  const emailStatus = await sendLandlordInviteEmail(invite, token);
+
+  return res.json({
+    invite: { id: String(invite._id), landlordEmail: invite.landlordEmail, status: invite.status, expiresAt: invite.expiresAt },
+    emailStatus,
+  });
 }
 
 /** GET /api/agency-invites/:token — datos públicos de la invitación (sin auth). */

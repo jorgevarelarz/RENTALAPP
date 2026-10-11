@@ -50,21 +50,30 @@ const esDate = (value: unknown) => {
 
 const contractLink = (contractId: string) => frontendUrl(`/contracts/${encodeURIComponent(contractId)}`);
 
-async function deliverEmail(options: EmailOptions): Promise<void> {
+/**
+ * Resultado de un envío. Nunca lanza: quien necesite decir al usuario que el
+ * correo no salió mira si es 'sent'. 'not_configured' = sin SMTP (desarrollo o
+ * un servidor mal configurado): el correo tampoco llega.
+ */
+export type EmailDelivery = 'sent' | 'not_configured' | 'failed';
+
+async function deliverEmail(options: EmailOptions): Promise<EmailDelivery> {
   const { to, subject } = options;
   if (!transporter) {
     logger.info({ type: 'email_mock', to, subject }, 'SMTP no configurado; email no enviado');
-    return;
+    return 'not_configured';
   }
   try {
     await transporter.sendMail({ from: defaultFrom, ...options });
     logger.info({ type: 'email_sent', to, subject }, 'Email enviado');
+    return 'sent';
   } catch (error) {
     logger.error({ type: 'email_error', to, subject, err: error }, 'Error enviando email');
+    return 'failed';
   }
 }
 
-export async function sendEmail(to: string, subject: string, html: string) {
+export async function sendEmail(to: string, subject: string, html: string): Promise<EmailDelivery> {
   return deliverEmail({ to, subject, html });
 }
 
@@ -262,7 +271,7 @@ export function coTenantInviteEmail(invite: CoTenantInviteEmail) {
   return { subject, html };
 }
 
-export async function sendCoTenantInviteEmail(to: string, invite: CoTenantInviteEmail) {
+export async function sendCoTenantInviteEmail(to: string, invite: CoTenantInviteEmail): Promise<EmailDelivery> {
   const { subject, html } = coTenantInviteEmail(invite);
-  await sendEmail(to, subject, html);
+  return sendEmail(to, subject, html);
 }
