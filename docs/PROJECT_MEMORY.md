@@ -1089,3 +1089,10 @@ Rules:
 - Frontend: `/invites/accept` page (`pages/CoTenantInviteAccept.tsx`), `components/contracts/CoTenantsCard.tsx` in `ContractDetail` (status list, invite, "Firmar como co-titular"); sign/pay-deposit buttons only for the principal tenant; login/register `?redirect=` restricted to internal paths (`safeInternalPath` in `services/coTenants.ts`), register prefills `?email=`.
 - Open for Jorge: co-tenant "signature" is only a status flip (no e-signature provider); accepting requires verified identity. "Mis contratos" doesn't list co-tenant contracts yet.
 - Verification: tsc clean; Jest (`--runInBand`) tests/contracts 58/58, src/__tests__ 37/37, e2e smoke 9/9; frontend build + 49 tests OK; Playwright screenshots 390/1280 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 13: login enumeration, password policy, reset rate limit
+
+- `login` returns `INVALID_CREDENTIALS` for unknown / social-only / wrong password and always runs one bcrypt (dummy hash). Register + reset: password 8–200 (`newPassword()` in `src/routes/auth.routes.ts`); `/api/auth/reset` behind `authLimiter`. Reset expired-token error now user-facing Spanish.
+- Frontend: `passwordPolicyError` / `PASSWORD_MIN_LENGTH` / `INVALID_CREDENTIALS_MESSAGE` in `services/auth.ts`; register + reset check before submit; login adds the Google/Apple hint only on credential errors; `ResetPassword` uses `auth-alert` and a "Contraseña actualizada" end state.
+- Files: `src/controllers/auth.controller.ts`, `src/routes/auth.routes.ts`, `src/app.ts`, `tests/auth/login-policy.test.ts`, `tests/auth/reset.test.ts`, `frontend/src/services/auth.ts`, `frontend/src/pages/auth/{LoginPage,RegisterPage,ResetPassword}.tsx`, `frontend/src/pages/auth/__tests__/passwordPolicy.test.tsx`.
+- Verification: tsc clean; Jest (`--runInBand`) tests/auth 16/16, src/__tests__+tests/security 48/48, e2e smoke 9/9; frontend build + 54 tests OK; Playwright screenshots 390/1280 px.

@@ -445,3 +445,39 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 
 **Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: enumeración de cuentas en el login («Esta cuenta utiliza Google o Apple») y contraseña mínima de 8 caracteres en registro y reset, alineada con la invitación de agencia. Si se prefiere seguir con el co-titular: listar sus contratos en «Mis contratos» y enriquecer el email de invitación.
 
+### Ronda 13 — 2026-10-11 10:18
+
+**Qué y por qué.** Seguridad, propuesta en la ronda 12 (que fue de interfaz). Es el punto P1-17 del plan de apertura y el último pendiente de «Contraseñas» en la auditoría:
+
+1. **Enumeración de cuentas en el login** (`auth.controller.ts`). Una cuenta creada con Google o Apple respondía «Esta cuenta utiliza Google o Apple», así que cualquiera podía saber qué correos estaban registrados. Además, una cuenta inexistente respondía antes, porque no hacía bcrypt. Ahora los tres casos (no existe, solo social, contraseña errónea) dan la misma respuesta (`INVALID_CREDENTIALS`) y hacen un bcrypt, contra un hash señuelo cuando no hay contraseña.
+2. **Contraseña mínima de 8** en `/register` y `/reset` (antes 6), con un máximo de 200, igual que la invitación de agencia. Las cuentas con contraseñas antiguas más cortas siguen entrando: el login no aplica la política.
+3. **Límite de intentos en `/api/auth/reset`**. Ya estaba en login, registro y request-reset, pero no en el reset. Entra en el mismo límite por IP (20 cada 15 minutos).
+4. **Interfaz.**
+   - Registro y reset comprueban los 8 caracteres antes de enviar, con un mensaje en español; antes llegaba `validation_error` del backend. El registro ya decía «Mínimo 8», pero el backend aceptaba 6.
+   - El login añade «Si creaste la cuenta con Google o Apple, entra con ese botón» solo al error de credenciales, no a otros errores como el límite de intentos. Así no se pierde la ayuda que daba el mensaje antiguo.
+   - `ResetPassword` usa los avisos `auth-alert` del resto de pantallas de acceso (antes cajas Tailwind rojas y verdes y un enlace índigo). Al terminar muestra «Contraseña actualizada» con un botón «Iniciar sesión».
+   - El error de token caducado dice «El enlace no es válido o ha caducado. Pide uno nuevo.»
+
+**Commits.**
+- `2541239` Auth: login sin enumeración de cuentas, contraseña mínima de 8 y límite de intentos en /reset (P1-17)
+- `6c9c69a` Interfaz de acceso: mínimo de 8 caracteres en registro y reset, pista de Google o Apple en el login y pantalla final del restablecimiento
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores; `tsc -p tsconfig.spec.json` sin errores en los ficheros tocados.
+- Jest `--runInBand`:
+  - nuevo `tests/auth/login-policy.test.ts` (4): misma respuesta en los tres casos y login correcto; registro con 7 caracteres rechazado y con 8 aceptado; reset con contraseña corta rechazado sin gastar el token; 429 al insistir en `/reset`;
+  - `tests/auth`: 3 suites, 16 OK. En `reset.test.ts`, el caso del token caducado usaba `newpass` (7 caracteres): ahora fallaría por la validación y no por el token, así que pasa a `newpassword`;
+  - `src/__tests__` y `tests/security`: 11 suites, 48 OK;
+  - e2e smoke: 9 OK.
+- Frontend: build OK; `npm test` 21 ficheros y 54 tests OK (antes 20 y 49). Nuevo `pages/auth/__tests__/passwordPolicy.test.tsx` (5): reset corto sin llamada a la API, pantalla final del reset, registro corto bloqueado, y pista en el login solo ante credenciales incorrectas.
+- Capturas con Playwright (vite local, `/api/*` simulado) a 390 y 1280 px: error de login, reset con contraseña corta y reset terminado. En la primera captura el botón «Iniciar sesión» del final salía estrecho; se puso a todo el ancho.
+- GitNexus: `impact` LOW en `login`, `RegisterPage` y `ResetPassword`. `detect_changes` sale medio y solo afecta a los flujos de login, registro y reset.
+
+**Qué queda.**
+- `request-reset` envía el email dentro de la petición, así que tarda más si la cuenta existe (enumeración por tiempo). Arreglarlo es mandar el email sin esperar, y eso choca con P0-07 (`sendEmail` que oculta fallos).
+- El registro sigue revelando si un correo existe; es inevitable sin verificar el correo antes de crear la cuenta.
+- El email no se normaliza a minúsculas: «Ana@x.es» y «ana@x.es» son cuentas distintas, y el login distingue mayúsculas. Normalizarlo exige migrar los usuarios de producción (comprobar antes duplicados por mayúsculas).
+- A3: sin revocación de JWT (7 días).
+- Pendientes anteriores: `payments.duplicates` intermitente, media de reseñas sin `$inc`, `returnUrl` libre en `/api/kyc/start`, la llamada real a Stripe en `contract.cotenant.test.ts`, «Mis contratos» sin los contratos de co-titular.
+
+**Siguiente mejora propuesta.** Interfaz, que esta ronda fue de seguridad: «Mis contratos» con los contratos en los que el usuario es co-titular, y la lista de `/api/me/invites` con sus invitaciones pendientes. Así el co-titular no depende del enlace del email. Si se prefiere seguridad: `tokenVersion` en el usuario (A3), que invalida los JWT al cambiar o restablecer la contraseña.
