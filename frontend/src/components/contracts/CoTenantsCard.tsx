@@ -5,6 +5,7 @@ import Input from '../ui/Input';
 import { useToast } from '../../context/ToastContext';
 import {
   ContractParty,
+  cancelCoTenantInvite,
   emailNotDelivered,
   inviteCoTenant,
   listContractParties,
@@ -31,6 +32,9 @@ const RESEND_ERRORS: Record<string, string> = {
   not_invited: 'Esa persona ya aceptó la invitación.',
   contract_closed: 'El contrato está cerrado.',
 };
+
+const ACTION =
+  'text-xs font-semibold text-[var(--ra-blue)] hover:underline disabled:cursor-default disabled:text-gray-400 disabled:no-underline';
 
 const formatExpiry = (value?: string) => {
   const date = value ? new Date(value) : null;
@@ -64,6 +68,8 @@ export default function CoTenantsCard({ contractId, contractStatus, myUserId, ca
   const [inviting, setInviting] = useState(false);
   const [signing, setSigning] = useState(false);
   const [resending, setResending] = useState<string | null>(null);
+  const [confirmCancel, setConfirmCancel] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -126,6 +132,26 @@ export default function CoTenantsCard({ contractId, contractStatus, myUserId, ca
     }
   };
 
+  const cancel = async (party: ContractParty) => {
+    const partyId = String(party.partyId);
+    setCancelling(partyId);
+    try {
+      await cancelCoTenantInvite(contractId, partyId);
+      push({ title: `Invitación a ${party.email} cancelada. El enlace ya no vale.`, tone: 'success' });
+      await load();
+    } catch (error: any) {
+      const code = error?.response?.data?.error;
+      push({
+        title: code === 'not_invited' ? 'Esa persona ya aceptó la invitación.' : 'No se pudo cancelar la invitación',
+        tone: 'error',
+      });
+      await load();
+    } finally {
+      setCancelling(null);
+      setConfirmCancel(null);
+    }
+  };
+
   const sign = async () => {
     if (!mine) return;
     setSigning(true);
@@ -160,16 +186,50 @@ export default function CoTenantsCard({ contractId, contractStatus, myUserId, ca
             >
               {statusText(p)}
             </p>
-            {inviteOpen && p.status === 'INVITED' && (
-              <button
-                type="button"
-                className="mt-1 text-xs font-semibold text-[var(--ra-blue)] hover:underline disabled:cursor-default disabled:text-gray-400 disabled:no-underline"
-                onClick={() => resend(p)}
-                disabled={resending === String(p.partyId)}
-                aria-label={`Reenviar invitación a ${p.email}`}
-              >
-                {resending === String(p.partyId) ? 'Enviando…' : 'Reenviar invitación'}
-              </button>
+            {inviteOpen && p.status === 'INVITED' && confirmCancel !== String(p.partyId) && (
+              <div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
+                <button
+                  type="button"
+                  className={ACTION}
+                  onClick={() => resend(p)}
+                  disabled={resending === String(p.partyId)}
+                  aria-label={`Reenviar invitación a ${p.email}`}
+                >
+                  {resending === String(p.partyId) ? 'Enviando…' : 'Reenviar invitación'}
+                </button>
+                <button
+                  type="button"
+                  className={`${ACTION} text-gray-500`}
+                  onClick={() => setConfirmCancel(String(p.partyId))}
+                  disabled={resending === String(p.partyId)}
+                  aria-label={`Cancelar invitación a ${p.email}`}
+                >
+                  Cancelar invitación
+                </button>
+              </div>
+            )}
+            {inviteOpen && p.status === 'INVITED' && confirmCancel === String(p.partyId) && (
+              <div className="mt-1 text-xs text-gray-600">
+                <span>El enlace dejará de valer. </span>
+                <span className="inline-flex gap-x-3">
+                  <button
+                    type="button"
+                    className={`${ACTION} text-red-700`}
+                    onClick={() => cancel(p)}
+                    disabled={cancelling === String(p.partyId)}
+                  >
+                    {cancelling === String(p.partyId) ? 'Cancelando…' : 'Sí, cancelar'}
+                  </button>
+                  <button
+                    type="button"
+                    className={`${ACTION} text-gray-500`}
+                    onClick={() => setConfirmCancel(null)}
+                    disabled={cancelling === String(p.partyId)}
+                  >
+                    No
+                  </button>
+                </span>
+              </div>
             )}
           </li>
         ))}

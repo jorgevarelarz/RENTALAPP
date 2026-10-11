@@ -450,4 +450,64 @@ describe('Co-tenants flows', () => {
       expect(joined.body.error).toBe('not_invited');
     });
   });
+
+  describe('cancel invite', () => {
+    const tenantId = '507f1f77bcf86cd7994390a1';
+    const landlordId = '507f1f77bcf86cd7994390a2';
+    const asTenant = (req: request.Test, id = tenantId) =>
+      req.set('x-user-id', id).set('x-user-role', 'tenant').set('x-user-verified', 'true');
+
+    const setup = async () => {
+      await makeUser(tenantId, 'tenant', 'main10@test.com');
+      await makeUser(landlordId, 'landlord', 'owner10@test.com');
+      const property = await makeProperty(landlordId);
+      const contract = await makeContract(landlordId, tenantId, String(property._id));
+      const party = await ContractParty.create({
+        contractId: contract._id,
+        role: 'TENANT',
+        email: 'co10@test.com',
+        status: 'INVITED',
+        invitedByUserId: new mongoose.Types.ObjectId(tenantId),
+        inviteTokenHash: crypto.createHash('sha256').update('cancel-token').digest('hex'),
+        inviteExpiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
+      return { contract, party };
+    };
+
+    it('invalidates the link, hides the invite and lets the tenant invite the same email again', async () => {
+      const { contract, party } = await setup();
+      const res = await asTenant(request(app).post(`/api/contracts/${contract._id}/tenants/${party._id}/cancel`));
+      expect(res.status).toBe(200);
+
+      const stored = await ContractParty.findById(party._id).lean();
+      expect(stored).toMatchObject({ status: 'REMOVED' });
+      expect(stored?.inviteTokenHash).toBeUndefined();
+      expect((await request(app).get('/api/invites/preview').query({ token: 'cancel-token' })).status).toBe(404);
+
+      const again = await asTenant(request(app).post(`/api/contracts/${contract._id}/tenants/invite`)).send({ email: 'co10@test.com' });
+      expect(again.status).toBe(200);
+      expect(String(again.body.partyId)).toBe(String(party._id));
+    });
+
+    it('only lets the principal tenant cancel, and only pending invites of that contract', async () => {
+      const { contract, party } = await setup();
+      const otherId = '507f1f77bcf86cd7994390a3';
+      await makeUser(otherId, 'tenant', 'other10@test.com');
+      const url = `/api/contracts/${contract._id}/tenants/${party._id}/cancel`;
+      expect((await asTenant(request(app).post(url), otherId)).status).toBe(403);
+      expect(
+        (await request(app).post(url).set('x-user-id', landlordId).set('x-user-role', 'landlord').set('x-user-verified', 'true')).status,
+      ).toBe(403);
+      expect((await asTenant(request(app).post(`/api/contracts/${contract._id}/tenants/nope/cancel`))).status).toBe(404);
+
+      const other = await ContractParty.create({ contractId: new mongoose.Types.ObjectId(), role: 'TENANT', email: 'x@test.com', status: 'INVITED' });
+      expect((await asTenant(request(app).post(`/api/contracts/${contract._id}/tenants/${other._id}/cancel`))).status).toBe(404);
+
+      await ContractParty.updateOne({ _id: party._id }, { status: 'JOINED' });
+      const joined = await asTenant(request(app).post(url));
+      expect(joined.status).toBe(400);
+      expect(joined.body.error).toBe('not_invited');
+      expect((await ContractParty.findById(party._id).lean())?.status).toBe('JOINED');
+    });
+  });
 });

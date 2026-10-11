@@ -147,6 +147,36 @@ export const resendCoTenantInvite = async (req: Request, res: Response) => {
   }
 };
 
+/**
+ * Cancela una invitación de co-titular que nadie ha aceptado: el enlace deja de valer y el correo
+ * puede volver a invitarse. Solo el inquilino principal. Para quien ya se unió está la baja con
+ * aprobación del administrador (remove-request).
+ */
+export const cancelCoTenantInvite = async (req: Request, res: Response) => {
+  try {
+    const { id, partyId } = req.params as { id: string; partyId: string };
+    const userId = req.user?.id;
+    const contract = Types.ObjectId.isValid(id) ? await Contract.findById(id) : null;
+    if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
+    if (String(contract.tenant) !== String(userId)) {
+      return res.status(403).json({ error: 'Solo el inquilino principal puede cancelar invitaciones' });
+    }
+    const party = Types.ObjectId.isValid(partyId) ? await ContractParty.findById(partyId) : null;
+    if (!party || String(party.contractId) !== String(contract._id)) {
+      return res.status(404).json({ error: 'party_not_found' });
+    }
+    if (party.status !== 'INVITED') return res.status(400).json({ error: 'not_invited' });
+    party.status = 'REMOVED';
+    party.inviteTokenHash = undefined;
+    party.inviteExpiresAt = undefined;
+    await party.save();
+    res.json({ ok: true, partyId: party._id });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: 'cancel_failed' });
+  }
+};
+
 export const signCoTenant = async (req: Request, res: Response) => {
   try {
     const { id, partyId } = req.params as { id: string; partyId: string };

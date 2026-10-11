@@ -51,6 +51,7 @@ router.patch('/:id/sign', authenticate, requirePolicies(REQUIRED_POLICIES), cont
 router.get('/:id/parties', authenticate, cotenantCtrl.getContractParties);
 router.post('/:id/tenants/invite', ...assertRole('tenant'), cotenantCtrl.inviteCoTenant);
 router.post('/:id/tenants/:partyId/resend', ...assertRole('tenant'), cotenantCtrl.resendCoTenantInvite);
+router.post('/:id/tenants/:partyId/cancel', ...assertRole('tenant'), cotenantCtrl.cancelCoTenantInvite);
 router.post('/:id/tenants/:partyId/sign', ...assertRole('tenant'), cotenantCtrl.signCoTenant);
 router.post('/:id/tenants/:partyId/remove-request', ...assertRole('tenant', 'landlord'), cotenantCtrl.removeCoTenantRequest);
 

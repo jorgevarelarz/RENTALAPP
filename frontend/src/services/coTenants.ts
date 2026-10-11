@@ -72,6 +72,12 @@ export async function resendCoTenantInvite(contractId: string, partyId: string) 
   return data as { ok: boolean; partyId: string; expiresAt: string; emailStatus?: EmailStatus };
 }
 
+/** Anula una invitación sin aceptar: el enlace deja de valer y el correo puede invitarse otra vez. */
+export async function cancelCoTenantInvite(contractId: string, partyId: string) {
+  const { data } = await client.post(`/api/contracts/${contractId}/tenants/${partyId}/cancel`);
+  return data as { ok: boolean; partyId: string };
+}
+
 export async function signAsCoTenant(contractId: string, partyId: string) {
   const { data } = await client.post(`/api/contracts/${contractId}/tenants/${partyId}/sign`);
   return data as { ok: boolean; contractStatus: string };

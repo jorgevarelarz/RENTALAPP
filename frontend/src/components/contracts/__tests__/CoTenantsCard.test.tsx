@@ -3,8 +3,9 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import CoTenantsCard from '../CoTenantsCard';
 
-const { listMock, inviteMock, signMock, resendMock, pushMock } = vi.hoisted(() => ({
+const { listMock, inviteMock, signMock, resendMock, cancelMock, pushMock } = vi.hoisted(() => ({
   listMock: vi.fn(),
+  cancelMock: vi.fn(),
   resendMock: vi.fn(),
   inviteMock: vi.fn(),
   signMock: vi.fn(),
@@ -18,6 +19,7 @@ vi.mock('../../../services/coTenants', async (importOriginal) => ({
   inviteCoTenant: inviteMock,
   signAsCoTenant: signMock,
   resendCoTenantInvite: resendMock,
+  cancelCoTenantInvite: cancelMock,
 }));
 
 const principal = { partyId: 'legacy:u1', role: 'TENANT', status: 'JOINED', email: 'ana@example.com', user: { id: 'u1', name: 'Ana' } };
@@ -114,5 +116,32 @@ describe('CoTenantsCard', () => {
     render(<CoTenantsCard contractId="c1" contractStatus="pending_signature" myUserId="u2" canInvite={false} />);
     expect(await screen.findByText('otro@example.com')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Reenviar/ })).toBeNull();
+    expect(screen.queryByRole('button', { name: /Cancelar/ })).toBeNull();
+  });
+
+  it('el inquilino principal cancela una invitación tras confirmarlo', async () => {
+    const pending = { partyId: 'p3', role: 'TENANT', status: 'INVITED', email: 'co@example.com' };
+    listMock.mockResolvedValueOnce([principal, pending]).mockResolvedValueOnce([principal]);
+    cancelMock.mockResolvedValue({ ok: true, partyId: 'p3' });
+    render(<CoTenantsCard contractId="c1" contractStatus="pending_signature" myUserId="u1" canInvite />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar invitación a co@example.com' }));
+    expect(cancelMock).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole('button', { name: 'Sí, cancelar' }));
+
+    await waitFor(() => expect(screen.queryByText('co@example.com')).toBeNull());
+    expect(cancelMock).toHaveBeenCalledWith('c1', 'p3');
+    expect(pushMock).toHaveBeenCalledWith({ title: 'Invitación a co@example.com cancelada. El enlace ya no vale.', tone: 'success' });
+  });
+
+  it('«No» deja la invitación como estaba', async () => {
+    listMock.mockResolvedValue([principal, { partyId: 'p3', role: 'TENANT', status: 'INVITED', email: 'co@example.com' }]);
+    render(<CoTenantsCard contractId="c1" contractStatus="pending_signature" myUserId="u1" canInvite />);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Cancelar invitación a co@example.com' }));
+    fireEvent.click(screen.getByRole('button', { name: 'No' }));
+
+    expect(screen.getByRole('button', { name: 'Reenviar invitación a co@example.com' })).toBeInTheDocument();
+    expect(cancelMock).not.toHaveBeenCalled();
   });
 });
