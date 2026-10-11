@@ -51,4 +51,34 @@ api?.interceptors?.request?.use?.((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
+// Códigos con los que el backend (auth.middleware.ts) rechaza un token: caducado, mal formado o
+// de una sesión cerrada (p. ej. tras restablecer la contraseña). Sin sesión válida no hay nada
+// que reintentar: se borra la sesión guardada y se vuelve al login con un aviso.
+const SESSION_LOST_CODES = new Set(['session_expired', 'invalid_token']);
+
+export function handleSessionLost(err: any): boolean {
+  if (err?.response?.status !== 401 || !SESSION_LOST_CODES.has(err?.response?.data?.code)) return false;
+  if (typeof window === 'undefined' || !localStorage.getItem('user')) return false;
+  localStorage.removeItem('user');
+  try {
+    delete (api.defaults.headers.common as any).Authorization;
+  } catch {}
+  const { pathname, search } = window.location;
+  if (pathname !== '/login') {
+    const redirect = encodeURIComponent(pathname + search);
+    window.location.assign(`/login?session=expired&redirect=${redirect}`);
+  }
+  return true;
+}
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - api puede ser un mock parcial en tests
+api?.interceptors?.response?.use?.(
+  (res: any) => res,
+  (err: any) => {
+    handleSessionLost(err);
+    return Promise.reject(err);
+  },
+);
+
 export default api;

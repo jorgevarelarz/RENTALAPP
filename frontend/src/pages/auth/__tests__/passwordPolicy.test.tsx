@@ -88,3 +88,15 @@ describe('LoginPage', () => {
     expect(screen.getByRole('alert')).not.toHaveTextContent('Google o Apple');
   });
 });
+
+describe('LoginPage tras perder la sesión', () => {
+  it('avisa de que la sesión ha caducado', () => {
+    render(<MemoryRouter initialEntries={['/login?session=expired&redirect=%2Fcontracts']}><LoginPage /></MemoryRouter>);
+    expect(screen.getByRole('status')).toHaveTextContent('Tu sesión ha caducado');
+  });
+
+  it('sin el parámetro no muestra el aviso', () => {
+    render(<MemoryRouter initialEntries={['/login']}><LoginPage /></MemoryRouter>);
+    expect(screen.queryByRole('status')).toBeNull();
+  });
+});

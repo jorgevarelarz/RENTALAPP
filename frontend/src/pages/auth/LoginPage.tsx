@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { AlertCircle, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Info } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../api/client";
 import SocialAuthButtons from "../../components/SocialAuthButtons";
@@ -22,6 +22,7 @@ export default function LoginPage() {
   const socialError = oauthError === 'access_failed'
     ? 'No se pudo completar el acceso con Google o Apple. Inténtalo de nuevo.'
     : null;
+  const sessionExpired = sp.get('session') === 'expired';
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -41,6 +42,12 @@ export default function LoginPage() {
     <>
       <h1 className="auth-title">Inicia sesión</h1>
       <p className="auth-subtitle">Gestiona propiedades, contratos e incidencias en un único lugar.</p>
+      {sessionExpired && !err && (
+        <div className="auth-alert auth-alert--info" role="status">
+          <Info size={17} className="auth-alert-icon" />
+          <span>Tu sesión ha caducado o se cerró al cambiar la contraseña. Vuelve a entrar para continuar.</span>
+        </div>
+      )}
       <SocialAuthButtons mode="login" redirect={next} />
       <form className="auth-form" onSubmit={submit} noValidate>
         <label className="auth-label" htmlFor="email">

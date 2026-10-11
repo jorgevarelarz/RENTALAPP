@@ -94,6 +94,7 @@ body { @apply m-0 antialiased bg-white text-gray-900 font-sans; }
   border-radius: 10px; padding: 11px 13px; font-size: .87rem; line-height: 1.45;
 }
 .auth-alert-icon { flex-shrink: 0; margin-top: 1px; }
+.auth-alert--info { background: #f9fafb; border-color: #e5e7eb; color: #374151; margin-bottom: 18px; }
 .auth-button {
   height: 46px; border-radius: 10px; border: none; background: #030712; color: #fff;
   font-size: .95rem; font-weight: 600; cursor: pointer;
