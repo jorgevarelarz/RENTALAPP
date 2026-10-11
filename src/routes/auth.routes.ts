@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import { body } from 'express-validator';
-import { register, login, requestPasswordReset, resetPassword } from '../controllers/auth.controller';
+import { register, login, requestPasswordReset, resetPassword, changePassword } from '../controllers/auth.controller';
+import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import {
@@ -64,5 +65,13 @@ router.post(
   [body('token').isString().notEmpty(), newPassword()],
   validate,
   asyncHandler(resetPassword),
+);
+// Sin requireVerified: cambiar la contraseña no depende de haber verificado la identidad.
+router.post(
+  '/change-password',
+  authenticate,
+  [body('currentPassword').isString().notEmpty().isLength({ max: PASSWORD_MAX }), newPassword()],
+  validate,
+  asyncHandler(changePassword),
 );
 export default router;

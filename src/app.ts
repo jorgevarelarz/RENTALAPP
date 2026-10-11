@@ -255,6 +255,7 @@ app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/request-reset', authLimiter);
 app.use('/api/auth/reset', authLimiter);
+app.use('/api/auth/change-password', authLimiter);
 app.use('/api/auth/oauth', oauthLimiter);
 
 const tenantProConsentVersion = process.env.TENANT_PRO_CONSENT_VERSION || 'v1';

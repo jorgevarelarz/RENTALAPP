@@ -7,6 +7,8 @@ import { signAuthToken } from '../utils/authToken';
 import { frontendUrl } from '../utils/frontendUrl';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 import { emailInUse, findUserByEmail, normalizeEmail } from '../utils/userEmail';
+import { getUserId } from '../utils/getUserId';
+import { SESSION_EXPIRED } from '../middleware/auth.middleware';
 
 export const INVALID_CREDENTIALS = 'Usuario o contraseña incorrectos';
 
@@ -138,4 +140,44 @@ export const resetPassword = async (req: Request, res: Response) => {
     console.error('Error resetting password', error);
     res.status(500).json({ error: 'Error al restablecer la contraseña' });
   }
+};
+
+/**
+ * Cambio de contraseña con sesión iniciada. Exige la contraseña actual, cierra las demás
+ * sesiones (sube `tokenVersion`) y devuelve un token nuevo para que este dispositivo siga dentro.
+ * Las cuentas creadas con Google/Apple no tienen contraseña: la eligen con la recuperación por
+ * correo, que demuestra que controlan el buzón.
+ */
+export const changePassword = async (req: Request, res: Response) => {
+  const { currentPassword, password } = req.body;
+  const user = await User.findById(getUserId(req)).select('+passwordHash');
+  if (!user) return res.status(401).json({ error: SESSION_EXPIRED, code: 'session_expired' });
+  if (!user.passwordHash) {
+    return res.status(400).json({
+      error: 'password_not_set',
+      message: 'Tu cuenta no tiene contraseña. Elige una con «He olvidado mi contraseña».',
+    });
+  }
+  if (!(await bcrypt.compare(String(currentPassword), user.passwordHash))) {
+    return res.status(400).json({ error: 'wrong_password', message: 'La contraseña actual no es correcta.' });
+  }
+  if (await bcrypt.compare(String(password), user.passwordHash)) {
+    return res.status(400).json({ error: 'same_password', message: 'La contraseña nueva tiene que ser distinta de la actual.' });
+  }
+
+  user.passwordHash = await bcrypt.hash(password, 10);
+  user.resetToken = undefined;
+  user.resetTokenExp = undefined;
+  (user as any).tokenVersion = (Number((user as any).tokenVersion) || 0) + 1;
+  await user.save();
+
+  // Aviso al titular por si no ha sido él; no retrasa la respuesta y nunca lanza.
+  void sendEmail(
+    user.email,
+    'Has cambiado la contraseña de RentalApp',
+    `<p>La contraseña de tu cuenta se ha cambiado y se han cerrado las demás sesiones.</p>
+<p>Si no has sido tú, <a href="${frontendUrl('/forgot-password')}">recupera tu cuenta</a> cuanto antes.</p>`,
+  );
+
+  res.json({ ok: true, token: signAuthToken(user) });
 };
