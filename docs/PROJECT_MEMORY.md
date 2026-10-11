@@ -1200,3 +1200,10 @@ Rules:
 - `charge.dispute.created|updated|closed` store `dispute` (shared `src/models/paymentDispute.schema.ts`) on `Payment`, `RentPayment` or `Contract.depositDispute`; history `paymentDisputed|paymentDisputeClosed`; payment statuses unchanged; closed disputes not reopened.
 - Verification: tsc clean; Jest `--runInBand` contracts+chat+escrow+agency 29 suites / 136 tests (new `payments.disputes.test.ts` 5), e2e 10/10; frontend build + 104 tests.
 
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 31: deposit refund + dispute notice in ContractDetail
+
+- `getContract` adds `rentDisputes` (RentPayments with `dispute`: `period`, `amount` + dispute fields).
+- `ContractDetail`: «Fianza devuelta» row in «Condiciones» (amount + date, or «(parcial)»), deposit timeline step shows refund; amber notice for open disputes (deposit or rent; closed statuses `won|lost|warning_closed` hidden). `types/contract.ts` gains `PaymentDispute`, `depositAmountRefunded`, `depositRefundedAt`, `depositDispute`, `rentDisputes`.
+- `getContractActionSummary`: role-aware plain texts (tenant «Paga la fianza», «Revisa y firma el contrato»; signed+paid «Se activa solo el <inicio>»); draft `blockedReason` null; label «En borrador».
+- Verification: tsc clean; Jest `--runInBand` 3 suites / 21 tests; frontend build + 107 tests; Playwright `/tmp/ra-shots31`.

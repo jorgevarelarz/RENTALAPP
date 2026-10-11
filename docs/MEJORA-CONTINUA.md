@@ -1115,3 +1115,41 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: la visita del propietario sale como «Has propuesto» para la agencia, la agencia no puede crear ni editar inmuebles, y falta «Cancelar invitación» de propietario.
 
 **Siguiente mejora propuesta.** Interfaz: en el detalle del contrato, mostrar «Fianza devuelta» (con importe y fecha) y un aviso discreto si hay una disputa abierta sobre la fianza o la renta. De paso, los textos de `getContractActionSummary` y la insignia `Badge` sin mayúsculas.
+
+### Ronda 31 — 2026-10-11 20:35
+
+**Qué y por qué.** Interfaz, como proponía la ronda 30. Desde esa ronda el webhook guarda las devoluciones de la fianza y las disputas (contracargos), pero nadie las veía. Además, el «Siguiente paso» del contrato usaba jerga interna («pendiente de activación operativa», «Faltan pasos previos antes de firma», «Confirmar fianza o pago inicial») y daba la misma instrucción a todas las partes.
+
+1. **Fianza devuelta.** En «Condiciones» aparece la fila «Fianza devuelta», con el importe y la fecha, o «Fianza devuelta (parcial)» solo con el importe. El paso «Pago de fianza» del estado dice «Fianza devuelta» con la fecha, o «Pagada; devueltos X €». De paso, «Fianza marcada como pagada» y «Pendiente de pago o conciliación» pasan a «Fianza pagada» y «Pendiente de pago».
+2. **Aviso de disputa.** Si hay una disputa sin resolver sobre la fianza o sobre algún recibo de renta, sale un aviso discreto en ámbar bajo la cabecera, con el mismo estilo que el de «Pago de la fianza cancelado». Explica que el titular de la tarjeta ha reclamado el cargo a su banco y que, mientras Stripe lo revisa, el cobro sigue registrado. Lista cada cobro: «Fianza» o «Renta de diciembre de 2026», con el importe, el motivo traducido si se conoce y la fecha. Las disputas cerradas (`won`, `lost`, `warning_closed`) no salen.
+   - Backend: `GET /api/contracts/:id` añade `rentDisputes`, los recibos de renta con disputa (`period`, `amount` y los datos de la disputa), con una consulta por `contractId`, que ya tiene índice. La disputa de la fianza ya venía en el contrato (`depositDispute`). Lo ven quienes ya podían ver el contrato.
+3. **«Siguiente paso» por parte** (`getContractActionSummary`, compartido con «Contratos» y el panel del casero):
+   - Borrador: el casero lee «Revisa los datos y envíalo a firmar», la agencia «Revisa los datos con el propietario, que es quien lo envía a firmar» y el inquilino «El propietario lo enviará a firmar cuando esté listo». El bloqueo redundante desaparece.
+   - Pendiente de firma: el inquilino lee «Revisa y firma el contrato» y los demás «Esperar a que firmen las partes».
+   - Firmado sin fianza: el inquilino lee «Paga la fianza» y el casero «Esperar a que el inquilino pague la fianza».
+   - Firmado con fianza: «No tienes que hacer nada más. Se activa solo el 1/11/2026». Es lo que hace `contractActivation.job`, que activa los contratos firmados con la fianza pagada en su fecha de inicio.
+   - Cerrado: «Este contrato ya no está en vigor».
+   - El co-titular, en «Contratos», lee «El inquilino principal paga la fianza».
+
+**Commits.**
+- `7ed4d84` Contratos: el detalle muestra la fianza devuelta y avisa de las disputas abiertas
+- `7a653ea` Contratos: el «Siguiente paso» dice a cada parte qué le toca
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` con `payments.disputes.test.ts`, `contract.integration.test.ts` y `contract.cotenant.test.ts`: 3 suites y 21 tests OK. El caso de la disputa de la renta comprueba ya que `GET /api/contracts/:id` devuelve `rentDisputes`.
+- Frontend: `npm --prefix frontend run build` OK (incluye `tsc --noEmit`). `npm --prefix frontend test`: 30 ficheros y 107 tests OK (antes 104). Hay tres casos nuevos:
+  - fianza devuelta y aviso con la disputa de la renta abierta, sin la de la fianza cerrada;
+  - sin disputas abiertas no hay aviso;
+  - textos del resumen por parte.
+  Se han adaptado tres tests a los textos nuevos.
+- Playwright (vite local, `/api/*` simulado) con el casero (contrato activo, devolución parcial, una disputa de la renta) y el inquilino (fianza devuelta, disputa de la fianza y de la renta), a 390 y 1280 px (`/tmp/ra-shots31`). No hay desbordamiento horizontal en ninguno de los cuatro casos. El aviso se lee bien en móvil.
+- GitNexus: `impact` HIGH en `getContractActionSummary` (3 llamadores directos: `MyContracts`, `LandlordDashboard` y `ContractDetail`). Solo cambian textos; la firma, los campos y los tonos (`LandlordDashboard` filtra por `tone`) siguen igual. `impact` LOW en `buildContractTimeline` y `getContract`. `detect_changes` sale alto, pero solo marca los flujos esperados de esas tres pantallas.
+
+**Qué queda.**
+- El aviso no distingue quién ve qué: el inquilino lee «el titular de la tarjeta ha pedido…» aunque sea él. Es neutro a propósito, porque no sabemos si el titular es el inquilino.
+- Sigue sin haber aviso fuera de la app (correo o panel de administración) para las disputas; es la decisión (1) de la ronda 30.
+- La insignia `Badge` sigue en mayúsculas («FIRMADO», «ACTIVO») en toda la app.
+- El paso «Contrato activo» muestra la fecha de inicio aunque esté pendiente, y «PDF preparado» muestra `updatedAt`.
+- Pendientes anteriores: la visita del propietario sale como «Has propuesto» para la agencia, la agencia no puede crear ni editar inmuebles y falta «Cancelar invitación» de propietario.
+
+**Siguiente mejora propuesta.** Interfaz compartida: la insignia de estado (`Badge` y `ContractStatusBadge`) sin mayúsculas ni letra espaciada, en minúscula como en Stripe o Airbnb, revisando las pantallas que la usan con capturas. Si se prefiere seguridad: PII en los logs (correos y cuerpo de los webhooks), pendiente en la auditoría.
