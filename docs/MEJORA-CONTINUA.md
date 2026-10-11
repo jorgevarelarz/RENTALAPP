@@ -25,6 +25,8 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 20**: crear un contrato exige ser el propietario del inmueble, su agencia gestora (`agencyAccess: 'manage'`) o administrador, y que el arrendador sea el dueño del inmueble. Quien antes creaba contratos con IDs a mano sobre inmuebles ajenos recibirá 403/400. Conviene comprobar también, con una consulta de solo lectura, que en producción existe el índice único `contractId_1_period_1` de `rentpayments`. Si había recibos duplicados, Mongoose no lo habrá podido crear, y la protección contra el doble cobro de la renta (P3) depende de él.
 - **Al desplegar la ronda 22**: conviene comprobar en producción, con una consulta de solo lectura, si hay cuentas cuyo correo solo se diferencia en mayúsculas (`db.users.aggregate([{$group:{_id:{$toLower:'$email'},n:{$sum:1},emails:{$push:'$email'}}},{$match:{n:{$gt:1}}}])`). Si las hay, quien entra con el correo exacto llega a la suya, pero con otras mayúsculas entra en una cualquiera de las dos; habría que decidir cuál se conserva. Además, el token de una cuenta borrada deja de valer en la siguiente petición.
 - **Al desplegar la ronda 23**: las visitas que el casero propuso antes desde «Solicitudes» se guardaron con la hora desplazada (el servidor leía «10:00» como UTC: 2 h tarde en verano y 1 h en invierno). No se corrigen solas. Si hay visitas futuras en producción, conviene revisarlas con una consulta de solo lectura (`db.applications.find({proposedBy:'landlord', proposedDate:{$gt:new Date()}})`) y avisar a los afectados. Además, `POST /api/contracts` toma ya la región del inmueble y rechaza con 400 `region_mismatch` una región distinta en el cuerpo.
+- **Recibos tras el fin del contrato (ronda 24)**: el job sigue generando recibos mientras el contrato esté `active`, también después de `endDate`, y ningún proceso lo pasa a terminado ni amplía `endDate`. Con la prórroga obligatoria de la LAU puede ser lo correcto, pero hay que decidir: ¿prórroga automática (ampliar `endDate` por años) o terminar el contrato al vencer salvo que se renueve? No se ha cambiado.
+- **Al desplegar la ronda 24**: `POST /api/contracts/:id/payments/:period/pay` solo acepta meses desde el inicio del contrato hasta el mes en curso (hora de Madrid) y contratos `active` o `signed`. Si alguien pagaba por adelantado meses futuros, recibirá 400 `period_in_future`. Conviene comprobar con una consulta de solo lectura si hay recibos fuera de rango (`period` posterior al mes actual o anterior al inicio) o de importe 0.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -850,3 +852,48 @@ La agencia gestora sigue sin acceso al asistente. Al revisarlo, su panel no tien
 
 **Siguiente mejora propuesta.** Agencia: `GET /api/agency/properties` con los inmuebles que gestiona (`agencyAccess: 'manage'`), abrir `GET /properties/:id/applications` y la propuesta de visitas a esa agencia, y una página «Inmuebles» en su panel que reutilice `ApplicantsModal` y lleve al asistente (abriendo `/contracts/new` al rol `agency`). Si se prefiere algo más corto: «Cancelar invitación» de propietario en «Propietarios», con el patrón de co-titulares.
 
+
+### Ronda 24 — 2026-10-11 16:32
+
+**Qué y por qué.** Fallos de cobro, que tienen prioridad sobre la funcionalidad de agencia que proponía la ronda 23. Al revisar el hueco de la auditoría «se siguen generando recibos después del fin», aparecieron tres fallos más claros en el cobro de la renta:
+
+1. **`POST /api/contracts/:id/payments/:period/pay` cobraba cualquier mes.** Solo validaba el formato `YYYY-MM`. Un inquilino podía pagar (y crear el recibo de) `2099-12`, `1999-01` o cualquier mes anterior al inicio, y además en un contrato `terminated`, `draft` o `cancelled`: no se comprobaba el estado. Ahora:
+   - el mes tiene que estar entre el de inicio del contrato y el mes en curso: 400 `period_before_start` o `period_in_future`;
+   - el contrato tiene que estar `active` o `signed` (como en `/pay-rent`): 400 `contract_not_active`;
+   - una renta no positiva da 400 `invalid_rent`.
+2. **`/pay-rent` cobraba antes de empezar.** Con un contrato `signed` que empieza el mes que viene, cobraba la renta de este mes. Ahora da `period_before_start`. El mes y el concepto salen de la hora de Madrid (antes, de la zona del servidor).
+3. **El job diario de recibos (`runRentGeneration`) se paraba entero.** Hacía `findOne` y luego `create` dentro de un único `try`. Si el inquilino creaba el recibo a la vez (E11000 del índice único) o un contrato daba error, el resto de contratos se quedaba sin recibo ese día. Además creaba recibos de 0 € para contratos sin renta. Ahora:
+   - `upsert` atómico por contrato, con un error aislado por contrato;
+   - sin recibos de importe no válido ni de meses anteriores al inicio;
+   - el periodo, en hora de Madrid;
+   - devuelve `{ period, created, failed }`.
+
+Todo sale del nuevo `src/utils/rentPeriod.ts` (`rentPeriodOf`, `checkRentPeriod`, `billableRent`). No se corta en `endDate`: con la prórroga de la LAU eso es una decisión (anotada en «Para Jorge»).
+
+No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el flujo pendiente de la decisión P1.
+
+**Commits.**
+- `f8c1f8f` Renta: solo se cobran meses del contrato (desde el inicio hasta el mes en curso) y de contratos vigentes; el job de recibos no se detiene si falla un contrato
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - nuevo `tests/contracts/rent-periods.test.ts` (7):
+    - mes en hora de Madrid en el cambio de mes;
+    - rango del inicio al mes en curso;
+    - mes pasado del contrato cobrado;
+    - futuro, anterior al inicio y `1999-01` rechazados sin recibo ni PaymentIntent;
+    - contrato terminado rechazado;
+    - `/pay-rent` de un contrato que aún no empieza, rechazado;
+    - job con un recibo ya pagado, uno sin renta, uno sin empezar, uno terminado y uno válido (crea solo ese, con 950 €, y repetirlo no crea nada).
+  - `contract.cotenant.test.ts` usaba el mes fijo `2026-01` con un contrato que empieza hoy; ahora usa el mes en curso. `payments.duplicates` calcula el mes con `rentPeriodOf`.
+  - `tests/contracts`: 19 suites y 87 tests OK. e2e: 2 suites y 10 tests OK (incluye el job dos veces y el pago con webhook).
+- Frontend (sin cambios; no hay llamadas a `/pay-rent` ni a `/payments/:period/pay`): build OK; `npm test` 28 ficheros y 94 tests OK.
+- GitNexus: `impact` LOW en `payRentForPeriod` y `runRentGeneration`. `detect_changes` sale alto porque marca `initiatePayment` por el desplazamiento de líneas tras el import; el código de esa función no cambia.
+
+**Qué queda.**
+- Recibos después de `endDate` y vencimiento del contrato: decisión anotada en «Para Jorge».
+- No hay estado `OVERDUE` ni recordatorios de impago.
+- La agencia gestora sigue sin ver candidatos ni crear contratos desde la interfaz (propuesta de la ronda 23).
+
+**Siguiente mejora propuesta.** La de la ronda 23, que es de interfaz y lleva tres rondas sin tocarse: «Inmuebles» en el panel de la agencia gestora. Incluye `GET /api/agency/properties` con `agencyAccess: 'manage'`, abrir los candidatos y la propuesta de visitas a esa agencia y llevar al asistente reutilizando `ApplicantsModal`. Si se prefiere algo más corto: «Cancelar invitación» de propietario en «Propietarios».

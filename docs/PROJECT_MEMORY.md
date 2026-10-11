@@ -1162,3 +1162,8 @@ Rules:
 - Files: `src/controllers/contract.controller.ts`, `src/controllers/application.controller.ts`, `src/policies/clauses/index.ts`, `frontend/src/components/ApplicantsModal.tsx`, `frontend/src/pages/contracts/contractDraft.ts`, tests `tests/contracts/create-contract.authz.test.ts`, `tests/contracts/contract.integration.test.ts`, `tests/applications/visit-proposal.test.ts`, `frontend/src/components/__tests__/ApplicantsModal.test.tsx`.
 - Verification: tsc clean; Jest `--runInBand` tests/contracts 80/80, applications 4/4, agencyReferral 14/14, e2e 10/10; frontend build + 94 tests; Playwright 390/1280 px.
 
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 24: rent periods + resilient rent job
+
+- New `src/utils/rentPeriod.ts` (`rentPeriodOf` Europe/Madrid, `checkRentPeriod` start month..current month, `billableRent`). `payRentForPeriod` now requires contract `active|signed` (400 `contract_not_active`) and period in range (400 `period_before_start|period_in_future`); `/pay-rent` rejects contracts not started yet. `runRentGeneration(now?)`: per-contract atomic upsert + isolated errors, no 0 € receipts, returns `{period, created, failed}`. Receipts after `endDate` intentionally unchanged (LAU prórroga → decision for Jorge).
+- Verification: tsc clean; Jest `--runInBand` tests/contracts 19 suites / 87 tests (new `rent-periods.test.ts` 7), e2e 10/10; frontend build + 94 tests.
