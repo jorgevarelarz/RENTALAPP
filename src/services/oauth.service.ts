@@ -230,7 +230,17 @@ export async function resolveSocialUser(
       throw new Error('El correo ya está vinculado a otra identidad');
     }
     user.set(`socialAuth.${profile.provider}`, identity);
-    if (!(user as any).emailVerifiedAt) (user as any).emailVerifiedAt = new Date();
+    if (!(user as any).emailVerifiedAt) {
+      // El registro con contraseña no verifica el correo: alguien pudo crear la cuenta con el
+      // email de la víctima antes de que esta entrara con Google o Apple. Al confirmar el
+      // proveedor que el correo es suyo, se anulan la contraseña y cualquier enlace de
+      // recuperación previos para que quien la creó no conserve el acceso.
+      // Si la contraseña era del propio titular, puede recuperarla con "He olvidado mi contraseña".
+      user.set('passwordHash', undefined);
+      user.set('resetToken', undefined);
+      user.set('resetTokenExp', undefined);
+      (user as any).emailVerifiedAt = new Date();
+    }
     if (!user.avatar && profile.avatar) user.avatar = profile.avatar;
     await user.save();
     return user;
