@@ -99,7 +99,7 @@ export default function TenantHome() {
     async function load() {
       try {
         const favorites = getFavorites().length;
-        const contracts = token ? (await listContracts(token)).items || [] : [];
+        const contracts = token ? (await listContracts(token, { include: 'cotenant' })).items || [] : [];
         if (!active) return;
         setSummary({ contracts, favorites, loading: false, error: '' });
       } catch (err) {
@@ -134,6 +134,8 @@ export default function TenantHome() {
 
   const activeSummary = activeContract ? getContractActionSummary(activeContract, 'tenant') : null;
   const depositPending = activeContract ? !activeContract.depositPaid && Number(activeContract.deposit) > 0 : false;
+  // La fianza la paga el inquilino principal; el co-titular solo ve el estado.
+  const canPayDeposit = depositPending && activeContract?.myRole !== 'cotenant';
   const loadingValue = '–';
 
   return (
@@ -191,12 +193,12 @@ export default function TenantHome() {
               </p>
             </div>
             <div className="flex shrink-0 flex-wrap gap-2">
-              {depositPending && (
+              {canPayDeposit && (
                 <Link to={`/contracts/${contractId(activeContract)}`} className={primaryLink}>
                   Pagar fianza
                 </Link>
               )}
-              <Link to={`/contracts/${contractId(activeContract)}`} className={depositPending ? secondaryLink : primaryLink}>
+              <Link to={`/contracts/${contractId(activeContract)}`} className={canPayDeposit ? secondaryLink : primaryLink}>
                 Ver contrato
               </Link>
               <Link to="/tenant/payments" className={secondaryLink}>

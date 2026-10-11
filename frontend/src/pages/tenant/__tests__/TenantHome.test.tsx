@@ -98,4 +98,31 @@ describe('TenantHome', () => {
     expect(screen.getByRole('link', { name: 'Mis solicitudes' })).toHaveAttribute('href', '/tenant/applications');
     expect(screen.queryByRole('link', { name: 'Pagar fianza' })).not.toBeInTheDocument();
   });
+
+  it('asks for co-tenant contracts and does not offer the deposit payment to a co-tenant', async () => {
+    listContractsMock.mockResolvedValue({
+      items: [
+        {
+          _id: 'contract-9',
+          status: 'signed',
+          rent: 800,
+          deposit: 800,
+          depositPaid: false,
+          myRole: 'cotenant',
+          property: { title: 'Piso compartido' },
+        },
+      ],
+    });
+    render(
+      <MemoryRouter>
+        <TenantHome />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Piso compartido')).toBeInTheDocument();
+    expect(listContractsMock).toHaveBeenCalledWith('token-1', { include: 'cotenant' });
+    expect(screen.getByText('800,00 € pendiente')).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Pagar fianza' })).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ver contrato' })).toHaveAttribute('href', '/contracts/contract-9');
+  });
 });

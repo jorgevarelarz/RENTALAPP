@@ -126,7 +126,10 @@ function Header({ unread, menuOpen, onOpenMenu }: { unread: number; menuOpen: bo
             <>
               <span className="text-gray-500 hidden sm:inline text-[13px]">{user.email}</span>
               {user?.isVerified && (
-                <Badge tone="highlight">KYC verificado</Badge>
+                // En móvil no cabe junto al logo y «Salir»; el estado está en Verificación.
+                <span className="hidden sm:inline-flex">
+                  <Badge tone="highlight" style={{ whiteSpace: 'nowrap' }}>KYC verificado</Badge>
+                </span>
               )}
               <button onClick={logout} className="ra-app-login">Salir</button>
             </>

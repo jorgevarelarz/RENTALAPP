@@ -44,4 +44,6 @@ export interface Contract {
   address?: string;
   ownerId?: string;
   tenantId?: string;
+  /** Papel del usuario en el contrato (solo en la lista de contratos). */
+  myRole?: 'landlord' | 'tenant' | 'cotenant';
 }

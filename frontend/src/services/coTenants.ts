@@ -17,6 +17,23 @@ export type ContractParty = {
   user?: { id: string; name?: string; avatar?: string };
 };
 
+export type MyCoTenantInvite = {
+  partyId: string;
+  contractId: string;
+  email: string;
+  invitedAt?: string;
+  expiresAt?: string;
+  expired: boolean;
+  landlordName?: string;
+  property?: { id: string; title?: string; address?: string; city?: string };
+};
+
+/** Invitaciones de co-titular pendientes dirigidas al correo del usuario. */
+export async function listMyCoTenantInvites() {
+  const { data } = await client.get('/api/me/invites');
+  return (data?.items ?? []) as MyCoTenantInvite[];
+}
+
 /** Vista previa pública: el invitado puede no tener cuenta todavía. */
 export async function getCoTenantInvitePreview(token: string) {
   const { data } = await client.get('/api/invites/preview', { params: { token } });
