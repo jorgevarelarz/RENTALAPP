@@ -554,3 +554,41 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - Pendientes anteriores: `request-reset` con enumeración por tiempo, email sin normalizar a minúsculas, `payments.duplicates` intermitente, media de reseñas sin `$inc`, `returnUrl` libre en `/api/kyc/start`, email de invitación de co-titular sin quién invita ni qué vivienda.
 
 **Siguiente mejora propuesta.** Interfaz, que esta ronda fue de seguridad: el email de invitación de co-titular con quién invita y qué vivienda es (con `escapeHtml`), y «Reenviar invitación» en la tarjeta «Co-titulares» para invitaciones caducadas. Si se prefiere seguridad: `returnUrl` libre en `/api/kyc/start` (redirección abierta) y normalizar el email a minúsculas en el registro y el login (sin migrar producción).
+
+### Ronda 16 — 2026-10-11 11:12
+
+**Qué y por qué.** Interfaz y flujo del co-titular, propuesta en la ronda 15 (que fue de seguridad). El email de invitación decía solo «Has sido invitado como co-titular en un contrato de alquiler», sin quién invitaba ni qué vivienda: parecía phishing. Además, una invitación caducada no tenía arreglo: volver a invitar al mismo correo daba `already_invited`. Al probarlo salió un fallo más grave.
+
+1. **Fallo: la tarjeta «Co-titulares» se quedaba vacía** en cuanto había una invitación pendiente. `getContractParties` hacía `String(p.userId)` antes de filtrar, y una invitación sin aceptar no tiene `userId`. La cadena `"undefined"` rompía la consulta de usuarios (500) y la interfaz lo ocultaba como lista vacía. Desde la ronda 12, el inquilino que invitaba a alguien dejaba de ver la tarjeta entera, incluido él mismo. Ahora se filtra antes de convertir.
+2. **Email de invitación** (`coTenantInviteEmail` y `sendCoTenantInviteEmail` en `utils/email.ts`):
+   - quién invita, qué vivienda (título y dirección), qué podrá hacer el co-titular y cuándo caduca el enlace;
+   - todo el texto del usuario pasa por `escapeHtml`, y el nombre de quien invita se deja en una línea y con tope de longitud antes de ir al asunto;
+   - el HTML se genera en una función pura, que se prueba sin SMTP.
+3. **Reenviar invitación**:
+   - endpoint `POST /api/contracts/:id/tenants/:partyId/resend`. Solo el inquilino principal, solo invitaciones `INVITED` de ese contrato y nunca en un contrato cerrado;
+   - genera un token nuevo con 48 horas de validez, y el enlace anterior deja de valer;
+   - si la invitación sigue vigente, como mucho un reenvío cada 10 minutos (429 `resend_too_soon`), para que no sirva para mandar correo en bucle;
+   - `GET /parties` devuelve `expiresAt` y `expired` en las invitaciones pendientes.
+4. **Tarjeta «Co-titulares»**: cada invitación pendiente muestra «Invitación enviada · caduca el 13 oct, 12:30» o «Invitación caducada» (ámbar), con la acción de texto «Reenviar invitación» debajo. Solo la ve el inquilino principal. Los errores salen explicados en el aviso.
+
+**Commits.**
+- `af8c60e` Co-titular: email de invitación con quién invita y qué vivienda, reenvío de invitaciones y lista de partes que no falla con invitaciones pendientes
+- `8586cad` Co-titulares: caducidad de cada invitación pendiente y «Reenviar invitación» para el inquilino principal
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - `contract.cotenant.test.ts`: 11 OK (3 nuevos). Cubren el reenvío de una invitación caducada (el token viejo da 404 en la vista previa y el nuevo es válido), el límite de 10 minutos, y que el reenvío solo lo hace el inquilino principal y solo con invitaciones pendientes de ese contrato (403, 404 y 400). El test del enlace ahora comprueba también quién invita y qué vivienda;
+  - nuevo `tests/unit/coTenantInviteEmail.test.ts`: 3 OK (contenido, escapado de HTML y asunto sin saltos de línea, y sin datos opcionales);
+  - `tests/contracts` y `tests/unit` juntos: 93 tests, 92 OK. El que falla es `payments.duplicates`, el intermitente ya anotado. Suelto pasa 7 de 7 dos veces.
+- El fallo de `getContractParties` salió con el primer test nuevo (500 «Cast to ObjectId failed for value "undefined"») y desapareció con el arreglo.
+- Frontend: build OK; `npm test` 23 ficheros y 69 tests OK (antes 66). `CoTenantsCard.test.tsx` suma 3: reenviar una invitación caducada, el error `resend_too_soon` explicado, y que el co-titular no ve «Reenviar».
+- Playwright (vite local, `/api/*` simulado) a 390 y 1280 px, y captura del email. En la primera pasada, el botón «Reenviar» a la derecha partía el correo en tres líneas en la columna estrecha de escritorio. Pasó a ser una acción de texto debajo del estado.
+- GitNexus: `impact` LOW en `inviteCoTenant` y `getContractParties` (solo los usa la ruta). `detect_changes` sale medio y solo afecta al controlador de co-titulares (flujo `InviteCoTenant → DeliverEmail`).
+
+**Qué queda.**
+- `sendEmail` sigue sin avisar si el SMTP falla (P0-07): «Invitación reenviada» sale aunque el correo no llegue.
+- La invitación de co-titular no tiene «Cancelar invitación». Solo existe la baja con aprobación del administrador (`remove-request`), que es excesiva para una invitación que nadie ha aceptado.
+- Pendientes anteriores: rol e `isVerified` leídos del token, `request-reset` con enumeración por tiempo, email sin normalizar a minúsculas, `payments.duplicates` intermitente, media de reseñas sin `$inc`, `returnUrl` libre en `/api/kyc/start`.
+
+**Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: `returnUrl` libre en `/api/kyc/start` (redirección abierta, se arregla con `frontendUrl()`), y que `authenticate` lea rol e `isVerified` de la base, ya que ahora consulta al usuario (ajustando los tests que fabrican tokens). Si se prefiere fiabilidad: P0-07, que `sendEmail` devuelva si el envío falló, para que las pantallas lo digan.

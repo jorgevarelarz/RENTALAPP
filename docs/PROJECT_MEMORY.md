@@ -1109,3 +1109,10 @@ Rules:
 - `tokenVersion` is bumped by `resetPassword` and by the A1 password wipe in `resolveSocialUser`; `updateUser` ignores it.
 - Frontend: `handleSessionLost` (axios response interceptor in `api/client.ts`) clears the stored user on those two codes and goes to `/login?session=expired&redirect=…`; `LoginPage` shows a neutral notice (`auth-alert--info`).
 - Files: `src/utils/authToken.ts`, `src/middleware/auth.middleware.ts`, `src/models/user.model.ts`, `src/controllers/{auth,oauth,agencyInvite,user}.controller.ts`, `src/services/oauth.service.ts`, `tests/auth/session-revocation.test.ts`, `frontend/src/api/client.ts`, `frontend/src/api/__tests__/sessionLost.test.ts`, `frontend/src/pages/auth/LoginPage.tsx`, `frontend/src/pages/auth/__tests__/passwordPolicy.test.tsx`, `frontend/src/index.css`.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 16: co-tenant invite email and resend
+
+- Bug fix: `getContractParties` crashed (500) whenever a pending invite without `userId` existed (`String(undefined)` in the user lookup); the "Co-titulares" card showed nothing.
+- `coTenantInviteEmail` / `sendCoTenantInviteEmail` (`src/utils/email.ts`): inviter, property, expiry, all escaped. `POST /api/contracts/:id/tenants/:partyId/resend` (principal tenant, INVITED only, new token, 10-min cooldown while still valid → 429 `resend_too_soon`). `/parties` returns `expiresAt`/`expired` for invites.
+- Frontend: `CoTenantsCard` shows expiry / "Invitación caducada" and "Reenviar invitación"; `resendCoTenantInvite` in `services/coTenants.ts`.
+- Verification: tsc clean; Jest (`--runInBand`) contract.cotenant 11/11, unit coTenantInviteEmail 3/3 (payments.duplicates flaky in batch, 7/7 alone); frontend build + 69 tests OK; Playwright screenshots 390/1280 px.
