@@ -20,6 +20,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 9**: las consultas a la IA (asistente Clara y descripción de anuncios) quedan limitadas a 30 cada 15 minutos por usuario. Si te parece poco o mucho, se cambia con `AI_RATE_LIMIT_MAX` en el entorno, sin tocar código.
 - **Al desplegar la ronda 11**: `/metrics` deja de ser público. Si algo lo lee (Prometheus, un panel), hay que poner `METRICS_TOKEN` en el entorno y mandar `Authorization: Bearer <token>`; sin la variable, `/metrics` da 404. `/health` ya no devuelve `env`. Si en producción no está `STRIPE_IDENTITY_WEBHOOK_SECRET`, el webhook de `/api/kyc` responde 503 (hoy la verificación de identidad es un stub y nadie lo usa).
 - **Al desplegar la ronda 15**: cada petición autenticada hace una consulta más a Mongo (`tokenVersion` del usuario, por `_id`). Los JWT ya emitidos siguen valiendo (cuentan como versión 0); no hace falta migración. Quien restablezca la contraseña cierra todas sus sesiones abiertas, también la del propio dispositivo.
+- **Al desplegar la ronda 17**: rol e `isVerified` salen de la base en cada petición, no del token. Un administrador degradado o una cuenta a la que se retira la verificación lo nota en la siguiente petición. No hay migración ni consulta extra (es la misma de `tokenVersion`).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
   - «Firmar como co-titular» solo cambia el estado en la base (`POST /tenants/:partyId/sign`, backend de antes); no es una firma electrónica con proveedor. ¿Vale así o el co-titular debe firmar con Firma.dev como el inquilino principal?
   - Aceptar la invitación exige tener la identidad verificada (`requireVerified` está en toda `/api`). La página lo explica y enlaza a `/tenant/kyc`, pero ¿debe poder unirse antes y verificar después?
@@ -592,3 +593,28 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - Pendientes anteriores: rol e `isVerified` leídos del token, `request-reset` con enumeración por tiempo, email sin normalizar a minúsculas, `payments.duplicates` intermitente, media de reseñas sin `$inc`, `returnUrl` libre en `/api/kyc/start`.
 
 **Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: `returnUrl` libre en `/api/kyc/start` (redirección abierta, se arregla con `frontendUrl()`), y que `authenticate` lea rol e `isVerified` de la base, ya que ahora consulta al usuario (ajustando los tests que fabrican tokens). Si se prefiere fiabilidad: P0-07, que `sendEmail` devuelva si el envío falló, para que las pantallas lo digan.
+
+### Ronda 17 — 2026-10-11 11:40
+
+**Qué y por qué.** Seguridad, propuesta en la ronda 16 (que fue de interfaz). Dos fallos pequeños pero reales:
+
+1. **Redirección abierta en `/api/kyc/start`.** El destino de vuelta tras verificar la identidad era `req.body.returnUrl` tal cual, así que cualquiera podía generar una sesión de verificación con la marca de la app que acababa en un dominio ajeno. Ahora `kycReturnUrl` (`src/routes/identity.routes.ts`) solo acepta rutas internas (`/…`, sin `//`, barras invertidas ni caracteres de control), las construye con `frontendUrl()` y comprueba al final que el origen es el del frontend (`/..//otro.dominio` se normaliza a `//otro.dominio`). Lo demás vuelve a `/tenant/kyc`. Hoy el frontend no llama a este endpoint, así que no cambia nada visible.
+2. **Rol e `isVerified` leídos del token.** Un administrador degradado seguía siéndolo hasta 7 días, y una verificación retirada (o concedida) no se aplicaba hasta volver a entrar. `authenticate` ya consultaba al usuario desde la ronda 15 para `tokenVersion`; ahora esa misma consulta trae también `role` e `isVerified`, que mandan sobre el token. Si la cuenta no existe (tests con identificadores inventados), se usan los datos del token como antes. El atajo de tests (`ALLOW_UNVERIFIED`) sigue considerando verificado un token sin la marca.
+
+**Commits.**
+- `b56a625` KYC: returnUrl de /api/kyc/start limitado a rutas del frontend (redirección abierta)
+- `1231d5c` Auth: rol e isVerified se leen de la base en cada petición; un cambio de rol o de verificación no espera a que caduque el token
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` y `tsc -p tsconfig.spec.json` sin errores.
+- Jest `--runInBand`, suite completa con el cambio de `authenticate`: 65 suites y 260 tests OK (no hizo falta ajustar ningún test que fabrica tokens). `tests/auth`: 5 suites y 34 tests OK, con el nuevo `tests/auth/session-claims.test.ts` (13): administrador degradado que pierde `GET /api/users` con el mismo token y ve `role: tenant` en `/me`, verificación retirada (403) y concedida (200) sin volver a entrar, 8 casos de `kycReturnUrl` (absoluta, `//`, `/\`, `javascript:`, objeto, ruta con consulta), `/..//` que no sale del dominio, y `POST /api/kyc/start` con una URL ajena que acaba en `/tenant/kyc`.
+- e2e: 2 suites y 10 tests OK.
+- Frontend (sin cambios): build OK; `npm test` 23 ficheros y 69 tests OK.
+- GitNexus: `impact` LOW en `authenticate` e `identity.routes.ts` (el índice no ve los `app.use`, por eso la suite completa). `detect_changes` LOW: solo `auth.middleware.ts` e `identity.routes.ts`.
+
+**Qué queda.**
+- El frontend guarda el rol del login: tras un cambio de rol, el menú sigue siendo el viejo hasta volver a entrar (el backend ya responde con el rol nuevo). Se arreglaría refrescando `/api/users/me` al arrancar.
+- Un usuario borrado conserva su token (no se rechaza si no existe).
+- Pendientes anteriores: P0-07 (`sendEmail` no avisa si el SMTP falla), «Cancelar invitación» de co-titular, `request-reset` con enumeración por tiempo, email sin normalizar a minúsculas, `payments.duplicates` intermitente, media de reseñas sin `$inc`.
+
+**Siguiente mejora propuesta.** Fiabilidad e interfaz juntas: P0-07, que `sendEmail` devuelva si el envío falló y que las pantallas que dependen del correo (reenviar invitación de co-titular, recuperación de contraseña en el lado del administrador, invitación de agencia) lo digan en vez de mostrar éxito. Si se prefiere solo interfaz: refrescar el usuario con `/api/users/me` al arrancar la app, para que rol y verificación de la interfaz coincidan con los del backend.

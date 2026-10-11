@@ -1116,3 +1116,11 @@ Rules:
 - `coTenantInviteEmail` / `sendCoTenantInviteEmail` (`src/utils/email.ts`): inviter, property, expiry, all escaped. `POST /api/contracts/:id/tenants/:partyId/resend` (principal tenant, INVITED only, new token, 10-min cooldown while still valid → 429 `resend_too_soon`). `/parties` returns `expiresAt`/`expired` for invites.
 - Frontend: `CoTenantsCard` shows expiry / "Invitación caducada" and "Reenviar invitación"; `resendCoTenantInvite` in `services/coTenants.ts`.
 - Verification: tsc clean; Jest (`--runInBand`) contract.cotenant 11/11, unit coTenantInviteEmail 3/3 (payments.duplicates flaky in batch, 7/7 alone); frontend build + 69 tests OK; Playwright screenshots 390/1280 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 17: KYC open redirect, role/isVerified from DB
+
+- `POST /api/kyc/start`: `returnUrl` sanitised by `kycReturnUrl` (`src/routes/identity.routes.ts`): internal paths only, built with `frontendUrl()`, same-origin check; fallback `/tenant/kyc`.
+- `authenticate`: the `tokenVersion` lookup (`loadSessionUser`) now also loads `role` and `isVerified`, which override the JWT claims when the user exists (token values kept for unknown ids / no Mongo).
+- Files: `src/routes/identity.routes.ts`, `src/middleware/auth.middleware.ts`, `tests/auth/session-claims.test.ts`.
+- Verification: tsc clean; full Jest `--runInBand` 65 suites / 260 tests OK; tests/auth 34/34; e2e 10/10; frontend build + 69 tests OK.
+
