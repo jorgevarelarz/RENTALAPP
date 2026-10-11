@@ -18,6 +18,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Ronda 4, cambio de producto**: la agencia ya no puede «Copiar enlace» de invitación (era justo la vulnerabilidad A4). Si quiere ofrecer un reenvío, habría que añadir un botón «Reenviar invitación» que vuelva a mandar el email al propietario.
 - **Al desplegar la ronda 2**: si en producción existen `DEPOSIT_SUCCESS_URL` o `DEPOSIT_CANCEL_URL`, mandan sobre las URLs nuevas (`FRONTEND_URL/contracts/<id>?deposit=success|cancel`); conviene borrarlas o comprobar que apuntan a app.rentalapp.es. El cambio de cobros no necesita migración.
 - **Al desplegar la ronda 9**: las consultas a la IA (asistente Clara y descripción de anuncios) quedan limitadas a 30 cada 15 minutos por usuario. Si te parece poco o mucho, se cambia con `AI_RATE_LIMIT_MAX` en el entorno, sin tocar código.
+- **Al desplegar la ronda 11**: `/metrics` deja de ser público. Si algo lo lee (Prometheus, un panel), hay que poner `METRICS_TOKEN` en el entorno y mandar `Authorization: Bearer <token>`; sin la variable, `/metrics` da 404. `/health` ya no devuelve `env`. Si en producción no está `STRIPE_IDENTITY_WEBHOOK_SECRET`, el webhook de `/api/kyc` responde 503 (hoy la verificación de identidad es un stub y nadie lo usa).
 
 ### Ronda 1 — 2026-10-11 04:55
 
@@ -364,3 +365,36 @@ Decisiones que el trabajador no toma y que siguen abiertas:
   - enlace del co-titular sin `frontendUrl()`.
 
 **Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: cerrar `/metrics` (solo con un token o desde la red interna) y quitar `NODE_ENV` de `/health`. En la misma ronda, el enlace del co-titular con `frontendUrl()`. Si se prefiere interfaz: revisar en móvil la búsqueda de pisos y la ficha del inmueble (`PublicLayout`) con capturas a 390 px.
+
+### Ronda 11 — 2026-10-11 09:43
+
+**Qué y por qué.** Seguridad, propuesta en la ronda 10 (la anterior fue de interfaz). Son puntos de la auditoría que no dependen de Jorge:
+
+1. **`/metrics` público** (`src/metrics.ts`). Cualquiera veía el volumen de peticiones por método y estado. Ahora exige `Authorization: Bearer <METRICS_TOKEN>`, comparado en tiempo constante. Sin la variable, la ruta da 404. Nada del repositorio lo lee (sin Prometheus en los compose).
+2. **`/health` exponía `NODE_ENV`** (`src/app.ts`). Ya no lo devuelve; `ok` y el estado de Mongo siguen igual, así que el smoke y el healthcheck de despliegue no cambian.
+3. **Tokens en los logs.** El log estructurado y `morgan` guardaban la URL con la query, incluido el `code` y el `state` del callback de Google y Apple. Ahora los dos registran la ruta sin query (`pathWithoutQuery`). El formato de `morgan` es el mismo que `dev`, sin colores.
+4. **Webhook de `/api/kyc` sin firma.** Sin `STRIPE_IDENTITY_WEBHOOK_SECRET`, cualquiera podía crear o marcar como `verified` un `IdentityCheck`. Ahora en producción responde 503; en desarrollo sigue el camino simulado. Hoy nadie lee `IdentityCheck`: es una defensa para cuando se conecte.
+5. **Enlace del co-titular** (`contract.cotenant.controller.ts`). Se construía a mano con `localhost:3001` por defecto; ahora usa `frontendUrl()`, como el resto de emails.
+
+**Commits.**
+- `adcdc95` Observabilidad: /metrics con token, /health sin entorno, logs sin query y webhook KYC sin secreto rechazado en producción
+- `fc15fa5` Co-titular: enlace de invitación con frontendUrl() y test del email
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores; `tsc -p tsconfig.spec.json` sin errores en los ficheros tocados.
+- Jest `--runInBand`:
+  - nuevo `src/__tests__/observability.test.ts` (7). Comprueba que `/health` no devuelve `env`. `/metrics` da 404 sin token configurado, 401 sin cabecera, con token erróneo o sin `Bearer`, y 200 con el bueno. La query se quita del log. El webhook KYC da 503 en producción sin secreto y sigue funcionando fuera de producción;
+  - `contract.cotenant.test.ts` (5, antes 4): el email lleva `https://<FRONTEND_URL>/invites/accept?token=…` y en la base solo queda el SHA-256 del token;
+  - `src/__tests__` y co-titular: 10 suites, 43 tests OK;
+  - e2e `health` y `smoke`: 10 OK.
+- Frontend (sin cambios): build OK; 17 ficheros y 39 tests OK.
+- GitNexus: `impact` LOW en `metricsHandler`, `metricsMiddleware` e `inviteCoTenant`. `detect_changes` sale medio y solo afecta al flujo `InviteCoTenant → DeliverEmail`.
+- Un detalle del test: con `NODE_ENV=test`, la app monta rutas de prueba que dan 404 a todo `/api` si se cambia a `production` en caliente. Por eso el webhook KYC se prueba con su router montado aparte.
+
+**Qué queda.**
+- **Invitación de co-titular rota en el frontend.** El email lleva a `/invites/accept?token=…`, pero esa ruta no existe en `AppRoutes`: solo existe `/invite/:token`, que es de la agencia. Tampoco hay pantalla para invitar ni para firmar como co-titular. El backend está completo (`POST /api/invites/accept`, `/api/me/invites`).
+- `contract.cotenant.test.ts` llama de verdad a la API de Stripe en un caso de pago (sale un `StripeAuthenticationError` por consola; el test pasa). Habría que simular `stripe.paymentIntents.retrieve`.
+- `POST /api/kyc/start` acepta un `returnUrl` elegido por el cliente. Hoy es un stub; al conectar Stripe Identity hay que limitarlo a `frontendUrl()`.
+- Pendientes anteriores: enumeración de cuentas en el login, PII en otros logs, `payments.duplicates` intermitente y media de reseñas sin `$inc`.
+
+**Siguiente mejora propuesta.** Interfaz: página `/invites/accept` para el co-titular. Tiene que leer el token, pedir que inicie sesión o se registre con el email invitado y llamar a `POST /api/invites/accept`. Además, una sección «Co-titulares» en el detalle del contrato para invitar (`/tenants/invite`) y ver el estado. Así se cierra un flujo que hoy acaba en una página que no existe. Si se prefiere seguridad: enumeración de cuentas en el login y contraseña mínima de 8 caracteres.

@@ -1074,3 +1074,11 @@ Rules:
 - `components/ui/Drawer`: closed panel is `visibility:hidden` + `aria-hidden` (links were tabbable off-screen); focus moves into the panel, Tab is trapped, focus returns to the opener; optional `label` prop.
 - Files: `frontend/src/layout/AppShell.tsx`, `frontend/src/layout/__tests__/AppShell.test.tsx`, `frontend/src/components/ui/Drawer.tsx`, `frontend/src/index.css`.
 - Verification: frontend build + 39 tests OK; Playwright screenshots 390/1280 px and keyboard focus check.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 11: observability hardening, co-tenant link
+
+- `/metrics` requires `Authorization: Bearer <METRICS_TOKEN>` (404 when unset); `/health` no longer returns `env`; request logs (structured + morgan) drop the query string (`pathWithoutQuery` in `src/metrics.ts`); `/api/kyc/webhook` without `STRIPE_IDENTITY_WEBHOOK_SECRET` → 503 in production. Co-tenant invite link via `frontendUrl()`.
+- Open: frontend has no `/invites/accept` route (co-tenant email link 404s) and no co-tenant UI.
+- Files: `src/metrics.ts`, `src/app.ts`, `src/routes/identity.routes.ts`, `src/controllers/contract.cotenant.controller.ts`, `src/__tests__/observability.test.ts`, `tests/contracts/contract.cotenant.test.ts`, `.env.example`, `docs/auditoria-seguridad-2026-10-05.md`.
+- Verification: tsc clean; Jest (`--runInBand`) 10 suites / 43 tests OK, e2e health+smoke 10/10; frontend build + 39 tests OK.
+
