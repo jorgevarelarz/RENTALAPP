@@ -2,52 +2,80 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import Card from '../../components/ui/Card';
-import { AlertCircle, Clock3, CreditCard, FileSignature, Heart, Home, Search, ShieldCheck } from 'lucide-react';
+import { AlertCircle, ChevronRight, Clock3, Heart, ShieldCheck } from 'lucide-react';
 import OnboardingChecklist from '../../components/OnboardingChecklist';
 import { listContracts } from '../../services/contracts';
 import { getFavorites } from '../../utils/favorites';
 import { formatApiError } from '../../api/client';
+import { getContractActionSummary, getContractStatusLabel } from '../../utils/contractWorkflow';
+import type { Contract } from '../../types/contract';
 
 type TenantSummary = {
-  contracts: any[];
+  contracts: Contract[];
   favorites: number;
   loading: boolean;
   error: string;
 };
 
-function statusLabel(status?: string) {
-  const labels: Record<string, string> = {
-    active: 'Activo',
-    signed: 'Firmado',
-    draft: 'Borrador',
-    completed: 'Completado',
-    cancelled: 'Cancelado',
-  };
-  return labels[status || ''] || 'Pendiente';
-}
+const IN_PROGRESS = ['draft', 'generated', 'pending_signature', 'signing'];
+
+const euroFormatter = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
+const formatEuros = (value: unknown) => euroFormatter.format(Number(value) || 0);
+
+const primaryLink =
+  'inline-flex items-center justify-center whitespace-nowrap rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90';
+const secondaryLink =
+  'inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50';
+
+const quickLinks = [
+  { to: '/contracts', title: 'Contratos', detail: 'Borradores, firmas y documentos' },
+  { to: '/tenant/payments', title: 'Pagos', detail: 'Rentas, recibos y fianza' },
+  { to: '/tenant/applications', title: 'Solicitudes', detail: 'Pisos a los que has aplicado' },
+  { to: '/tickets', title: 'Incidencias', detail: 'Averías y mantenimiento' },
+];
+
+const propertyOf = (contract: Contract) => (typeof contract.property === 'object' ? contract.property : undefined);
+
+const propertyTitle = (contract: Contract) => {
+  const property = propertyOf(contract);
+  return property?.title || property?.address || contract.propertyAddress || 'Contrato de alquiler';
+};
+
+const propertyPlace = (contract: Contract) => {
+  const property = propertyOf(contract);
+  return [property?.address !== property?.title ? property?.address : '', property?.city].filter(Boolean).join(', ');
+};
+
+const contractId = (contract: Contract) => contract._id || contract.id || '';
 
 function StatCard({
+  to,
   icon,
   label,
   value,
   hint,
 }: {
+  to: string;
   icon: React.ReactNode;
   label: string;
   value: React.ReactNode;
   hint: string;
 }) {
   return (
-    <Card className="border bg-white p-5 shadow-sm">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-gray-500">{label}</p>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{value}</p>
-          <p className="mt-1 text-sm text-gray-500">{hint}</p>
+    <Link to={to} className="block rounded-xl transition-shadow hover:shadow-sm">
+      <Card className="h-full p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-gray-500">{label}</p>
+            <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+            <p className="mt-1 text-xs text-gray-500">{hint}</p>
+          </div>
+          <div className="rounded-lg bg-gray-50 p-2.5 text-gray-500" aria-hidden="true">
+            {icon}
+          </div>
         </div>
-        <div className="rounded-lg bg-blue-50 p-3 text-blue-700">{icon}</div>
-      </div>
-    </Card>
+      </Card>
+    </Link>
   );
 }
 
@@ -96,21 +124,28 @@ export default function TenantHome() {
     [summary.contracts],
   );
 
-  const pendingContracts = useMemo(
-    () => summary.contracts.filter((contract) => ['draft', 'pending'].includes(contract?.status)).length,
+  const inProgress = useMemo(
+    () => summary.contracts.filter((contract) => IN_PROGRESS.includes(contract?.status)),
     [summary.contracts],
   );
 
   const tenantProStatus = user?.tenantPro?.status || 'pending';
   const tenantProLabel = tenantProStatus === 'verified' ? 'Verificado' : tenantProStatus === 'rejected' ? 'Revisar' : 'Pendiente';
 
+  const activeSummary = activeContract ? getContractActionSummary(activeContract, 'tenant') : null;
+  const depositPending = activeContract ? !activeContract.depositPaid && Number(activeContract.deposit) > 0 : false;
+  const loadingValue = '–';
+
   return (
-    <div className="space-y-8">
-      <div className="rounded-2xl border border-blue-100 bg-blue-50 p-8">
-        <h1 className="text-3xl font-bold text-gray-900">Hola, {firstName}</h1>
-        <p className="text-gray-600 mt-2 text-lg">
-          ¿En qué podemos ayudarte hoy? Gestiona tu hogar desde aquí.
-        </p>
+    <div className="space-y-8 pb-10">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">Hola, {firstName}</h1>
+          <p className="mt-1 text-gray-500">Tu alquiler, tus pagos y tus solicitudes, en un mismo sitio.</p>
+        </div>
+        <Link to="/properties" className={`${secondaryLink} self-start md:self-auto`}>
+          Buscar pisos
+        </Link>
       </div>
 
       <OnboardingChecklist role="tenant" />
@@ -122,111 +157,146 @@ export default function TenantHome() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <Card className="overflow-hidden">
+        <div className="border-b border-gray-100 px-5 py-4">
+          <h2 className="font-semibold text-gray-900">Tu alquiler</h2>
+        </div>
+        {summary.loading ? (
+          <div className="px-5 py-6 text-sm text-gray-500">Cargando…</div>
+        ) : activeContract && activeSummary ? (
+          <div className="flex flex-col gap-5 px-5 py-5 md:flex-row md:items-end md:justify-between">
+            <div className="min-w-0">
+              <p className="text-xl font-bold text-gray-900">{propertyTitle(activeContract)}</p>
+              {propertyPlace(activeContract) && (
+                <p className="mt-0.5 text-sm text-gray-500">{propertyPlace(activeContract)}</p>
+              )}
+              <dl className="mt-4 flex flex-wrap gap-x-8 gap-y-3 text-sm">
+                <div>
+                  <dt className="text-gray-500">Renta</dt>
+                  <dd className="font-semibold tabular-nums text-gray-900">{formatEuros(activeContract.rent)}/mes</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Estado</dt>
+                  <dd className="font-semibold text-gray-900">{getContractStatusLabel(activeContract.status)}</dd>
+                </div>
+                <div>
+                  <dt className="text-gray-500">Fianza</dt>
+                  <dd className="font-semibold text-gray-900">
+                    {depositPending ? `${formatEuros(activeContract.deposit)} pendiente` : 'Pagada'}
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-4 text-sm text-gray-600">
+                <span className="font-medium text-gray-900">Siguiente paso:</span> {activeSummary.nextAction}
+              </p>
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2">
+              {depositPending && (
+                <Link to={`/contracts/${contractId(activeContract)}`} className={primaryLink}>
+                  Pagar fianza
+                </Link>
+              )}
+              <Link to={`/contracts/${contractId(activeContract)}`} className={depositPending ? secondaryLink : primaryLink}>
+                Ver contrato
+              </Link>
+              <Link to="/tenant/payments" className={secondaryLink}>
+                Pagos
+              </Link>
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col gap-4 px-5 py-6 md:flex-row md:items-center md:justify-between">
+            <div>
+              <p className="font-medium text-gray-900">Aún no tienes un alquiler activo</p>
+              <p className="mt-1 text-sm text-gray-500">
+                Cuando firmes un contrato verás aquí la renta, la fianza y el siguiente paso.
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link to="/properties" className={primaryLink}>
+                Buscar pisos
+              </Link>
+              <Link to="/tenant/applications" className={secondaryLink}>
+                Mis solicitudes
+              </Link>
+            </div>
+          </div>
+        )}
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
         <StatCard
-          icon={<Home size={22} />}
-          label="Contrato activo"
-          value={summary.loading ? '...' : activeContract ? '1' : '0'}
-          hint={activeContract ? statusLabel(activeContract.status) : 'Sin alquiler activo'}
+          to="/contracts"
+          icon={<Clock3 size={20} />}
+          label="Contratos en trámite"
+          value={summary.loading ? loadingValue : inProgress.length}
+          hint="Por revisar o firmar"
         />
         <StatCard
-          icon={<Clock3 size={22} />}
-          label="En trámite"
-          value={summary.loading ? '...' : pendingContracts}
-          hint="Contratos por revisar o firmar"
-        />
-        <StatCard
-          icon={<Heart size={22} />}
+          to="/me/favorites"
+          icon={<Heart size={20} />}
           label="Favoritos"
-          value={summary.loading ? '...' : summary.favorites}
+          value={summary.loading ? loadingValue : summary.favorites}
           hint="Viviendas guardadas"
         />
         <StatCard
-          icon={<ShieldCheck size={22} />}
+          to="/tenant-pro"
+          icon={<ShieldCheck size={20} />}
           label="Tenant PRO"
           value={tenantProLabel}
           hint={tenantProStatus === 'verified' ? 'Perfil listo para aplicar' : 'Completa la verificación'}
         />
       </div>
 
-      {activeContract && (
-        <Card className="border border-emerald-200 bg-emerald-50 p-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div>
-              <p className="text-sm font-semibold uppercase tracking-wide text-emerald-700">Alquiler actual</p>
-              <h2 className="mt-1 text-xl font-bold text-gray-900">
-                {activeContract.property?.title || activeContract.property?.address || 'Contrato activo'}
-              </h2>
-              <p className="mt-1 text-sm text-gray-600">
-                Estado: {statusLabel(activeContract.status)}
-              </p>
-            </div>
-            <Link
-              to={`/contracts/${activeContract._id}`}
-              className="inline-flex items-center justify-center rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-800"
-            >
-              Ver contrato
-            </Link>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 lg:items-start">
+        <Card className="overflow-hidden">
+          <div className="border-b border-gray-100 px-5 py-4">
+            <h3 className="font-semibold text-gray-900">Contratos en trámite</h3>
           </div>
+          {inProgress.length === 0 ? (
+            <div className="px-5 py-6 text-sm text-gray-500">
+              {summary.loading ? 'Cargando…' : 'No tienes contratos pendientes de firma.'}
+            </div>
+          ) : (
+            <ul className="divide-y divide-gray-100">
+              {inProgress.slice(0, 3).map((contract) => (
+                <li key={contractId(contract)}>
+                  <Link
+                    to={`/contracts/${contractId(contract)}`}
+                    className="flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-gray-50"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate font-medium text-gray-900">{propertyTitle(contract)}</span>
+                      <span className="block text-xs text-gray-500">
+                        {getContractStatusLabel(contract.status)} · {getContractActionSummary(contract, 'tenant').nextAction}
+                      </span>
+                    </span>
+                    <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          )}
         </Card>
-      )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <Link to="/properties" className="block group">
-          <Card
-            style={{ height: '100%', padding: '24px', transition: 'all 0.2s', borderColor: 'transparent' }}
-            className="hover:shadow-lg hover:border-blue-200 border bg-white"
-          >
-            <div className="bg-blue-100 w-12 h-12 rounded-full flex items-center justify-center mb-4 group-hover:bg-blue-600 transition-colors">
-              <Search className="text-blue-600 group-hover:text-white" size={24} />
-            </div>
-            <h3 className="font-bold text-lg mb-2">Buscar nuevo hogar</h3>
-            <p className="text-sm text-gray-500">Explora propiedades verificadas y filtra por tus preferencias.</p>
-          </Card>
-        </Link>
-
-        <Link to="/tenant-pro" className="block group">
-          <Card
-            style={{ height: '100%', padding: '24px', transition: 'all 0.2s', borderColor: 'transparent' }}
-            className="hover:shadow-lg hover:border-emerald-200 border bg-white"
-          >
-            <div className="bg-emerald-100 w-12 h-12 rounded-full flex items-center justify-center mb-4 group-hover:bg-emerald-600 transition-colors">
-              <ShieldCheck className="text-emerald-600 group-hover:text-white" size={24} />
-            </div>
-            <h3 className="font-bold text-lg mb-2">Perfil Tenant PRO</h3>
-            <p className="text-sm text-gray-500">
-              {user?.tenantPro?.status === 'verified'
-                ? '¡Tu perfil está verificado! Tienes prioridad.'
-                : 'Verifica tu identidad y destaca ante los propietarios.'}
-            </p>
-          </Card>
-        </Link>
-
-        <Link to="/contracts" className="block group">
-          <Card
-            style={{ height: '100%', padding: '24px', transition: 'all 0.2s', borderColor: 'transparent' }}
-            className="hover:shadow-lg hover:border-purple-200 border bg-white"
-          >
-            <div className="bg-purple-100 w-12 h-12 rounded-full flex items-center justify-center mb-4 group-hover:bg-purple-600 transition-colors">
-              <FileSignature className="text-purple-600 group-hover:text-white" size={24} />
-            </div>
-            <h3 className="font-bold text-lg mb-2">Mis Contratos</h3>
-            <p className="text-sm text-gray-500">Accede a tus contratos de alquiler firmados y documentos.</p>
-          </Card>
-        </Link>
-
-        <Link to="/tenant/payments" className="block group">
-          <Card
-            style={{ height: '100%', padding: '24px', transition: 'all 0.2s', borderColor: 'transparent' }}
-            className="hover:shadow-lg hover:border-orange-200 border bg-white"
-          >
-            <div className="bg-orange-100 w-12 h-12 rounded-full flex items-center justify-center mb-4 group-hover:bg-orange-600 transition-colors">
-              <CreditCard className="text-orange-600 group-hover:text-white" size={24} />
-            </div>
-            <h3 className="font-bold text-lg mb-2">Pagos y Recibos</h3>
-            <p className="text-sm text-gray-500">Consulta tu historial de pagos o configura el pago automático.</p>
-          </Card>
-        </Link>
+        <Card className="overflow-hidden">
+          <div className="border-b border-gray-100 px-5 py-4">
+            <h3 className="font-semibold text-gray-900">Gestión rápida</h3>
+          </div>
+          <ul className="divide-y divide-gray-100">
+            {quickLinks.map((link) => (
+              <li key={link.to}>
+                <Link to={link.to} className="flex items-center justify-between gap-3 px-5 py-3 transition-colors hover:bg-gray-50">
+                  <span>
+                    <span className="block font-medium text-gray-900">{link.title}</span>
+                    <span className="block text-xs text-gray-500">{link.detail}</span>
+                  </span>
+                  <ChevronRight size={16} className="shrink-0 text-gray-400" aria-hidden="true" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </Card>
       </div>
     </div>
   );
