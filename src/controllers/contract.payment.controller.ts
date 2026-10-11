@@ -128,6 +128,10 @@ export const createRentPaymentIntent = async (req: Request, res: Response) => {
     if (attempt.kind === 'paid') {
       return res.status(400).json({ error: 'ya_pagado' });
     }
+    if (attempt.kind === 'refunded') {
+      // Un recibo devuelto no se vuelve a cobrar sin que alguien lo decida.
+      return res.status(409).json({ error: 'rent_refunded' });
+    }
     if (attempt.kind === 'in_progress') {
       return res.json({ status: 'PROCESSING', clientSecret: attempt.clientSecret, amount });
     }
@@ -231,6 +235,10 @@ export const payRentForPeriod = async (req: Request, res: Response) => {
     const attempt = await claimRentPayment(existing);
     if (attempt.kind === 'paid') {
       return res.status(400).json({ error: 'ya_pagado' });
+    }
+    if (attempt.kind === 'refunded') {
+      // Un recibo devuelto no se vuelve a cobrar sin que alguien lo decida.
+      return res.status(409).json({ error: 'rent_refunded' });
     }
     if (attempt.kind === 'in_progress') {
       return res.json({ status: 'PROCESSING', clientSecret: attempt.clientSecret, amount: attempt.rentPayment.amount });

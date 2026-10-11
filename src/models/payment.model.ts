@@ -23,6 +23,8 @@ export interface IPayment extends Document {
   receiptUrl?: string;
 
   paidAt?: Date;
+  amountRefunded?: number;
+  refundedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +60,9 @@ const PaymentSchema: Schema = new Schema(
     receiptUrl: { type: String },
 
     paidAt: { type: Date },
+    // Euros devueltos en Stripe (también en devoluciones parciales); `refunded` solo si es total.
+    amountRefunded: { type: Number },
+    refundedAt: { type: Date },
   },
   { timestamps: true },
 );

@@ -38,6 +38,24 @@ async function ensureContractConversation(contractId: string): Promise<string> {
   return conv.id;
 }
 
+/**
+ * Cargo del PaymentIntent y la URL de su recibo. Con la API 2022-11-15 el intent ya no trae
+ * `charges`, solo `latest_charge` (ID o, si se expande, el cargo).
+ */
+async function chargeReceipt(intent: Stripe.PaymentIntent): Promise<{ chargeId?: string; receiptUrl?: string }> {
+  const latest = intent.latest_charge;
+  if (!latest) return {};
+  if (typeof latest !== 'string') return { chargeId: latest.id, receiptUrl: latest.receipt_url || undefined };
+  try {
+    const charge = await stripe.charges.retrieve(latest);
+    return { chargeId: charge.id, receiptUrl: charge.receipt_url || undefined };
+  } catch (err) {
+    // Sin recibo el pago sigue siendo válido: no hacemos que Stripe reintente el evento.
+    console.error('[stripe] no se pudo leer el cargo', latest, err);
+    return { chargeId: latest };
+  }
+}
+
 async function maybePayAgencyRentFeeShare(params: {
   eventId: string;
   intent: Stripe.PaymentIntent;
@@ -225,34 +243,37 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
         const paymentId = intent.metadata?.paymentId as string | undefined;
         const rentPaymentId = intent.metadata?.rentPaymentId as string | undefined;
 
-        const receiptUrl = (intent as any)?.charges?.data?.[0]?.receipt_url;
+        const { chargeId, receiptUrl } = await chargeReceipt(intent);
         let payment: any = null;
 
+        // Un pago ya devuelto no vuelve a `succeeded` si el evento llega tarde o se reenvía.
         if (paymentId) {
-          payment = await Payment.findByIdAndUpdate(
-            paymentId,
+          payment = await Payment.findOneAndUpdate(
+            { _id: paymentId, status: { $ne: 'refunded' } },
             {
               status: 'succeeded',
               paidAt: new Date(),
               receiptUrl,
+              stripeChargeId: chargeId,
               stripePaymentIntentId: intent.id,
             },
             { new: true },
           );
         } else if (paymentType === 'rent') {
           payment = await Payment.findOneAndUpdate(
-            { stripePaymentIntentId: intent.id },
+            { stripePaymentIntentId: intent.id, status: { $ne: 'refunded' } },
             {
               status: 'succeeded',
               paidAt: new Date(),
               receiptUrl,
+              stripeChargeId: chargeId,
             },
             { new: true },
           );
         }
         if (rentPaymentId) {
           await RentPayment.findOneAndUpdate(
-            { _id: rentPaymentId, status: { $ne: 'PAID' } },
+            { _id: rentPaymentId, status: { $nin: ['PAID', 'REFUNDED'] } },
             { status: 'PAID', paidAt: new Date(), providerPaymentId: intent.id },
             { new: true },
           );
@@ -349,7 +370,7 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
         // anterior no debe deshacer un PAID ni pisar un reintento más nuevo.
         if (rentPaymentId) {
           await RentPayment.updateOne(
-            { _id: rentPaymentId, status: { $ne: 'PAID' }, providerPaymentId: intent.id },
+            { _id: rentPaymentId, status: { $nin: ['PAID', 'REFUNDED'] }, providerPaymentId: intent.id },
             { status: 'FAILED' },
           );
         }
@@ -375,11 +396,50 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
           await RentPayment.updateOne(
             {
               _id: rentPaymentId,
-              status: { $ne: 'PAID' },
+              status: { $nin: ['PAID', 'REFUNDED'] },
               $or: [{ providerPaymentId: intent.id }, { providerPaymentId: null }],
             },
             { status: 'PROCESSING', providerPaymentId: intent.id },
           );
+        }
+        break;
+      }
+      case 'charge.refunded': {
+        // Devolución desde el panel de Stripe (o la API). Total: el pago y el recibo de renta
+        // pasan a devueltos; parcial: solo se anota el importe. Las transferencias ya hechas
+        // (parte de la agencia) no se revierten aquí.
+        const charge = event.data.object as Stripe.Charge;
+        const intentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : charge.payment_intent?.id;
+        if (!intentId) break;
+        const amountRefunded = Math.round(charge.amount_refunded || 0) / 100;
+        const fullRefund = charge.refunded === true;
+        const refundedAt = new Date();
+
+        const payment = await Payment.findOneAndUpdate(
+          { stripePaymentIntentId: intentId, status: { $in: ['succeeded', 'refunded'] } },
+          fullRefund
+            ? { status: 'refunded', amountRefunded, refundedAt, stripeChargeId: charge.id }
+            : { amountRefunded, stripeChargeId: charge.id },
+          { new: true },
+        );
+        const rentPayment = fullRefund
+          ? await RentPayment.findOneAndUpdate(
+              { providerPaymentId: intentId, status: 'PAID' },
+              { status: 'REFUNDED', refundedAt },
+              { new: true },
+            )
+          : null;
+
+        const contractRef = payment?.contract || rentPayment?.contractId;
+        if (contractRef) {
+          await recordContractHistory(contractRef, fullRefund ? 'paymentRefunded' : 'paymentPartiallyRefunded', {
+            paymentIntentId: intentId,
+            amountRefunded,
+            period: rentPayment?.period,
+          });
+        }
+        if (!payment && !rentPayment) {
+          console.warn('[stripe] devolución sin pago asociado', { intentId, chargeId: charge.id });
         }
         break;
       }

@@ -19,6 +19,7 @@ export const RESUMABLE_INTENT_STATUSES = new Set(['requires_payment_method', 're
 
 export type RentAttemptOutcome =
   | { kind: 'paid' }
+  | { kind: 'refunded' }
   | { kind: 'claimed'; rentPayment: IRentPayment; previousStatus: RentPaymentStatus }
   | { kind: 'in_progress'; rentPayment: IRentPayment; clientSecret?: string };
 
@@ -53,6 +54,7 @@ async function resumableClientSecret(providerPaymentId?: string): Promise<{ secr
  */
 export async function claimRentPayment(rentPayment: IRentPayment): Promise<RentAttemptOutcome> {
   if (rentPayment.status === 'PAID') return { kind: 'paid' };
+  if (rentPayment.status === 'REFUNDED') return { kind: 'refunded' };
 
   if (rentPayment.status === 'PROCESSING' && rentPayment.providerPaymentId) {
     const resume = await resumableClientSecret(rentPayment.providerPaymentId);
@@ -84,6 +86,7 @@ export async function claimRentPayment(rentPayment: IRentPayment): Promise<RentA
   // Otra petición se adelantó: devolvemos su estado.
   const current = await RentPayment.findById(rentPayment._id);
   if (!current || current.status === 'PAID') return { kind: 'paid' };
+  if (current.status === 'REFUNDED') return { kind: 'refunded' };
   const resume = await resumableClientSecret(current.providerPaymentId);
   return { kind: 'in_progress', rentPayment: current, clientSecret: resume.secret };
 }
