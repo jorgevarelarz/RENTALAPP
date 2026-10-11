@@ -15,7 +15,8 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Datos legales** (razón social, NIF), **precios** y **carga de datos en producción**.
 - **TTL de `SystemEvent`**: cuántos días se conservan las visitas.
 - **Al desplegar la ronda 1**: comprobar que `FRONTEND_URL=https://app.rentalapp.es` está en el entorno de producción; el enlace de recuperación de contraseña depende de ello (sin la variable usaría `APP_URL` o `localhost`). Los tokens de recuperación emitidos antes del despliegue dejan de valer (ahora se guarda su hash); caducan en una hora, así que el efecto es mínimo.
-- **Ronda 4, cambio de producto**: la agencia ya no puede «Copiar enlace» de invitación (era justo la vulnerabilidad A4). Si quiere ofrecer un reenvío, habría que añadir un botón «Reenviar invitación» que vuelva a mandar el email al propietario.
+- **Ronda 4, cambio de producto**: la agencia ya no puede «Copiar enlace» de invitación (era justo la vulnerabilidad A4). Desde la ronda 18 tiene «Reenviar invitación» en «Propietarios», que manda un enlace nuevo al propietario.
+- **Al desplegar la ronda 18**: crear una invitación de agencia espera ahora al SMTP (antes se enviaba en segundo plano), así que la respuesta tarda lo que tarde el correo. Si en producción no hay SMTP configurado, las pantallas de invitación lo dirán («el correo no salió»).
 - **Al desplegar la ronda 2**: si en producción existen `DEPOSIT_SUCCESS_URL` o `DEPOSIT_CANCEL_URL`, mandan sobre las URLs nuevas (`FRONTEND_URL/contracts/<id>?deposit=success|cancel`); conviene borrarlas o comprobar que apuntan a app.rentalapp.es. El cambio de cobros no necesita migración.
 - **Al desplegar la ronda 9**: las consultas a la IA (asistente Clara y descripción de anuncios) quedan limitadas a 30 cada 15 minutos por usuario. Si te parece poco o mucho, se cambia con `AI_RATE_LIMIT_MAX` en el entorno, sin tocar código.
 - **Al desplegar la ronda 11**: `/metrics` deja de ser público. Si algo lo lee (Prometheus, un panel), hay que poner `METRICS_TOKEN` en el entorno y mandar `Authorization: Bearer <token>`; sin la variable, `/metrics` da 404. `/health` ya no devuelve `env`. Si en producción no está `STRIPE_IDENTITY_WEBHOOK_SECRET`, el webhook de `/api/kyc` responde 503 (hoy la verificación de identidad es un stub y nadie lo usa).
@@ -618,3 +619,48 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - Pendientes anteriores: P0-07 (`sendEmail` no avisa si el SMTP falla), «Cancelar invitación» de co-titular, `request-reset` con enumeración por tiempo, email sin normalizar a minúsculas, `payments.duplicates` intermitente, media de reseñas sin `$inc`.
 
 **Siguiente mejora propuesta.** Fiabilidad e interfaz juntas: P0-07, que `sendEmail` devuelva si el envío falló y que las pantallas que dependen del correo (reenviar invitación de co-titular, recuperación de contraseña en el lado del administrador, invitación de agencia) lo digan en vez de mostrar éxito. Si se prefiere solo interfaz: refrescar el usuario con `/api/users/me` al arrancar la app, para que rol y verificación de la interfaz coincidan con los del backend.
+
+### Ronda 18 — 2026-10-11 14:45
+
+**Qué y por qué.** Fiabilidad e interfaz juntas, propuesta en la ronda 17: P0-07. `sendEmail` se tragaba los fallos de SMTP, así que «Invitación enviada» salía aunque el correo no llegara. Encima, la agencia no podía hacer nada: sin «Copiar enlace» (A4, ronda 4) ni reenvío, una invitación cuyo correo fallaba quedaba bloqueada 30 días (`invite_already_pending`).
+
+1. **`deliverEmail` devuelve el resultado**, `'sent' | 'not_configured' | 'failed'`, y sigue sin lanzar. Los que ya lo llamaban lo ignoran, así que nada más cambia (GitNexus lo marca CRITICAL por los 24 dependientes; por eso se pasó la suite completa). `sendCoTenantInviteEmail` y `/api/notify/email` devuelven también el estado.
+2. **Co-titular.**
+   - `inviteEmailStatus` en `ContractParty`. Invitar y reenviar devuelven `emailStatus`; `/parties` marca `emailFailed`.
+   - Si el último correo falló, se puede reenviar sin los 10 minutos de espera.
+   - Tarjeta «Co-titulares»: aviso «Invitación guardada, pero el correo a … no salió» y estado ámbar «No se pudo enviar el correo».
+3. **Agencia.**
+   - El envío se espera (antes iba en segundo plano). Se guardan `emailStatus` y `emailSentAt`, la respuesta lleva `emailStatus` y la lista lleva `emailFailed`.
+   - Nuevo `POST /api/agency/landlords/invites/:id/resend`:
+     - solo la agencia dueña y solo invitaciones sin aceptar (vigentes o caducadas);
+     - enlace nuevo con 30 días, y el anterior deja de valer;
+     - espera de 10 minutos si el último correo salió bien;
+     - si la invitación estaba caducada, comprueba otra vez que el propietario no tenga cuenta ni otra invitación vigente.
+   - Las rutas de agencia pasan por `asyncHandler`: con Express 4, un error en esos handlers dejaba la petición colgada.
+   - En «Propietarios», cada invitación sin aceptar tiene la acción de texto «Reenviar invitación», el estado «No se pudo enviar el correo» si falló, y un aviso verde, ámbar o rojo según el resultado.
+4. La recuperación de contraseña no cambia a propósito: decir si el correo salió permitiría saber qué cuentas existen.
+
+**Commits.**
+- `d995447` Email: sendEmail devuelve si el correo salió (P0-07); las invitaciones de co-titular y de agencia guardan y devuelven el resultado, y la agencia puede reenviar su invitación
+- `6d9a223` Interfaz: las invitaciones de co-titular y de agencia avisan si el correo no salió; la agencia puede reenviar invitaciones pendientes o caducadas desde «Propietarios»
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` y `tsc -p tsconfig.spec.json` sin errores.
+- Jest `--runInBand`:
+  - lo tocado, 4 suites y 30 tests OK. Casos nuevos:
+    - co-titular con correo fallido: `emailFailed`, reenvío inmediato y vuelta de la espera cuando el correo sale;
+    - agencia: correo fallido y reenvío (token viejo 404, nuevo 200, 429 después), caducada renovada a 30 días, y reenvío rechazado si es ajena (404), si lo pide un inquilino (403), si el propietario ya tiene cuenta (409) o si ya la aceptó (400);
+    - `tests/unit/emailDelivery.test.ts`: sin SMTP devuelve `not_configured`.
+  - Suite completa con `--forceExit`: 67 suites y 278 tests OK, en 539 s. El primer intento sin `--forceExit` se quedó sin terminar a los 10 minutos del límite de la herramienta y no dio resultado.
+- Frontend: build OK; `npm test` 24 ficheros y 73 tests OK (antes 23 y 69). Nuevos: `AgencyLandlords.test.tsx` (3) y un caso en `CoTenantsCard.test.tsx`.
+- Playwright (vite local, `/api/*` simulado), página `/agency/landlords` a 1280 y 390 px: lista con una invitación fallida, una caducada y una activa, y aviso ámbar tras reenviar. La acción y el estado caben en una línea en móvil.
+- GitNexus: `impact` CRITICAL en `deliverEmail` (cambio solo aditivo, cubierto con la suite completa) y LOW en `createLandlordInvite`. `detect_changes`, con el índice del repo canónico, sale alto por desplazamiento de líneas; los cambios reales están en `email.ts`, los controladores de co-titular y agencia, los dos modelos y `notify.routes.ts`.
+
+**Qué queda.**
+- Los demás correos (contrato listo para firmar, recibos, recordatorios) siguen sin decir a nadie si fallaron; solo queda el log.
+- Sin «Cancelar invitación» de co-titular ni de agencia.
+- El frontend guarda el rol del login: tras un cambio de rol, el menú no cambia hasta volver a entrar.
+- La suite completa de Jest tarda unos 9 minutos; conviene lanzarla en segundo plano con `--forceExit`.
+- Pendientes anteriores: usuario borrado que conserva su token, `request-reset` con enumeración por tiempo, email sin normalizar a minúsculas, media de reseñas sin `$inc`.
+
+**Siguiente mejora propuesta.** Interfaz: refrescar el usuario con `/api/users/me` al arrancar la app, para que rol, verificación y la insignia KYC coincidan con el backend (desde la ronda 17 el backend ya los lee de la base). En la misma ronda, «Cancelar invitación» de co-titular para invitaciones sin aceptar. Si se prefiere seguridad: rechazar en `authenticate` el token de un usuario borrado, ajustando los tests que usan identificadores inventados.

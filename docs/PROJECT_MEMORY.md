@@ -1124,3 +1124,9 @@ Rules:
 - Files: `src/routes/identity.routes.ts`, `src/middleware/auth.middleware.ts`, `tests/auth/session-claims.test.ts`.
 - Verification: tsc clean; full Jest `--runInBand` 65 suites / 260 tests OK; tests/auth 34/34; e2e 10/10; frontend build + 69 tests OK.
 
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 18: email delivery result (P0-07) + agency invite resend
+
+- `deliverEmail`/`sendEmail`/`sendCoTenantInviteEmail` return `EmailDelivery` (`'sent' | 'not_configured' | 'failed'`), never throw. Co-tenant: `ContractParty.inviteEmailStatus`, `emailStatus` in invite/resend responses, `emailFailed` in `/parties`, no resend cooldown when last email failed. Agency: `AgencyInvite.emailStatus/emailSentAt`, send is awaited, `emailFailed` in list, new `POST /api/agency/landlords/invites/:id/resend`; agency routes wrapped in `asyncHandler`.
+- Frontend: `emailNotDelivered` in `services/coTenants.ts`; `CoTenantsCard` and `AgencyLandlords` warn when the email didn't go out; "Reenviar invitación" in agency list. Password reset intentionally unchanged (enumeration).
+- Verification: tsc clean; full Jest `--runInBand --forceExit` 67 suites / 278 tests; frontend build + 73 tests; Playwright 1280/390 px.
