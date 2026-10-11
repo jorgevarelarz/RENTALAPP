@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { Outlet, Link, NavLink } from 'react-router-dom';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Outlet, Link, NavLink, useLocation } from 'react-router-dom';
 import {
   Activity, BadgeCheck, BarChart3, Bath, Briefcase, Building2, CalendarDays,
-  CircleDot, CreditCard, FileSignature, FileText, Heart, Home, Map as MapIcon,
+  CircleDot, CreditCard, Menu, X, FileSignature, FileText, Heart, Home, Map as MapIcon,
   MessageSquare, Receipt, Scale, Search, Settings, ShieldCheck, Sparkles,
   User, Users, Wrench,
 } from 'lucide-react';
@@ -11,6 +11,7 @@ import navConfig from '../config/nav.config.json';
 import Breadcrumbs from '../components/Breadcrumbs';
 import Badge from '../components/ui/Badge';
 import Brand from '../components/Brand';
+import Drawer from '../components/ui/Drawer';
 import { listConversations } from '../services/chat';
 
 type LucideIcon = React.ComponentType<{ size?: number | string; className?: string }>;
@@ -81,9 +82,8 @@ function UnreadBadge({ count }: { count: number }) {
   );
 }
 
-function Header() {
+function Header({ unread, menuOpen, onOpenMenu }: { unread: number; menuOpen: boolean; onOpenMenu: () => void }) {
   const { user, logout } = useAuth();
-  const unread = useUnread();
   const roleHome = user?.role === 'tenant' ? '/tenant'
     : user?.role === 'landlord' ? '/landlord'
     : user?.role === 'pro' ? '/pro'
@@ -93,6 +93,17 @@ function Header() {
   return (
     <header className="ra-app-header">
       <div className="ra-app-header-inner">
+        <button
+          type="button"
+          className="ra-app-menu-button lg:hidden"
+          onClick={onOpenMenu}
+          aria-label={unread > 0 ? `Abrir menú (${unread} mensajes sin leer)` : 'Abrir menú'}
+          aria-expanded={menuOpen}
+          aria-controls="ra-mobile-nav"
+        >
+          <Menu size={18} />
+          {unread > 0 && <span className="ra-app-menu-dot" aria-hidden="true" />}
+        </button>
         <Brand to={roleHome} />
         <nav className="hidden md:flex items-center gap-1 text-sm ml-2">
           {user && (
@@ -126,12 +137,13 @@ function Header() {
   );
 }
 
-function NavItem({ item, unread }: { item: { path: string; label: string }; unread: number }) {
+function NavItem({ item, unread, onNavigate }: { item: { path: string; label: string }; unread: number; onNavigate?: () => void }) {
   const Icon = iconFor(item.path);
   return (
     <NavLink
       to={item.path}
-      end={/^\/(tenant|landlord|pro|admin)$/.test(item.path)}
+      onClick={onNavigate}
+      end={/^\/(tenant|landlord|pro|admin|agency)$/.test(item.path)}
       className={({ isActive }) =>
         `ra-side-link group flex items-center gap-2.5 px-3 py-2 rounded-lg text-[13.5px] transition-colors ${
           isActive
@@ -151,56 +163,92 @@ function NavItem({ item, unread }: { item: { path: string; label: string }; unre
   );
 }
 
-function SideNav() {
+const roleLabels: Record<string, string> = {
+  tenant: 'Inquilino',
+  landlord: 'Propietario',
+  pro: 'Profesional',
+  admin: 'Administración',
+  agency: 'Agencia',
+};
+
+const sectionTitle = 'text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-3 mb-1.5';
+
+// Enlaces del menú; los comparten el lateral de escritorio y el menú desplegable del móvil
+function NavSections({ unread, onNavigate }: { unread: number; onNavigate?: () => void }) {
   const { user } = useAuth();
-  const unread = useUnread();
   const role = user?.role as 'tenant' | 'landlord' | 'pro' | 'admin' | 'agency' | undefined;
-  const labelFor: Record<string, string> = {
-    tenant: 'Inquilino',
-    landlord: 'Propietario',
-    pro: 'Profesional',
-    admin: 'Administración',
-    agency: 'Agencia',
-  };
   const guestItems = [{ path: '/properties', label: 'Buscar pisos' }];
+  return (
+    <>
+      {!role && (
+        <>
+          <div className={sectionTitle}>Explorar</div>
+          <div className="grid gap-0.5 mb-5">
+            {guestItems.map((item) => <NavItem key={item.path} item={item} unread={0} onNavigate={onNavigate} />)}
+          </div>
+        </>
+      )}
+      <div className={sectionTitle}>General</div>
+      <div className="grid gap-0.5">
+        {(navConfig as any).general?.map((item: any) => (
+          <NavItem key={item.path} item={item} unread={unread} onNavigate={onNavigate} />
+        ))}
+      </div>
+      {role && (navConfig as any)[role] && (
+        <>
+          <div className={`${sectionTitle} mt-5`}>{roleLabels[role]}</div>
+          <div className="grid gap-0.5">
+            {((navConfig as any)[role] as any[]).map((item) => (
+              <NavItem key={item.path} item={item} unread={0} onNavigate={onNavigate} />
+            ))}
+          </div>
+        </>
+      )}
+    </>
+  );
+}
+
+function SideNav({ unread }: { unread: number }) {
   return (
     <aside className="ra-side-nav hidden lg:block w-60 shrink-0">
       <div className="sticky top-20 pr-2">
-        {!role && (
-          <>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-3 mb-1.5">Explorar</div>
-            <div className="grid gap-0.5 mb-5">
-              {guestItems.map((item) => <NavItem key={item.path} item={item} unread={0} />)}
-            </div>
-          </>
-        )}
-        <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-3 mb-1.5">General</div>
-        <div className="grid gap-0.5">
-          {(navConfig as any).general?.map((item: any) => (
-            <NavItem key={item.path} item={item} unread={unread} />
-          ))}
-        </div>
-        {role && (navConfig as any)[role] && (
-          <>
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-3 mt-5 mb-1.5">{labelFor[role]}</div>
-            <div className="grid gap-0.5">
-              {((navConfig as any)[role] as any[]).map((item) => (
-                <NavItem key={item.path} item={item} unread={0} />
-              ))}
-            </div>
-          </>
-        )}
+        <NavSections unread={unread} />
       </div>
     </aside>
   );
 }
 
+function MobileNav({ open, onClose, unread }: { open: boolean; onClose: () => void; unread: number }) {
+  const { user } = useAuth();
+  return (
+    <Drawer open={open} onClose={onClose} side="left" width={300} label="Menú">
+      <div id="ra-mobile-nav">
+        <div className="ra-mobile-nav-head">
+          <span className="text-[15px] font-semibold text-gray-950">Menú</span>
+          <button type="button" className="ra-app-menu-button" onClick={onClose} aria-label="Cerrar menú">
+            <X size={18} />
+          </button>
+        </div>
+        <NavSections unread={unread} onNavigate={onClose} />
+        {user?.email && <div className="ra-mobile-nav-foot">{user.email}</div>}
+      </div>
+    </Drawer>
+  );
+}
+
 export default function AppShell() {
+  // Un solo sondeo de mensajes sin leer para la cabecera y los dos menús
+  const unread = useUnread();
+  const [menuOpen, setMenuOpen] = useState(false);
+  const { pathname } = useLocation();
+  useEffect(() => { setMenuOpen(false); }, [pathname]);
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
   return (
     <div className="min-h-screen ra-app-shell">
-      <Header />
+      <Header unread={unread} menuOpen={menuOpen} onOpenMenu={() => setMenuOpen(true)} />
+      <MobileNav open={menuOpen} onClose={closeMenu} unread={unread} />
       <div className="ra-app-frame mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 flex gap-6 h-[calc(100vh-68px)] overflow-hidden">
-        <SideNav />
+        <SideNav unread={unread} />
         <main className="ra-app-content flex-1 min-w-0 h-full overflow-y-auto pr-2">
           <Breadcrumbs />
           <Outlet />
