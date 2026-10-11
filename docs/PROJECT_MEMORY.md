@@ -1186,3 +1186,9 @@ Rules:
 - `getContract` no longer 403s the managing agency after letting it through; `getContractParties` allows the managing agency read-only (`isManagingAgency` + contract `agencyId`).
 - Frontend: `/contracts` and `/contracts/:id` allow `agency`; agency nav gets «Contratos»; `MyContracts` keeps all items for agency/admin (was filtering to contracts where the user is a party → always empty) and shows «Propietario · Inquilino»; `getContractActionSummary` draft text for agency.
 - Verification: tsc clean; Jest `--runInBand` auth 46, e2e 10, contracts+agency 113; frontend build + 102 tests; Playwright `/tmp/ra-shots28`.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 29: ContractDetail restyle
+
+- `frontend/src/pages/ContractDetail.tsx`: render only (logic unchanged). Header = property title + `ContractStatusBadge` + address, no ID/colour band; actions full-width on mobile; «Siguiente paso»; timeline as progress line (`ol`, `aria-current`); «Condiciones»/«Partes» as `dl`; preview in sans, no italic/watermark; not-found card with link to `/contracts`. `CoTenantsCard` title restyled.
+- Tests mock `Link` from react-router-dom now.
+- Verification: frontend build + 104 tests (2 new in `ContractDetail.test.tsx`); Playwright `/tmp/ra-shots29` (tenant/agency, 390/1280, no horizontal overflow).

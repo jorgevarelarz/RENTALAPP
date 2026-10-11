@@ -1052,3 +1052,31 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: disputas de Stripe, `contractId` en el PaymentIntent de la fianza y «Cancelar invitación» de propietario.
 
 **Siguiente mejora propuesta.** Interfaz: pasar `ContractDetail` al sistema «RentalApp 2026»: cabecera sin banda de color, sin etiquetas en mayúsculas ni «ID Referencia», botones que no se salgan en móvil y la vista previa del contrato sin serif ni cursiva. Es la pantalla que más ven inquilinos, caseros y agencias. Si se prefiere pagos: `payment_intent_data.metadata.contractId` en el Checkout de la fianza, para que `charge.refunded` la reconozca.
+
+### Ronda 29 — 2026-10-11 19:51
+
+**Qué y por qué.** Ronda de interfaz, la que proponía la ronda 28. El detalle del contrato es la pantalla que más ven inquilinos, caseros y agencias, y seguía con el estilo antiguo: banda de color en la cabecera, «ID Referencia», etiquetas en mayúsculas («Timeline legal», «Resumen Económico»), la vista previa en serif con cursiva y una marca de agua «BORRADOR» girada. Además, en móvil el botón de descarga se salía de la tarjeta. No cambia ninguna lógica: permisos, firma, pago de la fianza y vuelta de Stripe siguen igual.
+
+1. **Cabecera.** El título es el inmueble (título o dirección), con la insignia de estado al lado y la dirección y la ciudad debajo. Ya no muestra el ID ni una banda de color. Las acciones («Firmar contrato», «Pagar fianza», «Descargar…») ocupan el ancho completo en móvil y se alinean a la derecha en escritorio. La miga «Contratos / Contrato #…» ya la pone `AppShell`, así que no hay enlace de vuelta duplicado.
+2. **«Siguiente paso»**: la acción, el detalle y el bloqueo, este sin el prefijo «Bloqueo actual:».
+3. **«Estado del contrato»**: los cinco pasos sin cajas de color. Es una línea de progreso (verde si está hecho, negra si está en curso, gris si está pendiente), horizontal en escritorio y vertical en móvil, con `aria-current="step"`.
+4. **«Condiciones» y «Partes»**: listas `dl` sin mayúsculas ni círculos de colores. La duración queda como «Inicio» y «Fin». La tarjeta de co-titulares (`CoTenantsCard`) sigue el mismo estilo de título.
+5. **Vista previa**: en la tipografía de la app, con «Reunidos» y «Acuerdan» como subtítulos y las condiciones como lista numerada (son cláusulas reales, no numeración decorativa). Una frase aclara si es borrador y que el texto completo está en el PDF.
+6. **Contrato que no carga**: tarjeta «No encontramos este contrato» con «Volver a contratos», en vez de un texto rojo suelto. El modal de firma se titula «Firma electrónica» (antes «Firma Segura - Signaturit»).
+
+**Commits.**
+- `c6ebec1` Contratos: el detalle pasa al sistema RentalApp 2026
+
+**Verificación (resultados reales).**
+- Backend: sin cambios.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 30 ficheros y 104 tests OK (antes 102). Hay dos casos nuevos en `ContractDetail.test.tsx`: la cabecera con la agencia (título y dirección del inmueble, sin el ID y sin botones de firmar o pagar) y el estado «No encontramos este contrato». Los tests existentes se han adaptado a los textos nuevos y al `Link` del router simulado.
+- Playwright (vite local, `/api/*` simulado) con el inquilino (contrato firmado y fianza sin pagar) y la agencia (borrador), a 390 y 1280 px (`/tmp/ra-shots29`). No hay desbordamiento horizontal en ninguno de los cuatro casos (comprobado con `scrollWidth`). En móvil, los botones ocupan el ancho y quedan dentro de la tarjeta.
+- GitNexus: `impact` LOW en `ContractDetail`. `detect_changes` sale medio, con los flujos esperados (`ContractDetail → WithAuth` y `→ FormatTimelineDate`; este último aparece solo porque sus líneas se desplazan).
+
+**Qué queda.**
+- La insignia de estado (`Badge`, compartida) sigue en mayúsculas en toda la app. Cambiarla afecta a muchas pantallas y conviene hacerlo en una ronda propia.
+- `getContractActionSummary` mantiene textos poco claros («pendiente de activación operativa», «Faltan pasos previos antes de firma»).
+- El paso «Contrato activo» muestra la fecha de inicio aunque esté pendiente, y «PDF preparado» muestra `updatedAt` en un borrador.
+- Pendientes anteriores: la visita del propietario sale como «Has propuesto» para la agencia, la agencia no puede crear ni editar inmuebles, disputas de Stripe, `contractId` en el PaymentIntent de la fianza y «Cancelar invitación» de propietario.
+
+**Siguiente mejora propuesta.** Volver a pagos y seguridad: `payment_intent_data.metadata.contractId` en el Checkout de la fianza, para que `charge.refunded` reconozca su devolución, y gestionar `charge.dispute.created` (marcar el pago como disputado y avisar). Si se sigue con la interfaz: textos de `getContractActionSummary` y la insignia `Badge` sin mayúsculas.
