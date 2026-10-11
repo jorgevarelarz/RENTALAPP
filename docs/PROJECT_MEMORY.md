@@ -1008,3 +1008,12 @@ Rules:
 - Files: `src/services/oauth.service.ts`, `src/controllers/auth.controller.ts`, `src/controllers/oauth.controller.ts`, `src/utils/frontendUrl.ts`, `src/models/user.model.ts`, `tests/auth/*`, `tests/e2e/smoke.e2e.test.ts`.
 - Verification: tsc clean; Jest `tests/auth` 12/12, oauthRedirect 4/4, e2e smoke 9/9 (all `--runInBand`); frontend build + 30 tests OK.
 - Deploy note: production needs `FRONTEND_URL` set for the reset link.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 2: duplicate charges (P3, P4)
+
+- Rent (`/pay-rent`, `/payments/:period/pay`) and receipts (`/api/payments/:id/pay`): atomic claim before creating the PaymentIntent, resume of the open intent, claim released if Stripe fails. Retry after a failed payment reuses the month's `Payment`. New `src/services/rentPaymentAttempt.service.ts`.
+- Stripe webhook: `payment_failed`/`processing` only touch the current intent and never a `PAID` receipt.
+- Deposit: open Checkout session reused (`contract.depositCheckoutSessionId`, idempotency key), return URLs built server-side from `FRONTEND_URL`.
+- Files: `src/controllers/contract.payment.controller.ts`, `src/controllers/payment.controller.ts`, `src/routes/stripe.webhook.ts`, `src/utils/deposit.ts`, `src/models/contract.model.ts`, `frontend/src/services/contracts.ts`, `tests/contracts/payments.duplicates.test.ts`.
+- Verification: tsc clean; Jest `tests/contracts` + `tests/jobs` 57/57, e2e smoke 9/9 (`--runInBand`); frontend build + 30 tests OK.
+- Deploy note: `DEPOSIT_SUCCESS_URL`/`DEPOSIT_CANCEL_URL`, if set in production, override the new URLs.
