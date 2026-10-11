@@ -4,6 +4,7 @@ import Ticket from '../models/ticket.model';
 import Conversation from '../models/conversation.model';
 import Message from '../models/message.model';
 import Escrow from '../models/escrow.model';
+import Appointment from '../models/appointment.model';
 import Pro from '../models/pro.model';
 import { User } from '../models/user.model';
 import { Contract } from '../models/contract.model';
@@ -17,6 +18,8 @@ import type { PolicyType } from '../models/policy.model';
 
 const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
+/** Estados en los que el profesional trabaja: pagado el presupuesto y aún sin dar por terminado. */
+const WORK_STATUSES = ['awaiting_schedule', 'scheduled', 'in_progress'];
 
 function parsePagination(query: any) {
   const page = Math.max(1, parseInt(query.page as string) || 1);
@@ -197,6 +200,9 @@ r.post('/:id/complete', ...assertRole('pro'), async (req, res) => {
     const { invoiceUrl } = req.body || {};
     const t = await loadTicketFor(req, res, ['pro']);
     if (!t) return;
+    // Solo se completa un trabajo ya pagado (hold) y que no esté pendiente de validar o cerrado
+    if (!t.escrowId) return res.status(409).json({ error: 'quote_not_approved', code: 409 });
+    if (!WORK_STATUSES.includes(t.status)) return res.status(409).json({ error: 'invalid_status', code: 409 });
 
     t.invoiceUrl = invoiceUrl;
     t.status = 'awaiting_validation';
@@ -234,6 +240,8 @@ r.post('/:id/resolve', ...assertRole('tenant'), requirePolicies(REQUIRED_POLICIE
     const t = await loadTicketFor(req, res, ['tenant']);
     if (!t) return;
     if (!t.escrowId) return res.status(400).json({ error: 'no escrow', code: 400 });
+    // Igual que /validate: no se libera el pago al profesional antes de que dé el trabajo por hecho
+    if (t.status !== 'awaiting_validation') return res.status(409).json({ error: 'work_not_completed', code: 409 });
     const { ticket, escrow } = await releaseTicketEscrow(String(t._id), userId, 'resolved_by_tenant');
     const conv = await Conversation.findOne({ kind: 'appointment', 'meta.ticketId': String(t._id) });
     if (conv) await publishSystem(conv.id, userId, 'CLOSED_BY_TENANT', { ticketId: String(t._id) });
@@ -486,9 +494,10 @@ r.get('/:id', async (req, res) => {
     const userIds = [t.ownerId, t.openedBy];
     const proIds = t.proId ? [t.proId] : [];
 
-    const [users, pros] = await Promise.all([
+    const [users, pros, appointment] = await Promise.all([
       User.find({ _id: { $in: userIds } }, { ratingAvg: 1, reviewCount: 1 }).lean(),
-      Pro.find({ userId: { $in: proIds } }, { userId: 1, ratingAvg: 1, reviewCount: 1 }).lean()
+      Pro.find({ userId: { $in: proIds } }, { userId: 1, displayName: 1, ratingAvg: 1, reviewCount: 1 }).lean(),
+      Appointment.findOne({ ticketId: String(t._id) }).sort({ createdAt: -1 }).select('start end status').lean(),
     ]);
 
     const userMap = new Map(users.map(u => [String(u._id), u]));
@@ -498,6 +507,7 @@ r.get('/:id', async (req, res) => {
       ...t,
       pro: t.proId ? {
         id: t.proId,
+        displayName: proMap.get(t.proId)?.displayName,
         ratingAvg: proMap.get(t.proId)?.ratingAvg ?? 0,
         reviewCount: proMap.get(t.proId)?.reviewCount ?? 0,
       } : null,
@@ -511,6 +521,8 @@ r.get('/:id', async (req, res) => {
         ratingAvg: userMap.get(t.openedBy)?.ratingAvg ?? 0,
         reviewCount: userMap.get(t.openedBy)?.reviewCount ?? 0,
       },
+      // Última cita propuesta por el profesional (el inquilino la acepta o la rechaza)
+      appointment: appointment ? { start: appointment.start, end: appointment.end, status: appointment.status } : null,
     };
 
     res.json(result);

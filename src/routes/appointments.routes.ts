@@ -43,6 +43,10 @@ r.post('/appointments/:ticketId/propose', async (req, res) => {
     const t = await Ticket.findById(ticketId).lean();
     if (!t) return res.status(404).json({ error: 'ticket_not_found' });
     if (t.proId !== userId) return res.status(403).json({ error: 'forbidden' });
+    // La cita se propone con el presupuesto ya pagado y antes de dar el trabajo por hecho
+    if (!t.escrowId || !['awaiting_schedule', 'scheduled'].includes(t.status)) {
+      return res.status(409).json({ error: 'invalid_status' });
+    }
 
     let a = await Appointment.findOne({ ticketId });
     if (!a) {
@@ -66,11 +70,13 @@ r.post('/appointments/:ticketId/accept', async (req, res) => {
     const a = await Appointment.findOne({ ticketId }).sort({ createdAt: -1 });
     if (!a) return res.status(404).json({ error: 'appointment_not_found' });
     if (a.tenantId !== userId) return res.status(403).json({ error: 'forbidden' });
+    if (a.status !== 'proposed') return res.status(409).json({ error: 'appointment_not_proposed' });
     a.status = 'accepted';
     await a.save();
     const conv = await Conversation.findOne({ kind: 'appointment', refId: String(a._id) });
     if (conv) await publishSystem(conv.id, userId, 'APPOINTMENT_ACCEPTED', { appointmentId: String(a._id) });
-    await Ticket.findByIdAndUpdate(ticketId, { status: 'scheduled' });
+    // Solo avanza el ticket que espera cita: no lo devuelve atrás si el trabajo ya se dio por hecho
+    await Ticket.updateOne({ _id: ticketId, status: { $in: ['awaiting_schedule', 'scheduled'] } }, { status: 'scheduled' });
     return res.json(a);
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message || 'error' });
@@ -86,6 +92,7 @@ r.post('/appointments/:ticketId/reject', async (req, res) => {
     const a = await Appointment.findOne({ ticketId }).sort({ createdAt: -1 });
     if (!a) return res.status(404).json({ error: 'appointment_not_found' });
     if (a.tenantId !== userId) return res.status(403).json({ error: 'forbidden' });
+    if (a.status !== 'proposed') return res.status(409).json({ error: 'appointment_not_proposed' });
     a.status = 'rescheduled';
     await a.save();
     const conv = await Conversation.findOne({ kind: 'appointment', refId: String(a._id) });

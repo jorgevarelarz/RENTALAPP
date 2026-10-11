@@ -76,7 +76,7 @@ describe('Escrow flows require policy acceptance', () => {
     await createVersion('data_processing', 'v1.0');
 
     const landlordToken = await signToken({ _id: '507f1f77bcf86cd799439011', role: 'landlord' });
-    const { ticketId, tenantToken } = await bootstrapTicket();
+    const { ticketId, tenantToken, proToken } = await bootstrapTicket();
 
     // Landlord without policies -> 409
     const missingBoth = await request(app)
@@ -107,6 +107,13 @@ describe('Escrow flows require policy acceptance', () => {
 
     expect(approve.body?.escrow?.status).toBe('held');
     const escrowId = approve.body?.escrow?._id;
+
+    // El profesional da el trabajo por hecho; antes, /resolve responde 409
+    await request(app)
+      .post(`/api/tickets/${ticketId}/complete`)
+      .set('Authorization', `Bearer ${proToken}`)
+      .send({})
+      .expect(200);
 
     // Tenant cannot resolve without policies
     const missingTenant = await request(app)

@@ -94,4 +94,37 @@ describe('Ticket access control', () => {
     const t = await Ticket.findById(ticketId).lean();
     expect((await Escrow.findById(t?.escrowId).lean())?.status).toBe('released');
   });
+
+  it('follows the real flow: pay, appointment, complete, confirm; and blocks steps out of order', async () => {
+    const { ticketId } = await openTicket();
+    const L = await token(LANDLORD, 'landlord');
+    const P = await token(PRO, 'pro');
+    const T = await token(TENANT, 'tenant');
+    await selectPro(ticketId);
+    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', P).send({ amount: 100 }).expect(200);
+
+    // Antes de pagar: ni cita ni trabajo completado
+    await request(app).post(`/api/appointments/${ticketId}/propose`).set('Authorization', P)
+      .send({ start: '2030-01-10T09:00:00Z', end: '2030-01-10T10:00:00Z', timezone: 'Europe/Madrid' }).expect(409);
+    await request(app).post(`/api/tickets/${ticketId}/complete`).set('Authorization', P).send({}).expect(409);
+
+    await request(app).post(`/api/tickets/${ticketId}/approve`).set('Authorization', L).send({ customerId: 'cus_mock' }).expect(200);
+    // El inquilino no puede liberar el pago antes de que el profesional termine
+    await request(app).post(`/api/tickets/${ticketId}/resolve`).set('Authorization', T).expect(409);
+
+    await request(app).post(`/api/appointments/${ticketId}/propose`).set('Authorization', P)
+      .send({ start: '2030-01-10T09:00:00Z', end: '2030-01-10T10:00:00Z', timezone: 'Europe/Madrid' }).expect(200);
+    const seen = await request(app).get(`/api/tickets/${ticketId}`).set('Authorization', T).expect(200);
+    expect(seen.body.appointment).toMatchObject({ status: 'proposed', start: '2030-01-10T09:00:00.000Z' });
+    expect(seen.body.pro).toMatchObject({ id: PRO });
+
+    await request(app).post(`/api/appointments/${ticketId}/accept`).set('Authorization', T).expect(200);
+    await request(app).post(`/api/appointments/${ticketId}/accept`).set('Authorization', T).expect(409);
+    expect((await Ticket.findById(ticketId).lean())?.status).toBe('scheduled');
+
+    await request(app).post(`/api/tickets/${ticketId}/complete`).set('Authorization', P).send({}).expect(200);
+    await request(app).post(`/api/tickets/${ticketId}/complete`).set('Authorization', P).send({}).expect(409);
+    await request(app).post(`/api/tickets/${ticketId}/resolve`).set('Authorization', T).expect(200);
+    expect((await Ticket.findById(ticketId).lean())?.status).toBe('closed');
+  });
 });

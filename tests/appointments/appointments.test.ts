@@ -30,6 +30,7 @@ describe('Appointments API', () => {
       title: 'Goteo',
       description: 'Se ha roto un latiguillo',
       status: 'awaiting_schedule',
+      escrowId: new mongoose.Types.ObjectId().toString(), // presupuesto ya pagado
       history: [],
     } as any);
     ticketId = t.id;
