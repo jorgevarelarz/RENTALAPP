@@ -9,8 +9,8 @@ const r = Router();
 // Tenant: list my applications
 r.get('/applications/my', authenticate, authorizeRoles('tenant'), asyncHandler(listMyApplications));
 
-// Landlord/admin: schedule a visit for an application
-r.post('/applications/:id/propose', authenticate, authorizeRoles('tenant', 'landlord', 'admin'), asyncHandler(proposeVisit));
-r.post('/applications/:id/accept', authenticate, authorizeRoles('tenant', 'landlord', 'admin'), asyncHandler(acceptProposedVisit));
+// Propietario, agencia gestora o admin proponen la visita; el inquilino puede contraproponer
+r.post('/applications/:id/propose', authenticate, authorizeRoles('tenant', 'landlord', 'agency', 'admin'), asyncHandler(proposeVisit));
+r.post('/applications/:id/accept', authenticate, authorizeRoles('tenant', 'landlord', 'agency', 'admin'), asyncHandler(acceptProposedVisit));
 
 export default r;

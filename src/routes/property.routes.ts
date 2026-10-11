@@ -42,7 +42,7 @@ r.get('/properties/:id', optionalAuthenticate, asyncHandler(ctrl.getById));
 r.get('/properties', optionalAuthenticate, asyncHandler(ctrl.search));
 
 r.post('/properties/:id/apply', ...assertRole('tenant', 'admin'), asyncHandler(ctrl.apply));
-r.get('/properties/:id/applications', authenticate, authorizeRoles('landlord', 'admin'), asyncHandler(ctrl.listApplications));
+r.get('/properties/:id/applications', authenticate, authorizeRoles('landlord', 'agency', 'admin'), asyncHandler(ctrl.listApplications));
 
 r.post('/properties/:id/subscribe-price', authenticate, asyncHandler(ctrl.subscribePriceAlert));
 r.delete('/properties/:id/subscribe-price', authenticate, asyncHandler(ctrl.unsubscribePriceAlert));

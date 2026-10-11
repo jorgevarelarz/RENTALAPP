@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { Application } from '../models/application.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
+import { isManagingAgency } from '../utils/propertyAccess';
 
 export async function listMyApplications(req: Request, res: Response) {
   const user: any = (req as any).user;
@@ -76,7 +77,8 @@ export async function proposeVisit(req: Request, res: Response) {
   const property = await Property.findById(app.propertyId);
   if (!property) return res.status(404).json({ error: 'property_not_found' });
 
-  const isOwner = String(property.owner) === String(userId);
+  // La agencia que gestiona el inmueble actúa por el propietario
+  const isOwner = String(property.owner) === String(userId) || isManagingAgency(user, property);
   const isTenant = String(app.tenantId) === String(userId);
   const isAdmin = user?.role === 'admin';
   if (!isOwner && !isTenant && !isAdmin) return res.status(403).json({ error: 'forbidden' });
@@ -111,7 +113,8 @@ export async function acceptProposedVisit(req: Request, res: Response) {
   const property = await Property.findById(app.propertyId);
   if (!property) return res.status(404).json({ error: 'property_not_found' });
 
-  const isOwner = String(property.owner) === String(userId);
+  // La agencia que gestiona el inmueble actúa por el propietario
+  const isOwner = String(property.owner) === String(userId) || isManagingAgency(user, property);
   const isTenant = String(app.tenantId) === String(userId);
   const isAdmin = user?.role === 'admin';
   if (!isOwner && !isTenant && !isAdmin) return res.status(403).json({ error: 'forbidden' });

@@ -10,6 +10,7 @@ import { SystemEvent } from '../models/systemEvent.model';
 import { emitSystemEvent } from '../events/system.events';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 import { suggestRent } from '../services/rentSuggestion.service';
+import { isManagingAgency } from '../utils/propertyAccess';
 
 const tensionedAreaDateQuery = (changeDate: Date) => ({
   active: true,
@@ -493,7 +494,7 @@ export async function listApplications(req: Request, res: Response) {
   const userId = user?._id || user?.id;
   const isOwner = userId && String(userId) === String(property.owner);
   const isAdmin = user?.role === 'admin';
-  if (!isOwner && !isAdmin) return res.status(403).json({ error: 'forbidden' });
+  if (!isOwner && !isAdmin && !isManagingAgency(user, property)) return res.status(403).json({ error: 'forbidden' });
 
   const apps = await Application.find({ propertyId: property._id })
     .sort({ createdAt: -1 })
