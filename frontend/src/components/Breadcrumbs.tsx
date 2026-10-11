@@ -13,9 +13,11 @@ function labelFor(path: string): string {
   const all = (Object.values(cfg) as any[]).flat();
   const item = all.find((i: any) => i.path === path);
   if (item?.label) return item.label;
+  if (path === '/contracts/new') return 'Nuevo contrato';
+  if (path === '/tickets/new') return 'Nueva incidencia';
   // Dynamic labels for known patterns
   if (/^\/contracts\/[a-z0-9]+/i.test(path)) return `Contrato #${prettyId(path.split('/').pop() || '')}`;
-  if (/^\/tickets\/[a-z0-9]+/i.test(path)) return `Ticket #${prettyId(path.split('/').pop() || '')}`;
+  if (/^\/tickets\/[a-z0-9]+/i.test(path)) return `Incidencia #${prettyId(path.split('/').pop() || '')}`;
   if (/^\/properties\/[a-z0-9]+/i.test(path)) return `Propiedad #${prettyId(path.split('/').pop() || '')}`;
   return path.split('/').pop() || '';
 }

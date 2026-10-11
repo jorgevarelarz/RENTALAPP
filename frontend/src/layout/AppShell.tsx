@@ -98,7 +98,7 @@ function Header() {
           {user && (
             <Link to="/inbox" className="ra-app-inbox">
               <MessageSquare size={15} />
-              Inbox
+              Mensajes
               {unread > 0 && (
                 <span className="inline-flex items-center justify-center text-white bg-red-500 rounded-full text-[10px] font-semibold px-1.5 py-0.5">{unread}</span>
               )}

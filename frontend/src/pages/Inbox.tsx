@@ -92,7 +92,7 @@ export default function Inbox() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Conversaciones"
+        title="Mensajes"
         subtitle="Conversaciones con propietarios, profesionales y soporte."
         cta={(
           <button

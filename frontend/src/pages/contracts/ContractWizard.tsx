@@ -7,9 +7,17 @@ import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Card from '../../components/ui/Card';
 import {
-  Calendar, DollarSign, Users, Scale, FileText,
+  Calendar, Users, Scale, FileText,
   ArrowRight, ArrowLeft, CheckCircle2, AlertTriangle
 } from 'lucide-react';
+
+const euroFormatter = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
+const formatEuros = (value: unknown) => euroFormatter.format(Number(value) || 0);
+const formatDate = (value?: string) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+};
 
 const STEPS = [
   { id: 'terms', title: 'Términos', icon: <Calendar size={18} /> },
@@ -120,7 +128,7 @@ export default function ContractWizard() {
   return (
     <div className="max-w-4xl mx-auto p-6">
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Redactar Nuevo Contrato</h1>
+        <h1 className="text-3xl font-bold text-gray-900 mb-2">Redactar nuevo contrato</h1>
         <p className="text-gray-500">Genera un contrato de arrendamiento legal en pocos pasos.</p>
         <div className="flex items-center justify-between mt-8 relative">
           <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-200 -z-10 rounded"></div>
@@ -138,19 +146,19 @@ export default function ContractWizard() {
         </div>
       </div>
 
-      <Card className="min-h-[400px] flex flex-col">
-        <div className="flex-1 p-2">
+      <Card className="min-h-[400px] flex flex-col p-6">
+        <div className="flex-1">
           {step === 0 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Condiciones Económicas y Duración</h3>
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Condiciones económicas y duración</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <Input
-                  label="Fecha de Inicio" type="date"
+                  label="Fecha de inicio" type="date"
                   value={formData.startDate}
                   onChange={e => handleChange('startDate', e.target.value)}
                 />
                 <Input
-                  label="Fecha de Fin" type="date"
+                  label="Fecha de fin" type="date"
                   value={formData.endDate}
                   readOnly
                 />
@@ -158,7 +166,7 @@ export default function ContractWizard() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <label style={{ display: 'grid', gap: 6 }}>
                   <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    Duracion del contrato (anos)
+                    Duración del contrato
                   </span>
                   <select
                     className="auth-input"
@@ -166,39 +174,25 @@ export default function ContractWizard() {
                     onChange={e => handleChange('durationYears', Number(e.target.value))}
                   >
                     {[1, 2, 3, 4, 5].map((years) => (
-                      <option key={years} value={years}>{years} ano{years > 1 ? 's' : ''}</option>
+                      <option key={years} value={years}>{years} {years > 1 ? 'años' : 'año'}</option>
                     ))}
                   </select>
                 </label>
                 <div className="text-sm text-gray-500 flex items-end">
-                  La fecha de fin se calcula automaticamente desde la fecha de inicio y la duracion seleccionada.
+                  La fecha de fin se calcula automáticamente con la fecha de inicio y la duración.
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Renta Mensual (€)</label>
-                  <div className="relative">
-                    <DollarSign size={16} className="absolute left-3 top-3 text-gray-400"/>
-                    <input
-                      type="number"
-                      className="auth-input pl-10 w-full"
-                      value={formData.rentAmount}
-                      onChange={e => handleChange('rentAmount', Number(e.target.value))}
-                    />
-                  </div>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Fianza (€)</label>
-                  <div className="relative">
-                    <DollarSign size={16} className="absolute left-3 top-3 text-gray-400"/>
-                    <input
-                      type="number"
-                      className="auth-input pl-10 w-full"
-                      value={formData.depositAmount}
-                      onChange={e => handleChange('depositAmount', Number(e.target.value))}
-                    />
-                  </div>
-                </div>
+                <Input
+                  label="Renta mensual (€)" type="number" min={0} step="0.01"
+                  value={formData.rentAmount}
+                  onChange={e => handleChange('rentAmount', Number(e.target.value))}
+                />
+                <Input
+                  label="Fianza (€)" type="number" min={0} step="0.01"
+                  value={formData.depositAmount}
+                  onChange={e => handleChange('depositAmount', Number(e.target.value))}
+                />
                 <Input
                   label="Día límite de pago (mensual)" type="number" min={1} max={30}
                   value={formData.paymentDay}
@@ -210,26 +204,26 @@ export default function ContractWizard() {
 
           {step === 1 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Datos de las Partes</h3>
-              <div className="bg-blue-50 p-4 rounded-xl border border-blue-100">
-                <h4 className="font-bold text-blue-900 mb-3 flex items-center gap-2"><Users size={18}/> Arrendador (Propietario)</h4>
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Datos de las partes</h3>
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2"><Users size={18}/> Arrendador (propietario)</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input label="Nombre Completo" value={formData.landlordName} onChange={e => handleChange('landlordName', e.target.value)} />
+                  <Input label="Nombre completo" value={formData.landlordName} onChange={e => handleChange('landlordName', e.target.value)} />
                   <Input label="DNI / NIF" placeholder="12345678X" value={formData.landlordIdDoc} onChange={e => handleChange('landlordIdDoc', e.target.value)} />
                 </div>
               </div>
 
-              <div className="bg-green-50 p-4 rounded-xl border border-green-100">
-                <h4 className="font-bold text-green-900 mb-3 flex items-center gap-2"><Users size={18}/> Arrendatario (Inquilino)</h4>
+              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
+                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2"><Users size={18}/> Arrendatario (inquilino)</h4>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input label="Nombre Completo" value={formData.tenantName} onChange={e => handleChange('tenantName', e.target.value)} />
+                  <Input label="Nombre completo" value={formData.tenantName} onChange={e => handleChange('tenantName', e.target.value)} />
                   <Input label="Email (para firma)" value={formData.tenantEmail} disabled />
                 </div>
-                <p className="text-xs text-green-700 mt-3">
+                <p className="text-xs text-gray-500 mt-3">
                   El email de firma viene del expediente anterior y se usa para invitar al inquilino a firmar.
                 </p>
                 <div className="mt-4">
-                  <Input label="DNI / NIF / Pasaporte del Inquilino" placeholder="Solicitar al inquilino si no lo tienes" value={formData.tenantIdDoc} onChange={e => handleChange('tenantIdDoc', e.target.value)} />
+                  <Input label="DNI, NIE o pasaporte del inquilino" placeholder="Solicitar al inquilino si no lo tienes" value={formData.tenantIdDoc} onChange={e => handleChange('tenantIdDoc', e.target.value)} />
                 </div>
               </div>
             </div>
@@ -237,14 +231,14 @@ export default function ContractWizard() {
 
           {step === 2 && (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Cláusulas del Contrato</h3>
+              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Cláusulas del contrato</h3>
               <p className="text-sm text-gray-500">Define las reglas de convivencia y legales. Se añadirán al texto estándar.</p>
               <div className="grid grid-cols-1 gap-4">
                 {[
-                  { key: 'petsAllowed', label: 'Permitir Mascotas', desc: 'El inquilino puede tener animales domésticos en la vivienda.' },
-                  { key: 'expensesIncluded', label: 'Gastos Incluidos', desc: 'La renta incluye gastos de suministros (Luz, Agua, Gas).' },
-                  { key: 'sublettingAllowed', label: 'Permitir Subarriendo', desc: 'El inquilino puede subarrendar habitaciones.' },
-                  { key: 'depositInAgency', label: 'Depositar fianza en organismo', desc: 'El propietario se compromete a depositar la fianza en la CCAA correspondiente.', disabled: true }
+                  { key: 'petsAllowed', label: 'Permitir mascotas', desc: 'El inquilino puede tener animales domésticos en la vivienda.' },
+                  { key: 'expensesIncluded', label: 'Gastos incluidos', desc: 'La renta incluye gastos de suministros (luz, agua, gas).' },
+                  { key: 'sublettingAllowed', label: 'Permitir subarriendo', desc: 'El inquilino puede subarrendar habitaciones.' },
+                  { key: 'depositInAgency', label: 'Depositar fianza en organismo', desc: 'El propietario se compromete a depositar la fianza en el organismo de su comunidad autónoma.', disabled: true }
                 ].map((item) => (
                   <label key={item.key} className={`flex items-start gap-4 p-4 border rounded-xl transition-all cursor-pointer ${
                     // @ts-ignore
@@ -275,12 +269,12 @@ export default function ContractWizard() {
               <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex gap-3">
                 <AlertTriangle className="text-yellow-600 shrink-0" />
                 <div>
-                  <h4 className="font-bold text-yellow-800">Borrador Listo</h4>
+                  <h4 className="font-bold text-yellow-800">Borrador listo</h4>
                   <p className="text-sm text-yellow-700">Revisa los datos. Al confirmar, se generará el documento legal y se enviará una notificación al inquilino para su firma digital.</p>
                   <ul className="mt-3 text-sm text-yellow-800 space-y-1 list-disc pl-5">
                     <li>Confirma el DNI/NIF del arrendador antes de enviar.</li>
-                    <li>Verifica el email del inquilino porque sera el usado para la firma.</li>
-                    <li>Comprueba renta, fianza y duracion antes de bloquear el borrador.</li>
+                    <li>Verifica el email del inquilino porque será el usado para la firma.</li>
+                    <li>Comprueba renta, fianza y duración antes de bloquear el borrador.</li>
                   </ul>
                 </div>
               </div>
@@ -288,24 +282,24 @@ export default function ContractWizard() {
               <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4 shadow-sm">
                 <div className="flex justify-between border-b pb-2">
                   <span className="text-gray-500">Propiedad</span>
-                  <span className="font-medium">{(state as any)?.initialData?.address || 'Dirección Propiedad'}</span>
+                  <span className="font-medium">{(state as any)?.initialData?.address || 'Sin dirección'}</span>
                 </div>
                 <div className="flex justify-between border-b pb-2">
                   <span className="text-gray-500">Duración</span>
-                  <span className="font-medium">{formData.startDate} a {formData.endDate}</span>
+                  <span className="font-medium">{formatDate(formData.startDate)} – {formatDate(formData.endDate)}</span>
                 </div>
                 <div className="flex justify-between border-b pb-2">
-                  <span className="text-gray-500">Renta Mensual</span>
-                  <span className="font-bold text-lg">{formData.rentAmount} €</span>
+                  <span className="text-gray-500">Renta mensual</span>
+                  <span className="font-bold text-lg">{formatEuros(formData.rentAmount)}</span>
                 </div>
                 <div className="flex justify-between border-b pb-2">
                   <span className="text-gray-500">Fianza</span>
-                  <span className="font-medium">{formData.depositAmount} €</span>
+                  <span className="font-medium">{formatEuros(formData.depositAmount)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-500">Mascotas</span>
                   <span className={`font-bold ${formData.petsAllowed ? 'text-green-600' : 'text-red-500'}`}>
-                    {formData.petsAllowed ? 'PERMITIDAS' : 'PROHIBIDAS'}
+                    {formData.petsAllowed ? 'Permitidas' : 'No permitidas'}
                   </span>
                 </div>
               </div>
@@ -318,18 +312,18 @@ export default function ContractWizard() {
             variant="ghost"
             onClick={() => setStep(s => Math.max(0, s - 1))}
             disabled={step === 0 || loading}
-            className="text-gray-500"
+            className="inline-flex items-center gap-2 text-gray-500"
           >
-            <ArrowLeft size={18} className="mr-2"/> Atrás
+            <ArrowLeft size={18} aria-hidden="true" /> Atrás
           </Button>
 
           {step < STEPS.length - 1 ? (
-            <Button onClick={handleNext} className="px-6">
-              Siguiente <ArrowRight size={18} className="ml-2"/>
+            <Button onClick={handleNext} className="inline-flex items-center gap-2 px-6">
+              Siguiente <ArrowRight size={18} aria-hidden="true" />
             </Button>
           ) : (
-            <Button onClick={handleSubmit} disabled={loading} className="px-8 bg-green-600 hover:bg-green-700 text-white shadow-lg">
-              {loading ? 'Generando Contrato...' : 'Enviar a Firma Digital'}
+            <Button onClick={handleSubmit} disabled={loading} className="px-8">
+              {loading ? 'Generando contrato…' : 'Enviar a firma'}
             </Button>
           )}
         </div>
