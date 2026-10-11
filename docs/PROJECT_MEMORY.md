@@ -1130,3 +1130,9 @@ Rules:
 - `deliverEmail`/`sendEmail`/`sendCoTenantInviteEmail` return `EmailDelivery` (`'sent' | 'not_configured' | 'failed'`), never throw. Co-tenant: `ContractParty.inviteEmailStatus`, `emailStatus` in invite/resend responses, `emailFailed` in `/parties`, no resend cooldown when last email failed. Agency: `AgencyInvite.emailStatus/emailSentAt`, send is awaited, `emailFailed` in list, new `POST /api/agency/landlords/invites/:id/resend`; agency routes wrapped in `asyncHandler`.
 - Frontend: `emailNotDelivered` in `services/coTenants.ts`; `CoTenantsCard` and `AgencyLandlords` warn when the email didn't go out; "Reenviar invitación" in agency list. Password reset intentionally unchanged (enumeration).
 - Verification: tsc clean; full Jest `--runInBand --forceExit` 67 suites / 278 tests; frontend build + 73 tests; Playwright 1280/390 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 19: session refresh on start + cancel co-tenant invite
+
+- Frontend `refreshStoredUser` (`services/auth.ts`), called by `AuthProvider` on mount: GET `/api/users/me`, merges `email/role/isVerified/tenantPro` into the stored user (token untouched); 403 `owner_not_verified` → `isVerified:false`; skips if the stored session changed meanwhile. `/api/users/me` now returns `isVerified` (effective: DB flag or approved `Verification`).
+- `POST /api/contracts/:id/tenants/:partyId/cancel` (`cancelCoTenantInvite`): principal tenant only, INVITED only → `REMOVED`, token/expiry cleared; same email can be re-invited. `CoTenantsCard`: "Cancelar invitación" with inline confirmation.
+- Verification: tsc clean; Jest `--runInBand --forceExit` tests/auth + tests/contracts 22 suites / 99 tests; frontend build + 81 tests; Playwright 390/1280 px.

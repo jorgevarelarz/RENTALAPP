@@ -664,3 +664,41 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - Pendientes anteriores: usuario borrado que conserva su token, `request-reset` con enumeración por tiempo, email sin normalizar a minúsculas, media de reseñas sin `$inc`.
 
 **Siguiente mejora propuesta.** Interfaz: refrescar el usuario con `/api/users/me` al arrancar la app, para que rol, verificación y la insignia KYC coincidan con el backend (desde la ronda 17 el backend ya los lee de la base). En la misma ronda, «Cancelar invitación» de co-titular para invitaciones sin aceptar. Si se prefiere seguridad: rechazar en `authenticate` el token de un usuario borrado, ajustando los tests que usan identificadores inventados.
+
+### Ronda 19 — 2026-10-11 15:20
+
+**Qué y por qué.** Interfaz, propuesta en la ronda 18. Dos huecos que dejaban la interfaz desfasada respecto al backend:
+
+1. **Sesión refrescada al arrancar.** Desde la ronda 17 el backend lee rol e `isVerified` de la base en cada petición, pero la interfaz seguía con los del login guardados en `localStorage`. Un administrador degradado seguía viendo el menú de administración, y una cuenta verificada después del login no veía la insignia «KYC verificado» hasta volver a entrar.
+   - `refreshStoredUser` (`frontend/src/services/auth.ts`), llamado por `AuthProvider` al montar, pide `/api/users/me` y actualiza `email`, `role`, `isVerified` y `tenantPro` sin tocar el token.
+   - Si la respuesta es 403 `owner_not_verified` (verificación retirada), marca `isVerified: false`.
+   - Si falla la consulta, no hay sesión o la sesión guardada cambió mientras llegaba la respuesta (logout u otro login), no toca nada. Las sesiones caducadas siguen yendo al login por el interceptor de la ronda 15.
+   - `/api/users/me` no devolvía `isVerified`. Ahora lo devuelve: `toMeUser` lo saca de la base, y `getMe` lo da también por verificado si `requireVerified` le dejó pasar por una `Verification` aprobada.
+2. **«Cancelar invitación» de co-titular.** Antes, una invitación enviada al correo equivocado solo podía quitarse con la baja con aprobación del administrador.
+   - Nuevo `POST /api/contracts/:id/tenants/:partyId/cancel`: solo el inquilino principal y solo invitaciones `INVITED` de ese contrato.
+   - La invitación pasa a `REMOVED` y se borran el token y la caducidad, así que el enlace deja de valer (la vista previa y la aceptación exigen `INVITED`). El mismo correo puede invitarse otra vez y se reutiliza la misma fila.
+   - En la tarjeta «Co-titulares», junto a «Reenviar invitación», está la acción de texto gris «Cancelar invitación». Pide confirmación en línea («El enlace dejará de valer. Sí, cancelar · No»), sin diálogo nativo.
+
+**Commits.**
+- `105414c` Sesión: al arrancar, la interfaz refresca rol y verificación con /api/users/me; /me devuelve isVerified
+- `cd9419e` Co-titulares: «Cancelar invitación» para invitaciones sin aceptar
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - `contract.cotenant.test.ts`: 14 OK (2 nuevos). Cubren que cancelar invalida el enlace (vista previa 404), borra el token y deja volver a invitar el mismo correo con la misma fila. También que solo cancela el inquilino principal (otro inquilino 403, el casero 403), que da 404 con una invitación de otro contrato o con un id inválido, y 400 `not_invited` con alguien que ya se unió, sin cambiarle el estado.
+  - `session-claims.test.ts`: 13 OK, ahora con `isVerified` en `/me`.
+  - `tests/auth` y `tests/contracts` juntos con `--forceExit`: 22 suites y 99 tests OK.
+- Frontend: build OK; `npm test` 25 ficheros y 81 tests OK (antes 24 y 73).
+  - Nuevo `services/__tests__/refreshStoredUser.test.tsx` (6): actualiza rol y verificación conservando el token, no consulta sin sesión, no toca nada si falla, 403 `owner_not_verified` → no verificado, no pisa una sesión que cambió, y `AuthProvider` pasa de `admin` a `tenant` al arrancar.
+  - `CoTenantsCard.test.tsx` suma 2: cancelar tras confirmar, y que «No» no cancela. Además, el co-titular no ve «Cancelar».
+- Playwright (vite local, `/api/*` simulado) en el detalle de contrato a 390 y 1280 px, tarjeta normal y en confirmación (`/tmp/ra-shots19`). Las dos acciones caben en una línea en móvil y en dos en la columna estrecha de escritorio. Con una sesión guardada sin verificar y `/me` verificado, la cabecera muestra «KYC verificado» y el `localStorage` conserva el token.
+- GitNexus: `impact` LOW en `toMeUser` y `AuthProvider`. `detect_changes` sale medio frente a `d2f3031`: solo afecta al flujo `AppRoutes → GetStoredUser` (paso `AuthProvider`). Lo demás son símbolos desplazados de línea en los dos controladores.
+
+**Qué queda.**
+- La sesión se refresca solo al cargar la app, no al volver a la pestaña. Un cambio de rol con la pestaña abierta se ve al recargar.
+- La agencia sigue sin «Cancelar invitación» de propietario.
+- Un usuario borrado conserva su token (no se rechaza si no existe).
+- Pendientes anteriores: correos de contrato, recibos y recordatorios sin aviso si fallan; `request-reset` con enumeración por tiempo; email sin normalizar a minúsculas en registro y login; media de reseñas sin `$inc`.
+
+**Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: rechazar en `authenticate` el token de un usuario que ya no existe (401 `session_expired`), ajustando los tests que usan identificadores inventados con el atajo de cabeceras. En la misma ronda, normalizar el email a minúsculas y sin espacios en registro, login y recuperación, sin migrar producción. Habría que comprobar antes con una consulta de solo lectura en local si el código asume mayúsculas en algún sitio. Si se prefiere interfaz: «Cancelar invitación» para la agencia en «Propietarios», con el mismo patrón.
