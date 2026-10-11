@@ -22,6 +22,7 @@ import { generateContractPdfFile } from '../services/pdfGenerator';
 import { evaluateAndPersist } from '../modules/rentalPublic';
 // @ts-ignore
 import { ensureCanReadContract, isActiveCoTenant } from '../utils/contractAccess';
+import { ContractParty } from '../models/contractParty.model';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i);
 
@@ -448,7 +449,11 @@ export const listContracts = async (req: Request, res: Response) => {
   try {
     const { page, limit } = parsePagination(req.query);
     const q: any = {};
-    if (req.query.status) q.status = req.query.status;
+    if (typeof req.query.status === 'string' && req.query.status) q.status = req.query.status;
+    // Opcional: «Mis contratos» pide también los contratos en los que el usuario es co-titular.
+    // El resto de pantallas (incidencias, panel del casero) siguen viendo solo casero e inquilino principal.
+    const includeCoTenant = req.query.include === 'cotenant';
+    let coTenantIds = new Set<string>();
 
     const user = req.user;
     if (!user) {
@@ -467,6 +472,17 @@ export const listContracts = async (req: Request, res: Response) => {
       q.agencyId = user.id;
     } else if (user.role !== 'admin') {
       q.$or = [{ landlord: user.id }, { tenant: user.id }];
+      if (includeCoTenant && user.id && Types.ObjectId.isValid(user.id)) {
+        const parties = await ContractParty.find({
+          role: 'TENANT',
+          userId: user.id,
+          status: { $in: ['JOINED', 'SIGNED'] },
+        })
+          .select('contractId')
+          .lean();
+        coTenantIds = new Set(parties.map(p => String(p.contractId)));
+        if (coTenantIds.size) q.$or.push({ _id: { $in: [...coTenantIds] } });
+      }
     }
 
     const [items, total] = await Promise.all([
@@ -502,10 +518,16 @@ export const listContracts = async (req: Request, res: Response) => {
       const tenant = getUser(c.tenant);
       const ownerId = getId(c.landlord);
       const tenantId = getId(c.tenant);
+      const myRole =
+        ownerId === String(user.id) ? 'landlord'
+        : tenantId === String(user.id) ? 'tenant'
+        : coTenantIds.has(String(c._id)) ? 'cotenant'
+        : undefined;
       return {
         ...toContractView(c as any, user as any),
         ownerId,
         tenantId,
+        ...(myRole ? { myRole } : {}),
         landlordName: landlord?.name,
         landlordEmail: landlord?.email,
         tenantName: tenant?.name,

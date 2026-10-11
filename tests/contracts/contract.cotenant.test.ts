@@ -129,6 +129,51 @@ describe('Co-tenants flows', () => {
     expect(res.body.ok).toBe(true);
   });
 
+  it('lists co-tenant contracts only with include=cotenant and marks myRole', async () => {
+    const tenantId = '507f1f77bcf86cd799439081';
+    const coId = '507f1f77bcf86cd799439082';
+    const landlordId = '507f1f77bcf86cd799439083';
+    const invitedId = '507f1f77bcf86cd799439084';
+    await makeUser(tenantId, 'tenant', 'main8@test.com');
+    await makeUser(coId, 'tenant', 'co8@test.com');
+    await makeUser(landlordId, 'landlord', 'landlord8@test.com');
+    await makeUser(invitedId, 'tenant', 'invited8@test.com');
+    const property = await makeProperty(landlordId);
+    const contract = await makeContract(landlordId, tenantId, String(property._id));
+    await ContractParty.create({ contractId: contract._id, role: 'TENANT', email: 'co8@test.com', status: 'JOINED', userId: new mongoose.Types.ObjectId(coId) });
+    await ContractParty.create({ contractId: contract._id, role: 'TENANT', email: 'invited8@test.com', status: 'INVITED', userId: new mongoose.Types.ObjectId(invitedId) });
+
+    const as = (id: string, query = '') =>
+      request(app)
+        .get(`/api/contracts${query}`)
+        .set('x-user-id', id)
+        .set('x-user-role', 'tenant')
+        .set('x-user-verified', 'true');
+
+    const plain = await as(coId);
+    expect(plain.status).toBe(200);
+    expect(plain.body.items).toHaveLength(0);
+
+    const withCo = await as(coId, '?include=cotenant');
+    expect(withCo.status).toBe(200);
+    expect(withCo.body.items).toHaveLength(1);
+    expect(withCo.body.items[0].myRole).toBe('cotenant');
+    expect(withCo.body.items[0].ibanEncrypted).toBeUndefined();
+
+    // Una invitación sin aceptar no da acceso al contrato.
+    const invited = await as(invitedId, '?include=cotenant');
+    expect(invited.body.items).toHaveLength(0);
+
+    const main = await as(tenantId, '?include=cotenant');
+    expect(main.body.items).toHaveLength(1);
+    expect(main.body.items[0].myRole).toBe('tenant');
+
+    // `status` como objeto ya no llega a Mongo como operador.
+    const injected = await as(coId, '?include=cotenant&status[$ne]=x');
+    expect(injected.status).toBe(200);
+    expect(injected.body.items).toHaveLength(1);
+  });
+
   it('prevents double pay for same period (idempotent)', async () => {
     const tenantId = '507f1f77bcf86cd799439031';
     const landlordId = '507f1f77bcf86cd799439032';
