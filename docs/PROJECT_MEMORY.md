@@ -1082,3 +1082,10 @@ Rules:
 - Files: `src/metrics.ts`, `src/app.ts`, `src/routes/identity.routes.ts`, `src/controllers/contract.cotenant.controller.ts`, `src/__tests__/observability.test.ts`, `tests/contracts/contract.cotenant.test.ts`, `.env.example`, `docs/auditoria-seguridad-2026-10-05.md`.
 - Verification: tsc clean; Jest (`--runInBand`) 10 suites / 43 tests OK, e2e health+smoke 10/10; frontend build + 39 tests OK.
 
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 12: co-tenant invite flow end to end
+
+- Backend: public `GET /api/invites/preview?token=` (email, property, inviter, expired; mounted before the authenticated `/api` routers); `POST /api/invites/accept` returns `contractId`; `getContract`/`getContractPDF` allow a JOINED/SIGNED co-tenant via `isActiveCoTenant` (`src/utils/contractAccess.ts`; `ensureCanReadContract` unchanged on purpose); PDF access errors → 403/404 instead of 500.
+- Frontend: `/invites/accept` page (`pages/CoTenantInviteAccept.tsx`), `components/contracts/CoTenantsCard.tsx` in `ContractDetail` (status list, invite, "Firmar como co-titular"); sign/pay-deposit buttons only for the principal tenant; login/register `?redirect=` restricted to internal paths (`safeInternalPath` in `services/coTenants.ts`), register prefills `?email=`.
+- Open for Jorge: co-tenant "signature" is only a status flip (no e-signature provider); accepting requires verified identity. "Mis contratos" doesn't list co-tenant contracts yet.
+- Verification: tsc clean; Jest (`--runInBand`) tests/contracts 58/58, src/__tests__ 37/37, e2e smoke 9/9; frontend build + 49 tests OK; Playwright screenshots 390/1280 px.

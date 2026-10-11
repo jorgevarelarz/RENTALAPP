@@ -19,6 +19,9 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 2**: si en producción existen `DEPOSIT_SUCCESS_URL` o `DEPOSIT_CANCEL_URL`, mandan sobre las URLs nuevas (`FRONTEND_URL/contracts/<id>?deposit=success|cancel`); conviene borrarlas o comprobar que apuntan a app.rentalapp.es. El cambio de cobros no necesita migración.
 - **Al desplegar la ronda 9**: las consultas a la IA (asistente Clara y descripción de anuncios) quedan limitadas a 30 cada 15 minutos por usuario. Si te parece poco o mucho, se cambia con `AI_RATE_LIMIT_MAX` en el entorno, sin tocar código.
 - **Al desplegar la ronda 11**: `/metrics` deja de ser público. Si algo lo lee (Prometheus, un panel), hay que poner `METRICS_TOKEN` en el entorno y mandar `Authorization: Bearer <token>`; sin la variable, `/metrics` da 404. `/health` ya no devuelve `env`. Si en producción no está `STRIPE_IDENTITY_WEBHOOK_SECRET`, el webhook de `/api/kyc` responde 503 (hoy la verificación de identidad es un stub y nadie lo usa).
+- **Co-titulares (ronda 12), dos decisiones de producto:**
+  - «Firmar como co-titular» solo cambia el estado en la base (`POST /tenants/:partyId/sign`, backend de antes); no es una firma electrónica con proveedor. ¿Vale así o el co-titular debe firmar con Firma.dev como el inquilino principal?
+  - Aceptar la invitación exige tener la identidad verificada (`requireVerified` está en toda `/api`). La página lo explica y enlaza a `/tenant/kyc`, pero ¿debe poder unirse antes y verificar después?
 
 ### Ronda 1 — 2026-10-11 04:55
 
@@ -398,3 +401,47 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - Pendientes anteriores: enumeración de cuentas en el login, PII en otros logs, `payments.duplicates` intermitente y media de reseñas sin `$inc`.
 
 **Siguiente mejora propuesta.** Interfaz: página `/invites/accept` para el co-titular. Tiene que leer el token, pedir que inicie sesión o se registre con el email invitado y llamar a `POST /api/invites/accept`. Además, una sección «Co-titulares» en el detalle del contrato para invitar (`/tenants/invite`) y ver el estado. Así se cierra un flujo que hoy acaba en una página que no existe. Si se prefiere seguridad: enumeración de cuentas en el login y contraseña mínima de 8 caracteres.
+
+### Ronda 12 — 2026-10-11 10:05
+
+**Qué y por qué.** Flujo roto, propuesto en la ronda 11: la invitación de co-titular acababa en una página que no existía (`/invites/accept`). Revisando el backend salió que, aunque existiera, el co-titular tampoco podía ver el contrato después de aceptar: `getContract` solo dejaba pasar al casero, al inquilino principal y al admin.
+
+1. **Backend.**
+   - `GET /api/invites/preview?token=` es público, porque el invitado puede no tener cuenta. Devuelve el email invitado, el inmueble, quién invita y si ha caducado. El token va en la query, que no llega a los logs (ronda 11). Se monta antes de los routers de `/api` que exigen sesión.
+   - `POST /api/invites/accept` devuelve también `contractId`.
+   - `getContract` y `getContractPDF` admiten al co-titular `JOINED` o `SIGNED` con el nuevo `isActiveCoTenant` (`utils/contractAccess.ts`). No he tocado `ensureCanReadContract`: GitNexus da MEDIUM y lo usan terminar, renovar y avisos, que el co-titular no debe hacer.
+   - De paso, `getContractPDF` respondía 500 cuando no había acceso; ahora da 403 o 404.
+2. **Página `/invites/accept`** (`pages/CoTenantInviteAccept.tsx`, dentro de `AuthLayout`). Muestra la vivienda, la dirección, quién invita y el correo invitado. Según el caso:
+   - sin sesión: «Iniciar sesión» y «Crear cuenta», que vuelven a la invitación; el registro precarga el email;
+   - con otra cuenta: «Cambiar de cuenta»;
+   - con la cuenta invitada: «Aceptar invitación», que abre el contrato;
+   - mensajes para enlace no válido, caducado, correo distinto y falta de verificación de identidad (con enlace a `/tenant/kyc`).
+3. **Tarjeta «Co-titulares»** en el detalle del contrato (`components/contracts/CoTenantsCard.tsx`). Lista cada persona con su estado («Invitación enviada», «Pendiente de firma», «Firmado»…). El inquilino principal puede invitar por email; el co-titular ve «Firmar como co-titular» cuando el contrato está pendiente de firma. «Firmar contrato» y «Pagar fianza» quedan solo para el inquilino principal: un co-titular también tiene rol `tenant` y antes los habría visto.
+4. **Redirecciones.** Login y registro aceptan `?redirect=` solo con rutas internas (`safeInternalPath`: fuera `//…`, `/\…` y URLs absolutas). Los enlaces entre login y registro conservan la vuelta.
+
+**Commits.**
+- `952f2f9` Co-titular: vista previa pública de la invitación, acceso de lectura al contrato y PDF tras aceptar
+- `b0f0c84` Co-titular: página /invites/accept y sección «Co-titulares» en el detalle del contrato
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - `contract.cotenant.test.ts`: 7 OK (1 nuevo). Comprueba la vista previa sin sesión (400 sin token, 404 con uno desconocido, 200 con datos), 403 al contrato y al PDF antes de aceptar, `contractId` al aceptar, 200 al contrato (sin `ibanEncrypted`) y al PDF después, y 404 en la vista previa de una invitación ya usada;
+  - `tests/contracts`: 17 suites, 58 tests OK;
+  - `src/__tests__`: 37 OK; e2e smoke: 9 OK.
+- Frontend: build OK; `npm test` 20 ficheros y 49 tests OK (antes 17 y 39). Nuevos:
+  - `CoTenantInviteAccept.test.tsx` (5): sin sesión, aceptar y abrir el contrato, falta de verificación, otra cuenta, enlace no válido o caducado;
+  - `CoTenantsCard.test.tsx` (3);
+  - `coTenants.test.ts` (`safeInternalPath`);
+  - un caso más en `ContractDetail.test.tsx`: el co-titular no ve firmar ni pagar.
+- Capturas con Playwright (vite local, `/api/*` simulado) a 390 y 1280 px: invitación sin sesión, con la cuenta invitada y la tarjeta en el contrato. En móvil el correo largo se partía a mitad («ejemplo.e / s»); el estado va ahora debajo del nombre.
+- GitNexus: `impact` LOW en `getContract`, `ContractDetail` y `RegisterPage`; MEDIUM en `ensureCanReadContract`, que por eso no se tocó. `detect_changes`: el backend sale LOW; el frontend sale MEDIUM y solo afecta a los flujos de `AppRoutes`, `ContractDetail` y el registro.
+
+**Qué queda.**
+- Las dos decisiones de «Para Jorge» (firma real del co-titular y verificación previa).
+- «Mis contratos» (`GET /api/contracts`) no lista los contratos en los que el usuario es co-titular; solo llega a ellos por el enlace. Lo mismo `/api/me/invites`, que no tiene pantalla.
+- El email de invitación no dice quién invita ni qué vivienda es.
+- Pendientes anteriores: enumeración de cuentas en el login y contraseña mínima de 8, `payments.duplicates` intermitente, media de reseñas sin `$inc`, `returnUrl` libre en `/api/kyc/start` y la llamada real a Stripe en `contract.cotenant.test.ts`.
+
+**Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: enumeración de cuentas en el login («Esta cuenta utiliza Google o Apple») y contraseña mínima de 8 caracteres en registro y reset, alineada con la invitación de agencia. Si se prefiere seguir con el co-titular: listar sus contratos en «Mis contratos» y enriquecer el email de invitación.
+
