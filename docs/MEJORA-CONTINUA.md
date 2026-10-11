@@ -29,6 +29,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 24**: `POST /api/contracts/:id/payments/:period/pay` solo acepta meses desde el inicio del contrato hasta el mes en curso (hora de Madrid) y contratos `active` o `signed`. Si alguien pagaba por adelantado meses futuros, recibirá 400 `period_in_future`. Conviene comprobar con una consulta de solo lectura si hay recibos fuera de rango (`period` posterior al mes actual o anterior al inicio) o de importe 0.
 - **Al desplegar la ronda 26**: en el panel de Stripe, el endpoint del webhook (`/api/stripe/webhook`) tiene que tener suscrito `charge.refunded`; si no, las devoluciones no llegan y nada cambia. Dos decisiones abiertas: (1) cuando se devuelve una renta entera, ¿hay que revertir la transferencia de la parte de la agencia (`PartnerEarning`)? Ahora no se revierte. (2) Un mes devuelto queda `REFUNDED` y el inquilino no puede volver a pagarlo (409 `rent_refunded`). ¿Debe poder volver a pagarse, o una devolución significa que ese mes no se debe?
 - **Al desplegar la ronda 27**: la agencia que gestiona un inmueble (`agencyAccess: 'manage'`) ve ya sus candidatos (nombre, correo, mensaje y si tienen la solvencia verificada), propone y acepta visitas en nombre del propietario y prepara el contrato. Antes solo podía el propietario. Al traspasar el inmueble (`status_only`) pierde todo eso. Si el propietario debe dar su visto bueno antes de que la agencia vea a los candidatos, hay que decidirlo.
+- **Al desplegar la ronda 28**: `POST /api/auth/request-reset` responde `{ ok: true }` antes de buscar la cuenta, y el correo sale después. Si el SMTP falla, solo queda en el log (la respuesta ya era la misma con o sin cuenta). Además, la agencia gestora ve ya «Contratos» en su menú, abre el detalle y descarga el borrador de los contratos de inmuebles que gestiona, y ve los co-titulares sin poder tocarlos. El administrador, que antes veía «Contratos» vacío, ve ahora todos.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -1018,3 +1019,36 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: disputas de Stripe, `contractId` en el PaymentIntent de la fianza, enumeración por tiempo en `request-reset` y «Cancelar invitación» de propietario.
 
 **Siguiente mejora propuesta.** Terminar el circuito de la agencia: «Contratos» en su menú, revisando `MyContracts` y `ContractDetail` con el rol `agency` (qué ve y qué acciones le corresponden). Si se prefiere seguridad: cerrar la enumeración por tiempo de `request-reset` enviando el correo sin esperar.
+
+### Ronda 28 — 2026-10-11 19:40
+
+**Qué y por qué.** Un fallo de seguridad corto, pendiente desde la ronda 13, y terminar el circuito de la agencia que proponía la ronda 27. Al revisar ese circuito salieron dos fallos que lo dejaban roto.
+
+1. **Enumeración de cuentas por tiempo en `request-reset`.** La ruta esperaba a guardar el token y al SMTP solo si la cuenta existía, así que tardaba más con un correo registrado. Ahora responde `{ ok: true }` en cuanto valida el cuerpo, y la búsqueda, el token y el correo van en `issuePasswordReset`, sin esperar. Un SMTP caído o lento ya no se nota en la respuesta. Lo que la ronda 13 temía (P0-07) no aplica: la respuesta ya era idéntica tanto si el envío salía bien como si fallaba.
+2. **La agencia gestora no podía abrir sus contratos.**
+   - Backend: `getContract` comprobaba que la agencia gestionaba el inmueble y, unas líneas más abajo, la rechazaba con 403 por no ser arrendador, inquilino ni administrador. `GET /:id/parties` tampoco la admitía. Ahora entra la agencia que sigue gestionando el inmueble y es la `agencyId` del contrato. Los co-titulares son de solo lectura. Otra agencia, o la gestora tras el traspaso, reciben 403. El PDF ya pasaba por `ensureCanReadContract`, que sí la admitía.
+   - Frontend: `/contracts` y `/contracts/:id` no admitían el rol `agency`, de modo que el asistente, al crear el contrato, la mandaba a una página prohibida. Además, `MyContracts` descartaba los contratos en los que el usuario no era parte, y la lista salía siempre vacía para la agencia y también para el administrador.
+3. **«Contratos» en el menú de la agencia** (entre «Inmuebles» y «Propietarios»). Cada fila dice «Propietario: … · Inquilino: …». El subtítulo y el estado vacío hablan de «los inmuebles que gestionas», con el botón «Ver inmuebles». En un borrador, el siguiente paso para la agencia es «Revisar los datos con el propietario, que lo envía a firma», porque enviarlo a firma es cosa del propietario (`ensureLandlordOrAdmin`).
+
+**Commits.**
+- `8d447c1` Auth: request-reset responde antes de buscar la cuenta y enviar el correo (sin enumeración por tiempo)
+- `a194622` Contratos: la agencia gestora abre el detalle y los co-titulares de sus contratos (getContract la dejaba pasar y luego daba 403)
+- `338c7fd` Agencia: «Contratos» en su menú, con propietario e inquilino en cada fila; la lista ya no descarta los contratos en los que la agencia o el admin no son parte
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - `tests/auth`: 7 suites y 46 tests OK. El caso nuevo en `reset.test.ts` usa un SMTP que no responde nunca: la petición contesta en menos de 1 s y el token se genera igual. Los tests que leen el correo esperan ahora al envío en segundo plano.
+  - e2e (`jest.config.e2e.js`): 2 suites y 10 tests OK, incluido el reset completo.
+  - `tests/contracts` y `tests/agency`: 22 suites y 113 tests OK. Dos casos nuevos en `agencyManagedProperties.test.ts`: la gestora lista, abre el detalle (sin `ibanEncrypted`) y ve los co-titulares; otra agencia, o la gestora tras el traspaso, reciben 403. Con los controladores de antes, el primero falla (comprobado).
+- Frontend: build OK y `npm test` con 30 ficheros y 102 tests OK (antes 101). El caso nuevo de `MyContracts.test.tsx` comprueba, con el rol de agencia, la fila con propietario e inquilino, el siguiente paso y «Ver inmuebles». Falló con el filtro anterior, y así salió el segundo fallo del frontend.
+- Playwright (vite local, `/api/*` simulado, sesión de agencia) a 390 y 1280 px (`/tmp/ra-shots28`): «Contratos» en el menú, la lista con los dos contratos y el detalle de un borrador, que se abre al pulsar la fila.
+- GitNexus: `impact` LOW en `requestPasswordReset`. `detect_changes` sale medio, con los flujos esperados (`RequestPasswordReset → DeliverEmail`, `AppRoutes` y `MyContracts`). `resetPassword` y `redactEmail` aparecen solo porque el índice es de la copia canónica y sus líneas se desplazan; no cambian.
+
+**Qué queda.**
+- El detalle del contrato (`ContractDetail`) conserva el estilo antiguo: banda de color, «Timeline legal» y «Resumen Económico» en mayúsculas y el contrato en serif. En móvil, el botón «Descargar borrador» se sale de la tarjeta de cabecera.
+- En el modal de candidatos, la visita que propuso el propietario sale como «Has propuesto» también para la agencia.
+- La agencia no puede crear ni editar inmuebles desde su panel.
+- Pendientes anteriores: disputas de Stripe, `contractId` en el PaymentIntent de la fianza y «Cancelar invitación» de propietario.
+
+**Siguiente mejora propuesta.** Interfaz: pasar `ContractDetail` al sistema «RentalApp 2026»: cabecera sin banda de color, sin etiquetas en mayúsculas ni «ID Referencia», botones que no se salgan en móvil y la vista previa del contrato sin serif ni cursiva. Es la pantalla que más ven inquilinos, caseros y agencias. Si se prefiere pagos: `payment_intent_data.metadata.contractId` en el Checkout de la fianza, para que `charge.refunded` la reconozca.
