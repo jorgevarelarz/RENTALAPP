@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
 import { getJwtSecret } from '../utils/getJwtSecret';
+import { frontendUrl } from '../utils/frontendUrl';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 import {
   OAuthAccountNotFoundError,
@@ -52,13 +53,6 @@ function clearFlowCookie(res: Response) {
     sameSite: secure ? 'none' : 'lax',
     secure,
   });
-}
-
-function frontendUrl(path: string, params?: Record<string, string>) {
-  const base = (process.env.FRONTEND_URL || process.env.APP_URL || 'http://localhost:3000').replace(/\/+$/, '');
-  const url = new URL(path, `${base}/`);
-  Object.entries(params || {}).forEach(([key, value]) => url.searchParams.set(key, value));
-  return url.toString();
 }
 
 function authPayload(user: any) {

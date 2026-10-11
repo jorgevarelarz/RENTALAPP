@@ -5,6 +5,7 @@ import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { sendEmail } from '../utils/email';
 import { getJwtSecret } from '../utils/getJwtSecret';
+import { frontendUrl } from '../utils/frontendUrl';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 
 const EFFECTIVE_JWT_SECRET = getJwtSecret();
@@ -79,19 +80,28 @@ export const login = async (req: Request, res: Response) => {
   }
 };
 
+// En la BD solo se guarda el hash del token: quien lea la colección no puede usar los enlaces.
+export const hashResetToken = (token: string) =>
+  crypto.createHash('sha256').update(token).digest('hex');
+
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+
 export const requestPasswordReset = async (req: Request, res: Response) => {
   const { email } = req.body;
   try {
     const user = await User.findOne({ email });
     if (user) {
-      const token = crypto.randomBytes(20).toString('hex');
-      user.resetToken = token;
-      user.resetTokenExp = new Date(Date.now() + 60 * 60 * 1000);
+      const token = crypto.randomBytes(32).toString('hex');
+      user.resetToken = hashResetToken(token);
+      user.resetTokenExp = new Date(Date.now() + RESET_TOKEN_TTL_MS);
       await user.save();
+      const link = frontendUrl('/reset', { token });
       await sendEmail(
         user.email,
-        'Password reset',
-        `Reset link: https://frontend/reset?token=${token}`,
+        'Restablece tu contraseña de RentalApp',
+        `<p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.</p>
+<p><a href="${link}">Elegir una contraseña nueva</a></p>
+<p>El enlace caduca en una hora y solo se puede usar una vez. Si no lo has pedido tú, ignora este correo.</p>`,
       );
     }
   } catch (error) {
@@ -105,7 +115,7 @@ export const resetPassword = async (req: Request, res: Response) => {
   try {
     const { token, password } = req.body;
     const user = await User.findOne({
-      resetToken: token,
+      resetToken: hashResetToken(String(token)),
       resetTokenExp: { $gt: new Date() },
     });
 
@@ -116,6 +126,8 @@ export const resetPassword = async (req: Request, res: Response) => {
     user.passwordHash = await bcrypt.hash(password, 10);
     user.resetToken = undefined;
     user.resetTokenExp = undefined;
+    // Quien recupera la cuenta por email demuestra que controla ese correo.
+    if (!(user as any).emailVerifiedAt) (user as any).emailVerifiedAt = new Date();
     await user.save();
 
     res.json({ ok: true });

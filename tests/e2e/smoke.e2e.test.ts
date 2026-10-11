@@ -12,6 +12,7 @@ import { RentPayment } from "../../src/models/rentPayment.model";
 import { runRentGeneration } from "../../src/jobs/rentGeneration.job";
 import { stripe } from "../../src/utils/stripe";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
+import * as emailUtils from "../../src/utils/email";
 
 const PASSWORD = "Passw0rd!";
 const NEW_PASSWORD = "NewPassw0rd!";
@@ -348,17 +349,21 @@ jest.setTimeout(180_000);
   });
 
   it("password reset flow works (request + reset)", async () => {
+    const sendSpy = jest.spyOn(emailUtils, "sendEmail").mockResolvedValue(undefined);
     await request(app)
       .post("/api/auth/request-reset")
       .send({ email: "tenant@test.com" })
       .expect(200);
 
-    const user = await User.findOne({ email: "tenant@test.com" });
+    const user = await User.findOne({ email: "tenant@test.com" }).select("+resetToken +resetTokenExp");
     expect(user?.resetToken && user?.resetTokenExp).toBeTruthy();
+    const token = String(sendSpy.mock.calls[0][2]).match(/[?&]token=([a-f0-9]+)/)?.[1];
+    sendSpy.mockRestore();
+    expect(token).toBeTruthy();
 
     await request(app)
       .post("/api/auth/reset")
-      .send({ token: user!.resetToken, password: NEW_PASSWORD })
+      .send({ token, password: NEW_PASSWORD })
       .expect(200);
 
     await request(app)
