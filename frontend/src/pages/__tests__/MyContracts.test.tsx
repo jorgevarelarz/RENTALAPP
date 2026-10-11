@@ -82,6 +82,32 @@ describe('MyContracts', () => {
     expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
   });
 
+  it('la agencia gestora ve propietario e inquilino y el siguiente paso que le toca', async () => {
+    auth.user = { _id: 'a1', email: 'agencia@example.com', role: 'agency' };
+    listContractsMock.mockResolvedValue({
+      items: [
+        {
+          _id: 'c7',
+          status: 'draft',
+          rent: 800,
+          tenantId: 'u1',
+          ownerId: 'l1',
+          landlordName: 'Luis Gómez',
+          tenantName: 'Ana Pérez',
+          property: { _id: 'p7', title: 'Piso Ensanche', city: 'Valencia' },
+        },
+      ],
+    });
+    renderPage();
+    const row = (await screen.findByText('Piso Ensanche')).closest('a')!;
+    expect(row).toHaveAttribute('href', '/contracts/c7');
+    expect(within(row).getByText('Propietario: Luis Gómez · Inquilino: Ana Pérez')).toBeInTheDocument();
+    expect(within(row).getByText(/Revisar los datos con el propietario/)).toBeInTheDocument();
+    expect(screen.getByText(/inmuebles que gestionas/)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Ver inmuebles' })).toHaveAttribute('href', '/agency/properties');
+    expect(listInvitesMock).not.toHaveBeenCalled();
+  });
+
   it('filtra por grupo de estado con su recuento', async () => {
     renderPage();
     await screen.findByText('Piso Centro');

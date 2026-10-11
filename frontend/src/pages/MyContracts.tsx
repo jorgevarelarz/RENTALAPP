@@ -118,7 +118,9 @@ const MyContracts: React.FC = () => {
           user.role === 'tenant' ? listMyCoTenantInvites().catch(() => []) : Promise.resolve([]),
         ]);
         if (!active) return;
-        setItems((r.items || []).filter((c) => myRoleOf(c, user._id)));
+        // La agencia y el admin no son parte de los contratos: el backend ya les filtra los suyos.
+        const seesAll = user.role === 'agency' || user.role === 'admin';
+        setItems((r.items || []).filter((c) => seesAll || myRoleOf(c, user._id)));
         setInvites(pending);
       } catch (e) {
         if (active) setError(formatApiError(e, 'No se pudieron cargar tus contratos'));
@@ -148,8 +150,12 @@ const MyContracts: React.FC = () => {
   if (!token || !user) return <div>Inicia sesión</div>;
 
   const isTenant = user.role === 'tenant';
+  // La agencia gestora ve los contratos de los inmuebles que aún gestiona; no es parte de ninguno.
+  const isAgency = user.role === 'agency';
   const cta = isTenant ? (
     <Link to="/properties" className={secondaryLink}>Buscar pisos</Link>
+  ) : isAgency ? (
+    <Link to="/agency/properties" className={secondaryLink}>Ver inmuebles</Link>
   ) : (
     <Link to="/owner/properties" className={secondaryLink}>Gestionar propiedades</Link>
   );
@@ -158,7 +164,11 @@ const MyContracts: React.FC = () => {
     <div className="space-y-6 pb-10">
       <PageHeader
         title="Contratos"
-        subtitle="Tus contratos de alquiler, su estado y el siguiente paso."
+        subtitle={
+          isAgency
+            ? 'Los contratos de los inmuebles que gestionas, su estado y el siguiente paso.'
+            : 'Tus contratos de alquiler, su estado y el siguiente paso.'
+        }
         cta={!loading && items.length === 0 && !error ? undefined : cta}
       />
 
@@ -201,7 +211,9 @@ const MyContracts: React.FC = () => {
               <p className="mt-1 text-sm text-gray-500">
                 {isTenant
                   ? 'Cuando el arrendador prepare tu contrato, o aceptes una invitación de co-titular, aparecerá aquí.'
-                  : 'Crea un contrato desde la ficha de una de tus propiedades.'}
+                  : isAgency
+                    ? 'Crea un contrato desde los candidatos de un inmueble que gestionas.'
+                    : 'Crea un contrato desde la ficha de una de tus propiedades.'}
               </p>
             </div>
             {cta}
@@ -216,8 +228,11 @@ const MyContracts: React.FC = () => {
               const place = propertyPlace(c);
               const start = formatDate(c.signedAt || c.startDate);
               const end = formatDate(c.endDate);
-              const counterpart =
-                role === 'landlord'
+              const counterpart = isAgency
+                ? [c.landlordName && `Propietario: ${c.landlordName}`, c.tenantName && `Inquilino: ${c.tenantName}`]
+                    .filter(Boolean)
+                    .join(' · ')
+                : role === 'landlord'
                   ? c.tenantName && `Inquilino: ${c.tenantName}`
                   : c.landlordName && `Arrendador: ${c.landlordName}`;
               return (

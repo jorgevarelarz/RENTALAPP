@@ -53,7 +53,12 @@ export function getContractActionSummary(contract: Contract, role?: UserRole): C
         label: 'Expediente incompleto',
         tone: 'warning',
         detail: 'El contrato sigue en borrador y todavía no se ha enviado a firma.',
-        nextAction: role === 'landlord' || role === 'admin' ? 'Revisar datos y enviarlo a firma' : 'Esperar validación del arrendador',
+        nextAction:
+          role === 'landlord' || role === 'admin'
+            ? 'Revisar datos y enviarlo a firma'
+            : role === 'agency'
+              ? 'Revisar los datos con el propietario, que lo envía a firma'
+              : 'Esperar validación del arrendador',
         blockedReason: 'Faltan pasos previos antes de firma',
       };
     case 'pending_signature':
