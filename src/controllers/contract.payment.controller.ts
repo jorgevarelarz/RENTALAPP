@@ -13,6 +13,7 @@ import { stripe } from '../utils/stripe';
 import { createPaymentIntent } from '../utils/payment';
 import { depositToEscrow, getDepositCheckout } from '../utils/deposit';
 import { frontendUrl } from '../utils/frontendUrl';
+import { billableRent, checkRentPeriod, isValidRentPeriod, rentPeriodOf } from '../utils/rentPeriod';
 import { initiatePaymentAction } from '../services/contract.actions';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 
@@ -116,8 +117,11 @@ export const createRentPaymentIntent = async (req: Request, res: Response) => {
     }
 
     const now = new Date();
-    const period = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    const amount = contract.rent ?? (contract as any).rentAmount ?? 0;
+    const period = rentPeriodOf(now);
+    const periodError = checkRentPeriod(contract, period, now);
+    if (periodError) return res.status(400).json({ error: periodError });
+    const amount = billableRent(contract);
+    if (amount === null) return res.status(400).json({ error: 'invalid_rent' });
     const existing = await ensureRentPayment(contract._id as Types.ObjectId, period, amount);
     if (!existing) return res.status(500).json({ error: 'rent_payment_unavailable' });
     const attempt = await claimRentPayment(existing);
@@ -129,8 +133,10 @@ export const createRentPaymentIntent = async (req: Request, res: Response) => {
     }
     const rentPayment = attempt.rentPayment;
 
-    const monthName = now.toLocaleString('es-ES', { month: 'long' });
-    const concept = `Renta ${monthName} ${now.getFullYear()}`;
+    const billingYear = Number(period.slice(0, 4));
+    const billingMonth = Number(period.slice(5));
+    const monthName = now.toLocaleString('es-ES', { month: 'long', timeZone: 'Europe/Madrid' });
+    const concept = `Renta ${monthName} ${billingYear}`;
     const amountCents = Math.round(amount * 100);
 
     let paymentIntent;
@@ -158,8 +164,8 @@ export const createRentPaymentIntent = async (req: Request, res: Response) => {
       {
         contract: contract._id,
         type: 'rent',
-        billingMonth: now.getMonth() + 1,
-        billingYear: now.getFullYear(),
+        billingMonth,
+        billingYear,
         status: { $ne: 'succeeded' },
       },
       {
@@ -193,11 +199,7 @@ export const payRentForPeriod = async (req: Request, res: Response) => {
   try {
     const { id, period } = req.params as { id: string; period: string };
     const userId = req.user?.id;
-    if (!/^\d{4}-\d{2}$/.test(period)) {
-      return res.status(400).json({ error: 'invalid_period' });
-    }
-    const month = Number(period.split('-')[1]);
-    if (month < 1 || month > 12) {
+    if (!isValidRentPeriod(period)) {
       return res.status(400).json({ error: 'invalid_period' });
     }
     const contract = await Contract.findById(id);
@@ -212,10 +214,17 @@ export const payRentForPeriod = async (req: Request, res: Response) => {
     if (!signedParty && !legacyTenant) {
       return res.status(403).json({ error: 'Solo los inquilinos firmantes pueden pagar' });
     }
+    if (contract.status !== 'active' && contract.status !== 'signed') {
+      return res.status(400).json({ error: 'contract_not_active' });
+    }
+    const periodError = checkRentPeriod(contract, period);
+    if (periodError) return res.status(400).json({ error: periodError });
+    const rent = billableRent(contract);
+    if (rent === null) return res.status(400).json({ error: 'invalid_rent' });
     if (!contract.stripeCustomerId) {
       return res.status(400).json({ error: 'Configuración de pago incompleta en el contrato.' });
     }
-    const existing = await ensureRentPayment(contract._id as Types.ObjectId, period, contract.rent);
+    const existing = await ensureRentPayment(contract._id as Types.ObjectId, period, rent);
     if (!existing) {
       return res.status(500).json({ error: 'rent_payment_unavailable' });
     }
@@ -229,7 +238,7 @@ export const payRentForPeriod = async (req: Request, res: Response) => {
     const rentPayment = attempt.rentPayment;
     let intent;
     try {
-      intent = await createPaymentIntent(contract.stripeCustomerId, contract.rent, contract.currency || 'eur', {
+      intent = await createPaymentIntent(contract.stripeCustomerId, rent, contract.currency || 'eur', {
         metadata: {
           rentPaymentId: String(rentPayment._id),
           contractId: String(contract._id),
@@ -244,9 +253,9 @@ export const payRentForPeriod = async (req: Request, res: Response) => {
     await recordFunnelEvent(req, 'payment', {
       resourceType: 'rentPayment',
       resourceId: String(rentPayment._id),
-      meta: { contractId: String(contract._id), amount: contract.rent, period, phase: 'rent_period' },
+      meta: { contractId: String(contract._id), amount: rent, period, phase: 'rent_period' },
     });
-    res.json({ clientSecret: intent.client_secret, amount: contract.rent, status: 'PROCESSING' });
+    res.json({ clientSecret: intent.client_secret, amount: rent, status: 'PROCESSING' });
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'rent_payment_failed' });

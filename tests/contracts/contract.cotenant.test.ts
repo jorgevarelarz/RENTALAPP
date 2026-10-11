@@ -2,6 +2,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { rentPeriodOf } from '../../src/utils/rentPeriod';
 import { User } from '../../src/models/user.model';
 import { Property } from '../../src/models/property.model';
 import { Contract } from '../../src/models/contract.model';
@@ -191,7 +192,7 @@ describe('Co-tenants flows', () => {
     });
 
     const r1 = await request(app)
-      .post(`/api/contracts/${contract._id}/payments/2026-01/pay`)
+      .post(`/api/contracts/${contract._id}/payments/${rentPeriodOf(new Date())}/pay`)
       .set('x-user-id', tenantId)
       .set('x-user-role', 'tenant')
       .set('x-user-verified', 'true')
@@ -200,7 +201,7 @@ describe('Co-tenants flows', () => {
     expect(r1.body.status).toBe('PROCESSING');
 
     const r2 = await request(app)
-      .post(`/api/contracts/${contract._id}/payments/2026-01/pay`)
+      .post(`/api/contracts/${contract._id}/payments/${rentPeriodOf(new Date())}/pay`)
       .set('x-user-id', tenantId)
       .set('x-user-role', 'tenant')
       .set('x-user-verified', 'true')

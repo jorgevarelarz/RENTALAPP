@@ -8,6 +8,7 @@ import { RentPayment } from '../../src/models/rentPayment.model';
 import { Payment } from '../../src/models/payment.model';
 import { stripe } from '../../src/utils/stripe';
 import { stripe as paymentStripe } from '../../src/utils/payment';
+import { rentPeriodOf } from '../../src/utils/rentPeriod';
 
 // P3/P4 de la auditoría de seguridad: cobros duplicados de renta y fianza.
 describe('Pagos sin cobros duplicados', () => {
@@ -18,10 +19,7 @@ describe('Pagos sin cobros duplicados', () => {
     'x-user-role': 'tenant',
     'x-user-verified': 'true',
   };
-  const period = () => {
-    const now = new Date();
-    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-  };
+  const period = () => rentPeriodOf(new Date());
 
   let createIntent: jest.SpyInstance;
   let intentSeq = 0;
