@@ -12,27 +12,47 @@ import { useToast } from '../context/ToastContext';
 import { useAuth } from '../context/AuthContext';
 import PropertyFormRHF, { PropertyFormData } from '../components/PropertyFormRHF';
 import ApplicantsModal from '../components/ApplicantsModal';
-import { AlertTriangle, Building2, Plus, Home, BarChart3, Image as ImageIcon, Users } from 'lucide-react';
+import { AlertTriangle, ChevronRight, Plus, Home, Image as ImageIcon, Users } from 'lucide-react';
 import { toAbsoluteUrl } from '../utils/media';
 import OnboardingChecklist from '../components/OnboardingChecklist';
 import { buildLandlordAlerts, estimateMonthlyRent, propertyPhotoCount } from '../utils/landlordDashboard';
 import { getContractActionSummary } from '../utils/contractWorkflow';
 
 const IconCash = () => (
-  <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+  <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
 const IconHome = () => (
-  <svg className="w-6 h-6 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+  <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
   </svg>
 );
 const IconDoc = () => (
-  <svg className="w-6 h-6 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+  <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 011.414.586l5.414 5.414a1 1 0 01.586 1.414V19a2 2 0 01-2 2z" />
   </svg>
 );
+
+const euroFormatter = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
+const formatEuros = (value: unknown) => euroFormatter.format(Number(value) || 0);
+
+const formatShortDate = (value: unknown) => {
+  if (!value) return '';
+  const date = new Date(value as string);
+  return Number.isNaN(date.getTime())
+    ? ''
+    : date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
+};
+
+const plural = (count: number, singular: string, pluralForm: string) => `${count} ${count === 1 ? singular : pluralForm}`;
+
+const quickLinks = [
+  { to: '/contracts', title: 'Contratos', detail: 'Borradores, firmas y contratos activos' },
+  { to: '/landlord/payments', title: 'Pagos', detail: 'Rentas cobradas y recibos pendientes' },
+  { to: '/landlord/showings', title: 'Visitas', detail: 'Citas con interesados' },
+  { to: '/landlord/issues', title: 'Incidencias', detail: 'Averías y mantenimiento abiertos' },
+];
 
 const LandlordDashboard: React.FC = () => {
   const { token, user } = useAuth();
@@ -167,8 +187,8 @@ const LandlordDashboard: React.FC = () => {
           <h1 className="text-3xl font-bold text-gray-900">Panel de propietario</h1>
           <p className="text-gray-500 mt-1">Gestiona inmuebles e ingresos desde aquí.</p>
         </div>
-        <Button onClick={openCreate} className="shadow-lg hover:shadow-xl hover:-translate-y-0.5 transition-all">
-          <Plus size={20} className="mr-2" /> Nueva Propiedad
+        <Button onClick={openCreate} className="inline-flex items-center gap-2 self-start md:self-auto whitespace-nowrap">
+          <Plus size={18} aria-hidden="true" /> Nueva propiedad
         </Button>
       </div>
 
@@ -199,122 +219,116 @@ const LandlordDashboard: React.FC = () => {
         <div className="p-6 flex justify-center"><Spinner /></div>
       ) : stats ? (
         <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <Card className="p-6 border-l-4 border-l-green-500">
-              <div className="flex justify-between items-start">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card className="p-5">
+              <div className="flex justify-between items-start gap-3">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 uppercase">Ingresos totales</p>
-                  <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.earnings} €</h3>
+                  <p className="text-sm font-medium text-gray-500">Ingresos cobrados</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{formatEuros(stats.earnings)}</p>
+                  <p className="text-xs text-gray-500 mt-1">Pagos confirmados por Stripe</p>
                 </div>
-                <div className="p-3 bg-green-50 rounded-full">
+                <div className="p-2.5 bg-gray-50 rounded-lg" aria-hidden="true">
                   <IconCash />
                 </div>
               </div>
             </Card>
 
-            <Card className="p-6 border-l-4 border-l-indigo-500">
-              <div className="flex justify-between items-start">
+            <Card className="p-5">
+              <div className="flex justify-between items-start gap-3">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 uppercase">Propiedades</p>
-                  <div className="flex items-baseline gap-2 mt-2">
-                    <h3 className="text-3xl font-bold text-gray-900">{stats.properties.total}</h3>
-                    <span className="text-sm text-gray-500">({stats.properties.rented} alquiladas)</span>
-                  </div>
+                  <p className="text-sm font-medium text-gray-500">Propiedades</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{stats.properties?.total ?? mine.length}</p>
+                  <p className="text-xs text-gray-500 mt-1">
+                    {plural(activeProps, 'publicada', 'publicadas')} · {plural(draftProps, 'borrador', 'borradores')} ·{' '}
+                    {plural(stats.properties?.rented ?? 0, 'alquilada', 'alquiladas')}
+                  </p>
                 </div>
-                <div className="p-3 bg-indigo-50 rounded-full">
+                <div className="p-2.5 bg-gray-50 rounded-lg" aria-hidden="true">
                   <IconHome />
                 </div>
               </div>
             </Card>
 
-            <Card className="p-6 border-l-4 border-l-yellow-500">
-              <div className="flex justify-between items-start">
+            <Card className="p-5">
+              <div className="flex justify-between items-start gap-3">
                 <div>
-                  <p className="text-sm font-medium text-gray-500 uppercase">En tramite</p>
-                  <h3 className="text-3xl font-bold text-gray-900 mt-2">{stats.contracts.pending}</h3>
-                  <p className="text-xs text-gray-500 mt-1">Contratos pendientes de firma</p>
+                  <p className="text-sm font-medium text-gray-500">Contratos en trámite</p>
+                  <p className="text-3xl font-bold text-gray-900 mt-2">{stats.contracts?.pending ?? 0}</p>
+                  <p className="text-xs text-gray-500 mt-1">Pendientes de firma o de activar</p>
                 </div>
-                <div className="p-3 bg-yellow-50 rounded-full">
+                <div className="p-2.5 bg-gray-50 rounded-lg" aria-hidden="true">
                   <IconDoc />
                 </div>
               </div>
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="bg-white rounded-lg shadow border border-gray-200 overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
-                <h3 className="font-bold text-gray-800">Ultimos pagos recibidos</h3>
-                <Link to="/landlord/payments" className="text-sm text-indigo-600 hover:text-indigo-800">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:items-start">
+            <Card className="overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+                <h3 className="font-semibold text-gray-900">Últimos pagos recibidos</h3>
+                <Link to="/landlord/payments" className="text-sm font-medium text-indigo-600 hover:text-indigo-800">
                   Ver todos
                 </Link>
               </div>
 
-              {stats.recentPayments.length === 0 ? (
-                <div className="p-8 text-center text-gray-500">No hay pagos recientes.</div>
+              {(stats.recentPayments ?? []).length === 0 ? (
+                <div className="px-5 py-8 text-sm text-center text-gray-500">Todavía no has recibido pagos.</div>
               ) : (
-                <div className="divide-y divide-gray-100">
-                  {stats.recentPayments.map((payment: any) => (
-                    <div key={payment.id} className="px-6 py-4 flex justify-between items-center hover:bg-gray-50 transition-colors">
-                      <div>
-                        <p className="font-semibold text-gray-900">{payment.concept}</p>
-                        <p className="text-xs text-gray-500">
-                          {payment.propertyName} • {new Date(payment.date).toLocaleDateString()}
-                        </p>
-                      </div>
-                      <span className="font-mono font-bold text-green-600">+{payment.amount} €</span>
-                    </div>
-                  ))}
-                </div>
+                <ul className="divide-y divide-gray-100">
+                  {stats.recentPayments.map((payment: any) => {
+                    const dateLabel = formatShortDate(payment.date);
+                    return (
+                      <li key={payment.id} className="px-5 py-3 flex justify-between items-center gap-4">
+                        <div className="min-w-0">
+                          <p className="font-medium text-gray-900 truncate">{payment.concept || 'Pago'}</p>
+                          <p className="text-xs text-gray-500 truncate">
+                            {[payment.propertyName, dateLabel].filter(Boolean).join(' · ')}
+                          </p>
+                        </div>
+                        <span className="font-semibold tabular-nums text-gray-900 whitespace-nowrap">{formatEuros(payment.amount)}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-            </div>
+            </Card>
 
-            <div className="bg-white rounded-lg shadow border border-gray-200 p-6">
-              <h3 className="font-bold text-gray-800 mb-4">Gestion rapida</h3>
-              <div className="space-y-3">
-                <Link to="/properties" className="block w-full p-3 text-left border rounded hover:border-indigo-500 hover:bg-indigo-50 transition-all">
-                  Mis propiedades: editar detalles y precios.
-                </Link>
-                <Link to="/contracts" className="block w-full p-3 text-left border rounded hover:border-indigo-500 hover:bg-indigo-50 transition-all">
-                  Contratos: revisar borradores y firmas.
-                </Link>
-                <Link to="/landlord/issues" className="block w-full p-3 text-left border rounded hover:border-indigo-500 hover:bg-indigo-50 transition-all">
-                  Mantenimiento: incidencias abiertas.
-                </Link>
+            <Card className="overflow-hidden">
+              <div className="px-5 py-4 border-b border-gray-100">
+                <h3 className="font-semibold text-gray-900">Gestión rápida</h3>
               </div>
-            </div>
+              <ul className="divide-y divide-gray-100">
+                {quickLinks.map((link) => (
+                  <li key={link.to}>
+                    <Link to={link.to} className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-gray-50 transition-colors">
+                      <span>
+                        <span className="block font-medium text-gray-900">{link.title}</span>
+                        <span className="block text-xs text-gray-500">{link.detail}</span>
+                      </span>
+                      <ChevronRight size={16} className="text-gray-400 shrink-0" aria-hidden="true" />
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </Card>
           </div>
         </>
       ) : (
-        <Card className="p-6 text-center text-gray-500">No se pudieron cargar las estadisticas.</Card>
+        <Card className="p-6 text-center text-gray-500">No se pudieron cargar las estadísticas.</Card>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
-          <div className="bg-blue-50 p-3 rounded-lg"><Home className="text-blue-600" size={24}/></div>
-          <div><p className="text-sm text-gray-500 font-medium">Total Inmuebles</p><p className="text-2xl font-bold">{mine.length}</p></div>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
-          <div className="bg-green-50 p-3 rounded-lg"><Building2 className="text-green-600" size={24}/></div>
-          <div><p className="text-sm text-gray-500 font-medium">Publicados</p><p className="text-2xl font-bold">{activeProps}</p></div>
-        </div>
-        <div className="bg-white p-5 rounded-xl border border-gray-200 shadow-sm flex items-center gap-4">
-          <div className="bg-gray-50 p-3 rounded-lg"><BarChart3 className="text-gray-600" size={24}/></div>
-          <div><p className="text-sm text-gray-500 font-medium">Borradores</p><p className="text-2xl font-bold">{draftProps}</p></div>
-        </div>
-      </div>
-
-      <Card className="border border-gray-200 shadow-sm">
-        <div className="p-4 border-b border-gray-100 bg-gray-50/50">
-          <h3 className="font-semibold text-gray-800">Siguiente acción</h3>
+      <Card className="overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100">
+          <h3 className="font-semibold text-gray-900">Siguiente acción</h3>
           <p className="text-sm text-gray-500 mt-1">Contratos en curso y sus próximos pasos.</p>
         </div>
         {nextActions.length === 0 ? (
-          <div className="p-4 text-sm text-gray-500">No hay contratos con acciones pendientes.</div>
+          <div className="px-5 py-4 text-sm text-gray-500">No hay contratos con acciones pendientes.</div>
         ) : (
           <div className="divide-y divide-gray-100">
             {nextActions.map(({ id, propertyTitle, summary }) => (
-              <div key={id} className="p-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
+              <div key={id} className="px-5 py-4 flex flex-col md:flex-row md:items-center justify-between gap-3">
                 <div>
                   <div className="font-semibold text-gray-900">{propertyTitle}</div>
                   <div className="text-sm text-gray-700 mt-1">{summary.nextAction}</div>
@@ -332,9 +346,9 @@ const LandlordDashboard: React.FC = () => {
         )}
       </Card>
 
-      <Card className="overflow-hidden border border-gray-200 shadow-sm">
-        <div className="p-4 border-b border-gray-100 bg-gray-50/50 flex justify-between items-center">
-          <h3 className="font-semibold text-gray-800">Mis Propiedades</h3>
+      <Card className="overflow-hidden">
+        <div className="px-5 py-4 border-b border-gray-100 flex justify-between items-center">
+          <h3 className="font-semibold text-gray-900">Mis propiedades</h3>
         </div>
 
         {mine.length === 0 ? (
@@ -342,7 +356,7 @@ const LandlordDashboard: React.FC = () => {
             <div className="bg-gray-100 w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-4 text-gray-400">
               <Home size={32} />
             </div>
-            <h4 className="text-lg font-medium text-gray-900">Aun no tienes propiedades</h4>
+            <h4 className="text-lg font-medium text-gray-900">Aún no tienes propiedades</h4>
             <p className="text-gray-500 mb-6">Crea tu primer anuncio en menos de 2 minutos.</p>
             <Button variant="secondary" onClick={openCreate}>Empezar ahora</Button>
           </div>
@@ -387,13 +401,12 @@ const LandlordDashboard: React.FC = () => {
                       <h4 className="font-bold text-gray-900 group-hover:text-blue-600 transition-colors">{p.title}</h4>
                       <span
                         className={`text-[10px] uppercase font-bold px-2 py-0.5 rounded-full border ${statusClass}`}
-                        style={rented ? { animation: 'pulse 3s ease-in-out infinite' } : undefined}
                       >
                         {statusLabel}
                       </span>
                     </div>
                     <p className="text-sm text-gray-600">{p.address}, {p.city}</p>
-                    <p className="text-sm font-medium text-gray-900 mt-1">{p.price} €/mes</p>
+                    <p className="text-sm font-medium text-gray-900 mt-1">{formatEuros(p.price)}/mes</p>
                     {priceEstimate && (
                       <p className="text-xs text-gray-500 mt-1">
                         Estimación inicial: {priceEstimate.toLocaleString('es-ES')} €/mes
@@ -409,7 +422,7 @@ const LandlordDashboard: React.FC = () => {
                         <span className="font-semibold">{readiness.label}</span>
                         <span>Fotos {readiness.imageCount}/3</span>
                         <span>{readiness.hasPrice ? 'Precio ok' : 'Falta precio'}</span>
-                        <span>{readiness.hasAddress ? 'Direccion ok' : 'Falta direccion'}</span>
+                        <span>{readiness.hasAddress ? 'Dirección ok' : 'Falta dirección'}</span>
                         <span className="font-medium">Siguiente paso: {readiness.nextAction}</span>
                       </div>
                     )}
@@ -456,8 +469,8 @@ const LandlordDashboard: React.FC = () => {
                     </Button>
                   )}
                   <Button variant="secondary" size="sm" onClick={() => openEdit(p)}>Editar</Button>
-                  <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={async () => {
-                    if (!window.confirm('¿Estás seguro de eliminar este borrador?')) return;
+                  <Button variant="ghost" size="sm" className="hover:bg-red-50" style={{ color: '#b91c1c' }} onClick={async () => {
+                    if (!window.confirm(`¿Eliminar «${p.title || 'esta propiedad'}»? Esta acción no se puede deshacer.`)) return;
                     await axios.delete(`/api/properties/${p._id}`, { headers: { Authorization: `Bearer ${token}` } });
                     await refresh();
                     push({ title: 'Eliminada', tone: 'success' });
@@ -469,7 +482,7 @@ const LandlordDashboard: React.FC = () => {
         )}
       </Card>
 
-      <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingProperty ? "Editar Propiedad" : "Nueva Propiedad"}>
+      <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={editingProperty ? "Editar propiedad" : "Nueva propiedad"}>
         <div className="pt-2">
           <PropertyFormRHF
             onSubmit={handleSubmit}

@@ -38,6 +38,9 @@ export function estimateMonthlyRent(property: LandlordPropertyLike) {
   return Math.round(size * eurM2);
 }
 
+const countLabel = (count: number, singular: string, plural: string) =>
+  `${count} ${count === 1 ? singular : plural}`;
+
 export function buildLandlordAlerts(properties: LandlordPropertyLike[]) {
   const alerts: LandlordAlert[] = [];
   const missingPhotos = properties.filter((property) => propertyPhotoCount(property) < 3);
@@ -54,7 +57,7 @@ export function buildLandlordAlerts(properties: LandlordPropertyLike[]) {
     alerts.push({
       id: 'missing-photos',
       tone: 'warning',
-      title: `${missingPhotos.length} propiedades con pocas fotos`,
+      title: countLabel(missingPhotos.length, 'propiedad con pocas fotos', 'propiedades con pocas fotos'),
       detail: 'Publicar requiere al menos 3 fotos. Completa las fichas para mejorar conversión.',
     });
   }
@@ -63,7 +66,7 @@ export function buildLandlordAlerts(properties: LandlordPropertyLike[]) {
     alerts.push({
       id: 'drafts',
       tone: 'info',
-      title: `${drafts.length} borradores pendientes`,
+      title: countLabel(drafts.length, 'borrador pendiente', 'borradores pendientes'),
       detail: 'Revisa precio, descripción y documentos para publicarlos.',
     });
   }
@@ -72,7 +75,7 @@ export function buildLandlordAlerts(properties: LandlordPropertyLike[]) {
     alerts.push({
       id: 'vacant-active',
       tone: 'info',
-      title: `${publishedVacant.length} anuncios publicados`,
+      title: countLabel(publishedVacant.length, 'anuncio publicado', 'anuncios publicados'),
       detail: 'Comprueba solicitudes y ajusta precio si no reciben contactos.',
     });
   }
@@ -81,8 +84,8 @@ export function buildLandlordAlerts(properties: LandlordPropertyLike[]) {
     alerts.push({
       id: 'price-outliers',
       tone: 'warning',
-      title: `${priceOutliers.length} precios a revisar`,
-      detail: 'La estimación por m2 detecta una desviación superior al 20%.',
+      title: countLabel(priceOutliers.length, 'precio a revisar', 'precios a revisar'),
+      detail: 'La estimación por m² detecta una desviación superior al 20 %.',
     });
   }
 
