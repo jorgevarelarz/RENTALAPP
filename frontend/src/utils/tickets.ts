@@ -4,9 +4,17 @@ export const SERVICE_LABELS: Record<string, string> = {
   plumbing: 'Fontanería',
   electricity: 'Electricidad',
   appliances: 'Electrodomésticos',
+  locksmith: 'Cerrajería',
+  cleaning: 'Limpieza',
   painting: 'Pintura',
+  others: 'Otros',
   maintenance: 'Mantenimiento',
 };
+
+/** Servicios que se pueden pedir al comunicar una avería (los de los profesionales, pro.model). */
+export const TICKET_SERVICES = ['plumbing', 'electricity', 'appliances', 'locksmith', 'cleaning', 'painting', 'others'];
+export const TICKET_TITLE_MAX = 120;
+export const TICKET_DESCRIPTION_MAX = 2000;
 
 export function getServiceLabel(service?: string) {
   if (!service) return 'Sin servicio';
@@ -133,6 +141,11 @@ export function getTicketNextStep(t: TicketForStep, role: TicketRole): string {
 }
 
 const ERROR_TEXTS: Record<string, string> = {
+  invalid_service: 'Elige el tipo de avería.',
+  invalid_title: 'Pon un título de hasta 120 caracteres.',
+  invalid_description: 'Describe la avería (hasta 2.000 caracteres).',
+  contract_not_active: 'Solo se pueden comunicar averías de un contrato activo.',
+  contract_not_owned: 'Ese contrato no es tuyo.',
   missing_policy_acceptance: 'Antes tienes que aceptar las condiciones del servicio y el tratamiento de datos.',
   owner_no_stripe_customer: 'Falta configurar tu método de pago antes de aprobar el presupuesto.',
   work_not_completed: 'El profesional aún no ha dado el trabajo por terminado.',

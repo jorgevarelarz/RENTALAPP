@@ -121,7 +121,7 @@ export default function AppRoutes() {
               <Route path="/me/favorites" element={withProtected(<FavoritesPage />, ["tenant", "landlord", "admin"])} />
               <Route path="/contracts/new" element={withProtected(<ContractWizard />, ["landlord", "agency", "admin"])} />
               <Route path="/tickets" element={withProtected(<TicketsList />)} />
-              <Route path="/tickets/new" element={withProtected(<TicketCreatePage />, ["tenant", "landlord", "admin"])} />
+              <Route path="/tickets/new" element={withProtected(<TicketCreatePage />, ["tenant"])} />
               <Route path="/tickets/:id" element={withProtected(<TicketDetail />)} />
               <Route path="/owner/properties" element={withProtected(<LandlordDashboard />, ["landlord"])} />
               <Route path="/pro" element={withProtected(<ProDashboard />, ["pro"])} />
