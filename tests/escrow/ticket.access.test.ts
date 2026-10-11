@@ -170,6 +170,43 @@ describe('Ticket access control', () => {
     }
   });
 
+  it('accepts only own uploaded photos on a report and returns them in the ticket', async () => {
+    const send = jest.spyOn(email, 'sendTicketOpenedEmail').mockResolvedValue('sent');
+    try {
+      const T = await token(TENANT, 'tenant');
+      const contract = await Contract.create({
+        landlord: LANDLORD, tenant: TENANT, property: '507f1f77bcf86cd799439012',
+        rent: 700, deposit: 700, startDate: new Date(), endDate: new Date(Date.now() + 365 * 86400000),
+        region: 'general', clauses: [], status: 'active',
+      });
+      const base = { contractId: String(contract._id), service: 'plumbing', title: 'Gotera', description: 'Cae agua del techo' };
+      const post = (body: object) => request(app).post('/api/tickets').set('Authorization', T).send(body);
+      const own = (n: number) => `/uploads/${'a'.repeat(31)}${n}.jpg`;
+
+      for (const photos of [
+        'not-an-array',
+        ['https://evil.example.com/uploads/x.jpg'],
+        ['/uploads/../.env'],
+        [42],
+        [1, 2, 3, 4, 5, 6, 7].map(own),
+      ]) {
+        expect((await post({ ...base, photos }).expect(400)).body.error).toBe('invalid_photos');
+      }
+
+      const created = await post({ ...base, photos: [own(1), own(2), own(1)] }).expect(201);
+      expect(created.body.photos).toEqual([own(1), own(2)]); // sin duplicados
+      const read = await request(app).get(`/api/tickets/${created.body._id}`).set('Authorization', await token(LANDLORD, 'landlord')).expect(200);
+      expect(read.body.photos).toEqual([own(1), own(2)]);
+      for (let i = 0; i < 100 && !send.mock.calls.length; i++) await new Promise(resolve => setTimeout(resolve, 20));
+      expect(send.mock.calls[0][1]).toMatchObject({ photoCount: 2 });
+
+      const plain = await post(base).expect(201);
+      expect(plain.body.photos).toBeUndefined();
+    } finally {
+      send.mockRestore();
+    }
+  });
+
   it('escapes the report in the owner email', () => {
     const { subject, html } = email.ticketOpenedEmail({
       ticketId: 'abc', title: '<b>Gotera</b>', serviceLabel: 'Fontanería', description: '<script>x</script>',
@@ -179,5 +216,8 @@ describe('Ticket access control', () => {
     expect(html).not.toContain('<script>');
     expect(html).toContain('&lt;b&gt;Gotera&lt;/b&gt;');
     expect(html).toContain('/tickets/abc');
+    expect(html).not.toContain('foto');
+    expect(email.ticketOpenedEmail({ ticketId: 'abc', title: 'G', serviceLabel: 'F', description: 'd', photoCount: 3 }).html)
+      .toContain('Ha adjuntado 3 fotos');
   });
 });

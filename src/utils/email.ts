@@ -281,6 +281,7 @@ export type TicketOpenedEmail = {
   title: string;
   serviceLabel: string;
   description: string;
+  photoCount?: number;
   tenantName?: string;
   propertyTitle?: string;
   propertyAddress?: string;
@@ -302,6 +303,7 @@ export function ticketOpenedEmail(ticket: TicketOpenedEmail) {
         <p style="margin: 4px 0 0; color: #4b5563;">${escapeHtml(ticket.serviceLabel)}${place[1] ? ` · ${escapeHtml(place[1])}` : ''}</p>
         <p style="margin: 12px 0 0; white-space: pre-line;">${escapeHtml(description)}</p>
       </div>
+      ${ticket.photoCount ? `<p>Ha adjuntado ${ticket.photoCount === 1 ? 'una foto' : `${ticket.photoCount} fotos`}; las verás en la incidencia.</p>` : ''}
       <p>Entra para elegir un profesional y aprobar su presupuesto.</p>
       <div style="text-align: center; margin: 28px 0;">
         <a href="${url}" style="background-color: #111827; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Ver la incidencia</a>

@@ -8,6 +8,8 @@ export interface ITicket extends Document {
   service: string;
   title: string;
   description: string;
+  /** Fotos de la avería: URLs de /uploads propios (ticket.routes valida con isOwnUploadUrl). */
+  photos?: string[];
   status: 'open'|'quoted'|'in_progress'|'awaiting_schedule'|'scheduled'|'awaiting_validation'|'closed'|'disputed';
   quote?: { amount: number; currency: 'EUR'; proId: string; ts: Date };
   extra?: { amount: number; reason: string; status: 'pending'|'approved'|'rejected' };
@@ -24,6 +26,7 @@ const s = new Schema<ITicket>({
   service: { type: String, required: true },
   title: { type: String, required: true },
   description: { type: String, required: true },
+  photos: { type: [String], default: undefined },
   status: { type: String, default: 'open' },
   quote: { amount: Number, currency: String, proId: String, ts: Date },
   extra: { amount: Number, reason: String, status: String },

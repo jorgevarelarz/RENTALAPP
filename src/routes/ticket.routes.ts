@@ -19,6 +19,7 @@ import type { ProService } from '../models/pro.model';
 import { Property } from '../models/property.model';
 import { sendTicketOpenedEmail } from '../utils/email';
 import { logger } from '../utils/logger';
+import { isOwnUploadUrl } from '../utils/uploadUrl';
 
 const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
@@ -35,6 +36,9 @@ async function publishSystem(conversationId: string, senderId: string, systemCod
   await Message.create({ conversationId, senderId, type: 'system', systemCode, payload, readBy: [] });
   await Conversation.findByIdAndUpdate(conversationId, { lastMessageAt: new Date() });
 }
+
+/** Fotos por avería: las mismas que admite una subida de /api/uploads/images. */
+const PHOTOS_MAX = 6;
 
 /** Servicios que se pueden pedir: los mismos que ofrecen los profesionales (pro.model). */
 const TICKET_SERVICES: ProService[] = ['plumbing', 'electricity', 'appliances', 'locksmith', 'cleaning', 'painting', 'others'];
@@ -64,6 +68,7 @@ async function notifyOwnerTicketOpened(t: any, ownerId: string, tenantId: string
     title: t.title,
     serviceLabel: SERVICE_LABELS[t.service as ProService] || t.service,
     description: t.description,
+    photoCount: t.photos?.length || 0,
     tenantName: (tenant as any)?.name,
     propertyTitle: p?.title,
     propertyAddress: [p?.address, p?.city].filter(Boolean).join(', ') || undefined,
@@ -109,6 +114,13 @@ r.post('/', ...assertRole('tenant'), async (req, res) => {
     if (!description || description.length > DESCRIPTION_MAX) {
       return res.status(400).json({ error: 'invalid_description', code: 400 });
     }
+    // Fotos opcionales, solo ficheros subidos a nuestro /uploads (nada de URLs ajenas)
+    const rawPhotos = req.body?.photos ?? [];
+    if (!Array.isArray(rawPhotos) || rawPhotos.length > PHOTOS_MAX
+      || !rawPhotos.every((u: unknown) => typeof u === 'string' && isOwnUploadUrl(u))) {
+      return res.status(400).json({ error: 'invalid_photos', code: 400 });
+    }
+    const photos = Array.from(new Set(rawPhotos as string[]));
     // Propietario e inmueble salen del contrato del inquilino, nunca del body
     const contract = contractId ? await Contract.findById(String(contractId)).select('tenant landlord property status').lean() : null;
     if (!contract || String(contract.tenant) !== userId) {
@@ -125,6 +137,7 @@ r.post('/', ...assertRole('tenant'), async (req, res) => {
       service,
       title,
       description,
+      ...(photos.length ? { photos } : {}),
       status: 'open',
       history: [{ ts: new Date(), actor: userId, action: 'opened' }]
     });
