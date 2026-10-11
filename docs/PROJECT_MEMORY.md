@@ -1148,3 +1148,9 @@ Rules:
 - The routed `/contracts/new` (`ContractWizard.tsx`) posted `propertyId/tenantId/rentAmount/...`; `POST /api/contracts` requires `landlord/tenant/property/region/rent/deposit/startDate/endDate/clauses` → always 400. New `pages/contracts/contractDraft.ts` (`buildContractPayload`, `contractRegion` free text → `madrid|galicia|catalunya`, `contractCreateError`). Wizard: 3 steps (Condiciones, Cláusulas, Revisar), loads the property for owner/region, blocks unsupported regions, navigates to `/contracts/:id`. Dead old wizard (`WizardStep1-3`, `ClausesStep`) deleted.
 - Verification: tsc clean; Jest `create-contract.authz` 10/10 (new: exact wizard body → 201); frontend build + 90 tests; Playwright 390/1280 px.
 
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 22: case-insensitive account email + deleted-user tokens
+
+- New `src/utils/userEmail.ts` (`normalizeEmail`, `findUserByEmail` exact-lowercase then collation strength 2 fallback for legacy mixed-case, `emailInUse`). Used by `register` (stores lowercase, rejects case-variant duplicates), `login`, `requestPasswordReset`, `resolveSocialUser`, admin `createUser`, agency invite existence checks.
+- `authenticate`/`loadSessionUser`: token of a user that no longer exists → 401 `session_expired`. Tests that sign JWTs must seed the user: use `tests/utils/sessionToken.ts` (`sessionToken`, `bearer`).
+- Verification: tsc clean; full Jest `--runInBand --forceExit` 69 suites / 296 tests; e2e 10/10; frontend build + 90 tests.

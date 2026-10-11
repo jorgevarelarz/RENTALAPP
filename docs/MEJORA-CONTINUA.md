@@ -23,6 +23,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 15**: cada petición autenticada hace una consulta más a Mongo (`tokenVersion` del usuario, por `_id`). Los JWT ya emitidos siguen valiendo (cuentan como versión 0); no hace falta migración. Quien restablezca la contraseña cierra todas sus sesiones abiertas, también la del propio dispositivo.
 - **Al desplegar la ronda 17**: rol e `isVerified` salen de la base en cada petición, no del token. Un administrador degradado o una cuenta a la que se retira la verificación lo nota en la siguiente petición. No hay migración ni consulta extra (es la misma de `tokenVersion`).
 - **Al desplegar la ronda 20**: crear un contrato exige ser el propietario del inmueble, su agencia gestora (`agencyAccess: 'manage'`) o administrador, y que el arrendador sea el dueño del inmueble. Quien antes creaba contratos con IDs a mano sobre inmuebles ajenos recibirá 403/400. Conviene comprobar también, con una consulta de solo lectura, que en producción existe el índice único `contractId_1_period_1` de `rentpayments`. Si había recibos duplicados, Mongoose no lo habrá podido crear, y la protección contra el doble cobro de la renta (P3) depende de él.
+- **Al desplegar la ronda 22**: conviene comprobar en producción, con una consulta de solo lectura, si hay cuentas cuyo correo solo se diferencia en mayúsculas (`db.users.aggregate([{$group:{_id:{$toLower:'$email'},n:{$sum:1},emails:{$push:'$email'}}},{$match:{n:{$gt:1}}}])`). Si las hay, quien entra con el correo exacto llega a la suya, pero con otras mayúsculas entra en una cualquiera de las dos; habría que decidir cuál se conserva. Además, el token de una cuenta borrada deja de valer en la siguiente petición.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -775,3 +776,35 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - Pendientes anteriores: token de usuario borrado, email sin normalizar a minúsculas y «Cancelar invitación» para la agencia.
 
 **Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: rechazar en `authenticate` el token de un usuario que ya no existe (401 `session_expired`) y normalizar el email a minúsculas en registro, login y recuperación. Si se prefiere seguir con contratos: que el backend derive la región del inmueble en vez de fiarse del cuerpo, y abrir `/contracts/new` a la agencia gestora desde su panel.
+
+### Ronda 22 — 2026-10-11 16:06
+
+**Qué y por qué.** Seguridad, como proponían las rondas 19 y 21. Dos huecos de cuentas:
+
+1. **Correo sensible a mayúsculas.** El registro guardaba el correo tal cual y el índice único lo distingue, así que «Ana@x.com» y «ana@x.com» eran dos cuentas. Entrar con otras mayúsculas daba «Usuario o contraseña incorrectos» y la recuperación no encontraba la cuenta. Peor: Google y Apple entregan el correo en minúsculas, de modo que una cuenta con mayúsculas no se vinculaba al entrar con Google y se creaba una segunda. Las comprobaciones de «ya tiene cuenta» de las invitaciones de agencia y del alta por administrador también fallaban.
+   - Nuevo `src/utils/userEmail.ts`: `normalizeEmail`, `findUserByEmail` y `emailInUse`. Busca primero la forma en minúsculas (usa el índice) y, si no está, una cuenta antigua con otras mayúsculas (`collation` con `strength: 2`). No hace falta migrar producción.
+   - Usado en `register` (guarda en minúsculas; rechaza un correo ya usado con otras mayúsculas, con el mismo 400 de antes), `login`, `requestPasswordReset`, `resolveSocialUser`, `createUser` y las tres comprobaciones de `agencyInvite.controller.ts`.
+2. **Token de una cuenta borrada.** `authenticate` dejaba pasar el token de un usuario que ya no existía, con el rol del token. Ahora `loadSessionUser` lo trata como revocado: 401 `session_expired`, y la interfaz manda al login con el interceptor de la ronda 15. `optionalAuthenticate` lo trata como anónimo.
+   - Once ficheros de tests firmaban tokens con identificadores inventados. El nuevo `tests/utils/sessionToken.ts` (`sessionToken` y `bearer`) crea la cuenta con el rol y la verificación del token antes de firmarlo.
+
+**Commits.**
+- `46fe929` Auth: el correo de la cuenta no distingue mayúsculas en registro, login, recuperación, Google y altas de agencia/admin
+- `20552e6` Auth: el token de una cuenta borrada deja de valer (401 session_expired)
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. `tsc -p tsconfig.spec.json` solo da un error en los ficheros tocados, `escrow.release.recovery.test.ts:145` (índice de una tupla del mock de Stripe), y ya estaba antes.
+- Jest `--runInBand`:
+  - antes de ajustar los tests, el cambio de `authenticate` rompía 11 ficheros; tras el ajuste, esos 13 ficheros dan 40 tests OK;
+  - `tests/auth`: 6 suites y 40 tests OK. Nuevo `email-case.test.ts` (6): registro en minúsculas, duplicado con otras mayúsculas rechazado, login con otras mayúsculas (cuenta antigua y nueva), recuperación de una cuenta antigua, Google que vincula la cuenta antigua sin crear otra, y token de cuenta borrada que da 401 `session_expired`;
+  - suite completa con `--forceExit`: 69 suites y 296 tests OK, en 724 s;
+  - e2e: 2 suites y 10 tests OK.
+- Frontend (sin cambios): build OK; `npm test` 27 ficheros y 90 tests OK.
+- GitNexus: `impact` LOW en `login`, `resolveSocialUser` y `createLandlordInvite`. `loadSessionUser` no está en el índice (es de la ronda 15), por eso se pasó la suite completa. `detect_changes` sale alto: afecta a los flujos de registro, login, recuperación de contraseña e invitación de agencia, que son los que se querían cambiar.
+
+**Qué queda.**
+- Posibles cuentas duplicadas por mayúsculas en producción: anotado en «Para Jorge».
+- `request-reset` sigue con enumeración por tiempo (con cuenta tarda lo que tarda el SMTP).
+- La región del contrato no se contrasta en el backend con la del inmueble.
+- La agencia no tiene `/contracts/new` ni «Cancelar invitación» de propietario.
+
+**Siguiente mejora propuesta.** Contratos, que dejó pendientes la ronda 21: que `POST /api/contracts` derive la región del inmueble en vez de fiarse del cuerpo, y abrir el asistente a la agencia gestora desde su panel. Si se prefiere interfaz pura: «Cancelar invitación» para la agencia en «Propietarios», con el patrón de co-titulares.
