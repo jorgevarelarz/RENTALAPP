@@ -3,7 +3,13 @@ import Card from '../ui/Card';
 import Button from '../ui/Button';
 import Input from '../ui/Input';
 import { useToast } from '../../context/ToastContext';
-import { ContractParty, inviteCoTenant, listContractParties, signAsCoTenant } from '../../services/coTenants';
+import {
+  ContractParty,
+  inviteCoTenant,
+  listContractParties,
+  resendCoTenantInvite,
+  signAsCoTenant,
+} from '../../services/coTenants';
 
 const STATUS_LABEL: Record<ContractParty['status'], string> = {
   INVITED: 'Invitación enviada',
@@ -17,6 +23,25 @@ const STATUS_LABEL: Record<ContractParty['status'], string> = {
 const INVITE_ERRORS: Record<string, string> = {
   already_invited: 'Ese correo ya está invitado a este contrato.',
   email_required: 'Escribe el correo de la persona que quieres invitar.',
+};
+
+const RESEND_ERRORS: Record<string, string> = {
+  resend_too_soon: 'Ya se envió hace poco. Podrás reenviarla dentro de unos minutos.',
+  not_invited: 'Esa persona ya aceptó la invitación.',
+  contract_closed: 'El contrato está cerrado.',
+};
+
+const formatExpiry = (value?: string) => {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return '';
+  return date.toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+};
+
+const statusText = (p: ContractParty) => {
+  if (p.status !== 'INVITED') return STATUS_LABEL[p.status] || p.status;
+  if (p.expired) return 'Invitación caducada';
+  const until = formatExpiry(p.expiresAt);
+  return until ? `Invitación enviada · caduca el ${until}` : STATUS_LABEL.INVITED;
 };
 
 type Props = {
@@ -36,6 +61,7 @@ export default function CoTenantsCard({ contractId, contractStatus, myUserId, ca
   const [email, setEmail] = useState('');
   const [inviting, setInviting] = useState(false);
   const [signing, setSigning] = useState(false);
+  const [resending, setResending] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -75,6 +101,21 @@ export default function CoTenantsCard({ contractId, contractStatus, myUserId, ca
     }
   };
 
+  const resend = async (party: ContractParty) => {
+    const partyId = String(party.partyId);
+    setResending(partyId);
+    try {
+      await resendCoTenantInvite(contractId, partyId);
+      push({ title: `Invitación reenviada a ${party.email}`, tone: 'success' });
+      await load();
+    } catch (error: any) {
+      const code = error?.response?.data?.error;
+      push({ title: RESEND_ERRORS[code] || 'No se pudo reenviar la invitación', tone: 'error' });
+    } finally {
+      setResending(null);
+    }
+  };
+
   const sign = async () => {
     if (!mine) return;
     setSigning(true);
@@ -98,9 +139,24 @@ export default function CoTenantsCard({ contractId, contractStatus, myUserId, ca
           <li key={String(p.partyId)} className="min-w-0 [overflow-wrap:anywhere]">
             <p className="font-medium text-gray-900">{p.user?.name || p.email || 'Invitado'}</p>
             {p.user?.name && p.email && <p className="text-xs text-gray-500">{p.email}</p>}
-            <p className={`mt-0.5 text-xs font-medium ${p.status === 'SIGNED' ? 'text-emerald-700' : 'text-gray-500'}`}>
-              {STATUS_LABEL[p.status] || p.status}
+            <p
+              className={`mt-0.5 text-xs font-medium ${
+                p.status === 'SIGNED' ? 'text-emerald-700' : p.expired ? 'text-amber-700' : 'text-gray-500'
+              }`}
+            >
+              {statusText(p)}
             </p>
+            {inviteOpen && p.status === 'INVITED' && (
+              <button
+                type="button"
+                className="mt-1 text-xs font-semibold text-[var(--ra-blue)] hover:underline disabled:cursor-default disabled:text-gray-400 disabled:no-underline"
+                onClick={() => resend(p)}
+                disabled={resending === String(p.partyId)}
+                aria-label={`Reenviar invitación a ${p.email}`}
+              >
+                {resending === String(p.partyId) ? 'Enviando…' : 'Reenviar invitación'}
+              </button>
+            )}
           </li>
         ))}
       </ul>

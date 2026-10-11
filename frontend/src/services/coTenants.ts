@@ -14,6 +14,9 @@ export type ContractParty = {
   email?: string;
   signedAt?: string;
   invitedAt?: string;
+  /** Solo en invitaciones pendientes. */
+  expiresAt?: string;
+  expired?: boolean;
   user?: { id: string; name?: string; avatar?: string };
 };
 
@@ -53,6 +56,12 @@ export async function listContractParties(contractId: string) {
 export async function inviteCoTenant(contractId: string, email: string) {
   const { data } = await client.post(`/api/contracts/${contractId}/tenants/invite`, { email });
   return data as { ok: boolean; partyId: string };
+}
+
+/** Enlace nuevo para una invitación sin aceptar; el anterior deja de valer. */
+export async function resendCoTenantInvite(contractId: string, partyId: string) {
+  const { data } = await client.post(`/api/contracts/${contractId}/tenants/${partyId}/resend`);
+  return data as { ok: boolean; partyId: string; expiresAt: string };
 }
 
 export async function signAsCoTenant(contractId: string, partyId: string) {
