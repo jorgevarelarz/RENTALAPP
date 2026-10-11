@@ -15,6 +15,7 @@ import { sendPaymentReceiptEmail } from '../utils/email';
 import { calcServiceFee } from '../utils/calcServiceFee';
 import { recordContractHistory } from '../utils/history';
 import { transitionContract } from '../services/contractState';
+import { recordDepositPayment } from '../services/depositPayment.service';
 import { ensureDirectConversation } from '../utils/ensureDirectConversation';
 import { RentPayment } from '../models/rentPayment.model';
 import { PartnerEarning } from '../models/partnerEarning.model';
@@ -81,41 +82,6 @@ async function findDepositContract(intentId: string, metadata?: Stripe.Metadata 
     { $set: { depositPaymentIntentId: intentId } },
     { new: true },
   );
-}
-
-/**
- * Guarda la fianza cobrada por Checkout como `Payment` (tipo `deposit`), para que tenga recibo y
- * salga en los cobros del contrato. Idempotente por PaymentIntent: los reenvíos no la duplican.
- */
-async function recordDepositPayment(
-  contract: InstanceType<typeof Contract>,
-  intentId: string,
-  session: Stripe.Checkout.Session,
-  paidAt: Date,
-) {
-  const amount = typeof session.amount_total === 'number' ? session.amount_total / 100 : Number(contract.deposit);
-  try {
-    await Payment.updateOne(
-      { stripePaymentIntentId: intentId },
-      {
-        $setOnInsert: {
-          contract: contract._id,
-          payer: contract.tenant,
-          payee: contract.landlord,
-          amount,
-          currency: session.currency || 'eur',
-          status: 'succeeded',
-          type: 'deposit',
-          concept: 'Fianza',
-          paidAt,
-          stripePaymentIntentId: intentId,
-        },
-      },
-      { upsert: true },
-    );
-  } catch (err: any) {
-    if (err?.code !== 11000) throw err; // otro reenvío simultáneo ya lo creó
-  }
 }
 
 /** Copia de la disputa de Stripe que se guarda junto al cobro (importes en euros). */
@@ -635,7 +601,12 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
             if (contract && depositIntentId) {
               // Fuera del `if` de abajo: si un intento anterior falló después de marcar la fianza
               // pagada, el reintento de Stripe crea el pago que faltaba.
-              await recordDepositPayment(contract, depositIntentId, session, paidAt);
+              await recordDepositPayment(contract, {
+                intentId: depositIntentId,
+                amount: typeof session.amount_total === 'number' ? session.amount_total / 100 : Number(contract.deposit),
+                currency: session.currency || undefined,
+                paidAt,
+              });
             }
             if (contract && !contract.depositPaid) {
               contract.depositPaid = true;
