@@ -1213,3 +1213,9 @@ Rules:
 - `src/utils/logger.ts`: pino `redact` on `to|email|phone|phoneNumber|iban` (+ `*.key`) with censor masking (`a***@domain`, `***456`, `ES91****1332`), `password|passwordHash|token|authorization|cookie` → `[oculto]`; `err` serializer and log message scrubbed (`scrubPii`). New `src/utils/redact.ts`. Exported `loggerOptions` for tests.
 - `errorHandler` logs path without query; signature webhook without ID logs body keys only; `user.controller` update errors go through logger.
 - Verification: tsc clean; Jest `--runInBand` unit+auth+contracts+src/__tests__ 46 suites / 215 tests (new `tests/unit/logRedaction.test.ts` 3), e2e 10/10; frontend build + 107 tests.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 33: Mongo operators rejected + status badge
+
+- New `src/middleware/rejectMongoOperators.ts` (after parsers/hpp in `app.ts`): 400 `invalid_input` when query or JSON body has a key starting with `$` (any depth). Webhooks mounted earlier are unaffected. Not `mongoose sanitizeFilter` (would wrap our own `$in/$or`).
+- Frontend `Badge`/`StatusBadge`/`.badge`: pill, sentence case, no uppercase/tracking. `getStatusLabel` translates ticket/payment statuses (`in_progress` → «En curso"…) and capitalises unknown ones; «Pendiente de firma».
+- Verification: tsc clean; full Jest `--runInBand` 77 suites / 343 tests (only the adapted cotenant case failed, now 14/14); new `tests/security/mongoOperators.test.ts` 5; frontend build + 111 tests (new `statusBadges.test.ts`); Playwright `/tmp/ra-shots33`.

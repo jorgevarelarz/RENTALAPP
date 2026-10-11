@@ -1184,3 +1184,33 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes de interfaz: insignia `Badge` en mayúsculas, el paso «Contrato activo» con la fecha aunque esté pendiente, y la visita del propietario como «Has propuesto» para la agencia.
 
 **Siguiente mejora propuesta.** Interfaz compartida: la insignia de estado (`Badge` y `ContractStatusBadge`) sin mayúsculas ni letra espaciada, revisando con capturas las pantallas que la usan. Si se prefiere seguridad: `sanitizeFilter` global de Mongo (`?status[$ne]=x`) o los adjuntos de chat y avatares públicos sin caducidad.
+
+### Ronda 33 — 2026-10-11 21:20
+
+**Qué y por qué.** Un punto de seguridad pendiente en la auditoría y la insignia de estado que proponían las rondas 31 y 32.
+
+1. **Operadores de Mongo en query y cuerpo** (auditoría, «Mongo: no hay `sanitizeFilter` global»). Express 4 convierte `?status[$ne]=x` en `{ status: { $ne: 'x' } }` y un cuerpo JSON puede traer `{"email":{"$gt":""}}`. Hasta ahora cada controlador se defendía a mano (`String(...)`), y uno nuevo que se olvidara quedaba expuesto. No he encontrado ningún controlador explotable hoy, así que es una defensa en profundidad.
+   - Nuevo `src/middleware/rejectMongoOperators.ts`, montado en `app.ts` tras los parsers y `hpp`: si la query o el cuerpo traen una clave que empieza por `$` (a cualquier profundidad, también en listas), responde 400 `invalid_input`. Los valores con `$` (`?q=$100`) pasan.
+   - No uso `mongoose.set('sanitizeFilter', true)`, porque envolvería también los `$in`, `$or` y `$gt` que construye el propio código.
+   - Los webhooks de Stripe y de firma se montan antes y no pasan por él. El de Stripe Identity (`/api/kyc`) sí, pero los eventos de Stripe no traen claves con `$`. El frontend no envía ninguna (comprobado con grep).
+2. **Insignia de estado** (`Badge`, `StatusBadge`, `ContractStatusBadge` y la clase `.badge`). Pasa de etiqueta en mayúsculas con letra espaciada a píldora en minúscula de 12 px, como en Stripe o Airbnb. Al quitar las mayúsculas salía a la vista que las incidencias y los pagos mostraban el valor interno en inglés («in progress», «awaiting schedule»). `getStatusLabel` los traduce ya («En curso», «Por agendar», «Por validar», «En disputa», «Pagado»…) y pone la mayúscula inicial a cualquier estado desconocido. «Pendiente firma» pasa a «Pendiente de firma», igual que en el resto de la app. `disputed` tiene tono rojo y `awaiting_validation` ámbar.
+
+**Commits.**
+- `be4e5b8` Interfaz: la insignia de estado pasa a píldora en minúscula y traduce los estados de incidencias y pagos que salían en inglés
+- `fdc8888` Seguridad: rechazar con 400 las peticiones con operadores de Mongo en la query o el cuerpo
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - El nuevo `tests/security/mongoOperators.test.ts` tiene 5 casos OK: la detección a cualquier profundidad; los valores con `$`, los textos y los `Buffer` pasan; el login con `{"email":{"$gt":""}}` da 400 `invalid_input`; `GET /api/properties?status[$ne]=archived` da 400; y una búsqueda con `?q=%24100` y un login normal siguen funcionando. Sin el middleware, el caso de la query devuelve 200.
+  - Suite completa (`tests` y `src/__tests__`): 77 suites y 343 tests, con 342 OK y un único fallo esperado. Era `contract.cotenant.test.ts`, que comprobaba que `?status[$ne]=x` se ignoraba (200). Ahora espera 400 `invalid_input` y pasa (14/14 al repetirlo).
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 31 ficheros y 111 tests OK (antes 30 y 107). El nuevo `statusBadges.test.ts` tiene 4 casos.
+- Playwright (vite local, `/api/*` simulado) a 390 y 1280 px (`/tmp/ra-shots33`): «Contratos» del casero (Borrador, Pendiente de firma, Activo, Rescindido) e «Incidencias» del inquilino (Abierta, En curso, Por agendar, Por validar, Cerrada, En disputa). No hay desbordamiento horizontal de la página en ninguno de los cuatro casos.
+- GitNexus: `impact` CRITICAL en `getStatusLabel` (2 llamadores directos, `StatusBadge` y `ContractStatusBadge`, y 5 pantallas). Solo cambia el texto que devuelve, no la firma; está cubierto por el test nuevo y por las capturas. `impact` LOW en `Badge`. `detect_changes` sale medio, con los flujos esperados (`TenantDashboard`, `TenantApplications` y `StatusBadge`).
+
+**Qué queda.**
+- «Incidencias» (`TicketsList`) tiene fallos que ya estaban: las fechas salen en formato inglés («10/1/2026, 2:00:00 AM»), «Titulo» sin tilde y etiquetas de tabla y filtro en mayúsculas, y en móvil la tabla no cabe y hay que desplazarla de lado. Además, el subtítulo habla de «tickets».
+- Algunos tests del backend llaman a la API real de Stripe sin clave (`StripeAuthenticationError` en el log de `rentPayment`). No fallan, pero deberían simularla.
+- Pendientes anteriores: el paso «Contrato activo» muestra la fecha aunque esté pendiente, la visita del propietario sale como «Has propuesto» para la agencia, adjuntos de chat y avatares públicos sin caducidad, y los `console.*` sueltos fuera del logger.
+
+**Siguiente mejora propuesta.** Interfaz: «Incidencias» (`TicketsList` y `TicketDetail`) al sistema RentalApp 2026, con fechas en `es-ES`, tildes, lista en tarjetas en móvil en vez de tabla y sin mayúsculas en las cabeceras. Si se prefiere seguridad: los adjuntos de chat y los avatares, que son públicos y no caducan.
