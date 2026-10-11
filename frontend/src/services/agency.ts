@@ -14,6 +14,8 @@ export type LandlordInviteItem = {
   landlordEmail: string;
   propertyAddress?: string;
   status: 'invited' | 'accepted' | 'expired';
+  /** El último correo con el enlace no salió. */
+  emailFailed?: boolean;
   createdAt: string;
   acceptedAt?: string;
   steps: {
@@ -36,7 +38,22 @@ export type AgencyEarningsSummary = {
 
 export async function createLandlordInvite(input: LandlordInviteInput) {
   const { data } = await client.post('/api/agency/landlords/invite', input);
-  return data.invite as { id: string; landlordEmail: string; status: string; expiresAt: string };
+  return { ...data.invite, emailStatus: data.emailStatus } as LandlordInviteResult;
+}
+
+/** Resultado del envío ('not_configured' = servidor sin SMTP); un backend antiguo no lo manda. */
+export type LandlordInviteResult = {
+  id: string;
+  landlordEmail: string;
+  status: string;
+  expiresAt: string;
+  emailStatus?: 'sent' | 'not_configured' | 'failed';
+};
+
+/** Enlace nuevo para una invitación sin aceptar (vigente o caducada); el anterior deja de valer. */
+export async function resendLandlordInvite(id: string) {
+  const { data } = await client.post(`/api/agency/landlords/invites/${encodeURIComponent(id)}/resend`);
+  return { ...data.invite, emailStatus: data.emailStatus } as LandlordInviteResult;
 }
 
 export async function listLandlordInvites(): Promise<LandlordInviteItem[]> {

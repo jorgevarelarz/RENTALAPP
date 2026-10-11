@@ -17,8 +17,16 @@ export type ContractParty = {
   /** Solo en invitaciones pendientes. */
   expiresAt?: string;
   expired?: boolean;
+  /** El último correo de la invitación no salió. */
+  emailFailed?: boolean;
   user?: { id: string; name?: string; avatar?: string };
 };
+
+/** Resultado del envío del correo que devuelve el backend ('not_configured' = servidor sin SMTP). */
+export type EmailStatus = 'sent' | 'not_configured' | 'failed';
+
+/** Un backend antiguo no manda emailStatus: se da por enviado. */
+export const emailNotDelivered = (status?: EmailStatus) => status !== undefined && status !== 'sent';
 
 export type MyCoTenantInvite = {
   partyId: string;
@@ -55,13 +63,13 @@ export async function listContractParties(contractId: string) {
 
 export async function inviteCoTenant(contractId: string, email: string) {
   const { data } = await client.post(`/api/contracts/${contractId}/tenants/invite`, { email });
-  return data as { ok: boolean; partyId: string };
+  return data as { ok: boolean; partyId: string; emailStatus?: EmailStatus };
 }
 
 /** Enlace nuevo para una invitación sin aceptar; el anterior deja de valer. */
 export async function resendCoTenantInvite(contractId: string, partyId: string) {
   const { data } = await client.post(`/api/contracts/${contractId}/tenants/${partyId}/resend`);
-  return data as { ok: boolean; partyId: string; expiresAt: string };
+  return data as { ok: boolean; partyId: string; expiresAt: string; emailStatus?: EmailStatus };
 }
 
 export async function signAsCoTenant(contractId: string, partyId: string) {

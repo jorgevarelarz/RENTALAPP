@@ -12,7 +12,8 @@ const { listMock, inviteMock, signMock, resendMock, pushMock } = vi.hoisted(() =
 }));
 
 vi.mock('../../../context/ToastContext', () => ({ useToast: () => ({ push: pushMock }) }));
-vi.mock('../../../services/coTenants', () => ({
+vi.mock('../../../services/coTenants', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('../../../services/coTenants')>()),
   listContractParties: listMock,
   inviteCoTenant: inviteMock,
   signAsCoTenant: signMock,
@@ -88,6 +89,23 @@ describe('CoTenantsCard', () => {
         tone: 'error',
       }),
     );
+  });
+
+  it('avisa si el correo de la invitación no salió y lo marca en la lista', async () => {
+    const failed = { partyId: 'p2', role: 'TENANT', status: 'INVITED', email: 'co@example.com', emailFailed: true };
+    listMock.mockResolvedValueOnce([principal]).mockResolvedValueOnce([principal, failed]);
+    inviteMock.mockResolvedValue({ ok: true, partyId: 'p2', emailStatus: 'failed' });
+    render(<CoTenantsCard contractId="c1" contractStatus="pending_signature" myUserId="u1" canInvite />);
+
+    fireEvent.change(await screen.findByLabelText('Invitar a otra persona'), { target: { value: 'co@example.com' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Enviar invitación' }));
+
+    expect(await screen.findByText('No se pudo enviar el correo')).toBeInTheDocument();
+    expect(pushMock).toHaveBeenCalledWith({
+      title: 'Invitación guardada, pero el correo a co@example.com no salió. Reenvíala en unos minutos.',
+      tone: 'error',
+    });
+    expect(screen.getByRole('button', { name: 'Reenviar invitación a co@example.com' })).toBeEnabled();
   });
 
   it('el co-titular no ve «Reenviar»', async () => {

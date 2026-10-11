@@ -5,6 +5,7 @@ import Input from '../ui/Input';
 import { useToast } from '../../context/ToastContext';
 import {
   ContractParty,
+  emailNotDelivered,
   inviteCoTenant,
   listContractParties,
   resendCoTenantInvite,
@@ -40,6 +41,7 @@ const formatExpiry = (value?: string) => {
 const statusText = (p: ContractParty) => {
   if (p.status !== 'INVITED') return STATUS_LABEL[p.status] || p.status;
   if (p.expired) return 'Invitación caducada';
+  if (p.emailFailed) return 'No se pudo enviar el correo';
   const until = formatExpiry(p.expiresAt);
   return until ? `Invitación enviada · caduca el ${until}` : STATUS_LABEL.INVITED;
 };
@@ -89,9 +91,13 @@ export default function CoTenantsCard({ contractId, contractStatus, myUserId, ca
     if (!value) return;
     setInviting(true);
     try {
-      await inviteCoTenant(contractId, value);
+      const { emailStatus } = await inviteCoTenant(contractId, value);
       setEmail('');
-      push({ title: `Invitación enviada a ${value}`, tone: 'success' });
+      push(
+        emailNotDelivered(emailStatus)
+          ? { title: `Invitación guardada, pero el correo a ${value} no salió. Reenvíala en unos minutos.`, tone: 'error' }
+          : { title: `Invitación enviada a ${value}`, tone: 'success' },
+      );
       await load();
     } catch (error: any) {
       const code = error?.response?.data?.error;
@@ -105,8 +111,12 @@ export default function CoTenantsCard({ contractId, contractStatus, myUserId, ca
     const partyId = String(party.partyId);
     setResending(partyId);
     try {
-      await resendCoTenantInvite(contractId, partyId);
-      push({ title: `Invitación reenviada a ${party.email}`, tone: 'success' });
+      const { emailStatus } = await resendCoTenantInvite(contractId, partyId);
+      push(
+        emailNotDelivered(emailStatus)
+          ? { title: `El correo a ${party.email} no salió. Inténtalo de nuevo en unos minutos.`, tone: 'error' }
+          : { title: `Invitación reenviada a ${party.email}`, tone: 'success' },
+      );
       await load();
     } catch (error: any) {
       const code = error?.response?.data?.error;
@@ -141,7 +151,11 @@ export default function CoTenantsCard({ contractId, contractStatus, myUserId, ca
             {p.user?.name && p.email && <p className="text-xs text-gray-500">{p.email}</p>}
             <p
               className={`mt-0.5 text-xs font-medium ${
-                p.status === 'SIGNED' ? 'text-emerald-700' : p.expired ? 'text-amber-700' : 'text-gray-500'
+                p.status === 'SIGNED'
+                  ? 'text-emerald-700'
+                  : p.status === 'INVITED' && (p.expired || p.emailFailed)
+                    ? 'text-amber-700'
+                    : 'text-gray-500'
               }`}
             >
               {statusText(p)}
