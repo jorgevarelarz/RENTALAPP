@@ -1257,3 +1257,9 @@ Rules:
 - `checkout.session.completed` (deposit) now upserts a `Payment` `type:'deposit'` via new `services/depositPayment.service.recordDepositPayment` (idempotent by `stripePaymentIntentId`, `paidAt` = `contract.depositPaidAt`), so the deposit has a receipt PDF and shows in contract/tenant payment lists. `charge.refunded` and disputes on a deposit `Payment` still update `contract.depositAmountRefunded/depositRefundedAt/depositDispute`.
 - New `scripts/backfill_deposit_payments.ts` (dry-run unless `--apply`) for deposits paid before; not run anywhere (Jorge).
 - Verification: tsc clean; Jest `--runInBand` payments.disputes 7, deposit.backfill 1, refunds/receipt/history/duplicates/serviceOffer/webhook OK, e2e 10/10. Frontend untouched.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 41: server-side ticket search + mobile ticket detail order
+
+- `GET /api/tickets/my/{tenant,owner,pro}` share `listMine(field)`: `q` (escaped title regex or Spanish service label, accent-insensitive, ≤100 chars), `status` validated against model statuses (400 `invalid_status`; non-string `q` 400 `invalid_query`). Removed dead nested `publishSystem` copy.
+- Frontend `TicketsList` sends debounced `q` to the server (page reset, `keepPreviousData`); `TicketDetail` mobile order: actions, description, history, chat (`contents` wrappers).
+- Verification: tsc clean; Jest `--runInBand` ticket.list 5, escrow 19, security 16, e2e 10/10; frontend build + 132 tests; Playwright `/tmp/ra-shots41`.

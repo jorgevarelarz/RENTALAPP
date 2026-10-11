@@ -1486,3 +1486,36 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: búsqueda de incidencias en el servidor (`q`), en móvil el historial de la ficha antes que la descripción, adjuntos de chat públicos, `console.*` fuera del logger.
 
 **Siguiente mejora propuesta.** Llevan tres rondas en pagos; toca interfaz. La búsqueda de incidencias en el servidor (`q` escapado en `GET /api/tickets/my/*` y la lista usándolo) y, en la ficha móvil, la descripción antes que el historial.
+
+### Ronda 41 — 2026-10-12 01:26
+
+**Qué y por qué.** Llevaba tres rondas en pagos; esta va de interfaz, con la mejora propuesta en la ronda 40: búsqueda de incidencias en el servidor y orden de la ficha en móvil. Al mirarlo apareció además un fallo de validación en el servidor.
+
+1. **Backend** (`routes/ticket.routes.ts`). `GET /api/tickets/my/tenant|owner|pro`:
+   - aceptan `q`: busca en el título (sin distinguir mayúsculas, escapado: `.*` o `(2)` se buscan como texto) o por el nombre del servicio en español, con o sin tilde («fontaneria» encuentra las de fontanería). Recorta a 100 caracteres. El `total` y la paginación cuentan sobre lo encontrado;
+   - `status` llegaba a Mongo sin validar, así que `?status[$ne]=closed` pasaba un operador a la consulta (solo dentro de las incidencias propias, por eso el impacto era bajo). Ahora solo se admiten los estados del modelo: cualquier otro da 400 `invalid_status`. Un `q` que no sea texto da 400 `invalid_query`;
+   - los tres manejadores eran copias del mismo código: pasan a uno (`listMine`). De paso desaparece una copia muerta de `publishSystem` que estaba metida dentro del de `/my/pro`.
+2. **Interfaz**:
+   - `pages/tickets/TicketsList.tsx`: la búsqueda filtraba solo los 20 de la página cargada, así que una avería de la página 2 «no existía». Ahora manda `q` al servidor (espera 300 ms al teclear con `useDebouncedValue`), vuelve a la página 1 y mantiene la lista anterior mientras carga;
+   - `pages/tickets/TicketDetail.tsx`: en móvil la columna lateral entera iba primero, de modo que el historial salía antes de la descripción. Con `contents` en móvil, el orden pasa a ser «Qué puedes hacer», descripción, historial y chat. En escritorio no cambia nada.
+
+**Commits.**
+- `7fee7c3` Incidencias: GET /api/tickets/my/* busca en el servidor y valida el estado (400 invalid_status); un solo manejador
+- `06f2469` Incidencias: la lista busca en el servidor; en móvil la ficha pone la descripción antes del historial
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand`:
+  - nuevo `tests/escrow/ticket.list.test.ts`, 5/5: título sin mayúsculas y sin las del otro inquilino; servicio con y sin tilde para inquilino, propietario y profesional; `(2)` y `.*` como texto; búsqueda con estado y `total` sobre lo filtrado; 400 con estado desconocido, `status[$ne]` y `q[$gt]`;
+  - `tests/escrow` completo: 4 suites, 19 tests OK;
+  - `tests/security`: 3 suites, 16 tests OK;
+  - e2e (`npm run test:e2e`): 10/10.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 36 ficheros y 132 tests OK (antes 35 y 130). Nuevo `TicketsList.test.tsx` con 2 casos: la búsqueda va al servidor con `page: 1` y `q` recortado, y sin resultados lo dice y deja el buscador a la vista.
+- Playwright (vite local, `/api/*` simulado) a 390 y 1280 px (`/tmp/ra-shots41`): la lista con `?q=grifo` pide `q=grifo` al servidor; en la ficha móvil el orden es acciones, descripción e historial, y en escritorio queda igual que antes. Sin desbordamiento horizontal.
+- GitNexus `detect_changes` (worktree contra el índice del repo canónico): riesgo bajo, sin símbolos ni flujos afectados.
+
+**Qué queda.**
+- La búsqueda no mira la descripción ni la dirección del inmueble; si hace falta, se añade al `$or` (con índice de texto si crecen los datos).
+- Las pantallas del profesional `Billing` y `Quotes` siguen pidiendo 100 incidencias y filtrando en el cliente.
+- Pendientes anteriores: correo al inquilino al pagar la fianza y aviso al casero de los cobros; flujo de devolución de fianza en la app; adjuntos de chat públicos; `console.*` fuera del logger.
+
+**Siguiente mejora propuesta.** Avisos de cobro: correo al inquilino al pagar la fianza (como ya tiene la renta) y al casero cuando se cobra una renta o una fianza, con enlace a «Cobros y recibos». Es el hueco «Notificaciones» de la auditoría, en el flujo de pago.
