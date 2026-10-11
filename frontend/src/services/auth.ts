@@ -108,3 +108,14 @@ export async function requestPasswordReset(email: string) {
 export async function resetPassword(token: string, password: string) {
   await axios.post(`/api/auth/reset`, { token, password });
 }
+
+// Cambia la contraseña con la sesión iniciada. El backend cierra las demás sesiones y devuelve
+// un token nuevo, que se guarda para que este dispositivo siga dentro.
+export async function changePassword(currentPassword: string, password: string): Promise<User | null> {
+  const { data } = await axios.post("/api/auth/change-password", { currentPassword, password });
+  const current = getStoredUser();
+  if (!current || !data?.token) return null;
+  const next: User = { ...current, token: data.token };
+  setStoredUser(next);
+  return next;
+}
