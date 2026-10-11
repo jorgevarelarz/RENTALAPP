@@ -5,6 +5,8 @@ import { bearer } from '../utils/sessionToken';
 import { Contract } from '../../src/models/contract.model';
 import Ticket from '../../src/models/ticket.model';
 import Escrow from '../../src/models/escrow.model';
+import { Property } from '../../src/models/property.model';
+import * as email from '../../src/utils/email';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 const token = bearer;
@@ -40,7 +42,7 @@ describe('Ticket access control', () => {
     const res = await request(app)
       .post('/api/tickets')
       .set('Authorization', await token(TENANT, 'tenant'))
-      .send({ contractId: String(contract._id), ownerId: OTHER_LANDLORD, service: 'maintenance', title: 'Grifo', description: 'Gotea' })
+      .send({ contractId: String(contract._id), ownerId: OTHER_LANDLORD, service: 'plumbing', title: 'Grifo', description: 'Gotea' })
       .expect(201);
     return { contract, ticketId: res.body._id as string, ticket: res.body };
   };
@@ -53,7 +55,7 @@ describe('Ticket access control', () => {
     await request(app)
       .post('/api/tickets')
       .set('Authorization', await token(OTHER_TENANT, 'tenant'))
-      .send({ contractId: String(contract._id), service: 'x', title: 'x', description: 'x' })
+      .send({ contractId: String(contract._id), service: 'plumbing', title: 'x', description: 'x' })
       .expect(403);
   });
 
@@ -126,5 +128,56 @@ describe('Ticket access control', () => {
     await request(app).post(`/api/tickets/${ticketId}/complete`).set('Authorization', P).send({}).expect(409);
     await request(app).post(`/api/tickets/${ticketId}/resolve`).set('Authorization', T).expect(200);
     expect((await Ticket.findById(ticketId).lean())?.status).toBe('closed');
+  });
+
+  it('validates the report, needs an active contract and emails the owner', async () => {
+    const send = jest.spyOn(email, 'sendTicketOpenedEmail').mockResolvedValue('sent');
+    try {
+      await token(LANDLORD, 'landlord'); // crea la cuenta del propietario (correo sesion-<id>@test.com)
+      const T = await token(TENANT, 'tenant');
+      const property = await Property.create({
+        owner: LANDLORD, title: 'Piso en Chamberí', address: 'Calle Real 1', city: 'Madrid', region: 'madrid',
+        location: { type: 'Point', coordinates: [-3.7, 40.43] }, price: 900, deposit: 900, availableFrom: new Date(),
+      });
+      const contract = await Contract.create({
+        landlord: LANDLORD, tenant: TENANT, property: property._id,
+        rent: 700, deposit: 700, startDate: new Date(), endDate: new Date(Date.now() + 365 * 86400000),
+        region: 'general', clauses: [], status: 'active',
+      });
+      const base = { contractId: String(contract._id), service: 'plumbing', title: 'Gotera', description: 'Cae agua del techo' };
+      const post = (body: object) => request(app).post('/api/tickets').set('Authorization', T).send(body);
+
+      expect((await post({ ...base, service: 'maintenance' }).expect(400)).body.error).toBe('invalid_service');
+      expect((await post({ ...base, title: '   ' }).expect(400)).body.error).toBe('invalid_title');
+      expect((await post({ ...base, title: 'x'.repeat(121) }).expect(400)).body.error).toBe('invalid_title');
+      expect((await post({ ...base, description: '' }).expect(400)).body.error).toBe('invalid_description');
+      expect(send).not.toHaveBeenCalled();
+
+      const created = await post({ ...base, title: '  Gotera  ' }).expect(201);
+      expect(created.body.title).toBe('Gotera');
+      // El correo sale después de responder
+      for (let i = 0; i < 100 && !send.mock.calls.length; i++) await new Promise(resolve => setTimeout(resolve, 20));
+      expect(send).toHaveBeenCalledTimes(1);
+      const [to, info] = send.mock.calls[0];
+      expect(to).toBe(`sesion-${LANDLORD}@test.com`);
+      expect(info).toMatchObject({ ticketId: created.body._id, title: 'Gotera', serviceLabel: 'Fontanería' });
+      expect(info).toMatchObject({ propertyTitle: 'Piso en Chamberí', propertyAddress: 'Calle Real 1, Madrid' });
+
+      await Contract.updateOne({ _id: contract._id }, { $set: { status: 'terminated' } });
+      expect((await post(base).expect(409)).body.error).toBe('contract_not_active');
+    } finally {
+      send.mockRestore();
+    }
+  });
+
+  it('escapes the report in the owner email', () => {
+    const { subject, html } = email.ticketOpenedEmail({
+      ticketId: 'abc', title: '<b>Gotera</b>', serviceLabel: 'Fontanería', description: '<script>x</script>',
+      tenantName: 'Ana <img>', propertyTitle: 'Piso', propertyAddress: 'Calle Real 1, Madrid',
+    });
+    expect(subject).toBe('Nueva avería: <b>Gotera</b>');
+    expect(html).not.toContain('<script>');
+    expect(html).toContain('&lt;b&gt;Gotera&lt;/b&gt;');
+    expect(html).toContain('/tickets/abc');
   });
 });

@@ -15,6 +15,10 @@ import { releaseTicketEscrow } from '../services/ticketEscrow.service';
 import { assertRole } from '../middleware/assertRole';
 import { requirePolicies } from '../middleware/requirePolicies';
 import type { PolicyType } from '../models/policy.model';
+import type { ProService } from '../models/pro.model';
+import { Property } from '../models/property.model';
+import { sendTicketOpenedEmail } from '../utils/email';
+import { logger } from '../utils/logger';
 
 const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
@@ -30,6 +34,40 @@ function parsePagination(query: any) {
 async function publishSystem(conversationId: string, senderId: string, systemCode: string, payload?: any) {
   await Message.create({ conversationId, senderId, type: 'system', systemCode, payload, readBy: [] });
   await Conversation.findByIdAndUpdate(conversationId, { lastMessageAt: new Date() });
+}
+
+/** Servicios que se pueden pedir: los mismos que ofrecen los profesionales (pro.model). */
+const TICKET_SERVICES: ProService[] = ['plumbing', 'electricity', 'appliances', 'locksmith', 'cleaning', 'painting', 'others'];
+const SERVICE_LABELS: Record<ProService, string> = {
+  plumbing: 'Fontanería',
+  electricity: 'Electricidad',
+  appliances: 'Electrodomésticos',
+  locksmith: 'Cerrajería',
+  cleaning: 'Limpieza',
+  painting: 'Pintura',
+  others: 'Otros',
+};
+const TITLE_MAX = 120;
+const DESCRIPTION_MAX = 2000;
+
+async function notifyOwnerTicketOpened(t: any, ownerId: string, tenantId: string, propertyId: string) {
+  const [owner, tenant, property] = await Promise.all([
+    User.findById(ownerId).select('email').lean(),
+    User.findById(tenantId).select('name').lean(),
+    Property.findById(propertyId).select('title address city').lean(),
+  ]);
+  const to = (owner as any)?.email;
+  if (!to) return;
+  const p = property as any;
+  await sendTicketOpenedEmail(to, {
+    ticketId: String(t._id),
+    title: t.title,
+    serviceLabel: SERVICE_LABELS[t.service as ProService] || t.service,
+    description: t.description,
+    tenantName: (tenant as any)?.name,
+    propertyTitle: p?.title,
+    propertyAddress: [p?.address, p?.city].filter(Boolean).join(', ') || undefined,
+  });
 }
 
 type TicketParty = 'owner' | 'tenant' | 'pro';
@@ -61,12 +99,22 @@ r.get('/ping', (_req, res) => res.json({ ok: true }));
 r.post('/', ...assertRole('tenant'), async (req, res) => {
   try {
     const userId = getUserId(req);
-    const { contractId, service, title, description } = req.body || {};
+    const { contractId, service } = req.body || {};
+    const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
+    const description = typeof req.body?.description === 'string' ? req.body.description.trim() : '';
+    if (typeof service !== 'string' || !TICKET_SERVICES.includes(service as ProService)) {
+      return res.status(400).json({ error: 'invalid_service', code: 400 });
+    }
+    if (!title || title.length > TITLE_MAX) return res.status(400).json({ error: 'invalid_title', code: 400 });
+    if (!description || description.length > DESCRIPTION_MAX) {
+      return res.status(400).json({ error: 'invalid_description', code: 400 });
+    }
     // Propietario e inmueble salen del contrato del inquilino, nunca del body
-    const contract = contractId ? await Contract.findById(String(contractId)).select('tenant landlord property').lean() : null;
+    const contract = contractId ? await Contract.findById(String(contractId)).select('tenant landlord property status').lean() : null;
     if (!contract || String(contract.tenant) !== userId) {
       return res.status(403).json({ error: 'contract_not_owned', code: 403 });
     }
+    if (contract.status !== 'active') return res.status(409).json({ error: 'contract_not_active', code: 409 });
     const ownerId = String(contract.landlord);
     const propertyId = String(contract.property);
     const t = await Ticket.create({
@@ -85,6 +133,10 @@ r.post('/', ...assertRole('tenant'), async (req, res) => {
       await publishSystem(direct.id, userId, 'TICKET_OPENED', { ticketId: String(t._id) });
     }
     res.status(201).json(t);
+    // El aviso por correo no retrasa ni tumba la respuesta: deliverEmail no lanza
+    notifyOwnerTicketOpened(t, ownerId, userId, propertyId).catch(err =>
+      logger.error({ type: 'ticket_owner_notify_error', ticketId: String(t._id), err }, 'Aviso de avería no enviado'),
+    );
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
   }

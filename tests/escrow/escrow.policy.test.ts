@@ -52,7 +52,7 @@ describe('Escrow flows require policy acceptance', () => {
       .set('Authorization', `Bearer ${tenantToken}`)
       .send({
         contractId: String(contract._id),
-        service: 'maintenance',
+        service: 'plumbing',
         title: 'Fix sink',
         description: 'Leak in kitchen',
       })

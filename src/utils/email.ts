@@ -275,3 +275,44 @@ export async function sendCoTenantInviteEmail(to: string, invite: CoTenantInvite
   const { subject, html } = coTenantInviteEmail(invite);
   return sendEmail(to, subject, html);
 }
+
+export type TicketOpenedEmail = {
+  ticketId: string;
+  title: string;
+  serviceLabel: string;
+  description: string;
+  tenantName?: string;
+  propertyTitle?: string;
+  propertyAddress?: string;
+};
+
+/** Aviso al propietario: su inquilino ha comunicado una avería. */
+export function ticketOpenedEmail(ticket: TicketOpenedEmail) {
+  const url = escapeHtml(frontendUrl(`/tickets/${encodeURIComponent(ticket.ticketId)}`));
+  const tenant = ticket.tenantName?.replace(/\s+/g, ' ').trim().slice(0, 80);
+  const who = tenant ? `<strong>${escapeHtml(tenant)}</strong> ha comunicado` : 'Tu inquilino ha comunicado';
+  const place = [ticket.propertyTitle, ticket.propertyAddress].map(v => v?.trim()).filter(Boolean) as string[];
+  const description = ticket.description.trim().slice(0, 600);
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; color: #111827;">
+      <h2 style="margin-top: 0;">Nueva avería en tu vivienda</h2>
+      <p>${who} una avería${place.length ? ` en <strong>${escapeHtml(place[0])}</strong>` : ''}.</p>
+      <div style="background-color: #f3f4f6; padding: 12px 16px; margin: 16px 0; border-radius: 6px;">
+        <p style="margin: 0; font-weight: bold;">${escapeHtml(ticket.title)}</p>
+        <p style="margin: 4px 0 0; color: #4b5563;">${escapeHtml(ticket.serviceLabel)}${place[1] ? ` · ${escapeHtml(place[1])}` : ''}</p>
+        <p style="margin: 12px 0 0; white-space: pre-line;">${escapeHtml(description)}</p>
+      </div>
+      <p>Entra para elegir un profesional y aprobar su presupuesto.</p>
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${url}" style="background-color: #111827; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Ver la incidencia</a>
+      </div>
+      <p style="color: #6b7280; font-size: 12px;">Si no puedes hacer clic, copia este enlace: ${url}</p>
+    </div>
+  `;
+  return { subject: `Nueva avería: ${ticket.title.replace(/\s+/g, ' ').trim().slice(0, 80)}`, html };
+}
+
+export async function sendTicketOpenedEmail(to: string, ticket: TicketOpenedEmail): Promise<EmailDelivery> {
+  const { subject, html } = ticketOpenedEmail(ticket);
+  return sendEmail(to, subject, html);
+}

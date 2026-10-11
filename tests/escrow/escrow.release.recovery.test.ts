@@ -46,7 +46,7 @@ describe('Escrow release recovery', () => {
     const res = await request(app)
       .post('/api/tickets')
       .set('Authorization', await token(TENANT, 'tenant'))
-      .send({ contractId: String(contract._id), service: 'maintenance', title: 'Grifo', description: 'Gotea' })
+      .send({ contractId: String(contract._id), service: 'plumbing', title: 'Grifo', description: 'Gotea' })
       .expect(201);
     const ticketId = res.body._id as string;
     await Ticket.updateOne({ _id: ticketId }, { $set: { proId: PRO } });
