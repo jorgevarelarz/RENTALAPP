@@ -4,14 +4,35 @@ import { stripeIdentityProvider } from '../identity/stripeIdentity';
 import { IdentityCheck } from '../models/identityCheck.model';
 import { authenticate } from '../middleware/auth.middleware';
 import { getUserId } from '../utils/getUserId';
+import { frontendUrl } from '../utils/frontendUrl';
 
 const router = Router();
+
+const DEFAULT_KYC_RETURN_PATH = '/tenant/kyc';
+
+/**
+ * Destino de vuelta tras verificar la identidad. Solo se aceptan rutas internas del frontend
+ * («/tenant/kyc?x=1»); una URL absoluta, «//otro.dominio» o «/\otro» abriría una redirección
+ * a un dominio ajeno con la marca de la app. Lo demás vuelve a la página de verificación.
+ */
+export const kycReturnUrl = (requested: unknown) => {
+  const fallback = frontendUrl(DEFAULT_KYC_RETURN_PATH);
+  const path = typeof requested === 'string' ? requested.trim() : '';
+  if (!path.startsWith('/') || path.startsWith('//') || /[\\\u0000-\u001f]/.test(path)) return fallback;
+  try {
+    const url = frontendUrl(path);
+    // «/..//otro.dominio» se normaliza a «//otro.dominio»: se exige el mismo origen al final
+    return new URL(url).origin === new URL(fallback).origin ? url : fallback;
+  } catch {
+    return fallback;
+  }
+};
 
 // Start identity verification session — requires authenticated user
 router.post('/start', authenticate, async (req, res) => {
   try {
     const userId = getUserId(req);
-    const returnUrl = req.body?.returnUrl || process.env.APP_URL || '';
+    const returnUrl = kycReturnUrl(req.body?.returnUrl);
     const session = await stripeIdentityProvider.createSession({ userId, returnUrl });
     await IdentityCheck.create({ userId, provider: 'stripe', sessionId: session.sessionId, status: 'created' });
     res.json(session);
