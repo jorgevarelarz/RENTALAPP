@@ -28,21 +28,21 @@
 | S14 | `oauth.service.ts` `sanitizeOAuthRedirect` | `?redirect=/%09/evil.com` era una redirección abierta tras el login. | corregido (rechaza caracteres de control y `\`). |
 | S15 | `contract.actions.ts` `initiatePayment` | El importe lo elegía el cliente (`req.body.amount`). | corregido. Siempre se usa `contract.rent`. |
 | P1 | `contract.routes.ts:58` tapa a `contract.payments.routes.ts` | `/:id/pay-rent` resuelve en el flujo sin transferencia al casero: las rentas se quedan en la cuenta de la plataforma y la comisión de agencia nunca se paga. | **decisión**: hay que decidir cuál es el flujo de cobro bueno. |
-| P2 | `routes/serviceOffers.routes.ts` `accept-slot` | Marca la oferta como pagada y confirmada sin que el pago se haya confirmado. La ganancia se cuenta dos veces con el webhook. | pendiente. |
+| P2 | `routes/serviceOffers.routes.ts` `accept-slot` | Marca la oferta como pagada y confirmada sin que el pago se haya confirmado. La ganancia se cuenta dos veces con el webhook. | corregido (2026-10-11, `claude/mejora-continua`). `accept-slot` solo crea el cobro (reclamo atómico `scheduled → payment_pending`); el webhook confirma la oferta y registra la ganancia una vez, con el intento vigente. |
 | P3 | `contract.payment.controller.ts` (`createRentPaymentIntent`, `payRentForPeriod`), `payReceipt` | Doble cobro de renta por condición de carrera. `payment_failed` pasa `PAID` a `FAILED`. | corregido (2026-10-11, `claude/mejora-continua`). Reclamo atómico del recibo antes del PaymentIntent y reanudación del intento abierto; el webhook solo toca el intento vigente y nunca un `PAID`. Sigue pendiente el flujo `contract.payments.routes.ts` (tapado, ver P1). |
 | P4 | `payDeposit` | Cada llamada crea un Checkout nuevo (fianza cobrada dos veces). `successUrl` y `cancelUrl` los elige el cliente. | corregido (2026-10-11). Se reutiliza la sesión abierta (`depositCheckoutSessionId` + clave de idempotencia) y las URLs las fija el servidor. |
 | P5 | `utils/payment.ts` (escrow con Stripe real) | SEPA no admite `capture_method: manual`. La captura usa `application_fee` sin `transfer_data`. Al pro nunca se le transfiere. | pendiente. Hay que rediseñar el escrow antes de usarlo con dinero real. |
 | A1 | `oauth.service.ts:213` | Secuestro de cuenta pre-creada: el registro no verifica el email y el login con Google se vincula a la cuenta del atacante. | corregido (2026-10-11, `claude/mejora-continua`). Si el correo no estaba verificado, al vincular se borran contraseña y token de recuperación. Queda el JWT ya emitido al atacante (hasta 7 días, ver A3). |
 | A2 | `contract.controller.ts` create | Un landlord puede crear contratos con un inmueble o un propietario ajenos. | pendiente. Toca muchos tests que crean contratos con datos arbitrarios. |
 | A3 | JWT | Sin revocación (7 días en `localStorage`). Rol y `isVerified` salen del token. | pendiente. |
-| A4 | `agencyInvite.controller.ts` | La agencia recibe el token de invitación y puede aceptar ella misma la cuenta del propietario. | pendiente. |
+| A4 | `agencyInvite.controller.ts` | La agencia recibe el token de invitación y puede aceptar ella misma la cuenta del propietario. | corregido (2026-10-11). El enlace solo va en el email; el token se guarda como SHA-256 y aceptar marca el correo como verificado. |
 | D1 | `docker-compose.override.yml` | Con `docker compose up` sin `-f` publica Mongo sin contraseña, usa `JWT_SECRET=dev-secret` y `NODE_ENV=development`. | pendiente. Renombrar a `docker-compose.dev.yml`. |
 | D2 | `uploads/`, `storage/` en git | 298 ficheros commiteados pese al `.gitignore`, entre ellos una foto HEIC real de iPhone con EXIF. | **decisión**: borrarlos del índice y, si son datos reales, limpiar el historial. |
 | D3 | `.dockerignore` | No excluye `.env.valeris`, `.env.*`, `uploads/` ni `storage/`: los secretos de producción entran en la imagen de build. | pendiente. |
 
 ## Medios y bajos (pendientes)
 
-- **Emails:** HTML con datos de usuario sin escapar (`utils/email.ts`, invitaciones de agencia). Permite phishing con el remitente de la app.
+- **Emails:** HTML con datos de usuario sin escapar (`utils/email.ts`; ~~invitaciones de agencia~~ corregido el 2026-10-11 con `utils/escapeHtml.ts`). Permite phishing con el remitente de la app.
 - **Exportaciones CSV:** inyección de fórmulas (`=HYPERLINK(...)`) en los CSV de ganancias, fiscal, admin e institución.
 - **IA:** asistente y `/api/ai/*` sin límite de peticiones ni `maxOutputTokens`. `/api/ai/health?test=true` está abierto a cualquier usuario verificado.
 - **Reseñas:** `relatedId` libre, así que se puede manipular la reputación de cualquiera.

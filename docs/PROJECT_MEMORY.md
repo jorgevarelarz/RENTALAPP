@@ -1023,3 +1023,10 @@ Rules:
 - `ContractDetail`: tenant "Pagar fianza" button (POST `/contracts/:id/deposit` → Stripe Checkout), return notices for `?deposit=success|cancel`, real `rent`/`deposit` amounts (was reading missing `rentAmount`/`depositAmount` → "undefined €"), property city/address, fake Wikimedia signature image removed, "Firmar contrato" label.
 - Files: `frontend/src/pages/ContractDetail.tsx`, its two tests, `frontend/src/components/dashboard/ActiveContractWidget.tsx`.
 - Verification: frontend build OK, 34/34 tests; Playwright screenshots with mocked API.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 4: agency invites (A4) + accept-slot (P2)
+
+- A4: the agency no longer receives `inviteUrl`; the token travels only in the landlord's email, is stored as SHA-256 (`select:false`; legacy 48-hex plaintext tokens still accepted), and accepting sets `emailVerifiedAt`. Invite email HTML escaped via new `src/utils/escapeHtml.ts`. Frontend "Copiar enlace" removed.
+- P2: `accept-slot` only creates the PaymentIntent (atomic `scheduled → payment_pending`, resume, rollback); the Stripe webhook confirms the offer and records the `PlatformEarning` once, for the current `paymentIntentId`; `payment_failed` → `scheduled`.
+- Files: `src/controllers/agencyInvite.controller.ts`, `src/models/agencyInvite.model.ts`, `src/utils/escapeHtml.ts`, `src/routes/serviceOffers.routes.ts`, `src/models/serviceOffer.model.ts`, `src/routes/stripe.webhook.ts`, `frontend/src/pages/agency/AgencyLandlords.tsx`, `frontend/src/services/agency.ts`, `tests/agency/agencyReferral.test.ts`, `tests/chat/serviceOffer.payment.test.ts`.
+- Verification: tsc clean; Jest (`--runInBand`) agency 11/11, contracts+chat+escrow+jobs 75/75, e2e smoke 9/9; frontend build + 34 tests OK.
