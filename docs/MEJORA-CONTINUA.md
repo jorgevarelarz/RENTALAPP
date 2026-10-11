@@ -1341,3 +1341,35 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: en móvil, el historial de la ficha sale antes de la descripción; la búsqueda de la lista filtra solo la página cargada; adjuntos de chat públicos; el paso «Contrato activo» con la fecha aunque esté pendiente.
 
 **Siguiente mejora propuesta.** Fotos en las averías: campo `photos` en `Ticket` (solo URLs propias de `/uploads`, validadas con `isOwnUploadUrl`), subida desde «Comunicar una avería» con `Dropzone` y galería en la ficha. Si se prefiere seguridad: los adjuntos de chat privados (URL firmada).
+
+### Ronda 37 — 2026-10-12 00:30
+
+**Qué y por qué.** Fotos en las averías, la mejora propuesta en la ronda 36. Una foto ahorra al profesional la visita previa para presupuestar, y el modelo `Ticket` no tenía dónde guardarlas.
+
+1. **Backend** (`ticket.model.ts`, `ticket.routes.ts`, `utils/email.ts`):
+   - campo `photos` (lista de URLs) en `Ticket`, que no se guarda si la avería no trae fotos;
+   - `POST /api/tickets` admite hasta 6 (el límite de una subida) y solo ficheros de nuestro `/uploads`, validados con `isOwnUploadUrl`, el mismo filtro que los adjuntos del chat (ronda 34). Si `photos` no es una lista, si hay más de 6, URLs de otros dominios o rutas raras (`/uploads/../.env`), devuelve 400 `invalid_photos`. Los duplicados se quitan;
+   - `GET /api/tickets/:id` las devuelve (ya devolvía el documento entero), y el correo al propietario dice «Ha adjuntado N fotos».
+2. **Interfaz** (`TicketCreatePage`, `TicketDetail`):
+   - en «Comunicar una avería», «Fotos (opcional)» con miniaturas cuadradas, botón de quitar en cada una y una casilla «Añadir fotos». Antes de subir se comprueban formato (JPG, PNG o WebP; HEIC lo rechazaría el servidor), tamaño (10 MB) y número; los errores salen en español. Mientras se suben, no se puede enviar;
+   - las fotos se suben con `POST /api/uploads/images`, que ya les quita EXIF/GPS (ronda 34);
+   - en la ficha, galería bajo la descripción; cada foto abre el original en otra pestaña.
+   - No he reutilizado `Dropzone`: su resaltado es un índigo fijo fuera de los tokens y admite cualquier `image/*`.
+
+**Commits.**
+- `4e7e695` Incidencias: una avería admite hasta 6 fotos, solo ficheros subidos a nuestro /uploads, las devuelve la ficha y el correo al propietario dice cuántas hay
+- `07336a5` Incidencias: «Comunicar una avería» deja adjuntar hasta 6 fotos y la ficha las muestra en galería
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` de `tests/escrow`: 3 suites y 14 tests OK (`ticket.access` pasa de 6 a 7 casos). El caso nuevo comprueba los cinco 400 `invalid_photos`, que se guardan sin duplicados, que la ficha del propietario las devuelve, `photoCount: 2` en el correo y que una avería sin fotos no lleva el campo. El test de la plantilla comprueba el texto «Ha adjuntado 3 fotos» y que sin fotos no sale.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 32 ficheros y 119 tests OK (antes 117). Casos nuevos: subir dos fotos, quitar una y que la avería se envíe con la que queda, y el HEIC rechazado sin llegar a subir; en la ficha, la galería con sus enlaces y ninguna galería sin fotos.
+- Playwright (vite local, `/api/*` y `/uploads/*` simulados) a 390 y 1280 px (`/tmp/ra-shots37`): formulario con tres fotos y ficha con galería. No hay desbordamiento horizontal.
+- GitNexus: `impact` LOW en `TicketCreatePage` (lo importa solo `AppRoutes`); `isOwnUploadUrl` se reutiliza sin cambios. `detect_changes` LOW, sin flujos afectados. Ojo: el índice es del repo canónico y no conoce esta rama.
+
+**Qué queda.**
+- Las fotos son públicas para quien tenga el enlace (nombre de 128 bits imposible de adivinar), como los adjuntos del chat. La decisión de las URL firmadas ya está en «Para Jorge» (ronda 34) y vale también para estas.
+- Si el inquilino sube fotos y no envía la avería, quedan ficheros huérfanos en `/uploads`. Pasa igual con el chat y los anuncios; haría falta una limpieza periódica.
+- No se pueden añadir fotos a una avería ya creada.
+- Pendientes anteriores: en móvil, el historial de la ficha sale antes de la descripción; la búsqueda de la lista filtra solo la página cargada (el backend no admite `q`); el paso «Contrato activo» con la fecha aunque esté pendiente; los `console.*` fuera del logger.
+
+**Siguiente mejora propuesta.** Búsqueda de incidencias en el servidor: `q` (título o servicio, con la expresión escapada) en `GET /api/tickets/my/*` y la lista usándolo, porque hoy solo filtra las 20 cargadas. De paso, en la ficha móvil, la descripción antes que el historial.
