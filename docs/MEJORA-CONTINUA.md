@@ -28,6 +28,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Recibos tras el fin del contrato (ronda 24)**: el job sigue generando recibos mientras el contrato esté `active`, también después de `endDate`, y ningún proceso lo pasa a terminado ni amplía `endDate`. Con la prórroga obligatoria de la LAU puede ser lo correcto, pero hay que decidir: ¿prórroga automática (ampliar `endDate` por años) o terminar el contrato al vencer salvo que se renueve? No se ha cambiado.
 - **Al desplegar la ronda 24**: `POST /api/contracts/:id/payments/:period/pay` solo acepta meses desde el inicio del contrato hasta el mes en curso (hora de Madrid) y contratos `active` o `signed`. Si alguien pagaba por adelantado meses futuros, recibirá 400 `period_in_future`. Conviene comprobar con una consulta de solo lectura si hay recibos fuera de rango (`period` posterior al mes actual o anterior al inicio) o de importe 0.
 - **Al desplegar la ronda 26**: en el panel de Stripe, el endpoint del webhook (`/api/stripe/webhook`) tiene que tener suscrito `charge.refunded`; si no, las devoluciones no llegan y nada cambia. Dos decisiones abiertas: (1) cuando se devuelve una renta entera, ¿hay que revertir la transferencia de la parte de la agencia (`PartnerEarning`)? Ahora no se revierte. (2) Un mes devuelto queda `REFUNDED` y el inquilino no puede volver a pagarlo (409 `rent_refunded`). ¿Debe poder volver a pagarse, o una devolución significa que ese mes no se debe?
+- **Al desplegar la ronda 27**: la agencia que gestiona un inmueble (`agencyAccess: 'manage'`) ve ya sus candidatos (nombre, correo, mensaje y si tienen la solvencia verificada), propone y acepta visitas en nombre del propietario y prepara el contrato. Antes solo podía el propietario. Al traspasar el inmueble (`status_only`) pierde todo eso. Si el propietario debe dar su visto bueno antes de que la agencia vea a los candidatos, hay que decidirlo.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -976,3 +977,44 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: «Inmuebles» de la agencia gestora, la pegatina «KYC VERIFICADO» de `AppShell` y la enumeración por tiempo en `request-reset`.
 
 **Siguiente mejora propuesta.** Ronda de interfaz: quitar la pegatina «KYC VERIFICADO» de la barra superior (`AppShell`) y empezar «Inmuebles» en el panel de la agencia gestora (`GET /api/agency/properties` con `agencyAccess: 'manage'`). Si se prefiere seguir con pagos: `payment_intent_data.metadata` en el Checkout de la fianza y `charge.dispute.*`.
+
+### Ronda 27 — 2026-10-11 17:10
+
+**Qué y por qué.** Ronda de interfaz, la que proponían las rondas 23 a 26. La agencia gestora no tenía dónde ver sus inmuebles. Podía crear contratos (backend, ronda 20), pero no llegaba a los candidatos ni al asistente. Además, la barra superior seguía con la pegatina «KYC verificado».
+
+1. **Backend: la agencia gestora actúa por el propietario.**
+   - Nuevo `src/utils/propertyAccess.ts` con `isManagingAgency(user, property)`: la agencia es `agencyId` y el inmueble sigue en `agencyAccess: 'manage'`.
+   - `GET /properties/:id/applications`, `POST /applications/:id/propose` y `POST /applications/:id/accept` admiten el rol `agency` si gestiona el inmueble. Sus propuestas cuentan como del propietario (`proposedBy: 'landlord'`), así que no puede aceptarse a sí misma; acepta las del candidato.
+   - Otra agencia o un inmueble ya traspasado dan 403.
+   - `GET /api/agency/properties` añade el nombre del propietario, la región, y, solo mientras lo gestiona, precio, fianza y solicitudes abiertas (sin las descartadas, contadas con un `aggregate`).
+2. **Frontend: página «Inmuebles» (`/agency/properties`)**, en el menú de la agencia entre «Inicio» y «Propietarios».
+   - Lista los gestionados con el estado en texto (Publicado, Borrador, Alquilado, Archivado), el precio, el propietario y el último cobro, más el número de solicitudes y el botón «Candidatos». Ese botón abre el `ApplicantsModal` de siempre, con precio y fianza para el asistente.
+   - Los traspasados van aparte y sin acciones.
+   - Hay estados de carga, error con «Reintentar» y vacío (con enlace a «Propietarios»).
+   - `/contracts/new` se abre al rol `agency`. El asistente, sin candidato o al terminar sin ID, lleva a `/agency/properties` en vez de a `/landlord`.
+   - El aviso `forbidden` del modal menciona a la agencia.
+3. **Cabecera (`AppShell`)**: fuera la pegatina «KYC verificado». El estado está en «Verificación» y en el perfil (ronda 25).
+
+**Commits.**
+- `932b3ba` Agencia: la agencia gestora ve los candidatos de sus inmuebles y propone o acepta visitas; su listado trae propietario, precio, fianza y solicitudes abiertas
+- `aa03557` Agencia: página «Inmuebles» con los que gestiona (candidatos, visitas y asistente de contratos) y los traspasados; la cabecera deja la pegatina «KYC verificado»
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand` de `tests/agency`, `tests/applications` y `tests/properties/property.routes.test.ts`: 4 suites y 32 tests OK. El nuevo `tests/agency/agencyManagedProperties.test.ts` tiene 5 casos:
+  - el listado trae propietario, precio y solicitudes abiertas (sin contar la descartada);
+  - tras el traspaso no hay precio y los candidatos y las visitas dan 403;
+  - la gestora ve los candidatos;
+  - otra agencia recibe 403;
+  - la gestora propone (queda como `landlord`), no puede aceptar su propia propuesta y acepta la del candidato.
+- Frontend: build OK. `npm test`: 30 ficheros y 101 tests OK (antes 29 y 98). El nuevo `AgencyProperties.test.tsx` tiene 3 casos: secciones y apertura del modal con precio y fianza, estado vacío y reintento tras un error. Se ha actualizado el texto esperado en `ApplicantsModal.test.tsx`.
+- Playwright (vite local, `/api/*` simulado, sesión de agencia) a 390 y 1280 px (`/tmp/ra-shots27`): la página, el modal de candidatos y «Crear contrato», que llega a `/contracts/new` con la dirección, la renta y la fianza rellenas. La cabecera sale sin la pegatina.
+- GitNexus: `impact` LOW en `listApplications`, `proposeVisit` y `listAgencyProperties`. `detect_changes` sale medio porque el índice es el de la copia canónica y en `services/agency.ts` las funciones solo se desplazan. Los flujos tocados son los esperados (`AppRoutes` y `ApplicantsModal`).
+
+**Qué queda.**
+- La agencia no tiene «Contratos» en su menú. El backend ya le lista los suyos (`listContracts` filtra por `agencyId`), pero falta comprobar que `MyContracts` y `ContractDetail` se ven bien con ese rol. La miga «Contratos» del asistente lleva a `/contracts`.
+- En el modal, una visita que propuso el propietario sale como «Has propuesto» también para la agencia.
+- La agencia no puede crear ni editar inmuebles desde su panel; la API ya admite `agency` en `PUT /properties/:id`.
+- Pendientes anteriores: disputas de Stripe, `contractId` en el PaymentIntent de la fianza, enumeración por tiempo en `request-reset` y «Cancelar invitación» de propietario.
+
+**Siguiente mejora propuesta.** Terminar el circuito de la agencia: «Contratos» en su menú, revisando `MyContracts` y `ContractDetail` con el rol `agency` (qué ve y qué acciones le corresponden). Si se prefiere seguridad: cerrar la enumeración por tiempo de `request-reset` enviando el correo sin esperar.
