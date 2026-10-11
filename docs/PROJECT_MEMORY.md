@@ -1000,3 +1000,11 @@ Rules:
   - D2: user files committed to git, including a real iPhone photo;
   - the escrow redesign for real Stripe.
 - Verification: `tsc` clean for src and the touched tests. Backend Jest only runs in CI. New tests: `tests/escrow/ticket.access.test.ts`, plus cases in lifecycle, policies, property routes and oauthRedirect.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 1: account security
+
+- Branch `claude/mejora-continua` (worktree, on top of PR #46). Round log: `docs/MEJORA-CONTINUA.md`.
+- Fixed A1 (OAuth pre-created account takeover: linking a provider to an account with no `emailVerifiedAt` now clears password and reset token) and the password reset flow (link built with `FRONTEND_URL` via new `src/utils/frontendUrl.ts` instead of `https://frontend/reset`; token stored as SHA-256 with `select:false`).
+- Files: `src/services/oauth.service.ts`, `src/controllers/auth.controller.ts`, `src/controllers/oauth.controller.ts`, `src/utils/frontendUrl.ts`, `src/models/user.model.ts`, `tests/auth/*`, `tests/e2e/smoke.e2e.test.ts`.
+- Verification: tsc clean; Jest `tests/auth` 12/12, oauthRedirect 4/4, e2e smoke 9/9 (all `--runInBand`); frontend build + 30 tests OK.
+- Deploy note: production needs `FRONTEND_URL` set for the reset link.

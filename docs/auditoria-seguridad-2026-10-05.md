@@ -32,7 +32,7 @@
 | P3 | `contract.payment.controller.ts` (`createRentPaymentIntent`, `payRentForPeriod`), `payReceipt` | Doble cobro de renta por condición de carrera. `payment_failed` pasa `PAID` a `FAILED`. | pendiente. |
 | P4 | `payDeposit` | Cada llamada crea un Checkout nuevo (fianza cobrada dos veces). `successUrl` y `cancelUrl` los elige el cliente. | pendiente. |
 | P5 | `utils/payment.ts` (escrow con Stripe real) | SEPA no admite `capture_method: manual`. La captura usa `application_fee` sin `transfer_data`. Al pro nunca se le transfiere. | pendiente. Hay que rediseñar el escrow antes de usarlo con dinero real. |
-| A1 | `oauth.service.ts:213` | Secuestro de cuenta pre-creada: el registro no verifica el email y el login con Google se vincula a la cuenta del atacante. | pendiente. |
+| A1 | `oauth.service.ts:213` | Secuestro de cuenta pre-creada: el registro no verifica el email y el login con Google se vincula a la cuenta del atacante. | corregido (2026-10-11, `claude/mejora-continua`). Si el correo no estaba verificado, al vincular se borran contraseña y token de recuperación. Queda el JWT ya emitido al atacante (hasta 7 días, ver A3). |
 | A2 | `contract.controller.ts` create | Un landlord puede crear contratos con un inmueble o un propietario ajenos. | pendiente. Toca muchos tests que crean contratos con datos arbitrarios. |
 | A3 | JWT | Sin revocación (7 días en `localStorage`). Rol y `isVerified` salen del token. | pendiente. |
 | A4 | `agencyInvite.controller.ts` | La agencia recibe el token de invitación y puede aceptar ella misma la cuenta del propietario. | pendiente. |
@@ -47,7 +47,7 @@
 - **IA:** asistente y `/api/ai/*` sin límite de peticiones ni `maxOutputTokens`. `/api/ai/health?test=true` está abierto a cualquier usuario verificado.
 - **Reseñas:** `relatedId` libre, así que se puede manipular la reputación de cualquiera.
 - **Stripe, eventos:** reembolsos y disputas sin gestionar. `payment_intent.processing` puede devolver el estado a `PROCESSING`. Importes sin `Math.round` (`deposit.ts`).
-- **Contraseñas:** token de reset en claro en la BD y sin `select:false`. El enlace de reset apunta a `https://frontend/reset`, que está escrito a mano. Hay enumeración de cuentas en el login.
+- **Contraseñas:** ~~token de reset en claro en la BD y sin `select:false`; enlace a `https://frontend/reset`~~ corregido el 2026-10-11 (hash SHA-256, `select:false`, `FRONTEND_URL`). Sigue pendiente: enumeración de cuentas en el login ("Esta cuenta utiliza Google o Apple") y contraseña mínima de 6 caracteres.
 - **Ficheros:** adjuntos de chat y avatares públicos y sin caducidad. El nombre se genera con `Math.random` y no se borra el EXIF.
 - **Observabilidad:** `/metrics` es público y `/health` expone `NODE_ENV`. Hay PII en logs (emails y body de webhooks).
 - **Mongo:** no hay `sanitizeFilter` global (`?status[$ne]=x`). El impacto es bajo porque los filtros ya están acotados al usuario.
