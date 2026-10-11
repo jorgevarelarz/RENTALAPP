@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { downloadReceipt, getPayments, payReceipt } from '../../services/payments';
+import { getPayments, payReceipt } from '../../services/payments';
+import { paymentTitle, saveReceiptPdf } from '../../utils/payments';
 import Card from '../../components/ui/Card';
 import PaymentModal from '../../components/payments/PaymentModal';
 import { useToast } from '../../context/ToastContext';
@@ -21,11 +22,6 @@ type PaymentItem = {
   billingYear?: number;
 };
 
-const MONTHS = [
-  'enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio',
-  'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre',
-];
-
 const euro = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' });
 const shortDate = (value?: string) => {
   if (!value) return '';
@@ -34,14 +30,6 @@ const shortDate = (value?: string) => {
     ? ''
     : d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short', year: 'numeric' });
 };
-
-export function paymentTitle(p: Pick<PaymentItem, 'type' | 'concept' | 'billingMonth' | 'billingYear'>) {
-  if (p.type === 'deposit') return 'Fianza';
-  if (p.type === 'rent' && p.billingMonth && p.billingMonth >= 1 && p.billingMonth <= 12 && p.billingYear) {
-    return `Renta de ${MONTHS[p.billingMonth - 1]} de ${p.billingYear}`;
-  }
-  return p.concept || 'Recibo de renta';
-}
 
 const isOpen = (p: PaymentItem) => p.status === 'pending' || p.status === 'failed';
 const hasReceipt = (p: PaymentItem) => p.status === 'succeeded' && (p.type === 'rent' || p.type === 'deposit');
@@ -97,15 +85,7 @@ export default function Payments() {
     if (!token) return;
     setBusyId(payment._id);
     try {
-      const blob = await downloadReceipt(token, payment._id);
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.setAttribute('download', `recibo_${paymentTitle(payment).toLowerCase().replace(/\s+/g, '_')}.pdf`);
-      document.body.appendChild(link);
-      link.click();
-      link.remove();
-      window.URL.revokeObjectURL(url);
+      await saveReceiptPdf(token, payment);
     } catch {
       push({ title: 'No se pudo descargar el recibo', tone: 'error' });
     } finally {

@@ -1,7 +1,8 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import Payments, { paymentTitle } from '../Payments';
+import Payments from '../Payments';
+import { paymentTitle } from '../../../utils/payments';
 
 const { getPaymentsMock, payReceiptMock, downloadReceiptMock, pushMock } = vi.hoisted(() => ({
   getPaymentsMock: vi.fn(),

@@ -38,6 +38,7 @@ vi.mock('../../services/contracts', () => ({
   getContract: vi.fn(),
   createSignSession: vi.fn(),
   payDeposit: vi.fn(),
+  getPaymentHistory: vi.fn().mockResolvedValue([]),
 }));
 
 vi.mock('../../services/coTenants', () => ({
@@ -120,6 +121,35 @@ describe('ContractDetail', () => {
     expect(await screen.findByRole('button', { name: /descargar borrador/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /estado del contrato/i })).toBeInTheDocument();
     expect(screen.getByText(/firma digital/i)).toBeInTheDocument();
+  });
+
+  test('En un contrato firmado el casero ve los cobros con su recibo; en un borrador no', async () => {
+    setAuth({ _id: 'u1', role: 'landlord' });
+    (contracts.getContract as Mock).mockResolvedValue({
+      _id: 'c1',
+      landlord: 'u1',
+      status: 'active',
+      rent: 900,
+      deposit: 900,
+      startDate: '2026-01-01T00:00:00.000Z',
+      endDate: '2027-01-01T00:00:00.000Z',
+    });
+    (contracts.getPaymentHistory as Mock).mockResolvedValue([
+      { _id: 'p1', type: 'rent', status: 'succeeded', amount: 900, billingMonth: 9, billingYear: 2026, paidAt: '2026-09-03T09:00:00Z' },
+    ]);
+
+    const { unmount } = render(<ContractDetail />);
+    expect(await screen.findByRole('heading', { name: 'Cobros y recibos' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Descargar recibo: Renta de septiembre de 2026' })).toBeInTheDocument();
+    expect(contracts.getPaymentHistory).toHaveBeenCalledWith('c1');
+    unmount();
+
+    (contracts.getPaymentHistory as Mock).mockClear();
+    (contracts.getContract as Mock).mockResolvedValue({ _id: 'c1', landlord: 'u1', status: 'draft', rent: 900 });
+    render(<ContractDetail />);
+    await screen.findByRole('heading', { name: /estado del contrato/i });
+    expect(screen.queryByRole('heading', { name: 'Cobros y recibos' })).toBeNull();
+    expect(contracts.getPaymentHistory).not.toHaveBeenCalled();
   });
 
   const signedContract = {

@@ -37,6 +37,7 @@ vi.mock('../../services/contracts', () => ({
   getContract: vi.fn(),
   createSignSession: vi.fn(),
   payDeposit: vi.fn(),
+  getPaymentHistory: vi.fn().mockResolvedValue([]),
 }));
 
 import ContractDetail from '../ContractDetail';

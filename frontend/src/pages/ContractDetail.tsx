@@ -8,6 +8,7 @@ import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import SignaturitWidget from '../components/SignaturitWidget';
 import CoTenantsCard from '../components/contracts/CoTenantsCard';
+import ContractReceiptsCard from '../components/contracts/ContractReceiptsCard';
 import { ContractStatusBadge } from '../components/ContractStatusBadge';
 import { getContractActionSummary } from '../utils/contractWorkflow';
 import type { PaymentDispute } from '../types/contract';
@@ -441,6 +442,8 @@ export default function ContractDetail() {
               ))}
             </dl>
           </Card>
+
+          {isSigned && token && <ContractReceiptsCard contractId={contract._id} token={token} />}
 
           <Card className="px-5 py-4">
             <h2 className="font-semibold text-gray-900">Partes</h2>

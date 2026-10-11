@@ -120,15 +120,22 @@ export async function initiateRentPayment(contractId: string) {
   return res.data as { clientSecret?: string; amount?: number };
 }
 
+export type ContractPayment = {
+  _id: string;
+  type: 'rent' | 'deposit';
+  amount: number;
+  amountRefunded?: number;
+  currency?: string;
+  status: string;
+  concept?: string;
+  billingMonth?: number;
+  billingYear?: number;
+  paidAt?: string;
+  createdAt?: string;
+};
+
+/** Rentas y fianza cobradas del contrato, la más reciente primero. */
 export async function getPaymentHistory(contractId: string) {
   const res = await client.get(`/api/contracts/${contractId}/payments`);
-  return res.data as Array<{
-    _id: string;
-    amount: number;
-    currency: string;
-    status: string;
-    concept: string;
-    paidAt?: string;
-    createdAt?: string;
-  }>;
+  return res.data as ContractPayment[];
 }
