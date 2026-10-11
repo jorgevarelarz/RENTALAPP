@@ -1556,3 +1556,48 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: flujo de devolución de la fianza en la app; adjuntos de chat públicos; `console.*` fuera del logger; `Billing` y `Quotes` del profesional filtran en el cliente.
 
 **Siguiente mejora propuesta.** Hace dos rondas que no toco la interfaz. Propongo las pantallas del profesional, `Billing` y `Quotes`: usar la búsqueda y la paginación del servidor (como la lista de incidencias de la ronda 41) y pasarlas al sistema 2026.
+
+### Ronda 43 — 2026-10-12 01:58
+
+**Qué y por qué.** La mejora propuesta en la ronda 42: las pantallas del profesional «Presupuestos» y «Facturación», que no tocaba desde hacía dos rondas. Al mirarlas aparecieron fallos de cálculo, no solo de aspecto:
+
+- pedían `limit: 100`, pero el servidor da 50 como máximo, así que las cifras y el CSV salían de las 50 últimas incidencias;
+- contaban estados que no existen (`done`, `awaiting_approval`). Un trabajo «Por validar» (`awaiting_validation`) no salía como facturable, y «Aprobados» se lo saltaba;
+- el CSV tenía cabeceras en inglés, el ID como única referencia y ninguna protección contra fórmulas.
+
+1. **Backend** (`routes/ticket.routes.ts`):
+   - `GET /api/tickets/my/pro/summary` (solo `pro`): una agregación sobre todas las incidencias del profesional. Devuelve por presupuestar, esperando al propietario, aprobados e importe presupuestado; y pendiente de liberar y liberado, con número de trabajos e importe. El importe es presupuesto más extra aprobado, lo mismo que libera `releaseTicketEscrow`;
+   - `GET /api/tickets/my/pro/billing.csv` (solo `pro`): los trabajos facturables (pagado el presupuesto: por agendar, agendada, en curso, por validar y cerrada), hasta 5.000. Columnas en español: fecha, trabajo, servicio, estado, presupuesto, extra aprobado, total y referencia. Va con BOM para Excel y pasa por `csvRow`, que neutraliza fórmulas;
+   - los listados `/my/*` admiten varios estados separados por comas (`status=awaiting_validation,closed`). Cada uno se valida igual que antes y cualquiera desconocido da 400 `invalid_status`.
+2. **Interfaz**, en el sistema 2026 como la lista de incidencias:
+   - nuevo `components/pro/ProTicketList.tsx`: lista paginada en el servidor con búsqueda (300 ms) y filtros con recuento;
+   - `Presupuestos`: empieza en «Por presupuestar». Las filas sin presupuesto dicen «Enviar presupuesto» y el total presupuestado va a la derecha del título;
+   - `Facturación`: dos cifras, «Pendiente de liberar» y «Pagos liberados», con número de trabajos. Filtros «Todos», «Pendientes de liberar» y «Liberados». Cada fila muestra el total y, si hay extra aprobado, el desglose. «Exportar CSV» descarga el del servidor y avisa si falla;
+   - quité las tarjetas con icono, la tabla que no cabía en móvil y la cifra «Total facturable», que era la suma de las otras dos.
+3. **Test que fallaba** (`tests/escrow/ticket.access.test.ts`, «accepts only own uploaded photos»): fallaba también en la base, sin mis cambios. La cuenta del propietario se creaba después de abrir la incidencia, así que el aviso por correo, que sale en segundo plano, a veces no encontraba su dirección. Ahora la cuenta se crea antes, como en el caso anterior del mismo fichero. El código no tenía fallo.
+
+**Commits.**
+- `cb07847` Incidencias: resumen y CSV de facturación del profesional calculados en el servidor; el listado admite varios estados; test de fotos sin carrera
+- `dc85ad7` Interfaz: «Presupuestos» y «Facturación» del profesional en el sistema 2026, con cifras, lista y CSV del servidor
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` de `tests/escrow`: 5 suites, 23 tests OK. Incluye el nuevo `ticket.pro.summary` (4/4):
+  - el resumen suma los extras aprobados y no los pendientes, y no cuenta incidencias de otro profesional;
+  - el CSV trae solo los trabajos facturables propios, en español, con `'=HYPERLINK` neutralizado;
+  - el propietario recibe 403 en el resumen y en el CSV;
+  - el filtro con varios estados funciona y `closed,done` da 400.
+- `ticket.access` falló dos veces antes del arreglo, también en el commit base, y pasa después.
+- GitNexus `detect_changes`: riesgo bajo, sin flujos afectados. `impact` sigue sin encontrar los símbolos, porque el índice es del repo canónico.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 37 ficheros y 135 tests OK (antes 36 y 132). El nuevo `ProBillingQuotes.test.tsx` tiene 3 casos:
+  - Facturación pide los estados facturables al servidor y cambia de filtro;
+  - solo desglosa el extra aprobado;
+  - el CSV avisa si falla, y Presupuestos empieza en «Por presupuestar» con «Enviar presupuesto».
+- Playwright (vite local, `/api/*` simulado) a 1280 y 390 px (`/tmp/ra-shots43`): las peticiones llevan `status` y `limit=20`. Sin desbordamiento horizontal. En móvil, las dos cifras van lado a lado y las filas apilan título, estado e importe.
+
+**Qué queda.**
+- «Pagos liberados» cuenta los trabajos cerrados, que es cuando se libera el depósito de garantía. Que el dinero llegue de verdad al profesional depende del rediseño del escrow con Stripe real (P5, reservado).
+- `ProDashboard` sigue con el aspecto antiguo (degradado naranja y tarjetas con icono en círculo) y su enlace dice «Gestiona tus ingresos y facturas», pero facturas no hay.
+- `Profile` del profesional es un marcador de 3 líneas.
+- Pendientes anteriores: aviso de cobro a la agencia (Jorge), flujo de devolución de fianza en la app, adjuntos de chat públicos, `console.*` fuera del logger.
+
+**Siguiente mejora propuesta.** El inicio del profesional (`ProDashboard`) en el sistema 2026: quitar el degradado y las tarjetas con icono, enseñar «lo que te toca hoy» con el mismo resumen (por presupuestar, citas por proponer, por validar) y separar el formulario de perfil público en `/pro/profile`, que hoy es un marcador.

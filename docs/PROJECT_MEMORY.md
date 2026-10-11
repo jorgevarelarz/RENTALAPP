@@ -1269,3 +1269,10 @@ Rules:
 - New `services/paymentNotice.service.notifyPaymentSucceeded` + `utils/email.paymentNoticeEmail` (replaces `sendPaymentReceiptEmail`): payer gets receipt email (link `/tenant/payments` for rent/deposit), landlord gets «Cobro recibido» (link `/contracts/:id`) for rent/deposit. Fire-and-forget, never throws.
 - Webhook `payment_intent.succeeded`: notifies only on first transition to `succeeded`; redelivery keeps `paidAt`, only refreshes charge/receiptUrl. Deposit notifies when `recordDepositPayment` creates the Payment. `rentReceiptPdf` exports `receiptConcept`/`rentPeriodLabel`.
 - Verification: tsc clean; Jest `--runInBand` payments.notice 3, email.escape 6, tests/contracts+unit+webhook 160, e2e 10/10. Frontend untouched.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 43: pro quotes/billing server-side + 2026 UI
+
+- New `GET /api/tickets/my/pro/summary` (aggregate: toQuote/awaitingApproval/approved/quotedTotal; pending/released count+total = quote + approved extra) and `GET /api/tickets/my/pro/billing.csv` (Spanish headers, BOM, `csvRow`). `/my/*` lists accept comma-separated `status` (each validated).
+- Frontend `pages/pro/Quotes.tsx` + `Billing.tsx` rebuilt on new `components/pro/ProTicketList` (server pagination/search/status chips with counts) and `utils/proTickets`; they previously used `limit:100` (server max 50) and nonexistent statuses `done`/`awaiting_approval`.
+- Fixed race in `tests/escrow/ticket.access.test.ts` (owner account created after ticket → notify email sometimes missing).
+- Verification: tsc clean; Jest `--runInBand` tests/escrow 23; frontend build + 135 tests; Playwright `/tmp/ra-shots43`.
