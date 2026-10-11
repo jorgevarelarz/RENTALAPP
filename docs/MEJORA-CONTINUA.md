@@ -481,3 +481,36 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - Pendientes anteriores: `payments.duplicates` intermitente, media de reseñas sin `$inc`, `returnUrl` libre en `/api/kyc/start`, la llamada real a Stripe en `contract.cotenant.test.ts`, «Mis contratos» sin los contratos de co-titular.
 
 **Siguiente mejora propuesta.** Interfaz, que esta ronda fue de seguridad: «Mis contratos» con los contratos en los que el usuario es co-titular, y la lista de `/api/me/invites` con sus invitaciones pendientes. Así el co-titular no depende del enlace del email. Si se prefiere seguridad: `tokenVersion` en el usuario (A3), que invalida los JWT al cambiar o restablecer la contraseña.
+
+### Ronda 14 — 2026-10-11 10:31
+
+**Qué y por qué.** Interfaz, propuesta en la ronda 13 (que fue de seguridad). El co-titular solo llegaba a su contrato por el enlace del email: «Mis contratos» no lo listaba y sus invitaciones pendientes no salían en ninguna pantalla. Además, «Mis contratos» era de las pantallas con peor aspecto que quedaban: estilos en línea, un `<select>` sin estilo, «aun» y «aparecera» sin tilde y estados de carga y error en texto suelto.
+
+1. **Backend** (`listContracts`). `GET /api/contracts?include=cotenant` añade los contratos en los que el usuario es co-titular `JOINED` o `SIGNED`. Una invitación sin aceptar no da acceso. Cada contrato lleva `myRole` (`landlord`, `tenant` o `cotenant`). Es opcional a propósito: sin el parámetro todo sigue igual. Así el alta de incidencias, que lista los contratos activos, no ofrece contratos con los que el backend luego respondería 403. De paso, `status` solo se acepta como texto (`?status[$ne]=x` llegaba a Mongo como operador).
+2. **«Mis contratos»** (`pages/MyContracts.tsx`), en la línea de `TenantHome`:
+   - una lista en tarjeta, con una fila enlazada por contrato: inmueble, dirección, renta en es-ES, la otra parte, vigencia, estado y siguiente paso. En móvil el estado va arriba;
+   - la etiqueta «Co-titular» en los contratos compartidos. En ellos, si la fianza está pendiente, el siguiente paso es «El inquilino principal confirma la fianza» y no «Confirmar fianza», porque el co-titular no puede pagarla;
+   - un filtro con recuento («Todos», «En trámite», «Vigentes», «Cerrados») en lugar del `<select>`, que además no tenía los estados `generated`, `pending_signature`, `signing` ni `terminated`;
+   - la tarjeta «Invitaciones pendientes» (`/api/me/invites`, solo para inquilinos): vivienda, arrendador, caducidad y «Acepta desde el enlace que enviamos a…». No hay botón de aceptar: aceptar exige el token del email, que es lo que demuestra que el correo es suyo. El registro no verifica el correo, así que aceptar solo con la sesión permitiría a alguien registrado con el correo de otra persona unirse a su contrato. Si la petición falla (por ejemplo, identidad sin verificar), la lista de contratos se muestra igual;
+   - un vacío que menciona la invitación de co-titular, sin repetir «Buscar pisos» en la cabecera.
+3. **Inicio del inquilino**: también pide los contratos de co-titular, para que el co-titular vea su alquiler, pero sin «Pagar fianza».
+4. **Cabecera en móvil**: «KYC verificado» se partía en dos líneas junto al logo; ahora se oculta por debajo de 640 px, como el email.
+
+**Commits.**
+- `704b6c9` Contratos: GET /api/contracts?include=cotenant lista también los contratos del co-titular, con myRole y status solo como texto
+- `630d99a` Mis contratos: contratos de co-titular marcados, invitaciones pendientes, filtro por estado y lista con el sistema visual; el co-titular no ve «Pagar fianza» en el inicio
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`: `contract.cotenant.test.ts` 8 OK (1 nuevo). El caso nuevo comprueba que sin `include` el co-titular no ve nada, que con `include` ve el contrato con `myRole: 'cotenant'` y sin `ibanEncrypted`, que el invitado sin aceptar no lo ve, que el inquilino principal tiene `myRole: 'tenant'` y que `status[$ne]` se ignora. Sigue saliendo en el log la llamada real a Stripe que ya estaba anotada; no hace fallar el test.
+- Frontend: build OK; `npm test` 22 ficheros y 60 tests OK (antes 21 y 54). Nuevo `pages/__tests__/MyContracts.test.tsx` (5): co-titular marcado con su siguiente paso, filtro con recuento, invitaciones vigentes y caducadas, vacío y casero sin petición de invitaciones, y fallo de invitaciones que no rompe la lista. `TenantHome.test.tsx` suma 1: co-titular sin «Pagar fianza».
+- Capturas con Playwright (vite local, `/api/*` simulado) a 390 y 1280 px, con lista e invitación y vacía. En la primera pasada salían dos «Buscar pisos» en el vacío y el estado al final de la fila en móvil; corregido. El badge de KYC partido en la cabecera de móvil también se corrigió.
+- GitNexus: `impact` LOW en `listContracts`. `detect_changes` sale LOW en el backend. En el frontend sale «alto» por número de flujos, pero son solo los de `MyContracts`, `TenantHome` y `AppShell` (`NavItem`, por desplazamiento de líneas).
+
+**Qué queda.**
+- `/api/me/invites` enseña las invitaciones a cualquiera que se registre con ese correo, aunque no sea suyo (vivienda y nombre del arrendador). Es una fuga pequeña que ya existía; se cierra cuando se verifique el correo al registrarse.
+- El email de invitación sigue sin decir quién invita ni qué vivienda es.
+- El inquilino principal no puede reenviar una invitación caducada desde la tarjeta «Co-titulares» (habría que dar de baja y volver a invitar).
+- Pendientes anteriores: A3 (sin revocación de JWT), `request-reset` con enumeración por tiempo, email sin normalizar a minúsculas, `payments.duplicates` intermitente, media de reseñas sin `$inc`, `returnUrl` libre en `/api/kyc/start`.
+
+**Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: `tokenVersion` en el usuario (A3), comprobado en `authenticate`, que invalida los JWT al restablecer la contraseña y al anular la contraseña de una cuenta vinculada (A1). Toca la ruta caliente de autenticación, así que necesita una ronda propia con tests. Si se prefiere interfaz: un email de invitación de co-titular con quién invita y qué vivienda es, y «Reenviar invitación» en la tarjeta «Co-titulares».

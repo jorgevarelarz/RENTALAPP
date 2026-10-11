@@ -1096,3 +1096,9 @@ Rules:
 - Frontend: `passwordPolicyError` / `PASSWORD_MIN_LENGTH` / `INVALID_CREDENTIALS_MESSAGE` in `services/auth.ts`; register + reset check before submit; login adds the Google/Apple hint only on credential errors; `ResetPassword` uses `auth-alert` and a "Contraseña actualizada" end state.
 - Files: `src/controllers/auth.controller.ts`, `src/routes/auth.routes.ts`, `src/app.ts`, `tests/auth/login-policy.test.ts`, `tests/auth/reset.test.ts`, `frontend/src/services/auth.ts`, `frontend/src/pages/auth/{LoginPage,RegisterPage,ResetPassword}.tsx`, `frontend/src/pages/auth/__tests__/passwordPolicy.test.tsx`.
 - Verification: tsc clean; Jest (`--runInBand`) tests/auth 16/16, src/__tests__+tests/security 48/48, e2e smoke 9/9; frontend build + 54 tests OK; Playwright screenshots 390/1280 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 14: co-tenant contracts in "Mis contratos"
+
+- Backend: `GET /api/contracts?include=cotenant` adds contracts where the user is a JOINED/SIGNED co-tenant; every item carries `myRole` (`landlord`/`tenant`/`cotenant`). Opt-in so ticket creation etc. are unchanged. `status` filter accepted only as string.
+- Frontend: `MyContracts` rewritten (list card, "Co-titular" tag, status group filter with counts, "Invitaciones pendientes" from `/api/me/invites` — no accept button, the email token is the proof of email ownership); `TenantHome` includes co-tenant contracts but hides "Pagar fianza" for them; `AppShell` hides the KYC badge below `sm`. `listMyCoTenantInvites` in `services/coTenants.ts`, `myRole` in `types/contract.ts`.
+- Verification: tsc clean; Jest (`--runInBand`) contract.cotenant 8/8; frontend build + 60 tests OK; Playwright screenshots 390/1280 px.
