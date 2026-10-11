@@ -36,14 +36,14 @@
 | A2 | `contract.controller.ts` create | Un landlord puede crear contratos con un inmueble o un propietario ajenos. | pendiente. Toca muchos tests que crean contratos con datos arbitrarios. |
 | A3 | JWT | Sin revocación (7 días en `localStorage`). Rol y `isVerified` salen del token. | pendiente. |
 | A4 | `agencyInvite.controller.ts` | La agencia recibe el token de invitación y puede aceptar ella misma la cuenta del propietario. | corregido (2026-10-11). El enlace solo va en el email; el token se guarda como SHA-256 y aceptar marca el correo como verificado. |
-| D1 | `docker-compose.override.yml` | Con `docker compose up` sin `-f` publica Mongo sin contraseña, usa `JWT_SECRET=dev-secret` y `NODE_ENV=development`. | pendiente. Renombrar a `docker-compose.dev.yml`. |
+| D1 | `docker-compose.override.yml` | Con `docker compose up` sin `-f` publica Mongo sin contraseña, usa `JWT_SECRET=dev-secret` y `NODE_ENV=development`. | corregido el 2026-10-11: ahora es `docker-compose.dev.yml` y hay que pedirlo con `-f`; `docker-compose.override.yml` está en `.gitignore`. |
 | D2 | `uploads/`, `storage/` en git | 298 ficheros commiteados pese al `.gitignore`, entre ellos una foto HEIC real de iPhone con EXIF. | **decisión**: borrarlos del índice y, si son datos reales, limpiar el historial. |
-| D3 | `.dockerignore` | No excluye `.env.valeris`, `.env.*`, `uploads/` ni `storage/`: los secretos de producción entran en la imagen de build. | pendiente. |
+| D3 | `.dockerignore` | No excluye `.env.valeris`, `.env.*`, `uploads/` ni `storage/`: los secretos de producción entran en la imagen de build. | corregido el 2026-10-11 (`.env`, `.env.*` de la raíz, `uploads`, `storage`). Los `.env` de `frontend/` se mantienen: solo llevan `VITE_*` públicas. |
 
 ## Medios y bajos (pendientes)
 
 - **Emails:** HTML con datos de usuario sin escapar (`utils/email.ts`; ~~invitaciones de agencia~~ corregido el 2026-10-11 con `utils/escapeHtml.ts`). Permite phishing con el remitente de la app.
-- **Exportaciones CSV:** inyección de fórmulas (`=HYPERLINK(...)`) en los CSV de ganancias, fiscal, admin e institución.
+- ~~**Exportaciones CSV:** inyección de fórmulas (`=HYPERLINK(...)`) en los CSV de ganancias, fiscal, admin e institución.~~ Corregido el 2026-10-11 con `utils/csv.ts` en los siete exportadores.
 - **IA:** asistente y `/api/ai/*` sin límite de peticiones ni `maxOutputTokens`. `/api/ai/health?test=true` está abierto a cualquier usuario verificado.
 - **Reseñas:** `relatedId` libre, así que se puede manipular la reputación de cualquiera.
 - **Stripe, eventos:** reembolsos y disputas sin gestionar. `payment_intent.processing` puede devolver el estado a `PROCESSING`. Importes sin `Math.round` (`deposit.ts`).

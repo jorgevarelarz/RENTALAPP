@@ -1030,3 +1030,11 @@ Rules:
 - P2: `accept-slot` only creates the PaymentIntent (atomic `scheduled → payment_pending`, resume, rollback); the Stripe webhook confirms the offer and records the `PlatformEarning` once, for the current `paymentIntentId`; `payment_failed` → `scheduled`.
 - Files: `src/controllers/agencyInvite.controller.ts`, `src/models/agencyInvite.model.ts`, `src/utils/escapeHtml.ts`, `src/routes/serviceOffers.routes.ts`, `src/models/serviceOffer.model.ts`, `src/routes/stripe.webhook.ts`, `frontend/src/pages/agency/AgencyLandlords.tsx`, `frontend/src/services/agency.ts`, `tests/agency/agencyReferral.test.ts`, `tests/chat/serviceOffer.payment.test.ts`.
 - Verification: tsc clean; Jest (`--runInBand`) agency 11/11, contracts+chat+escrow+jobs 75/75, e2e smoke 9/9; frontend build + 34 tests OK.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 5: Docker hardening (D1, D3) + CSV formula injection
+
+- D3: `.dockerignore` excludes root `.env`/`.env.*`, `uploads`, `storage` (frontend `.env*` kept on purpose: Vite reads public `VITE_*` vars at build time).
+- D1: `docker-compose.override.yml` renamed to `docker-compose.dev.yml` (must be passed with `-f`); override name added to `.gitignore`; README updated. Production uses `-f docker-compose.valeris.yml`, unaffected.
+- CSV: new `src/utils/csv.ts` (`csvCell`/`csvRow`/`csvRows`) prefixes formula-like cells with `'` (negative numbers untouched); used by all seven CSV exporters.
+- Files: `.dockerignore`, `.gitignore`, `README.md`, `docker-compose.dev.yml`, `src/utils/csv.ts`, the seven exporters, `tests/unit/csv.test.ts`, `tests/contracts/earnings.export.test.ts`, `docs/auditoria-seguridad-2026-10-05.md`.
+- Verification: tsc clean; Jest (`--runInBand`) 8 suites / 24 tests OK; `docker compose config` and a throwaway context build checked; frontend build + 34 tests OK.
