@@ -2,6 +2,7 @@ import request from 'supertest';
 import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { seedContractParties } from '../utils/contractParties';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 
@@ -42,6 +43,7 @@ describe('Contracts require policy acceptance', () => {
   afterEach(clearDb);
 
   it('returns 409 until required policies are accepted', async () => {
+    await seedContractParties();
     const userToken = signToken({ _id: '507f1f77bcf86cd799439011', role: 'landlord' });
 
     await createVersion('terms_of_service', 'v2.0');

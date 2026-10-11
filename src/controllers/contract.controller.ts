@@ -24,7 +24,7 @@ import { evaluateAndPersist } from '../modules/rentalPublic';
 import { ensureCanReadContract, isActiveCoTenant } from '../utils/contractAccess';
 import { ContractParty } from '../models/contractParty.model';
 
-const objectId = z.string().regex(/^[a-f\d]{24}$/i);
+const objectId = z.string().regex(/^[a-f\d]{24}$/i).transform((s: string) => s.toLowerCase());
 
 const createContractSchema = z.object({
   landlord: objectId,
@@ -42,6 +42,37 @@ function parsePagination(query: any) {
   const page = Math.max(1, parseInt(query.page as string) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(query.limit as string) || 10));
   return { page, limit };
+}
+
+/**
+ * Quién puede crear un contrato sobre un inmueble (A2): el propietario, la agencia que lo gestiona
+ * (`agencyAccess: 'manage'`) o un administrador. El arrendador del contrato tiene que ser el dueño
+ * del inmueble y el inquilino, otra cuenta que exista.
+ */
+async function checkContractParties(
+  actor: any,
+  data: { landlord: string; tenant: string; property: string },
+): Promise<{ status: number; error: string; property?: any }> {
+  const property: any = await Property.findById(data.property)
+    .select('owner agencyId agencyAccess refAgencyId')
+    .lean();
+  if (!property) return { status: 404, error: 'property_not_found' };
+
+  const actorId = String(actor?._id ?? actor?.id ?? '');
+  const role = actor?.role;
+  const allowed =
+    role === 'admin' ||
+    (role === 'landlord' && String(property.owner) === actorId) ||
+    (role === 'agency' &&
+      property.agencyId != null &&
+      String(property.agencyId) === actorId &&
+      property.agencyAccess === 'manage');
+  if (!allowed) return { status: 403, error: 'forbidden' };
+
+  if (String(property.owner) !== data.landlord) return { status: 400, error: 'landlord_not_owner' };
+  if (data.tenant === data.landlord) return { status: 400, error: 'tenant_is_landlord' };
+  if (!(await User.exists({ _id: data.tenant }))) return { status: 400, error: 'tenant_not_found' };
+  return { status: 200, error: '', property };
 }
 
 export async function create(req: Request, res: Response) {
@@ -89,6 +120,8 @@ export async function create(req: Request, res: Response) {
 
   try {
     const actor: any = req.user;
+    const parties = await checkContractParties(actor, data);
+    if (parties.status !== 200) return res.status(parties.status).json({ error: parties.error });
     const actorIdRaw = actor?._id ?? actor?.id;
     const isAgency = actor?.role === 'agency';
 
@@ -102,7 +135,7 @@ export async function create(req: Request, res: Response) {
     // con el mismo inquilino. Un inquilino nuevo corta la atribución.
     let refAgencyIdToAttach: any = undefined;
     if (!agencyIdToAttach) {
-      const propertyDoc: any = await Property.findById(data.property).select('refAgencyId').lean();
+      const propertyDoc: any = parties.property;
       if (propertyDoc?.refAgencyId) {
         const priorContracts = await Contract.find({ property: data.property })
           .select('tenant')

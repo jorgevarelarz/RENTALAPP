@@ -3,6 +3,15 @@ import { createContract } from '../../services/contracts';
 import { useNotify } from '../../utils/notify';
 import { sendEmail } from '../../services/notify';
 
+// Errores de POST /api/contracts al comprobar inmueble y partes (A2)
+const CREATE_ERRORS: Record<string, string> = {
+  property_not_found: 'No existe ningún inmueble con ese ID.',
+  forbidden: 'Solo el propietario del inmueble, la agencia que lo gestiona o un administrador pueden crear el contrato.',
+  landlord_not_owner: 'El arrendador tiene que ser el propietario del inmueble.',
+  tenant_not_found: 'No existe ninguna cuenta con el ID de inquilino indicado.',
+  tenant_is_landlord: 'El inquilino no puede ser el propio arrendador.',
+};
+
 type Props = { basics: any; clauses: Record<string, any>; onBack: () => void; onCreated: (c: any) => void };
 export default function WizardStep3Review({ basics, clauses, onBack, onCreated }: Props) {
   const { push } = useNotify();
@@ -35,7 +44,7 @@ export default function WizardStep3Review({ basics, clauses, onBack, onCreated }
       const raw = error?.response?.data?.error;
       const msg = raw && String(raw).toLowerCase().includes('contrato activo vigente')
         ? 'No puedes alquilar esta propiedad porque ya hay un contrato vigente.'
-        : raw || 'No se pudo crear el contrato';
+        : CREATE_ERRORS[raw] || raw || 'No se pudo crear el contrato';
       push('error', msg);
     }
   };

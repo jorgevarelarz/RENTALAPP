@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../../src/app";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
+import { seedContractParties, LANDLORD_ID } from "../utils/contractParties";
 
 const LANDLORD = "507f1f77bcf86cd799439011";
 
@@ -15,7 +16,8 @@ describe("Contract lifecycle", () => {
   afterEach(clearDb);
 
   beforeEach(async () => {
-    const res = await request(app).post("/api/contracts").send({
+    await seedContractParties();
+    const res = await request(app).post("/api/contracts").set("x-user-id", LANDLORD).send({
       landlord: "507f1f77bcf86cd799439011",
       tenant: "507f1f77bcf86cd799439012",
       property: "507f1f77bcf86cd799439013",
