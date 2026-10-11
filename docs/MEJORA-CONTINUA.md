@@ -1375,7 +1375,7 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 
 **Siguiente mejora propuesta.** Búsqueda de incidencias en el servidor: `q` (título o servicio, con la expresión escapada) en `GET /api/tickets/my/*` y la lista usándolo, porque hoy solo filtra las 20 cargadas. De paso, en la ficha móvil, la descripción antes que el historial.
 
-### Ronda 38 — 2026-10-12 00:45
+### Ronda 38 — 2026-10-12 00:42
 
 **Qué y por qué.** Recibos PDF de la renta. Era un hueco de producto apuntado en la auditoría («Recibos PDF de renta: no existen, aunque el art. 17.4 de la LAU los exige»): el inquilino pagaba y no tenía más justificante que el recibo genérico de Stripe. Lo he preferido a la búsqueda de incidencias propuesta en la ronda 37 porque es una obligación legal en el flujo de pago, que es el más crítico, y llevaba cuatro rondas seguidas en incidencias.
 
