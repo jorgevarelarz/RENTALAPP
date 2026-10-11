@@ -5,6 +5,7 @@ import { Mock, vi } from 'vitest';
 
 // Mock router param id
 vi.mock('react-router-dom', () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
   useParams: () => ({ id: (global as any).__mockId || 'c1' }),
   useSearchParams: () => [new URLSearchParams((global as any).__mockSearch || ''), (global as any).__mockSetSearch || (() => {})]
 }), { virtual: true });
@@ -97,7 +98,7 @@ describe('ContractDetail', () => {
 
     render(<ContractDetail />);
 
-    await screen.findByRole('heading', { name: /pendiente de firma/i });
+    await screen.findByText(/revisar las firmas del contrato/i);
     expect(screen.queryByRole('button', { name: /firmar contrato/i })).toBeNull();
   });
 
@@ -117,7 +118,7 @@ describe('ContractDetail', () => {
     render(<ContractDetail />);
 
     expect(await screen.findByRole('button', { name: /descargar borrador/i })).toBeInTheDocument();
-    expect(screen.getByText(/timeline legal/i)).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /estado del contrato/i })).toBeInTheDocument();
     expect(screen.getByText(/firma digital/i)).toBeInTheDocument();
   });
 
@@ -160,14 +161,14 @@ describe('ContractDetail', () => {
     setAuth({ _id: 'u1', role: 'landlord' });
     (contracts.getContract as Mock).mockResolvedValue(signedContract);
     const { unmount } = render(<ContractDetail />);
-    await screen.findByText(/resumen econ/i);
+    await screen.findByRole('heading', { name: /^condiciones$/i });
     expect(screen.queryByRole('button', { name: /pagar fianza/i })).toBeNull();
     unmount();
 
     setAuth({ _id: 'u2', role: 'tenant' });
     (contracts.getContract as Mock).mockResolvedValue({ ...signedContract, depositPaid: true });
     render(<ContractDetail />);
-    await screen.findByText(/resumen econ/i);
+    await screen.findByRole('heading', { name: /^condiciones$/i });
     expect(screen.queryByRole('button', { name: /pagar fianza/i })).toBeNull();
   });
 
@@ -200,13 +201,39 @@ describe('ContractDetail', () => {
     setAuth({ _id: 'u3', role: 'tenant' });
     (contracts.getContract as Mock).mockResolvedValue({ ...signedContract, status: 'pending_signature' });
     const { unmount } = render(<ContractDetail />);
-    await screen.findByText(/resumen econ/i);
+    await screen.findByRole('heading', { name: /^condiciones$/i });
     expect(screen.queryByRole('button', { name: /firmar contrato/i })).toBeNull();
     unmount();
 
     (contracts.getContract as Mock).mockResolvedValue({ ...signedContract, tenant: { id: 'u2' }, tenantId: 'u2' });
     render(<ContractDetail />);
-    await screen.findByText(/resumen econ/i);
+    await screen.findByRole('heading', { name: /^condiciones$/i });
     expect(screen.queryByRole('button', { name: /pagar fianza/i })).toBeNull();
+  });
+
+  test('La cabecera nombra el inmueble y no muestra el ID interno', async () => {
+    setAuth({ _id: 'a1', role: 'agency' });
+    (contracts.getContract as Mock).mockResolvedValue({
+      ...signedContract,
+      _id: '65f0c0ffee00000000abcdef',
+      property: { title: 'Piso en Chamberí', address: 'Calle Fuencarral 120', city: 'Madrid' },
+    });
+
+    render(<ContractDetail />);
+
+    expect(await screen.findByRole('heading', { level: 1, name: 'Piso en Chamberí' })).toBeInTheDocument();
+    expect(screen.getByText('Calle Fuencarral 120, Madrid')).toBeInTheDocument();
+    expect(screen.queryByText(/ABCDEF/)).toBeNull();
+    expect(screen.queryByRole('button', { name: /pagar fianza|firmar contrato/i })).toBeNull();
+  });
+
+  test('Si el contrato no carga, ofrece volver a la lista', async () => {
+    setAuth({ _id: 'u1', role: 'landlord' });
+    (contracts.getContract as Mock).mockRejectedValue(new Error('404'));
+
+    render(<ContractDetail />);
+
+    expect(await screen.findByText(/no encontramos este contrato/i)).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /volver a contratos/i })).toHaveAttribute('href', '/contracts');
   });
 });

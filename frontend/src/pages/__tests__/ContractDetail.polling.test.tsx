@@ -4,6 +4,7 @@ import { Mock, vi } from 'vitest';
 
 // Mock router param id
 vi.mock('react-router-dom', () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
   useParams: () => ({ id: (global as any).__mockId || 'c1' }),
   useSearchParams: () => [new URLSearchParams((global as any).__mockSearch || ''), (global as any).__mockSetSearch || (() => {})],
 }), { virtual: true });

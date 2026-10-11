@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { getContract, createSignSession, downloadPdf, downloadSignedPdf, payDeposit } from '../services/contracts';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
@@ -10,7 +10,10 @@ import SignaturitWidget from '../components/SignaturitWidget';
 import CoTenantsCard from '../components/contracts/CoTenantsCard';
 import { ContractStatusBadge } from '../components/ContractStatusBadge';
 import { getContractActionSummary } from '../utils/contractWorkflow';
-import { CheckCircle2, Circle, Clock3, FileCheck, User, ShieldCheck, Download, PenTool, Wallet } from 'lucide-react';
+import { CheckCircle2, Circle, Clock3, Download, PenTool, Wallet } from 'lucide-react';
+
+const secondaryButton =
+  'inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50';
 
 function formatTimelineDate(value?: string) {
   if (!value) return null;
@@ -189,8 +192,16 @@ export default function ContractDetail() {
     }
   };
 
-  if (loading) return <div className="p-8 text-center">Cargando contrato...</div>;
-  if (!contract) return <div className="p-8 text-center text-red-500">Contrato no encontrado</div>;
+  if (loading) return <div className="py-10 text-center text-sm text-gray-500">Cargando contrato…</div>;
+  if (!contract) {
+    return (
+      <Card className="mx-auto max-w-xl px-5 py-6">
+        <p className="font-medium text-gray-900">No encontramos este contrato</p>
+        <p className="mt-1 text-sm text-gray-500">Puede que se haya cancelado o que no tengas acceso a él.</p>
+        <Link to="/contracts" className={`${secondaryButton} mt-4`}>Volver a contratos</Link>
+      </Card>
+    );
+  }
 
   const isTenant = user?.role === 'tenant';
   const myUserId = user?._id || (user as any)?.id;
@@ -208,6 +219,8 @@ export default function ContractDetail() {
   const deposit = contract.deposit ?? contract.depositAmount;
   const property = typeof contract.property === 'object' ? contract.property : null;
   const address = property?.address || contract.propertyAddress || contract.address;
+  const title = property?.title || address || 'Contrato de alquiler';
+  const place = [address !== title ? address : '', property?.city || contract.city].filter(Boolean).join(', ');
   const signedAt = contract.signedAt || contract.signature?.signedAt;
   const isSigned = ['signed', 'active', 'completed'].includes(contract.status) || !!signedAt;
   const depositConfirming = depositReturn === 'success' && !contract.depositPaid;
@@ -217,14 +230,15 @@ export default function ContractDetail() {
     !contract.depositPaid &&
     !depositConfirming;
   const formatDate = (value?: string) => (value ? new Date(value).toLocaleDateString('es-ES') : '—');
+  const actionButton = 'inline-flex w-full items-center justify-center gap-2 whitespace-nowrap text-sm sm:w-auto';
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
+    <div className="space-y-6 pb-10">
       {depositReturn === 'success' && (
         <div
           role="status"
-          className={`flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between ${
-            contract.depositPaid ? 'border-emerald-200 bg-emerald-50' : 'border-blue-200 bg-blue-50'
+          className={`flex flex-col gap-3 rounded-lg border p-4 sm:flex-row sm:items-center sm:justify-between ${
+            contract.depositPaid ? 'border-emerald-200 bg-emerald-50' : 'border-[var(--border)] bg-[var(--card)]'
           }`}
         >
           <div>
@@ -245,165 +259,124 @@ export default function ContractDetail() {
         </div>
       )}
       {depositReturn === 'cancel' && !contract.depositPaid && (
-        <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+        <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4">
           <p className="font-semibold text-gray-900">Pago de la fianza cancelado</p>
           <p className="text-sm text-gray-600">No se ha hecho ningún cargo. Puedes volver a intentarlo cuando quieras.</p>
         </div>
       )}
-      <div className={`p-6 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-4 ${
-        isActive ? 'bg-green-50 border-green-200' : 'bg-indigo-50 border-indigo-200'
-      }`}>
-        <div className="flex items-center gap-4">
-          <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
-            isActive ? 'bg-green-100 text-green-600' : 'bg-indigo-100 text-indigo-600'
-          }`}>
-            {isActive ? <ShieldCheck size={24} /> : <FileCheck size={24} />}
-          </div>
-          <div>
-            <h1 className="text-xl font-bold text-gray-900">
-              {contract.status === 'pending_signature' || contract.status === 'signing'
-                ? `Pendiente de firma · ${actionSummary.label}`
-                : actionSummary.label}
-            </h1>
-            <p className="text-sm text-gray-600">
-              ID Referencia: {contract._id?.slice(-6).toUpperCase()} · {actionSummary.detail}
-            </p>
-          </div>
-        </div>
 
-        <div className="flex items-center gap-4">
-          <div className="flex flex-col items-end">
-            <span className="text-xs text-gray-400 uppercase tracking-wide">Estado actual</span>
-            <ContractStatusBadge
-              status={contract.status}
-              className="mt-1"
-              style={{ fontSize: 12, padding: '4px 10px' }}
-            />
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="text-2xl font-semibold text-gray-900 [overflow-wrap:anywhere]">{title}</h1>
+            <ContractStatusBadge status={contract.status} />
           </div>
-          <Button variant="secondary" className="flex items-center gap-2 whitespace-nowrap" onClick={handleDownloadDraft}>
-            <Download size={16} /> {downloadLabel}
-          </Button>
-          {hasSignedPdf && (
-            <Button variant="secondary" className="flex items-center gap-2 whitespace-nowrap" onClick={handleDownloadSigned}>
-              <Download size={16} /> Descargar firmado
-            </Button>
-          )}
+          {place && <p className="mt-1 text-sm text-gray-500">{place}</p>}
+        </div>
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap lg:shrink-0 lg:justify-end">
           {needsMySignature && (
-            <Button
-              onClick={handleStartSigning}
-              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center gap-2 whitespace-nowrap"
-            >
-              <PenTool size={18} /> Firmar contrato
+            <Button onClick={handleStartSigning} className={actionButton}>
+              <PenTool size={16} aria-hidden="true" /> Firmar contrato
             </Button>
           )}
           {canPayDeposit && (
             <Button
               onClick={handlePayDeposit}
               disabled={payingDeposit}
-              className="flex items-center gap-2 whitespace-nowrap"
+              className={actionButton}
               style={{ opacity: payingDeposit ? 0.7 : 1 }}
             >
-              <Wallet size={18} /> {payingDeposit ? 'Abriendo pago…' : `Pagar fianza · ${euros(deposit)}`}
+              <Wallet size={16} aria-hidden="true" /> {payingDeposit ? 'Abriendo pago…' : `Pagar fianza · ${euros(deposit)}`}
+            </Button>
+          )}
+          <Button variant="secondary" className={actionButton} onClick={handleDownloadDraft}>
+            <Download size={16} aria-hidden="true" /> {downloadLabel}
+          </Button>
+          {hasSignedPdf && (
+            <Button variant="secondary" className={actionButton} onClick={handleDownloadSigned}>
+              <Download size={16} aria-hidden="true" /> Descargar firmado
             </Button>
           )}
         </div>
       </div>
 
-      <Card className="border border-gray-200 bg-white p-5">
-        <div className="mb-5 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-gray-400">Timeline legal</p>
-            <h2 className="text-lg font-bold text-gray-900">Estado del contrato</h2>
-          </div>
-          <p className="text-sm text-gray-500">Firma, pago y activación en una sola vista.</p>
-        </div>
-        <div className="grid gap-3 md:grid-cols-5">
+      <Card className="px-5 py-4">
+        <h2 className="text-sm font-medium text-gray-500">Siguiente paso</h2>
+        <p className="mt-1 font-semibold text-gray-900">{actionSummary.nextAction}</p>
+        <p className="mt-1 text-sm text-gray-600">{actionSummary.detail}</p>
+        {actionSummary.blockedReason && (
+          <p className="mt-2 text-sm text-amber-800">{actionSummary.blockedReason}.</p>
+        )}
+        {actionSummary.nextDate && (
+          <p className="mt-2 text-sm text-gray-600">Próxima fecha clave: {actionSummary.nextDate}</p>
+        )}
+      </Card>
+
+      <Card className="px-5 py-5">
+        <h2 className="font-semibold text-gray-900">Estado del contrato</h2>
+        <ol className="mt-4 grid gap-4 md:grid-cols-5 md:gap-3">
           {timeline.map((step) => {
             const isDone = step.state === 'done';
             const isCurrent = step.state === 'current';
             return (
-              <div
+              <li
                 key={step.id}
-                className={`rounded-xl border p-4 ${
-                  isDone
-                    ? 'border-emerald-200 bg-emerald-50'
-                    : isCurrent
-                      ? 'border-blue-200 bg-blue-50'
-                      : 'border-gray-200 bg-gray-50'
+                aria-current={isCurrent ? 'step' : undefined}
+                className={`flex gap-3 border-l-2 pl-3 md:block md:border-l-0 md:border-t-2 md:pl-0 md:pt-3 ${
+                  isDone ? 'border-emerald-600' : isCurrent ? 'border-gray-900' : 'border-gray-200'
                 }`}
               >
-                <div className="mb-3 flex items-center justify-between">
+                <span className="mt-0.5 shrink-0 md:mb-2 md:block">
                   {isDone ? (
-                    <CheckCircle2 className="h-5 w-5 text-emerald-700" />
+                    <CheckCircle2 className="h-4 w-4 text-emerald-700" aria-label="Hecho" />
                   ) : isCurrent ? (
-                    <Clock3 className="h-5 w-5 text-blue-700" />
+                    <Clock3 className="h-4 w-4 text-gray-900" aria-label="En curso" />
                   ) : (
-                    <Circle className="h-5 w-5 text-gray-400" />
+                    <Circle className="h-4 w-4 text-gray-300" aria-label="Pendiente" />
                   )}
-                  {step.date && <span className="text-xs text-gray-500">{step.date}</span>}
+                </span>
+                <div className="min-w-0">
+                  <p className={`text-sm font-medium ${isDone || isCurrent ? 'text-gray-900' : 'text-gray-500'}`}>{step.title}</p>
+                  <p className="mt-0.5 text-sm text-gray-500">{step.detail}</p>
+                  {step.date && <p className="mt-0.5 text-xs tabular-nums text-gray-500">{step.date}</p>}
                 </div>
-                <p className="font-semibold text-gray-900">{step.title}</p>
-                <p className="mt-1 text-sm text-gray-600">{step.detail}</p>
-              </div>
+              </li>
             );
           })}
-        </div>
+        </ol>
       </Card>
 
-      <Card className="p-5">
-        <h3 className="font-bold text-gray-400 text-xs uppercase mb-4 tracking-wider">Siguiente acción</h3>
-        <div className="space-y-2">
-          <p className="text-base font-semibold text-gray-900">{actionSummary.nextAction}</p>
-          {actionSummary.blockedReason && (
-            <p className="text-sm text-amber-700">Bloqueo actual: {actionSummary.blockedReason}</p>
-          )}
-          {actionSummary.nextDate && (
-            <p className="text-sm text-gray-600">Próxima fecha clave: {actionSummary.nextDate}</p>
-          )}
-        </div>
-      </Card>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
         <div className="space-y-6">
-          <Card className="p-5">
-            <h3 className="font-bold text-gray-400 text-xs uppercase mb-4 tracking-wider">Resumen Económico</h3>
-            <div className="space-y-4">
-              <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                <span className="text-gray-600 text-sm">Renta Mensual</span>
-                <span className="font-bold text-lg">{euros(rent)}</span>
-              </div>
-              <div className="flex justify-between items-center border-b border-gray-100 pb-2">
-                <span className="text-gray-600 text-sm">Fianza</span>
-                <span className="font-medium">{euros(deposit)}</span>
-              </div>
-              <div className="flex justify-between items-center pt-1">
-                <span className="text-gray-600 text-sm">Duración</span>
-                <span className="font-medium text-sm text-right">
-                  {formatDate(contract.startDate)} <br/> al <br/>
-                  {formatDate(contract.endDate)}
-                </span>
-              </div>
-            </div>
+          <Card className="px-5 py-4">
+            <h2 className="font-semibold text-gray-900">Condiciones</h2>
+            <dl className="mt-3 divide-y divide-gray-100 text-sm">
+              {[
+                { label: 'Renta mensual', value: euros(rent), strong: true },
+                { label: 'Fianza', value: euros(deposit) },
+                { label: 'Inicio', value: formatDate(contract.startDate) },
+                { label: 'Fin', value: formatDate(contract.endDate) },
+              ].map((row) => (
+                <div key={row.label} className="flex items-center justify-between gap-4 py-2">
+                  <dt className="text-gray-500">{row.label}</dt>
+                  <dd className={`tabular-nums text-gray-900 ${row.strong ? 'text-base font-semibold' : 'font-medium'}`}>{row.value}</dd>
+                </div>
+              ))}
+            </dl>
           </Card>
 
-          <Card className="p-5">
-            <h3 className="font-bold text-gray-400 text-xs uppercase mb-4 tracking-wider">Intervinientes</h3>
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="bg-blue-100 p-2 rounded-full"><User size={16} className="text-blue-600"/></div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase font-bold">Arrendador</p>
-                  <p className="font-medium text-gray-900">{contract.landlordName}</p>
-                </div>
+          <Card className="px-5 py-4">
+            <h2 className="font-semibold text-gray-900">Partes</h2>
+            <dl className="mt-3 space-y-3 text-sm">
+              <div>
+                <dt className="text-gray-500">Arrendador</dt>
+                <dd className="font-medium text-gray-900">{contract.landlordName || '—'}</dd>
               </div>
-              <div className="flex items-start gap-3">
-                 <div className="bg-green-100 p-2 rounded-full"><User size={16} className="text-green-600"/></div>
-                <div>
-                  <p className="text-xs text-gray-500 uppercase font-bold">Arrendatario</p>
-                  <p className="font-medium text-gray-900">{contract.tenantName}</p>
-                </div>
+              <div>
+                <dt className="text-gray-500">Arrendatario</dt>
+                <dd className="font-medium text-gray-900">{contract.tenantName || '—'}</dd>
               </div>
-            </div>
+            </dl>
           </Card>
 
           <CoTenantsCard
@@ -415,64 +388,65 @@ export default function ContractDetail() {
           />
         </div>
 
-        <div className="lg:col-span-2">
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 min-h-[600px] shadow-inner relative overflow-hidden">
-            {!isSigned && (
-              <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.03] rotate-[-45deg]">
-                <span className="text-9xl font-black uppercase">Borrador</span>
-              </div>
-            )}
-
-            <div className="max-w-2xl mx-auto bg-white shadow-sm border border-gray-200 p-8 min-h-[800px] text-sm text-gray-800 font-serif leading-relaxed">
-              <h2 className="text-center font-bold text-xl uppercase mb-8 border-b pb-4">Contrato de Arrendamiento</h2>
-              <p className="mb-4">En {property?.city || contract.city || '—'}, a {signedAt ? formatDate(signedAt) : new Date().toLocaleDateString('es-ES')}.</p>
-              <p className="mb-4">
-                <strong>REUNIDOS:</strong><br/>
-                De una parte, D./Dña {contract.landlordName} (ARRENDADOR).<br/>
-                Y de otra, D./Dña {contract.tenantName} (ARRENDATARIO).
+        <section aria-labelledby="contract-preview-title" className="lg:col-span-2">
+          <div className="mb-2 flex flex-wrap items-baseline justify-between gap-2">
+            <h2 id="contract-preview-title" className="font-semibold text-gray-900">Vista previa</h2>
+            <p className="text-sm text-gray-500">
+              {isSigned ? 'Resumen del contrato firmado. El documento completo está en el PDF.' : 'Borrador: puede cambiar hasta la firma. El texto completo está en el PDF.'}
+            </p>
+          </div>
+          <div className="rounded-lg border border-[var(--border)] bg-gray-50 p-3 sm:p-6">
+            <article className="mx-auto max-w-2xl rounded-md border border-gray-200 bg-white p-5 text-sm leading-relaxed text-gray-800 sm:p-8">
+              <h3 className="border-b border-gray-200 pb-4 text-center text-lg font-semibold text-gray-900">
+                Contrato de arrendamiento de vivienda
+              </h3>
+              <p className="mt-6">En {property?.city || contract.city || '—'}, a {signedAt ? formatDate(signedAt) : new Date().toLocaleDateString('es-ES')}.</p>
+              <h4 className="mt-6 font-semibold text-gray-900">Reunidos</h4>
+              <p className="mt-1">
+                De una parte, D./Dña. {contract.landlordName || '—'}, como arrendador.<br />
+                De otra, D./Dña. {contract.tenantName || '—'}, como arrendatario.
               </p>
-              <p className="mb-4">
-                <strong>ACUERDAN:</strong><br/>
-                El arrendamiento de la finca urbana sita en {address || '—'},
-                con renta mensual de {euros(rent)}.
+              <h4 className="mt-6 font-semibold text-gray-900">Acuerdan</h4>
+              <p className="mt-1">
+                El arrendamiento de la vivienda situada en {address || '—'}, con una renta mensual de {euros(rent)}, en estas condiciones:
               </p>
-              <div className="pl-4 border-l-2 border-gray-200 my-6 space-y-2 italic text-gray-600">
-                <p>1. Duración: Del {formatDate(contract.startDate)} al {formatDate(contract.endDate)}.</p>
-                <p>2. Renta: {euros(rent)} mensuales pagaderos los primeros 5 días.</p>
-                <p>3. Fianza: {euros(deposit)}.</p>
-                {contract.petsAllowed ? <p>4. Mascotas: Permitidas.</p> : <p>4. Mascotas: No permitidas.</p>}
-              </div>
-              <div className="mt-12 pt-8 border-t border-gray-300 grid grid-cols-2 gap-8">
+              <ol className="mt-3 list-decimal space-y-1 pl-5">
+                <li>Duración: del {formatDate(contract.startDate)} al {formatDate(contract.endDate)}.</li>
+                <li>Renta: {euros(rent)} al mes, pagaderos en los cinco primeros días.</li>
+                <li>Fianza: {euros(deposit)}.</li>
+                <li>Mascotas: {contract.petsAllowed ? 'permitidas' : 'no permitidas'}.</li>
+              </ol>
+              <div className="mt-10 grid grid-cols-1 gap-4 border-t border-gray-200 pt-6 sm:grid-cols-2">
                 {[
-                  { label: 'El Arrendador', name: contract.landlordName },
-                  { label: 'El Arrendatario', name: contract.tenantName },
+                  { label: 'Arrendador', name: contract.landlordName },
+                  { label: 'Arrendatario', name: contract.tenantName },
                 ].map((party) => (
-                  <div key={party.label} className="text-center">
-                    <div className="h-16 flex flex-col items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 font-sans text-xs">
+                  <div key={party.label}>
+                    <p className="text-xs font-medium text-gray-500">{party.label}</p>
+                    <div className="mt-1 rounded-md border border-dashed border-gray-300 px-3 py-3 text-xs">
                       {isSigned ? (
                         <>
-                          <span className="font-semibold text-gray-700">{party.name || 'Firmado'}</span>
-                          <span className="text-gray-500">
-                            Firmado electrónicamente{signedAt ? ` · ${formatDate(signedAt)}` : ''}
-                          </span>
+                          <p className="font-medium text-gray-900">{party.name || 'Firmado'}</p>
+                          <p className="text-gray-500">
+                            Firmado electrónicamente{signedAt ? ` el ${formatDate(signedAt)}` : ''}
+                          </p>
                         </>
                       ) : (
-                        <span className="text-gray-400">Pendiente de firma electrónica</span>
+                        <p className="text-gray-500">Pendiente de firma electrónica</p>
                       )}
                     </div>
-                    <p className="text-xs uppercase font-bold border-t border-gray-300 pt-2 mt-2">{party.label}</p>
                   </div>
                 ))}
               </div>
-            </div>
+            </article>
           </div>
-        </div>
+        </section>
       </div>
 
       <Modal
         open={isSigning}
         onClose={() => setIsSigning(false)}
-        title="Firma Segura - Signaturit"
+        title="Firma electrónica"
         className="max-w-6xl h-[85vh] w-full"
       >
         {signingUrl ? (
@@ -483,9 +457,9 @@ export default function ContractDetail() {
             onError={() => push({ title: 'Error en el widget de firma', tone: 'error' })}
           />
         ) : (
-          <div className="flex flex-col items-center justify-center h-full space-y-4">
-             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-             <p className="text-gray-500">Conectando con el proveedor de confianza...</p>
+          <div className="flex h-full flex-col items-center justify-center gap-3">
+            <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-gray-900" />
+            <p className="text-sm text-gray-500">Conectando con el proveedor de firma…</p>
           </div>
         )}
       </Modal>

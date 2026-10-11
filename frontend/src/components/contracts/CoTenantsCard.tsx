@@ -168,8 +168,8 @@ export default function CoTenantsCard({ contractId, contractStatus, myUserId, ca
   };
 
   return (
-    <Card className="p-5">
-      <h3 className="font-bold text-gray-400 text-xs uppercase mb-4 tracking-wider">Co-titulares</h3>
+    <Card className="px-5 py-4">
+      <h2 className="mb-3 font-semibold text-gray-900">Co-titulares</h2>
       <ul className="space-y-3">
         {visible.map((p) => (
           <li key={String(p.partyId)} className="min-w-0 [overflow-wrap:anywhere]">
