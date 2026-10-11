@@ -1173,3 +1173,9 @@ Rules:
 - `POST /api/auth/change-password` (`changePassword`, `authenticate` only, `authLimiter`): requires `currentPassword` (400 `wrong_password`), new password policy, 400 `same_password`, 400 `password_not_set` for Google/Apple-only accounts; bumps `tokenVersion` (other sessions closed), clears reset token, returns a new `token`; fire-and-forget notice email.
 - Frontend: `changePassword` in `services/auth.ts` and `AuthContext` (stores the new token); `pages/profile/ChangePasswordCard.tsx`; `ProfilePage` without gradient banner/uppercase badges, accents fixed.
 - Verification: tsc clean; Jest `--runInBand` tests/auth 7 suites / 45 tests (new `change-password.test.ts` 5); frontend build + 98 tests (new `ChangePasswordCard.test.tsx` 4); Playwright 390/1280 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 26: Stripe refunds + receipt URL
+
+- `src/routes/stripe.webhook.ts`: new `charge.refunded` (full → `Payment.status='refunded'` + `amountRefunded/refundedAt`, `RentPayment.status='REFUNDED'` (new enum value, `refundedAt`); partial → `amountRefunded` only; contract history `paymentRefunded|paymentPartiallyRefunded`). Late `succeeded/processing/payment_failed` don't overwrite refunded. `chargeReceipt()` reads `latest_charge` (API 2022-11-15 has no `intent.charges`) → `receiptUrl` + `stripeChargeId`.
+- `claimRentPayment` returns `{kind:'refunded'}`; `/pay-rent` and `/payments/:period/pay` → 409 `rent_refunded`.
+- Verification: tsc clean; Jest `--runInBand` contracts+chat+escrow 26 suites / 110 tests (new `payments.refunds.test.ts` 5); e2e 10/10; frontend build + 98 tests.

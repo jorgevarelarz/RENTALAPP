@@ -27,6 +27,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 23**: las visitas que el casero propuso antes desde «Solicitudes» se guardaron con la hora desplazada (el servidor leía «10:00» como UTC: 2 h tarde en verano y 1 h en invierno). No se corrigen solas. Si hay visitas futuras en producción, conviene revisarlas con una consulta de solo lectura (`db.applications.find({proposedBy:'landlord', proposedDate:{$gt:new Date()}})`) y avisar a los afectados. Además, `POST /api/contracts` toma ya la región del inmueble y rechaza con 400 `region_mismatch` una región distinta en el cuerpo.
 - **Recibos tras el fin del contrato (ronda 24)**: el job sigue generando recibos mientras el contrato esté `active`, también después de `endDate`, y ningún proceso lo pasa a terminado ni amplía `endDate`. Con la prórroga obligatoria de la LAU puede ser lo correcto, pero hay que decidir: ¿prórroga automática (ampliar `endDate` por años) o terminar el contrato al vencer salvo que se renueve? No se ha cambiado.
 - **Al desplegar la ronda 24**: `POST /api/contracts/:id/payments/:period/pay` solo acepta meses desde el inicio del contrato hasta el mes en curso (hora de Madrid) y contratos `active` o `signed`. Si alguien pagaba por adelantado meses futuros, recibirá 400 `period_in_future`. Conviene comprobar con una consulta de solo lectura si hay recibos fuera de rango (`period` posterior al mes actual o anterior al inicio) o de importe 0.
+- **Al desplegar la ronda 26**: en el panel de Stripe, el endpoint del webhook (`/api/stripe/webhook`) tiene que tener suscrito `charge.refunded`; si no, las devoluciones no llegan y nada cambia. Dos decisiones abiertas: (1) cuando se devuelve una renta entera, ¿hay que revertir la transferencia de la parte de la agencia (`PartnerEarning`)? Ahora no se revierte. (2) Un mes devuelto queda `REFUNDED` y el inquilino no puede volver a pagarlo (409 `rent_refunded`). ¿Debe poder volver a pagarse, o una devolución significa que ese mes no se debe?
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -937,3 +938,41 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: «Inmuebles» de la agencia gestora, enumeración por tiempo en `request-reset` y «Cancelar invitación» de propietario para la agencia.
 
 **Siguiente mejora propuesta.** La de las rondas 23 y 24: «Inmuebles» en el panel de la agencia gestora, con `GET /api/agency/properties` filtrado a `agencyAccess: 'manage'`, candidatos y propuesta de visitas abiertos a esa agencia y `ApplicantsModal` hasta el asistente. Si se prefiere algo corto: quitar la pegatina «KYC VERIFICADO» de la barra superior y cerrar la enumeración por tiempo de `request-reset` enviando el correo sin esperar.
+
+### Ronda 26 — 2026-10-11 16:57
+
+**Qué y por qué.** Fallos de cobro en el webhook de Stripe, apuntados como pendientes en la auditoría de seguridad («Stripe, eventos»). La interfaz se tocó en la ronda 25, así que tocaba un fallo.
+
+1. **Las devoluciones no se registraban.** Si se devolvía una renta desde Stripe, el pago seguía `succeeded` y el recibo `PAID`, y el arrendador y los informes fiscales la contaban como cobrada. Ahora el webhook gestiona `charge.refunded`:
+   - si la devolución es total, `Payment` pasa a `refunded` (con `amountRefunded` y `refundedAt`) y `RentPayment` a `REFUNDED`, un estado nuevo;
+   - si es parcial, solo se anota `amountRefunded`;
+   - en los dos casos queda en el historial del contrato (`paymentRefunded` o `paymentPartiallyRefunded`);
+   - una devolución que no corresponde a ningún pago se registra en el log y se responde 200.
+2. **Un mes devuelto no se vuelve a cobrar solo.** `claimRentPayment` devuelve `refunded`, y `/pay-rent` y `/payments/:period/pay` responden 409 `rent_refunded`. Si debe poder volver a pagarse es una decisión, anotada en «Para Jorge».
+3. **Eventos tardíos.** `payment_intent.succeeded`, `processing` y `payment_failed` ya no pisan un pago o un recibo devuelto.
+4. **La URL del recibo nunca se guardaba.** Se leía de `intent.charges`, que no existe en la API `2022-11-15` con la que se crea el cliente. Ahora sale de `latest_charge` (con `charges.retrieve` si viene solo el ID) y se guarda también `stripeChargeId`. Si Stripe falla al leer el cargo, el pago se confirma igual, sin recibo.
+
+`deposit.ts` ya redondeaba los céntimos, así que esa parte del pendiente estaba hecha.
+
+**Commits.**
+- `c18c8e5` Stripe: las devoluciones (charge.refunded) marcan el pago y el recibo de renta como devueltos, y la URL del recibo sale de latest_charge
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`, nuevo `tests/contracts/payments.refunds.test.ts` (5 casos):
+  - `latest_charge` da el cargo y la URL del recibo;
+  - si falla la lectura del cargo, el pago se confirma sin recibo;
+  - una devolución parcial solo anota el importe;
+  - una devolución total marca pago y recibo como devueltos, resiste `succeeded`, `processing` y `failed` tardíos y bloquea las dos rutas de cobro (409) sin crear PaymentIntent;
+  - una devolución desconocida da 200 sin cambiar nada.
+- Jest `--runInBand` de `tests/contracts`, `tests/chat` y `tests/escrow`: 26 suites y 110 tests OK. e2e: 2 suites y 10 tests OK.
+- Frontend (sin cambios; ya trataba `refunded`): build OK. `npm test` dio una vez 97/98 mientras Jest corría a la vez; al repetirlo, 29 ficheros y 98 tests OK.
+- GitNexus: el índice es el de la copia canónica y no tiene `claimRentPayment`, así que los llamadores (los dos controladores de renta) se comprobaron con grep. `detect_changes` da riesgo medio. Marca `maybePayAgencyRentFeeShare` solo porque `chargeReceipt` se añadió encima y desplaza sus líneas; su código no cambia.
+
+**Qué queda.**
+- Disputas (`charge.dispute.created` y `closed`): no se gestionan.
+- Devolución de la fianza: el Checkout no pone `contractId` en el PaymentIntent, así que `charge.refunded` no la reconoce.
+- Revertir la parte de la agencia al devolver una renta: decisión anotada en «Para Jorge».
+- Pendientes anteriores: «Inmuebles» de la agencia gestora, la pegatina «KYC VERIFICADO» de `AppShell` y la enumeración por tiempo en `request-reset`.
+
+**Siguiente mejora propuesta.** Ronda de interfaz: quitar la pegatina «KYC VERIFICADO» de la barra superior (`AppShell`) y empezar «Inmuebles» en el panel de la agencia gestora (`GET /api/agency/properties` con `agencyAccess: 'manage'`). Si se prefiere seguir con pagos: `payment_intent_data.metadata` en el Checkout de la fianza y `charge.dispute.*`.
