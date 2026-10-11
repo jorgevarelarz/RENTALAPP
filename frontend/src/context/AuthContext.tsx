@@ -5,6 +5,7 @@ import {
   login as apiLogin,
   logout as apiLogout,
   bootstrapAuthHeader,
+  refreshStoredUser,
 } from "../services/auth";
 
 type AuthCtx = {
@@ -22,6 +23,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     bootstrapAuthHeader();
+    let cancelled = false;
+    refreshStoredUser().then((fresh) => {
+      if (fresh && !cancelled) setUser(fresh);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = async (email: string, password: string) => {

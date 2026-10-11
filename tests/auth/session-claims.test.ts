@@ -63,6 +63,7 @@ describe('Rol y verificación leídos de la base en cada petición', () => {
     const me = await get('/api/users/me', token);
     expect(me.status).toBe(200);
     expect(me.body.role).toBe('tenant');
+    expect(me.body.isVerified).toBe(true);
   });
 
   it('una verificación retirada se aplica en la siguiente petición', async () => {
@@ -83,7 +84,9 @@ describe('Rol y verificación leídos de la base en cada petición', () => {
 
     await User.updateOne({ _id: user._id }, { isVerified: true });
 
-    expect((await get('/api/users/me', token)).status).toBe(200);
+    const me = await get('/api/users/me', token);
+    expect(me.status).toBe(200);
+    expect(me.body.isVerified).toBe(true);
   });
 });
 

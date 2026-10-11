@@ -25,6 +25,7 @@ const toMeUser = (u: any) => ({
   name: u.name,
   email: u.email,
   role: u.role,
+  isVerified: Boolean(u.isVerified),
   phone: u.phone,
   avatar: u.avatar,
   bio: u.bio,
@@ -173,7 +174,10 @@ export const getMe = async (req: Request, res: Response) => {
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
-    res.json(toMeUser(user));
+    // requireVerified también da por verificado a quien tiene una Verification aprobada
+    // aunque User.isVerified siga en false: se devuelve el estado con el que se le atiende.
+    const me = toMeUser(user);
+    res.json({ ...me, isVerified: me.isVerified || (req as any).user?.isVerified === true });
   } catch (error) {
     console.error('Error obteniendo perfil:', error);
     res.status(500).json({ message: 'Error al obtener perfil' });

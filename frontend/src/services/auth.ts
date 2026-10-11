@@ -67,6 +67,35 @@ export function getStoredUser(): User | null {
   }
 }
 
+// El backend lee rol y verificación de la base en cada petición (auth.middleware.ts); la copia
+// guardada en el login puede estar desfasada. Se actualizan esos campos con /api/users/me sin
+// tocar el token. Devuelve el usuario actualizado, o null si no hay sesión, falla la consulta o
+// la sesión guardada cambió mientras tanto (logout u otro login).
+export async function refreshStoredUser(): Promise<User | null> {
+  const stored = getStoredUser();
+  if (!stored?.token) return null;
+  let fields: Partial<User>;
+  try {
+    const { data } = await axios.get("/api/users/me");
+    if (!data) return null;
+    fields = {
+      ...(data.email ? { email: data.email } : {}),
+      ...(data.role ? { role: data.role } : {}),
+      ...(typeof data.isVerified === "boolean" ? { isVerified: data.isVerified } : {}),
+      ...(data.tenantPro ? { tenantPro: data.tenantPro } : {}),
+    };
+  } catch (err: any) {
+    // requireVerified responde 403 owner_not_verified a quien ya no está verificado.
+    if (err?.response?.status !== 403 || err?.response?.data?.error !== "owner_not_verified") return null;
+    fields = { isVerified: false };
+  }
+  const current = getStoredUser();
+  if (!current || current.token !== stored.token) return null;
+  const next: User = { ...current, ...fields };
+  localStorage.setItem("user", JSON.stringify(next));
+  return next;
+}
+
 export function bootstrapAuthHeader() {
   const u = getStoredUser();
   if (u?.token) axios.defaults.headers.common["Authorization"] = `Bearer ${u.token}`;
