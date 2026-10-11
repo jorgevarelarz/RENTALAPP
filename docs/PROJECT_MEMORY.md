@@ -1142,3 +1142,9 @@ Rules:
 - `create` (`src/controllers/contract.controller.ts`) runs `checkContractParties`: property must exist (404), actor must be owner / managing agency (`agencyAccess: 'manage'`) / admin (403), body `landlord` must be the property owner, tenant an existing other user (400). IDs lowercased by zod. `WizardStep3Review` maps these codes to Spanish messages.
 - Tests creating contracts now seed parties via `tests/utils/contractParties.ts` and send `x-user-id`. `payments.duplicates` awaits `RentPayment.init()/Payment.init()` (flaky because the unique index wasn't built yet).
 - Verification: tsc clean; Jest `--runInBand` 7 contract-creating suites 32/32, new authz suite 9/9, full suite 288/289 (payments.duplicates, fixed → 7/7 ×3); e2e 10/10; frontend build + 83 tests (AppShell timing flake under load, 2/2 alone).
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 21: contract wizard fixed and redone
+
+- The routed `/contracts/new` (`ContractWizard.tsx`) posted `propertyId/tenantId/rentAmount/...`; `POST /api/contracts` requires `landlord/tenant/property/region/rent/deposit/startDate/endDate/clauses` → always 400. New `pages/contracts/contractDraft.ts` (`buildContractPayload`, `contractRegion` free text → `madrid|galicia|catalunya`, `contractCreateError`). Wizard: 3 steps (Condiciones, Cláusulas, Revisar), loads the property for owner/region, blocks unsupported regions, navigates to `/contracts/:id`. Dead old wizard (`WizardStep1-3`, `ClausesStep`) deleted.
+- Verification: tsc clean; Jest `create-contract.authz` 10/10 (new: exact wizard body → 201); frontend build + 90 tests; Playwright 390/1280 px.
+

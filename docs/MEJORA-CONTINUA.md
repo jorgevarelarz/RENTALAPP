@@ -23,6 +23,8 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 15**: cada petición autenticada hace una consulta más a Mongo (`tokenVersion` del usuario, por `_id`). Los JWT ya emitidos siguen valiendo (cuentan como versión 0); no hace falta migración. Quien restablezca la contraseña cierra todas sus sesiones abiertas, también la del propio dispositivo.
 - **Al desplegar la ronda 17**: rol e `isVerified` salen de la base en cada petición, no del token. Un administrador degradado o una cuenta a la que se retira la verificación lo nota en la siguiente petición. No hay migración ni consulta extra (es la misma de `tokenVersion`).
 - **Al desplegar la ronda 20**: crear un contrato exige ser el propietario del inmueble, su agencia gestora (`agencyAccess: 'manage'`) o administrador, y que el arrendador sea el dueño del inmueble. Quien antes creaba contratos con IDs a mano sobre inmuebles ajenos recibirá 403/400. Conviene comprobar también, con una consulta de solo lectura, que en producción existe el índice único `contractId_1_period_1` de `rentpayments`. Si había recibos duplicados, Mongoose no lo habrá podido crear, y la protección contra el doble cobro de la renta (P3) depende de él.
+- **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
+- **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
   - «Firmar como co-titular» solo cambia el estado en la base (`POST /tenants/:partyId/sign`, backend de antes); no es una firma electrónica con proveedor. ¿Vale así o el co-titular debe firmar con Firma.dev como el inquilino principal?
   - Aceptar la invitación exige tener la identidad verificada (`requireVerified` está en toda `/api`). La página lo explica y enlaza a `/tenant/kyc`, pero ¿debe poder unirse antes y verificar después?
@@ -737,3 +739,39 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 
 **Siguiente mejora propuesta.** Interfaz, que hace tres rondas que no hay una solo de interfaz: rehacer el asistente de contratos con el sistema visual RentalApp 2026. Que elija el inmueble entre los propios (o los gestionados, si es agencia) y busque al inquilino por email en vez de pedir IDs, que la revisión sea un resumen legible en vez de JSON y que se quite el correo de prueba. Si se prefiere seguridad: rechazar el token de un usuario borrado y normalizar el email.
 
+### Ronda 21 — 2026-10-11 15:40
+
+**Qué y por qué.** Interfaz, como proponía la ronda 20. Al revisar el asistente de contratos apareció un flujo roto: el asistente que de verdad está enrutado en `/contracts/new` (`ContractWizard.tsx`) enviaba `propertyId`, `tenantId`, `rentAmount`, `landlordIdDoc`… Pero `POST /api/contracts` exige `landlord`, `tenant`, `property`, `region`, `rent`, `deposit`, las fechas y `clauses`. **Crear un contrato desde la interfaz daba siempre 400 `invalid_payload`**, también en producción (el esquema es el mismo en `726bf6f`). En la ronda 20 los mensajes de error se habían puesto en `WizardStep3Review`, que era código muerto de un asistente antiguo sin ruta. Aunque se hubieran corregido los nombres, habría fallado igual por `region_not_supported`: la región del inmueble es texto libre («Comunidad de Madrid») y el catálogo solo conoce `madrid`, `galicia` y `catalunya`.
+
+1. **`frontend/src/pages/contracts/contractDraft.ts`** (lógica pura y probada):
+   - `buildContractPayload`: el arrendador es el dueño del inmueble (`GET /api/properties/:id`), el inquilino es el candidato elegido, y las opciones del formulario se convierten en cláusulas del catálogo: `duracion_prorroga` (años × 12, prórroga anual), `uso_vivienda`, `mascotas` (con límite de 1 a 3), `subarriendo`, `retraso_pago` (días de margen) y `fianza_autonomica`;
+   - `contractRegion` traduce la región libre a la clave del catálogo, sin tildes;
+   - `contractCreateError` traduce los errores del backend al español (los de A2 y también `region_not_supported`, `invalid_date_range` e `invalid_payload`).
+2. **Asistente rehecho** con los componentes de la app (`Card`, `Input`, `Button`) y el azul `--ra-blue`, sin iconos decorativos ni el aviso amarillo:
+   - tres pasos en pestañas de texto: Condiciones, Cláusulas y Revisar;
+   - la revisión es una lista de datos legible: inmueble, inquilino con email, fechas, importes, cláusulas y organismo de la fianza;
+   - se quitan los campos que se pedían y luego se descartaban: DNI del casero (era obligatorio), DNI del inquilino, «gastos incluidos» y «día de pago»;
+   - la fianza propone una mensualidad;
+   - sin candidato (al entrar directamente en `/contracts/new`) explica que se crea desde los candidatos de un inmueble;
+   - con una comunidad no soportada avisa y desactiva «Crear contrato»;
+   - al crear abre el detalle del contrato en vez de volver al panel.
+3. **Limpieza**: se borran `WizardStep1Basics`, `WizardStep2Clauses`, `WizardStep3Review` y `ClausesStep` (sin ruta ni importaciones), y con ellos el correo de prueba a `notificaciones@rental-app.test`.
+
+**Commits.**
+- `5a71430` Contratos: el asistente /contracts/new manda el cuerpo que espera el backend (antes siempre daba 400) y se rehace
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` `create-contract.authz.test.ts`: 10 OK. El caso nuevo manda el cuerpo exacto del asistente, con las seis cláusulas, y recibe 201 con el contrato en `pending_signature`.
+- Frontend: build OK; `npm test` 27 ficheros y 90 tests OK (antes 26 y 83; se quitan 2 del asistente antiguo y se suman 9). Nuevos:
+  - `contractDraft.test.ts` (5): regiones, fecha de fin, cuerpo completo, dueño poblado y errores;
+  - `ContractWizard.test.tsx` (4): sin candidato, creación completa con navegación al detalle, comunidad no soportada y error `forbidden` en español.
+- Playwright (vite local, `/api/*` simulado, sesión de casero) a 390 y 1280 px, los tres pasos (`/tmp/ra-shots21`). En los dos tamaños, el cuerpo capturado en `POST /api/contracts` es el que acepta el backend y la página acaba en `/contracts/c77`.
+- GitNexus: `impact` LOW en `ContractWizard`. `detect_changes` LOW: solo cambia `ContractWizard` y no afecta a ningún flujo.
+
+**Qué queda.**
+- Solo se llega al asistente desde «Crear contrato» en los candidatos de un inmueble (`ApplicantsModal`, panel del casero). La agencia no tiene ruta (`/contracts/new` es solo para `landlord` y `admin`), aunque el backend se lo permite con `agencyAccess: 'manage'`.
+- La región del contrato no se contrasta en el backend con la del inmueble; el asistente la deriva del inmueble.
+- Comunidades fuera del catálogo y DNI de las partes: anotado en «Para Jorge».
+- Pendientes anteriores: token de usuario borrado, email sin normalizar a minúsculas y «Cancelar invitación» para la agencia.
+
+**Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: rechazar en `authenticate` el token de un usuario que ya no existe (401 `session_expired`) y normalizar el email a minúsculas en registro, login y recuperación. Si se prefiere seguir con contratos: que el backend derive la región del inmueble en vez de fiarse del cuerpo, y abrir `/contracts/new` a la agencia gestora desde su panel.
