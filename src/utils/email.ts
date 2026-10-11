@@ -217,3 +217,52 @@ export async function sendContractActiveEmail(
     html,
   );
 }
+
+export type CoTenantInviteEmail = {
+  link: string;
+  inviterName?: string;
+  propertyTitle?: string;
+  propertyAddress?: string;
+  expiresAt: Date;
+};
+
+/** Invitación de co-titular: quién invita, qué vivienda y hasta cuándo vale el enlace. */
+export function coTenantInviteEmail(invite: CoTenantInviteEmail) {
+  const url = escapeHtml(invite.link);
+  const inviter = invite.inviterName?.replace(/\s+/g, ' ').trim().slice(0, 80);
+  const who = inviter ? `<strong>${escapeHtml(inviter)}</strong> te ha invitado` : 'Te han invitado';
+  const place = [invite.propertyTitle, invite.propertyAddress].map(v => v?.trim()).filter(Boolean);
+  const expires = invite.expiresAt.toLocaleString('es-ES', {
+    day: 'numeric',
+    month: 'long',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'Europe/Madrid',
+  });
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; color: #111827;">
+      <h2 style="margin-top: 0;">Invitación para compartir un alquiler</h2>
+      <p>${who} a unirte como co-titular a su contrato de alquiler en RentalApp.</p>
+      ${
+        place.length
+          ? `<div style="background-color: #f3f4f6; padding: 12px 16px; margin: 16px 0; border-radius: 6px;">
+        ${place.map((v, i) => `<p style="margin: 0;${i === 0 ? ' font-weight: bold;' : ' color: #4b5563;'}">${escapeHtml(v)}</p>`).join('')}
+      </div>`
+          : ''
+      }
+      <p>Como co-titular podrás ver el contrato, firmarlo y descargar el PDF. Para aceptar, entra o crea tu cuenta con este mismo correo.</p>
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${url}" style="background-color: #111827; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Ver la invitación</a>
+      </div>
+      <p style="color: #4b5563; font-size: 13px;">El enlace caduca el ${escapeHtml(expires)}. Si no esperabas esta invitación, puedes ignorar este correo.</p>
+      <p style="color: #6b7280; font-size: 12px;">Si no puedes hacer clic, copia este enlace: ${url}</p>
+    </div>
+  `;
+  const subject = inviter ? `${inviter} te invita a compartir su alquiler` : 'Invitación para compartir un alquiler';
+  return { subject, html };
+}
+
+export async function sendCoTenantInviteEmail(to: string, invite: CoTenantInviteEmail) {
+  const { subject, html } = coTenantInviteEmail(invite);
+  await sendEmail(to, subject, html);
+}

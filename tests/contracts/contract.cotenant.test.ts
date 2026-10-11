@@ -18,6 +18,7 @@ jest.mock('../../src/utils/payment', () => ({
 jest.mock('../../src/utils/email', () => ({
   ...jest.requireActual('../../src/utils/email'),
   sendEmail: jest.fn().mockResolvedValue(undefined),
+  sendCoTenantInviteEmail: jest.fn().mockResolvedValue(undefined),
 }));
 
 describe('Co-tenants flows', () => {
@@ -260,7 +261,7 @@ describe('Co-tenants flows', () => {
   });
 
   it('sends the invite link to the configured frontend with a token that is stored only as a hash', async () => {
-    const { sendEmail } = jest.requireMock('../../src/utils/email');
+    const { sendCoTenantInviteEmail } = jest.requireMock('../../src/utils/email');
     const prevFrontend = process.env.FRONTEND_URL;
     process.env.FRONTEND_URL = 'https://app.example.test/';
     try {
@@ -279,8 +280,10 @@ describe('Co-tenants flows', () => {
         .send({ email: 'Co@Test.com ' });
       expect(res.status).toBe(200);
 
-      const html: string = sendEmail.mock.calls.at(-1)[2];
-      const match = html.match(/href="https:\/\/app\.example\.test\/invites\/accept\?token=([a-f0-9]{64})"/);
+      const [to, invite] = sendCoTenantInviteEmail.mock.calls.at(-1);
+      expect(to).toBe('co@test.com');
+      expect(invite).toMatchObject({ inviterName: 'tenant-9021', propertyTitle: 'Piso Test', propertyAddress: 'Calle 1, Madrid' });
+      const match = String(invite.link).match(/^https:\/\/app\.example\.test\/invites\/accept\?token=([a-f0-9]{64})$/);
       expect(match).not.toBeNull();
       const party = await ContractParty.findById(res.body.partyId).lean();
       expect(party?.email).toBe('co@test.com');
@@ -336,5 +339,87 @@ describe('Co-tenants flows', () => {
     expect((await asCo(request(app).get(`/api/contracts/${contract._id}/pdf`))).status).toBe(200);
     // La invitación ya usada no se puede volver a previsualizar.
     expect((await request(app).get('/api/invites/preview').query({ token })).status).toBe(404);
+  });
+  describe('resend invite', () => {
+    const tenantId = '507f1f77bcf86cd799439091';
+    const landlordId = '507f1f77bcf86cd799439092';
+    const asTenant = (req: request.Test, id = tenantId) =>
+      req.set('x-user-id', id).set('x-user-role', 'tenant').set('x-user-verified', 'true');
+
+    const setup = async (inviteExpiresAt: Date, updatedAt?: Date) => {
+      await makeUser(tenantId, 'tenant', 'main9@test.com');
+      await makeUser(landlordId, 'landlord', 'owner9@test.com');
+      const property = await makeProperty(landlordId);
+      const contract = await makeContract(landlordId, tenantId, String(property._id));
+      const party = await ContractParty.create({
+        contractId: contract._id,
+        role: 'TENANT',
+        email: 'co9@test.com',
+        status: 'INVITED',
+        invitedByUserId: new mongoose.Types.ObjectId(tenantId),
+        inviteTokenHash: crypto.createHash('sha256').update('old-token').digest('hex'),
+        inviteExpiresAt,
+      });
+      if (updatedAt) {
+        await ContractParty.collection.updateOne({ _id: party._id }, { $set: { updatedAt } });
+      }
+      return { contract, party };
+    };
+
+    it('reissues an expired invite with a new link, invalidates the old one and lists the expiry', async () => {
+      const { sendCoTenantInviteEmail } = jest.requireMock('../../src/utils/email');
+      sendCoTenantInviteEmail.mockClear();
+      const { contract, party } = await setup(new Date(Date.now() - 1000));
+
+      const parties = await asTenant(request(app).get(`/api/contracts/${contract._id}/parties`));
+      expect(parties.status).toBe(200);
+      const invited = parties.body.items.find((p: any) => String(p.partyId) === String(party._id));
+      expect(invited).toMatchObject({ status: 'INVITED', expired: true });
+
+      const res = await asTenant(request(app).post(`/api/contracts/${contract._id}/tenants/${party._id}/resend`));
+      expect(res.status).toBe(200);
+      expect(new Date(res.body.expiresAt).getTime()).toBeGreaterThan(Date.now() + 47 * 60 * 60 * 1000);
+      expect(sendCoTenantInviteEmail).toHaveBeenCalledTimes(1);
+      const [to, invite] = sendCoTenantInviteEmail.mock.calls[0];
+      expect(to).toBe('co9@test.com');
+      const token = String(invite.link).split('token=')[1];
+
+      expect((await request(app).get('/api/invites/preview').query({ token: 'old-token' })).status).toBe(404);
+      const preview = await request(app).get('/api/invites/preview').query({ token });
+      expect(preview.status).toBe(200);
+      expect(preview.body.expired).toBe(false);
+    });
+
+    it('limits resending a still valid invite to once every 10 minutes', async () => {
+      const valid = new Date(Date.now() + 60 * 60 * 1000);
+      const { contract, party } = await setup(valid);
+      const url = `/api/contracts/${contract._id}/tenants/${party._id}/resend`;
+      const tooSoon = await asTenant(request(app).post(url));
+      expect(tooSoon.status).toBe(429);
+      expect(tooSoon.body.error).toBe('resend_too_soon');
+
+      await ContractParty.collection.updateOne(
+        { _id: party._id },
+        { $set: { updatedAt: new Date(Date.now() - 11 * 60 * 1000) } },
+      );
+      expect((await asTenant(request(app).post(url))).status).toBe(200);
+    });
+
+    it('only lets the principal tenant resend, and only pending invites of that contract', async () => {
+      const { contract, party } = await setup(new Date(Date.now() - 1000));
+      const otherId = '507f1f77bcf86cd799439093';
+      await makeUser(otherId, 'tenant', 'other9@test.com');
+      const url = `/api/contracts/${contract._id}/tenants/${party._id}/resend`;
+      expect((await asTenant(request(app).post(url), otherId)).status).toBe(403);
+      expect(
+        (await asTenant(request(app).post(`/api/contracts/${contract._id}/tenants/507f1f77bcf86cd799439099/resend`))).status,
+      ).toBe(404);
+      expect((await asTenant(request(app).post(`/api/contracts/${contract._id}/tenants/nope/resend`))).status).toBe(404);
+
+      await ContractParty.updateOne({ _id: party._id }, { status: 'JOINED' });
+      const joined = await asTenant(request(app).post(url));
+      expect(joined.status).toBe(400);
+      expect(joined.body.error).toBe('not_invited');
+    });
   });
 });
