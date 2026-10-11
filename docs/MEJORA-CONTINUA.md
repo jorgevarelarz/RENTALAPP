@@ -1406,7 +1406,7 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 
 **Siguiente mejora propuesta.** Recibos para el casero: en el detalle del contrato, la lista de meses cobrados con «Descargar recibo» (reutilizando `GET /api/contracts/:id/payments`, que ya devuelve los `Payment` cobrados del contrato). Después, la búsqueda de incidencias en el servidor.
 
-### Ronda 39 — 2026-10-12 00:59
+### Ronda 39 — 2026-10-12 00:58
 
 **Qué y por qué.** Recibos para el casero, la mejora propuesta en la ronda 38. El endpoint del recibo ya dejaba descargarlo al casero y a la agencia gestora, pero no tenían ninguna pantalla donde hacerlo: su «Pagos» es la conexión con Stripe y «Ganancias» solo exporta CSV.
 
