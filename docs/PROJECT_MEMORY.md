@@ -1232,3 +1232,9 @@ Rules:
 - Frontend: `TicketDetail` actions per role from real statuses (validate/resolve via new `validateTicket`/`resolveTicket`; removed nonexistent `closeTicket`/`openDispute`); `TicketsList` card rows + status chips; new `utils/tickets.ts` (service/history labels, es-ES dates, next step, error texts).
 - Verification: tsc clean; Jest `--runInBand` ticket.access 4, escrow.policy 1, appointments 3, recovery 6, rbac 8, e2e 10/10; frontend build + 114 tests; Playwright `/tmp/ra-shots35`.
 
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 36: ticket creation validated + «Comunicar una avería» UI
+
+- `POST /api/tickets`: `service` must be in pro catalog (`plumbing|electricity|appliances|locksmith|cleaning|painting|others`, 400 `invalid_service`), trimmed `title` ≤120 / `description` ≤2000 required (400 `invalid_title|invalid_description`), contract `active` (409 `contract_not_active`). After responding, emails owner via new `sendTicketOpenedEmail` (`utils/email.ts`).
+- Frontend `TicketCreatePage` rewritten (single contract preselected, service chips, Spanish errors via `getTicketErrorText`, navigate to ticket). `/tickets/new` tenant-only. `utils/tickets.ts` gains `TICKET_SERVICES` and new labels.
+- Verification: tsc clean; Jest `--runInBand` escrow 3 suites / 13, rbac 8, e2e 10/10; frontend build + 117 tests; Playwright `/tmp/ra-shots36`.

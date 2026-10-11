@@ -1303,3 +1303,41 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 
 **Siguiente mejora propuesta.** «Comunicar una avería» (`TicketCreatePage`) al sistema 2026: contrato preseleccionado si solo hay uno, servicios del catálogo, fotos con el subidor seguro y aviso al propietario por correo al crearla, que la auditoría de mejoras deja pendiente.
 
+
+### Ronda 36 — 2026-10-11 22:05
+
+**Qué y por qué.** «Comunicar una avería» (`TicketCreatePage`), la mejora propuesta en la ronda 35. Al revisarla salieron también fallos del backend en la misma ruta:
+
+1. **`POST /api/tickets` sin validar** (fallo). Un ticket sin descripción daba 500 y devolvía el mensaje de validación de Mongoose. El servicio era texto libre (`'x'` valía) y se podía abrir una avería sobre un contrato terminado o en borrador. Ahora:
+   - el servicio tiene que ser uno de los que ofrecen los profesionales (`pro.model`: fontanería, electricidad, electrodomésticos, cerrajería, limpieza, pintura y otros). Si no, 400 `invalid_service`;
+   - el título (hasta 120 caracteres) y la descripción (hasta 2.000) se recortan y son obligatorios: 400 `invalid_title` / `invalid_description`;
+   - el contrato tiene que estar `active`: 409 `contract_not_active`.
+2. **Aviso al propietario** (pendiente en `auditoria-mejoras-2026-10-05.md`). Al crearse la incidencia, el propietario recibe un correo («Nueva avería: …») con la vivienda, el tipo, la descripción y el enlace a la ficha. Es la nueva `sendTicketOpenedEmail` en `utils/email.ts`, con todo escapado. Sale después de responder y un fallo solo queda en el log, así que no retrasa la petición.
+3. **La página, al sistema 2026.** Antes eran inputs sin estilo, solo cuatro servicios, un `<pre>` con el JSON del ticket como respuesta y el mensaje de error en inglés del backend. Ahora:
+   - si hay un solo contrato activo, la vivienda ya viene elegida (título y dirección). Con varios hay un selector, y sin ninguno sale una explicación con enlace a «Contratos»;
+   - el tipo de avería se elige con chips, como el filtro de la lista;
+   - hay título, «Qué pasa» con ayuda («cuándo puede entrar el profesional») y contador, y los errores salen en español junto al formulario;
+   - al crearla salta a la ficha con el aviso «Hemos avisado a tu arrendador».
+   - La ruta `/tickets/new` queda solo para inquilinos (el backend ya no dejaba crearla a nadie más) y la miga de pan dice «Comunicar una avería».
+
+**Commits.**
+- `2f1ff22` Incidencias: crear una avería valida servicio, título y descripción, exige el contrato activo y avisa al propietario por correo
+- `0d80f9e` Incidencias: «Comunicar una avería» pasa al sistema 2026 y solo la abre el inquilino
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - `tests/escrow`: 3 suites y 13 tests OK. `ticket.access` pasa de 4 a 6 casos. Uno recorre los 400 (servicio, título vacío o largo, descripción vacía), comprueba que el título se recorta, que el correo va al propietario con la vivienda y «Fontanería», y el 409 con el contrato terminado. El otro comprueba que la plantilla escapa el HTML.
+  - Los tests que usaban el servicio `maintenance` pasan a `plumbing`.
+  - `src/__tests__/rbac` 8/8 y e2e (`jest.config.e2e.js`) 10/10.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 32 ficheros y 117 tests OK (antes 31 y 114). El nuevo `TicketCreatePage.test.tsx` tiene 3 casos: un contrato preseleccionado con envío y salto a la ficha, validación y error traducido con dos contratos, y el estado sin contrato.
+- Playwright (vite local, `/api/*` simulado) a 390 y 1280 px (`/tmp/ra-shots36`): con un contrato (rellenado y con el error 409), con dos y sin ninguno. No hay desbordamiento horizontal en ninguno.
+- GitNexus: `impact` LOW en `TicketCreatePage` (solo la ruta). `detect_changes` sale medio, con los flujos esperados (`TicketCreatePage → WithAuth` y `AppRoutes`).
+
+**Qué queda.**
+- Fotos de la avería: el modelo `Ticket` no tiene campo de imágenes. Añadirlas con el subidor seguro de la ronda 34 es la siguiente pieza natural.
+- Las incidencias antiguas con servicios fuera del catálogo (`maintenance`) se siguen mostrando («Mantenimiento»), pero ya no se pueden crear nuevas.
+- El correo no tiene versión de texto plano ni se avisa al propietario de los pasos siguientes (presupuesto, trabajo terminado).
+- Pendientes anteriores: en móvil, el historial de la ficha sale antes de la descripción; la búsqueda de la lista filtra solo la página cargada; adjuntos de chat públicos; el paso «Contrato activo» con la fecha aunque esté pendiente.
+
+**Siguiente mejora propuesta.** Fotos en las averías: campo `photos` en `Ticket` (solo URLs propias de `/uploads`, validadas con `isOwnUploadUrl`), subida desde «Comunicar una avería» con `Dropzone` y galería en la ficha. Si se prefiere seguridad: los adjuntos de chat privados (URL firmada).
