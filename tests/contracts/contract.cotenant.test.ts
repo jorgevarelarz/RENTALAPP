@@ -170,10 +170,10 @@ describe('Co-tenants flows', () => {
     expect(main.body.items).toHaveLength(1);
     expect(main.body.items[0].myRole).toBe('tenant');
 
-    // `status` como objeto ya no llega a Mongo como operador.
+    // Un operador de Mongo en la query se rechaza antes de llegar al controlador.
     const injected = await as(coId, '?include=cotenant&status[$ne]=x');
-    expect(injected.status).toBe(200);
-    expect(injected.body.items).toHaveLength(1);
+    expect(injected.status).toBe(400);
+    expect(injected.body.error).toBe('invalid_input');
   });
 
   it('prevents double pay for same period (idempotent)', async () => {
