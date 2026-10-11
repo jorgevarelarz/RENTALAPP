@@ -17,6 +17,16 @@ const tensionedAreaDateQuery = (changeDate: Date) => ({
   $or: [{ effectiveTo: { $exists: false } }, { effectiveTo: null }, { effectiveTo: { $gte: changeDate } }],
 });
 
+// Las suscripciones guardan el usuario; el aviso va a su email.
+async function subscriberEmails(propertyId: string, type: 'price' | 'availability') {
+  const subs = await AlertSubscription.find({ propertyId, type }).select('userId').lean();
+  if (subs.length === 0) return [];
+  const users = await User.find({ _id: { $in: subs.map((s) => s.userId) } })
+    .select('email')
+    .lean();
+  return users.map((u) => u.email).filter((email): email is string => Boolean(email));
+}
+
 const isGeoPoint = (value: any): value is { type: 'Point'; coordinates: [number, number] } =>
   value?.type === 'Point' &&
   Array.isArray(value.coordinates) &&
@@ -169,16 +179,14 @@ export async function update(req: Request, res: Response) {
     prevAvailableFrom !== updatedAvailableFrom || prevAvailableTo !== updatedAvailableTo;
 
   if (priceChanged) {
-    const subs = await AlertSubscription.find({ propertyId: id, type: 'price' });
-    for (const s of subs) {
-      await sendPriceAlert(String(s.userId), updated);
+    for (const email of await subscriberEmails(id, 'price')) {
+      await sendPriceAlert(email, updated);
     }
   }
 
   if (availabilityChanged) {
-    const subs = await AlertSubscription.find({ propertyId: id, type: 'availability' });
-    for (const s of subs) {
-      await sendAvailabilityAlert(String(s.userId), updated);
+    for (const email of await subscriberEmails(id, 'availability')) {
+      await sendAvailabilityAlert(email, updated);
     }
   }
 
