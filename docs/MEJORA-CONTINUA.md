@@ -1153,3 +1153,34 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: la visita del propietario sale como «Has propuesto» para la agencia, la agencia no puede crear ni editar inmuebles y falta «Cancelar invitación» de propietario.
 
 **Siguiente mejora propuesta.** Interfaz compartida: la insignia de estado (`Badge` y `ContractStatusBadge`) sin mayúsculas ni letra espaciada, en minúscula como en Stripe o Airbnb, revisando las pantallas que la usan con capturas. Si se prefiere seguridad: PII en los logs (correos y cuerpo de los webhooks), pendiente en la auditoría.
+
+### Ronda 32 — 2026-10-11 20:42
+
+**Qué y por qué.** Seguridad, después de tres rondas de interfaz. Lo último pendiente de «Observabilidad» en la auditoría eran los datos personales en los logs. Cada correo enviado dejaba la dirección completa (`email_sent`, `email_mock`, `email_error`), cada SMS el teléfono, y el webhook de firma, si llegaba sin ID, volcaba el cuerpo entero. Además, los errores 500 guardaban `req.url` con la query (tokens, códigos OAuth), y los errores de SMTP, Twilio o Mongo (E11000 `dup key: { email: … }`) traen el correo en el mensaje.
+
+1. **Enmascarado central en el logger** (`src/utils/logger.ts`, nuevo `src/utils/redact.ts`). Así no hay que tocar `deliverEmail`, que GitNexus marca CRITICAL porque pasa por él todo el correo.
+   - Pino `redact`, en las claves `to`, `email`, `phone`, `phoneNumber` e `iban` (en el primer nivel y uno por debajo): `ana@example.org` → `a***@example.org` (se conserva el dominio para depurar la entrega), `+34600123456` → `***456` y el IBAN → `ES91****1332`. `password`, `passwordHash`, `token`, `authorization` y `cookie` salen como `[oculto]`.
+   - Serializador `err`: la misma limpieza sobre el mensaje, el stack y los campos del error (`response` de nodemailer, por ejemplo). El stack sigue saliendo.
+   - El mensaje del log también se limpia (`hooks.logMethod`).
+   - Los teléfonos solo se reconocen con prefijo internacional (`+`), para no tocar importes, fechas ni IDs.
+2. **`errorHandler`** guarda la ruta sin la query (`pathWithoutQuery`, la misma que el log de peticiones).
+3. **Webhook de firma sin ID**: registra solo las claves del cuerpo, no los valores.
+4. **`user.controller`**: los dos `console.error` al actualizar el usuario o el perfil (un E11000 lleva el correo) pasan al logger.
+
+**Commits.**
+- `9e132fd` Logs: el logger enmascara correos, teléfonos e IBAN y oculta secretos; el manejador de errores guarda la ruta sin la query y el webhook de firma ya no vuelca el cuerpo
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - El nuevo `tests/unit/logRedaction.test.ts` tiene 3 casos: enmascarado en texto libre, sin tocar importes, fechas ni IDs de Stripe o Mongo; los logs de correo, de SMS y de un objeto anidado no dejan ni la dirección ni el teléfono completos; y contraseña, cabecera `Authorization`, mensaje y error E11000 con `response` de SMTP sin el correo, con el stack conservado.
+  - `tests/unit`, `tests/auth`, `tests/contracts` y `src/__tests__`: 46 suites y 215 tests OK. e2e (`jest.config.e2e.js`): 2 suites y 10 tests OK.
+- Frontend (sin cambios): build OK y `npm test` con 30 ficheros y 107 tests OK.
+- GitNexus: `impact` LOW en `errorHandler`; CRITICAL en `deliverEmail`, que por eso no se ha tocado. `detect_changes` sale medio: `signatureWebhook` (solo el log), `errorHandler` y `logger`. Los símbolos de `user.controller` aparecen solo porque sus líneas se desplazan.
+
+**Qué queda.**
+- Los `console.*` sueltos (unos 100) no pasan por pino ni se enmascaran. Hoy ninguno escribe correos ni cuerpos, pero algunos vuelcan errores enteros (`console.error('…', err)`). Lo ideal sería pasarlos al logger por módulos.
+- El enmascarado de pino `redact` solo mira las claves listadas hasta un nivel de profundidad. Una clave nueva con otro nombre (`recipient`, `mail`) quedaría sin enmascarar, salvo en el mensaje y en los errores, que sí se limpian siempre.
+- Pendientes de interfaz: insignia `Badge` en mayúsculas, el paso «Contrato activo» con la fecha aunque esté pendiente, y la visita del propietario como «Has propuesto» para la agencia.
+
+**Siguiente mejora propuesta.** Interfaz compartida: la insignia de estado (`Badge` y `ContractStatusBadge`) sin mayúsculas ni letra espaciada, revisando con capturas las pantallas que la usan. Si se prefiere seguridad: `sanitizeFilter` global de Mongo (`?status[$ne]=x`) o los adjuntos de chat y avatares públicos sin caducidad.

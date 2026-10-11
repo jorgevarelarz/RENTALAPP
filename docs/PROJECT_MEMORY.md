@@ -1207,3 +1207,9 @@ Rules:
 - `ContractDetail`: «Fianza devuelta» row in «Condiciones» (amount + date, or «(parcial)»), deposit timeline step shows refund; amber notice for open disputes (deposit or rent; closed statuses `won|lost|warning_closed` hidden). `types/contract.ts` gains `PaymentDispute`, `depositAmountRefunded`, `depositRefundedAt`, `depositDispute`, `rentDisputes`.
 - `getContractActionSummary`: role-aware plain texts (tenant «Paga la fianza», «Revisa y firma el contrato»; signed+paid «Se activa solo el <inicio>»); draft `blockedReason` null; label «En borrador».
 - Verification: tsc clean; Jest `--runInBand` 3 suites / 21 tests; frontend build + 107 tests; Playwright `/tmp/ra-shots31`.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 32: PII out of logs
+
+- `src/utils/logger.ts`: pino `redact` on `to|email|phone|phoneNumber|iban` (+ `*.key`) with censor masking (`a***@domain`, `***456`, `ES91****1332`), `password|passwordHash|token|authorization|cookie` → `[oculto]`; `err` serializer and log message scrubbed (`scrubPii`). New `src/utils/redact.ts`. Exported `loggerOptions` for tests.
+- `errorHandler` logs path without query; signature webhook without ID logs body keys only; `user.controller` update errors go through logger.
+- Verification: tsc clean; Jest `--runInBand` unit+auth+contracts+src/__tests__ 46 suites / 215 tests (new `tests/unit/logRedaction.test.ts` 3), e2e 10/10; frontend build + 107 tests.
