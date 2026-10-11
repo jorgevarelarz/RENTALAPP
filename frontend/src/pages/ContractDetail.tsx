@@ -7,6 +7,7 @@ import Card from '../components/ui/Card';
 import Button from '../components/ui/Button';
 import Modal from '../components/ui/Modal';
 import SignaturitWidget from '../components/SignaturitWidget';
+import CoTenantsCard from '../components/contracts/CoTenantsCard';
 import { ContractStatusBadge } from '../components/ContractStatusBadge';
 import { getContractActionSummary } from '../utils/contractWorkflow';
 import { CheckCircle2, Circle, Clock3, FileCheck, User, ShieldCheck, Download, PenTool, Wallet } from 'lucide-react';
@@ -192,7 +193,12 @@ export default function ContractDetail() {
   if (!contract) return <div className="p-8 text-center text-red-500">Contrato no encontrado</div>;
 
   const isTenant = user?.role === 'tenant';
-  const needsMySignature = isTenant && (contract.status === 'pending_signature' || contract.status === 'signing');
+  const myUserId = user?._id || (user as any)?.id;
+  const contractTenantId =
+    contract.tenantId || (typeof contract.tenant === 'object' ? contract.tenant?.id || contract.tenant?._id : contract.tenant);
+  // Un co-titular también es «tenant», pero firma y paga desde su propia sección, no como inquilino principal.
+  const isPrincipalTenant = isTenant && !!myUserId && String(contractTenantId) === String(myUserId);
+  const needsMySignature = isPrincipalTenant && (contract.status === 'pending_signature' || contract.status === 'signing');
   const isActive = contract.status === 'active';
   const hasSignedPdf = !!contract?.signature?.pdfUrl;
   const downloadLabel = isActive || contract.status === 'signed' ? 'Descargar contrato' : 'Descargar borrador';
@@ -206,7 +212,7 @@ export default function ContractDetail() {
   const isSigned = ['signed', 'active', 'completed'].includes(contract.status) || !!signedAt;
   const depositConfirming = depositReturn === 'success' && !contract.depositPaid;
   const canPayDeposit =
-    isTenant &&
+    isPrincipalTenant &&
     (contract.status === 'signed' || contract.status === 'active') &&
     !contract.depositPaid &&
     !depositConfirming;
@@ -399,6 +405,14 @@ export default function ContractDetail() {
               </div>
             </div>
           </Card>
+
+          <CoTenantsCard
+            contractId={contract._id}
+            contractStatus={contract.status}
+            myUserId={myUserId}
+            canInvite={isPrincipalTenant}
+            onSigned={loadContract}
+          />
         </div>
 
         <div className="lg:col-span-2">

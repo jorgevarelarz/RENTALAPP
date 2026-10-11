@@ -4,6 +4,7 @@ import { register as apiRegister } from "../../services/auth";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../api/client";
 import SocialAuthButtons from "../../components/SocialAuthButtons";
+import { safeInternalPath } from "../../services/coTenants";
 
 export default function RegisterPage() {
   const [searchParams] = useSearchParams();
@@ -14,7 +15,7 @@ export default function RegisterPage() {
     : "tenant";
 
   const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(searchParams.get("email") || "");
   const [password, setPassword] = useState("");
   const [role, setRole] = useState<"tenant"|"landlord"|"pro">(initialRole);
   const [err, setErr] = useState<string | null>(null);
@@ -22,6 +23,9 @@ export default function RegisterPage() {
   const nav = useNavigate();
   const { login } = useAuth();
   const oauthError = searchParams.get('oauth_error');
+  // Vuelta tras registrarse (p. ej. a una invitación de co-titular); solo rutas internas.
+  const homeFor = (r: string) => (r === 'tenant' ? '/tenant' : r === 'landlord' ? '/landlord' : '/pro');
+  const redirect = safeInternalPath(searchParams.get('redirect'), '');
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -29,12 +33,7 @@ export default function RegisterPage() {
     try {
       await apiRegister(name.trim(), email.trim(), password, role);
       await login(email.trim(), password);
-      const path = role === 'tenant' ? '/tenant'
-        : role === 'landlord' ? '/landlord'
-        : role === 'pro' ? '/pro'
-        : '/properties';
-
-      nav(path, { replace: true });
+      nav(redirect || homeFor(role), { replace: true });
     } catch (e: any) {
       setErr(formatApiError(e, "No se pudo registrar"));
     } finally {
@@ -88,7 +87,7 @@ export default function RegisterPage() {
       <SocialAuthButtons
         mode="register"
         role={role}
-        redirect={role === 'tenant' ? '/tenant' : role === 'landlord' ? '/landlord' : '/pro'}
+        redirect={redirect || homeFor(role)}
       />
 
       <form className="auth-form" onSubmit={submit} noValidate>
@@ -139,7 +138,7 @@ export default function RegisterPage() {
       </form>
 
       <div className="auth-footer mt-6 text-center">
-        ¿Ya tienes cuenta? <Link to="/login" className="auth-link font-medium text-blue-600 hover:text-blue-500">Inicia sesión</Link>
+        ¿Ya tienes cuenta? <Link to={redirect ? `/login?redirect=${encodeURIComponent(redirect)}` : "/login"} className="auth-link font-medium text-blue-600 hover:text-blue-500">Inicia sesión</Link>
       </div>
     </>
   );

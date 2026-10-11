@@ -39,6 +39,13 @@ vi.mock('../../services/contracts', () => ({
   payDeposit: vi.fn(),
 }));
 
+vi.mock('../../services/coTenants', () => ({
+  __esModule: true,
+  listContractParties: vi.fn().mockResolvedValue([]),
+  inviteCoTenant: vi.fn(),
+  signAsCoTenant: vi.fn(),
+}));
+
 import ContractDetail from '../ContractDetail';
 import * as contracts from '../../services/contracts';
 
@@ -188,5 +195,18 @@ describe('ContractDetail', () => {
 
     expect(await screen.findByText(/pago de la fianza cancelado/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /pagar fianza/i })).toBeInTheDocument();
+  });
+  test('El co-titular no ve firmar ni pagar como inquilino principal', async () => {
+    setAuth({ _id: 'u3', role: 'tenant' });
+    (contracts.getContract as Mock).mockResolvedValue({ ...signedContract, status: 'pending_signature' });
+    const { unmount } = render(<ContractDetail />);
+    await screen.findByText(/resumen econ/i);
+    expect(screen.queryByRole('button', { name: /firmar contrato/i })).toBeNull();
+    unmount();
+
+    (contracts.getContract as Mock).mockResolvedValue({ ...signedContract, tenant: { id: 'u2' }, tenantId: 'u2' });
+    render(<ContractDetail />);
+    await screen.findByText(/resumen econ/i);
+    expect(screen.queryByRole('button', { name: /pagar fianza/i })).toBeNull();
   });
 });

@@ -4,6 +4,7 @@ import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../api/client";
 import SocialAuthButtons from "../../components/SocialAuthButtons";
+import { safeInternalPath } from "../../services/coTenants";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -15,7 +16,7 @@ export default function LoginPage() {
   const nav = useNavigate();
   const loc = useLocation();
   const sp = new URLSearchParams(loc.search);
-  const next = sp.get('redirect') || (loc.state as any)?.from || "/";
+  const next = safeInternalPath(sp.get('redirect') || (loc.state as any)?.from, "/");
   const oauthError = sp.get('oauth_error');
   const socialError = oauthError === 'access_failed'
     ? 'No se pudo completar el acceso con Google o Apple. Inténtalo de nuevo.'
@@ -98,7 +99,7 @@ export default function LoginPage() {
         </button>
       </form>
       <div className="auth-footer">
-        ¿No tienes cuenta? <Link to="/register" className="auth-link">Crea una gratis</Link>
+        ¿No tienes cuenta? <Link to={sp.get('redirect') ? `/register?redirect=${encodeURIComponent(next)}` : "/register"} className="auth-link">Crea una gratis</Link>
       </div>
     </>
   );

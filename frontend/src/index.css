@@ -740,6 +740,15 @@ body {
 .auth-link-muted,
 .auth-footer .auth-link { color: var(--ra-blue); }
 .auth-back { align-items: center; color: var(--ra-muted); display: flex; font-size: 12px; gap: 6px; justify-content: center; margin-top: 20px; text-decoration: none; }
+.auth-button { text-decoration: none; }
+.auth-button-secondary { background: #fff; border: 1px solid var(--ra-line); color: var(--ra-ink); }
+.auth-button-secondary:hover { background: var(--ra-paper); }
+.auth-hint { color: var(--ra-muted); font-size: .9rem; line-height: 1.5; margin: 0; }
+.auth-invite-summary { border: 1px solid var(--ra-line); border-radius: 14px; margin: 0 0 20px; padding: 4px 16px; }
+.auth-invite-summary > div { display: flex; gap: 16px; justify-content: space-between; padding: 11px 0; }
+.auth-invite-summary > div + div { border-top: 1px solid var(--ra-line); }
+.auth-invite-summary dt { color: var(--ra-muted); font-size: .85rem; }
+.auth-invite-summary dd { color: var(--ra-ink); font-size: .9rem; font-weight: 600; margin: 0; overflow-wrap: anywhere; text-align: right; }
 
 /* Functional application shell */
 .ra-app-shell { background: var(--ra-paper); }

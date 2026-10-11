@@ -69,6 +69,7 @@ const InboundTestingPage = lazy(() => import("./pages/testing/InboundTestingPage
 const AgencyHome = lazy(() => import("./pages/agency/AgencyHome"));
 const AgencyLandlords = lazy(() => import("./pages/agency/AgencyLandlords"));
 const InviteAccept = lazy(() => import("./pages/InviteAccept"));
+const CoTenantInviteAccept = lazy(() => import("./pages/CoTenantInviteAccept"));
 
 function RouteFallback() {
   return <div className="p-6 text-sm text-gray-500">Cargando...</div>;
@@ -156,6 +157,7 @@ export default function AppRoutes() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset" element={<ResetPassword />} />
               <Route path="/invite/:token" element={<InviteAccept />} />
+              <Route path="/invites/accept" element={<CoTenantInviteAccept />} />
             </Route>
           </Routes>
         </Suspense>
