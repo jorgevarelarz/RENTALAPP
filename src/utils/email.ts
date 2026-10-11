@@ -158,37 +158,86 @@ export async function sendContractReadyEmail(
   await sendEmail(email, 'Acción requerida: Firma tu contrato de alquiler', html);
 }
 
-export async function sendPaymentReceiptEmail(
-  email: string,
-  payerName: string,
-  amount: number,
-  concept: string,
-  date: Date,
-) {
+export type PaymentNoticeEmail = {
+  /** `payer`: quien ha pagado (justificante). `payee`: el casero que cobra. */
+  audience: 'payer' | 'payee';
+  /** «Renta de octubre de 2026» o «Fianza». */
+  concept: string;
+  amount: number;
+  paidAt: Date;
+  contractId?: string;
+  /** Si el pago tiene recibo PDF en «Pagos y recibos» (rentas y fianzas). */
+  hasReceipt?: boolean;
+  /** Nombre de quien recibe el correo. */
+  name?: string;
+  /** Nombre de quien ha pagado (solo en el aviso al casero). */
+  payerName?: string;
+  propertyTitle?: string;
+  propertyAddress?: string;
+};
+
+const oneLine = (value?: string, max = 80) => value?.replace(/\s+/g, ' ').trim().slice(0, max) || '';
+
+/**
+ * Cobro de una renta o fianza. Al inquilino le sirve de justificante y le lleva a «Pagos y
+ * recibos»; al casero le avisa del cobro y le lleva a «Cobros y recibos» del contrato.
+ */
+export function paymentNoticeEmail(notice: PaymentNoticeEmail) {
+  const concept = oneLine(notice.concept) || 'Pago';
+  const amount = eur(notice.amount);
+  const name = oneLine(notice.name);
+  const payer = oneLine(notice.payerName);
+  const place = [notice.propertyTitle, notice.propertyAddress].map(v => oneLine(v, 160)).filter(Boolean);
+  const toPayee = notice.audience === 'payee';
+  const link = toPayee
+    ? notice.contractId && contractLink(notice.contractId)
+    : notice.hasReceipt && frontendUrl('/tenant/payments');
+  const url = link ? escapeHtml(link) : '';
+  const lead = toPayee
+    ? `${payer ? `<strong>${escapeHtml(payer)}</strong> ha pagado` : 'Tu inquilino ha pagado'} la ${escapeHtml(concept.toLowerCase())}${place.length ? ` de <strong>${escapeHtml(place[0])}</strong>` : ''} a través de RentalApp.`
+    : `Hemos recibido tu pago${place.length ? ` de <strong>${escapeHtml(place[0])}</strong>` : ''}. Guarda este correo como justificante${
+        url ? ' o descarga el recibo en PDF' : ''
+      }.`;
+  const rows: Array<[string, string]> = [
+    ['Concepto', concept],
+    ['Importe', amount],
+    ['Fecha de pago', esDate(notice.paidAt)],
+  ];
+  if (place[1]) rows.push(['Vivienda', place[1]]);
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
-      <h2 style="color: #059669;">Pago recibido correctamente</h2>
-      <p>Hola <strong>${escapeHtml(payerName)}</strong>,</p>
-      <p>Hemos recibido tu pago. Detalles:</p>
-      <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
-        <tr style="background-color: #f9fafb;">
-          <td style="padding: 10px; border: 1px solid #ddd;">Concepto</td>
-          <td style="padding: 10px; border: 1px solid #ddd; font-weight: bold;">${escapeHtml(concept)}</td>
-        </tr>
-        <tr>
-          <td style="padding: 10px; border: 1px solid #ddd;">Importe</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(eur(amount))}</td>
-        </tr>
-        <tr style="background-color: #f9fafb;">
-          <td style="padding: 10px; border: 1px solid #ddd;">Fecha</td>
-          <td style="padding: 10px; border: 1px solid #ddd;">${escapeHtml(esDate(date))}</td>
-        </tr>
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; color: #111827;">
+      <h2 style="margin-top: 0;">${toPayee ? 'Has recibido un cobro' : 'Pago recibido'}</h2>
+      ${name ? `<p>Hola, ${escapeHtml(name)}:</p>` : ''}
+      <p>${lead}</p>
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0; background-color: #f3f4f6; border-radius: 6px;">
+        ${rows
+          .map(
+            ([label, value]) => `<tr>
+          <td style="padding: 8px 16px; color: #4b5563;">${escapeHtml(label)}</td>
+          <td style="padding: 8px 16px; text-align: right; font-weight: bold;">${escapeHtml(value)}</td>
+        </tr>`,
+          )
+          .join('')}
       </table>
-      <p>Puedes descargar este recibo desde tu panel de usuario.</p>
+      ${
+        url
+          ? `<div style="text-align: center; margin: 28px 0;">
+        <a href="${url}" style="background-color: #111827; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">${
+          toPayee ? 'Ver cobros y recibos' : 'Descargar el recibo'
+        }</a>
+      </div>
+      <p style="color: #6b7280; font-size: 12px;">Si no puedes hacer clic, copia este enlace: ${url}</p>`
+          : ''
+      }
     </div>
   `;
+  const subject = toPayee ? `Cobro recibido: ${concept} · ${amount}` : `Pago recibido: ${concept}`;
+  return { subject, html };
+}
 
-  await sendEmail(email, `Recibo de Pago: ${concept}`, html);
+export async function sendPaymentNoticeEmail(to: string, notice: PaymentNoticeEmail): Promise<EmailDelivery> {
+  const { subject, html } = paymentNoticeEmail(notice);
+  return sendEmail(to, subject, html);
 }
 
 export async function sendContractActiveEmail(

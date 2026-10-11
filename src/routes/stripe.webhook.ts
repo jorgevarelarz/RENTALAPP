@@ -11,11 +11,11 @@ import PlatformEarning from '../models/platformEarning.model';
 import ProcessedEvent from '../models/processedEvent.model';
 import { Payment } from '../models/payment.model';
 import { User } from '../models/user.model';
-import { sendPaymentReceiptEmail } from '../utils/email';
 import { calcServiceFee } from '../utils/calcServiceFee';
 import { recordContractHistory } from '../utils/history';
 import { transitionContract } from '../services/contractState';
 import { recordDepositPayment } from '../services/depositPayment.service';
+import { notifyPaymentSucceeded } from '../services/paymentNotice.service';
 import { ensureDirectConversation } from '../utils/ensureDirectConversation';
 import { RentPayment } from '../models/rentPayment.model';
 import { PartnerEarning } from '../models/partnerEarning.model';
@@ -287,30 +287,25 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
         const { chargeId, receiptUrl } = await chargeReceipt(intent);
         let payment: any = null;
 
-        // Un pago ya devuelto no vuelve a `succeeded` si el evento llega tarde o se reenvía.
-        if (paymentId) {
+        // Un pago ya devuelto no vuelve a `succeeded` si el evento llega tarde o se reenvía, y uno ya
+        // cobrado conserva su fecha de pago: el reenvío solo refresca el cargo y su recibo de Stripe.
+        const paymentFilter = paymentId
+          ? { _id: paymentId }
+          : paymentType === 'rent'
+            ? { stripePaymentIntentId: intent.id }
+            : null;
+        let firstPaid = false;
+        if (paymentFilter) {
+          const charge = { receiptUrl, stripeChargeId: chargeId, stripePaymentIntentId: intent.id };
           payment = await Payment.findOneAndUpdate(
-            { _id: paymentId, status: { $ne: 'refunded' } },
-            {
-              status: 'succeeded',
-              paidAt: new Date(),
-              receiptUrl,
-              stripeChargeId: chargeId,
-              stripePaymentIntentId: intent.id,
-            },
+            { ...paymentFilter, status: { $nin: ['refunded', 'succeeded'] } },
+            { status: 'succeeded', paidAt: new Date(), ...charge },
             { new: true },
           );
-        } else if (paymentType === 'rent') {
-          payment = await Payment.findOneAndUpdate(
-            { stripePaymentIntentId: intent.id, status: { $ne: 'refunded' } },
-            {
-              status: 'succeeded',
-              paidAt: new Date(),
-              receiptUrl,
-              stripeChargeId: chargeId,
-            },
-            { new: true },
-          );
+          firstPaid = !!payment;
+          if (!payment) {
+            payment = await Payment.findOneAndUpdate({ ...paymentFilter, status: 'succeeded' }, charge, { new: true });
+          }
         }
         if (rentPaymentId) {
           await RentPayment.findOneAndUpdate(
@@ -320,18 +315,9 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
           );
         }
 
-        if (payment?.payer) {
-          const payer = await User.findById(payment.payer).lean();
-          if (payer?.email) {
-            const amountEur = payment.amount;
-            sendPaymentReceiptEmail(
-              payer.email,
-              payer.name || 'Usuario',
-              amountEur,
-              payment.concept,
-              new Date(),
-            ).catch(console.error);
-          }
+        // Justificante al inquilino y aviso al casero, solo la primera vez (no en cada reenvío).
+        if (firstPaid) {
+          void notifyPaymentSucceeded({ _id: payment._id });
         }
 
         if (contractId) {
@@ -601,12 +587,13 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
             if (contract && depositIntentId) {
               // Fuera del `if` de abajo: si un intento anterior falló después de marcar la fianza
               // pagada, el reintento de Stripe crea el pago que faltaba.
-              await recordDepositPayment(contract, {
+              const created = await recordDepositPayment(contract, {
                 intentId: depositIntentId,
                 amount: typeof session.amount_total === 'number' ? session.amount_total / 100 : Number(contract.deposit),
                 currency: session.currency || undefined,
                 paidAt,
               });
+              if (created) void notifyPaymentSucceeded({ stripePaymentIntentId: depositIntentId });
             }
             if (contract && !contract.depositPaid) {
               contract.depositPaid = true;

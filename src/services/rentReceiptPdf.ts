@@ -41,18 +41,35 @@ const money = (n: number) =>
 const dateEs = (d: Date) =>
   new Intl.DateTimeFormat('es-ES', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'Europe/Madrid' }).format(d);
 
+/** «octubre de 2026» si el pago es de renta y tiene un mes válido; si no, `null`. */
+export function rentPeriodLabel(
+  type: string | undefined,
+  billingMonth?: number | null,
+  billingYear?: number | null,
+): string | null {
+  const valid =
+    type === 'rent' &&
+    Number.isInteger(billingMonth) &&
+    Number.isInteger(billingYear) &&
+    billingMonth! >= 1 &&
+    billingMonth! <= 12;
+  return valid ? `${MONTHS[billingMonth! - 1]} de ${billingYear}` : null;
+}
+
+/** Concepto de un cobro tal como sale en el recibo: «Fianza», «Renta de octubre de 2026» o «Renta». */
+export function receiptConcept(type: string | undefined, billingMonth?: number | null, billingYear?: number | null) {
+  if (type === 'deposit') return 'Fianza';
+  const period = rentPeriodLabel(type, billingMonth, billingYear);
+  return period ? `Renta de ${period}` : 'Renta';
+}
+
 export function describeReceipt(input: ReceiptInput): ReceiptContent {
-  const hasPeriod =
-    input.type === 'rent' &&
-    Number.isInteger(input.billingMonth) &&
-    Number.isInteger(input.billingYear) &&
-    input.billingMonth! >= 1 &&
-    input.billingMonth! <= 12;
-  const period = hasPeriod ? `${MONTHS[input.billingMonth! - 1]} de ${input.billingYear}` : null;
+  const period = rentPeriodLabel(input.type, input.billingMonth, input.billingYear);
+  const hasPeriod = period !== null;
   const mm = hasPeriod ? String(input.billingMonth).padStart(2, '0') : '';
   const suffix = input.paymentId.slice(-6).toUpperCase();
   const number = hasPeriod ? `R-${input.billingYear}${mm}-${suffix}` : `R-${suffix}`;
-  const concept = input.type === 'deposit' ? 'Fianza' : period ? `Renta de ${period}` : 'Renta';
+  const concept = receiptConcept(input.type, input.billingMonth, input.billingYear);
   const address = [input.propertyAddress, input.propertyCity].filter(Boolean).join(', ');
 
   const rows: Array<[string, string]> = [
