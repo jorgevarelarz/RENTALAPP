@@ -1251,7 +1251,7 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 
 **Siguiente mejora propuesta.** Interfaz: «Incidencias» (`TicketsList` y `TicketDetail`) al sistema RentalApp 2026, con fechas en `es-ES`, tildes, tarjetas en móvil y cabeceras sin mayúsculas. Lleva dos rondas propuesta y la ronda 33 ya era en parte de seguridad.
 
-### Ronda 35 — 2026-10-11 21:55
+### Ronda 35 — 2026-10-11 21:47
 
 **Qué y por qué.** «Incidencias», propuesta desde la ronda 33 como mejora de interfaz. Al revisarla, el flujo estaba roto después del pago, así que lo primero ha sido arreglarlo:
 
