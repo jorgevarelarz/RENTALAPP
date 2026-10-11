@@ -1,329 +1,390 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
-import { useAuth } from '../../context/AuthContext';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useToast } from '../../context/ToastContext';
 import { createContract } from '../../services/contracts';
+import { getProperty } from '../../services/properties';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
 import Card from '../../components/ui/Card';
+import { ArrowLeft, ArrowRight } from 'lucide-react';
 import {
-  Calendar, Users, Scale, FileText,
-  ArrowRight, ArrowLeft, CheckCircle2, AlertTriangle
-} from 'lucide-react';
+  buildContractPayload,
+  contractCreateError,
+  contractEndDate,
+  contractRegion,
+  ContractDraft,
+  DEPOSIT_BODY,
+  DraftProperty,
+  SUPPORTED_REGIONS,
+} from './contractDraft';
 
-const euroFormatter = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
-const formatEuros = (value: unknown) => euroFormatter.format(Number(value) || 0);
-const formatDate = (value?: string) => {
-  if (!value) return '—';
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+// Estado con el que llega desde «Crear contrato» en los candidatos de un inmueble (ApplicantsModal)
+type WizardState = {
+  propertyId?: string;
+  tenantId?: string;
+  initialData?: {
+    address?: string;
+    city?: string;
+    rentAmount?: number;
+    depositAmount?: number;
+    tenantName?: string;
+    tenantEmail?: string;
+  };
 };
 
-const STEPS = [
-  { id: 'terms', title: 'Términos', icon: <Calendar size={18} /> },
-  { id: 'people', title: 'Intervinientes', icon: <Users size={18} /> },
-  { id: 'clauses', title: 'Cláusulas', icon: <Scale size={18} /> },
-  { id: 'review', title: 'Revisar', icon: <FileText size={18} /> },
-];
+type LoadedProperty = DraftProperty & { title?: string; address?: string; city?: string };
+
+const euroFormatter = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 });
+const formatEuros = (value: number) => euroFormatter.format(Number(value) || 0);
+const formatDate = (value?: string) => {
+  if (!value) return '—';
+  const date = new Date(`${value}T00:00:00`);
+  return Number.isNaN(date.getTime())
+    ? value
+    : date.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
+};
+const tomorrow = () => {
+  const d = new Date(Date.now() + 86400000);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
+
+const STEPS = ['Condiciones', 'Cláusulas', 'Revisar'];
+const SELECT = 'auth-input';
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col gap-0.5 py-3 sm:flex-row sm:justify-between sm:gap-6 border-b border-gray-100 last:border-0">
+      <dt className="text-sm text-gray-500 shrink-0">{label}</dt>
+      <dd className="text-sm font-medium text-gray-900 sm:text-right [overflow-wrap:anywhere]">{children}</dd>
+    </div>
+  );
+}
+
+function Toggle({
+  checked,
+  onChange,
+  label,
+  hint,
+  children,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  label: string;
+  hint: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="py-4 border-b border-gray-100 last:border-0">
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          className="mt-1 h-4 w-4 shrink-0 accent-[var(--ra-blue)]"
+          checked={checked}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        <span>
+          <span className="block font-medium text-gray-900">{label}</span>
+          <span className="block text-sm text-gray-500">{hint}</span>
+        </span>
+      </label>
+      {children}
+    </div>
+  );
+}
 
 export default function ContractWizard() {
-  const { state } = useLocation();
-  const { user } = useAuth();
+  const location = useLocation();
+  const state = (location.state || null) as WizardState | null;
   const nav = useNavigate();
   const { push } = useToast();
 
+  const propertyId = state?.propertyId || '';
+  const tenantId = state?.tenantId || '';
+  const tenantName = state?.initialData?.tenantName || '';
+  const tenantEmail = state?.initialData?.tenantEmail || '';
+
   const [step, setStep] = useState(0);
-  const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    propertyId: '',
-    tenantId: '',
-    startDate: '',
-    endDate: '',
-    durationYears: 1,
-    rentAmount: 0,
-    depositAmount: 0,
-    paymentDay: 5,
-    landlordName: (user as any)?.name || user?.email?.split?.('@')?.[0] || '',
-    landlordIdDoc: '',
-    tenantName: '',
-    tenantIdDoc: '',
-    tenantEmail: '',
-    petsAllowed: false,
-    expensesIncluded: false,
-    sublettingAllowed: false,
-    depositInAgency: true,
+  const [saving, setSaving] = useState(false);
+  const [property, setProperty] = useState<LoadedProperty | null>(null);
+  const [loadError, setLoadError] = useState(false);
+  const [draft, setDraft] = useState<ContractDraft>(() => {
+    const rent = Number(state?.initialData?.rentAmount) || 0;
+    return {
+      startDate: tomorrow(),
+      durationYears: 1,
+      rent,
+      deposit: Number(state?.initialData?.depositAmount) || rent,
+      petsAllowed: false,
+      petsLimit: 1,
+      sublettingAllowed: false,
+      professionalUse: false,
+      graceDays: 5,
+    };
   });
 
   useEffect(() => {
-    if (state) {
-      setFormData(prev => ({
-        ...prev,
-        propertyId: (state as any).propertyId || '',
-        tenantId: (state as any).tenantId || '',
-        rentAmount: (state as any).initialData?.rentAmount || 0,
-        depositAmount: (state as any).initialData?.depositAmount || 0,
-        tenantName: (state as any).initialData?.tenantName || '',
-        tenantEmail: (state as any).initialData?.tenantEmail || '',
-        startDate: new Date(Date.now() + 86400000).toISOString().slice(0, 10),
-        endDate: new Date(Date.now() + 31536000000).toISOString().slice(0, 10),
-        durationYears: 1,
-      }));
-    }
-  }, [state]);
+    if (!propertyId) return;
+    let alive = true;
+    getProperty(propertyId)
+      .then((p) => alive && setProperty(p as LoadedProperty))
+      .catch(() => alive && setLoadError(true));
+    return () => {
+      alive = false;
+    };
+  }, [propertyId]);
 
-  useEffect(() => {
-    if (!formData.startDate || !formData.durationYears) return;
-    const start = new Date(formData.startDate);
-    if (Number.isNaN(start.getTime())) return;
-    const end = new Date(start);
-    end.setFullYear(end.getFullYear() + Number(formData.durationYears));
-    const nextEnd = end.toISOString().slice(0, 10);
-    if (nextEnd !== formData.endDate) {
-      setFormData(prev => ({ ...prev, endDate: nextEnd }));
-    }
-  }, [formData.startDate, formData.durationYears, formData.endDate]);
+  const set = <K extends keyof ContractDraft>(key: K, value: ContractDraft[K]) =>
+    setDraft((prev) => ({ ...prev, [key]: value }));
 
-  const handleChange = (field: string, value: any) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
+  const region = contractRegion(property?.region);
+  const endDate = contractEndDate(draft.startDate, draft.durationYears);
+  const address =
+    [property?.address || state?.initialData?.address, property?.city || state?.initialData?.city]
+      .filter(Boolean)
+      .join(', ') || property?.title || 'Inmueble';
 
-  const validateStep = () => {
+  const stepError = useMemo(() => {
     if (step === 0) {
-      if (!formData.startDate || !formData.endDate) return "Las fechas son obligatorias.";
-      if (formData.rentAmount <= 0) return "La renta debe ser mayor a 0.";
-    }
-    if (step === 1) {
-      if (!formData.landlordIdDoc) return "Tu DNI/NIF es obligatorio para el contrato.";
-      if (!formData.tenantName || !formData.tenantEmail) return "Faltan datos del inquilino.";
+      if (!draft.startDate || !endDate) return 'Indica la fecha de inicio.';
+      if (!(draft.rent > 0)) return 'La renta mensual tiene que ser mayor que 0 €.';
+      if (draft.deposit < 0) return 'La fianza no puede ser negativa.';
     }
     return null;
-  };
+  }, [step, draft, endDate]);
 
-  const handleNext = () => {
-    const error = validateStep();
-    if (error) {
-      push({ title: error, tone: 'error' });
+  if (!propertyId || !tenantId) {
+    return (
+      <div className="max-w-2xl mx-auto p-6">
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">Nuevo contrato</h1>
+        <Card className="p-6">
+          <p className="text-gray-700">
+            Los contratos se preparan a partir de un candidato. Abre los candidatos de uno de tus inmuebles y pulsa
+            «Crear contrato» junto a la persona elegida.
+          </p>
+          <Link to="/landlord" className="inline-block mt-4 font-semibold text-[var(--ra-blue)] hover:underline">
+            Ir a mis inmuebles
+          </Link>
+        </Card>
+      </div>
+    );
+  }
+
+  const next = () => {
+    if (stepError) {
+      push({ title: stepError, tone: 'error' });
       return;
     }
-    setStep(s => Math.min(s + 1, STEPS.length - 1));
+    setStep((s) => Math.min(s + 1, STEPS.length - 1));
   };
 
-  const handleSubmit = async () => {
-    setLoading(true);
+  const submit = async () => {
+    if (!property || !region) return;
+    setSaving(true);
     try {
-      await createContract(formData);
-      push({ title: 'Contrato enviado a firma correctamente', tone: 'success' });
-      nav('/landlord');
-    } catch (e: any) {
-      const raw = e?.response?.data?.error;
-      const msg = raw && String(raw).toLowerCase().includes('contrato activo vigente')
-        ? 'No puedes alquilar esta propiedad porque ya hay un contrato vigente.'
-        : raw || e?.message || 'Error al crear contrato';
-      push({ title: msg, tone: 'error' });
+      const contract: any = await createContract(buildContractPayload(draft, property, tenantId));
+      push({ title: 'Contrato creado. Queda pendiente de la firma del inquilino.', tone: 'success' });
+      const id = contract?._id || contract?.id;
+      nav(id ? `/contracts/${id}` : '/landlord');
+    } catch (e) {
+      push({ title: contractCreateError(e), tone: 'error' });
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Redactar nuevo contrato</h1>
-        <p className="text-gray-500">Genera un contrato de arrendamiento legal en pocos pasos.</p>
-        <div className="flex items-center justify-between mt-8 relative">
-          <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-200 -z-10 rounded"></div>
-          {STEPS.map((s, i) => (
-            <div key={s.id} className="flex flex-col items-center gap-2 bg-white px-2">
-              <div className={`w-10 h-10 rounded-full flex items-center justify-center border-2 transition-colors ${
-                i === step ? 'border-blue-600 bg-blue-50 text-blue-600' :
-                i < step ? 'border-green-500 bg-green-500 text-white' : 'border-gray-200 text-gray-400'
-              }`}>
-                {i < step ? <CheckCircle2 size={20} /> : s.icon}
-              </div>
-              <span className={`text-xs font-medium ${i === step ? 'text-blue-600' : 'text-gray-500'}`}>{s.title}</span>
-            </div>
+    <div className="max-w-3xl mx-auto p-6">
+      <header className="mb-6">
+        <h1 className="text-2xl font-bold text-gray-900">Nuevo contrato de alquiler</h1>
+        <p className="text-gray-500 mt-1 [overflow-wrap:anywhere]">
+          {address}
+          {tenantName ? ` · con ${tenantName}` : ''}
+        </p>
+        <ol className="mt-6 flex gap-6 border-b border-gray-200 text-sm" aria-label="Pasos">
+          {STEPS.map((title, i) => (
+            <li
+              key={title}
+              aria-current={i === step ? 'step' : undefined}
+              className={`-mb-px pb-3 border-b-2 ${
+                i === step
+                  ? 'border-[var(--ra-blue)] font-semibold text-gray-900'
+                  : i < step
+                    ? 'border-transparent text-gray-700'
+                    : 'border-transparent text-gray-400'
+              }`}
+            >
+              {title}
+            </li>
           ))}
-        </div>
-      </div>
+        </ol>
+      </header>
 
-      <Card className="min-h-[400px] flex flex-col p-6">
-        <div className="flex-1">
-          {step === 0 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Condiciones económicas y duración</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <Input
-                  label="Fecha de inicio" type="date"
-                  value={formData.startDate}
-                  onChange={e => handleChange('startDate', e.target.value)}
-                />
-                <Input
-                  label="Fecha de fin" type="date"
-                  value={formData.endDate}
-                  readOnly
-                />
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <label style={{ display: 'grid', gap: 6 }}>
-                  <span style={{ fontSize: 12, color: 'var(--muted)' }}>
-                    Duración del contrato
-                  </span>
+      {loadError && (
+        <p role="alert" className="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+          No se pudo cargar el inmueble. Vuelve a intentarlo desde tus inmuebles.
+        </p>
+      )}
+      {property && !region && (
+        <p role="alert" className="mb-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          Todavía no generamos contratos para inmuebles en «{property.region || 'sin comunidad'}». Por ahora:{' '}
+          {Object.values(SUPPORTED_REGIONS).join(', ')}.
+        </p>
+      )}
+
+      <Card className="p-6">
+        {step === 0 && (
+          <section className="space-y-5">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <Input
+                label="Fecha de inicio"
+                type="date"
+                value={draft.startDate}
+                onChange={(e) => set('startDate', e.target.value)}
+              />
+              <label style={{ display: 'grid', gap: 6 }}>
+                <span style={{ fontSize: 12, color: 'var(--muted)' }}>Duración</span>
+                <select
+                  className={SELECT}
+                  value={draft.durationYears}
+                  onChange={(e) => set('durationYears', Number(e.target.value))}
+                >
+                  {[1, 2, 3, 4, 5].map((y) => (
+                    <option key={y} value={y}>
+                      {y} {y > 1 ? 'años' : 'año'}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <p className="text-sm text-gray-500">Termina el {formatDate(endDate)}. Después se prorroga por años.</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <Input
+                label="Renta mensual (€)"
+                type="number"
+                min={0}
+                step="0.01"
+                value={draft.rent || ''}
+                onChange={(e) => set('rent', Number(e.target.value))}
+              />
+              <Input
+                label="Fianza (€)"
+                type="number"
+                min={0}
+                step="0.01"
+                value={draft.deposit || ''}
+                onChange={(e) => set('deposit', Number(e.target.value))}
+              />
+            </div>
+            <p className="text-sm text-gray-500">La ley fija para vivienda una fianza de una mensualidad.</p>
+          </section>
+        )}
+
+        {step === 1 && (
+          <section>
+            <Toggle
+              checked={draft.petsAllowed}
+              onChange={(v) => set('petsAllowed', v)}
+              label="Se permiten mascotas"
+              hint="El inquilino responde de los daños y la limpieza."
+            >
+              {draft.petsAllowed && (
+                <label className="mt-3 ml-7 flex items-center gap-3 text-sm text-gray-700">
+                  Hasta
                   <select
-                    className="auth-input"
-                    value={formData.durationYears}
-                    onChange={e => handleChange('durationYears', Number(e.target.value))}
+                    className={SELECT}
+                    style={{ width: 'auto' }}
+                    value={draft.petsLimit}
+                    onChange={(e) => set('petsLimit', Number(e.target.value))}
+                    aria-label="Número máximo de mascotas"
                   >
-                    {[1, 2, 3, 4, 5].map((years) => (
-                      <option key={years} value={years}>{years} {years > 1 ? 'años' : 'año'}</option>
+                    {[1, 2, 3].map((n) => (
+                      <option key={n} value={n}>
+                        {n}
+                      </option>
                     ))}
                   </select>
+                  {draft.petsLimit > 1 ? 'animales' : 'animal'}
                 </label>
-                <div className="text-sm text-gray-500 flex items-end">
-                  La fecha de fin se calcula automáticamente con la fecha de inicio y la duración.
-                </div>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Input
-                  label="Renta mensual (€)" type="number" min={0} step="0.01"
-                  value={formData.rentAmount}
-                  onChange={e => handleChange('rentAmount', Number(e.target.value))}
-                />
-                <Input
-                  label="Fianza (€)" type="number" min={0} step="0.01"
-                  value={formData.depositAmount}
-                  onChange={e => handleChange('depositAmount', Number(e.target.value))}
-                />
-                <Input
-                  label="Día límite de pago (mensual)" type="number" min={1} max={30}
-                  value={formData.paymentDay}
-                  onChange={e => handleChange('paymentDay', Number(e.target.value))}
-                />
-              </div>
+              )}
+            </Toggle>
+            <Toggle
+              checked={draft.sublettingAllowed}
+              onChange={(v) => set('sublettingAllowed', v)}
+              label="Se permite subarrendar"
+              hint="Siempre con tu autorización previa y por escrito."
+            />
+            <Toggle
+              checked={draft.professionalUse}
+              onChange={(v) => set('professionalUse', v)}
+              label="Se permite actividad profesional"
+              hint="Sin atención al público. Si no, la vivienda es solo para vivir."
+            />
+            <div className="py-4">
+              <label className="flex flex-wrap items-center gap-3 text-sm text-gray-700">
+                <span className="font-medium text-gray-900">Días de margen para pagar la renta</span>
+                <select
+                  className={SELECT}
+                  style={{ width: 'auto' }}
+                  value={draft.graceDays}
+                  onChange={(e) => set('graceDays', Number(e.target.value))}
+                >
+                  {[0, 3, 5, 7, 10, 15].map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
             </div>
-          )}
+          </section>
+        )}
 
-          {step === 1 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Datos de las partes</h3>
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2"><Users size={18}/> Arrendador (propietario)</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input label="Nombre completo" value={formData.landlordName} onChange={e => handleChange('landlordName', e.target.value)} />
-                  <Input label="DNI / NIF" placeholder="12345678X" value={formData.landlordIdDoc} onChange={e => handleChange('landlordIdDoc', e.target.value)} />
-                </div>
-              </div>
+        {step === 2 && (
+          <section>
+            <dl>
+              <Row label="Inmueble">{address}</Row>
+              <Row label="Inquilino">
+                {tenantName || 'Candidato seleccionado'}
+                {tenantEmail && <span className="block text-gray-500 font-normal">{tenantEmail}</span>}
+              </Row>
+              <Row label="Duración">
+                {formatDate(draft.startDate)} – {formatDate(endDate)}
+              </Row>
+              <Row label="Renta mensual">{formatEuros(draft.rent)}</Row>
+              <Row label="Fianza">{formatEuros(draft.deposit)}</Row>
+              <Row label="Mascotas">
+                {draft.petsAllowed ? `Sí, hasta ${draft.petsLimit}` : 'No, salvo autorización por escrito'}
+              </Row>
+              <Row label="Subarriendo">{draft.sublettingAllowed ? 'Con autorización previa' : 'No'}</Row>
+              <Row label="Uso">{draft.professionalUse ? 'Vivienda y actividad profesional' : 'Solo vivienda'}</Row>
+              <Row label="Margen de pago">
+                {draft.graceDays} {draft.graceDays === 1 ? 'día' : 'días'}
+              </Row>
+              {region && <Row label="Depósito de la fianza">En {DEPOSIT_BODY[region]}</Row>}
+            </dl>
+            <p className="mt-4 text-sm text-gray-500">
+              Al crearlo generamos el PDF y avisamos al inquilino por correo para que lo revise y lo firme.
+            </p>
+          </section>
+        )}
 
-              <div className="bg-gray-50 p-4 rounded-xl border border-gray-200">
-                <h4 className="font-semibold text-gray-900 mb-3 flex items-center gap-2"><Users size={18}/> Arrendatario (inquilino)</h4>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <Input label="Nombre completo" value={formData.tenantName} onChange={e => handleChange('tenantName', e.target.value)} />
-                  <Input label="Email (para firma)" value={formData.tenantEmail} disabled />
-                </div>
-                <p className="text-xs text-gray-500 mt-3">
-                  El email de firma viene del expediente anterior y se usa para invitar al inquilino a firmar.
-                </p>
-                <div className="mt-4">
-                  <Input label="DNI, NIE o pasaporte del inquilino" placeholder="Solicitar al inquilino si no lo tienes" value={formData.tenantIdDoc} onChange={e => handleChange('tenantIdDoc', e.target.value)} />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {step === 2 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-              <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Cláusulas del contrato</h3>
-              <p className="text-sm text-gray-500">Define las reglas de convivencia y legales. Se añadirán al texto estándar.</p>
-              <div className="grid grid-cols-1 gap-4">
-                {[
-                  { key: 'petsAllowed', label: 'Permitir mascotas', desc: 'El inquilino puede tener animales domésticos en la vivienda.' },
-                  { key: 'expensesIncluded', label: 'Gastos incluidos', desc: 'La renta incluye gastos de suministros (luz, agua, gas).' },
-                  { key: 'sublettingAllowed', label: 'Permitir subarriendo', desc: 'El inquilino puede subarrendar habitaciones.' },
-                  { key: 'depositInAgency', label: 'Depositar fianza en organismo', desc: 'El propietario se compromete a depositar la fianza en el organismo de su comunidad autónoma.', disabled: true }
-                ].map((item) => (
-                  <label key={item.key} className={`flex items-start gap-4 p-4 border rounded-xl transition-all cursor-pointer ${
-                    // @ts-ignore
-                    formData[item.key] ? 'border-blue-500 bg-blue-50 shadow-sm' : 'border-gray-200 hover:border-gray-300'
-                  }`}>
-                    <input
-                      type="checkbox"
-                      className="mt-1 w-5 h-5 text-blue-600 rounded"
-                      // @ts-ignore
-                      checked={formData[item.key]}
-                      // @ts-ignore
-                      onChange={e => !item.disabled && handleChange(item.key, e.target.checked)}
-                      // @ts-ignore
-                      disabled={item.disabled}
-                    />
-                    <div>
-                      <span className="block font-bold text-gray-900">{item.label}</span>
-                      <span className="text-sm text-gray-500">{item.desc}</span>
-                    </div>
-                  </label>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {step === 3 && (
-            <div className="space-y-6 animate-in fade-in slide-in-from-right-4">
-              <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex gap-3">
-                <AlertTriangle className="text-yellow-600 shrink-0" />
-                <div>
-                  <h4 className="font-bold text-yellow-800">Borrador listo</h4>
-                  <p className="text-sm text-yellow-700">Revisa los datos. Al confirmar, se generará el documento legal y se enviará una notificación al inquilino para su firma digital.</p>
-                  <ul className="mt-3 text-sm text-yellow-800 space-y-1 list-disc pl-5">
-                    <li>Confirma el DNI/NIF del arrendador antes de enviar.</li>
-                    <li>Verifica el email del inquilino porque será el usado para la firma.</li>
-                    <li>Comprueba renta, fianza y duración antes de bloquear el borrador.</li>
-                  </ul>
-                </div>
-              </div>
-
-              <div className="bg-white border border-gray-200 rounded-xl p-6 space-y-4 shadow-sm">
-                <div className="flex justify-between border-b pb-2">
-                  <span className="text-gray-500">Propiedad</span>
-                  <span className="font-medium">{(state as any)?.initialData?.address || 'Sin dirección'}</span>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <span className="text-gray-500">Duración</span>
-                  <span className="font-medium">{formatDate(formData.startDate)} – {formatDate(formData.endDate)}</span>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <span className="text-gray-500">Renta mensual</span>
-                  <span className="font-bold text-lg">{formatEuros(formData.rentAmount)}</span>
-                </div>
-                <div className="flex justify-between border-b pb-2">
-                  <span className="text-gray-500">Fianza</span>
-                  <span className="font-medium">{formatEuros(formData.depositAmount)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Mascotas</span>
-                  <span className={`font-bold ${formData.petsAllowed ? 'text-green-600' : 'text-red-500'}`}>
-                    {formData.petsAllowed ? 'Permitidas' : 'No permitidas'}
-                  </span>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        <div className="pt-4 mt-4 border-t border-gray-100 flex justify-between">
+        <div className="mt-6 pt-4 border-t border-gray-100 flex justify-between gap-3">
           <Button
             variant="ghost"
-            onClick={() => setStep(s => Math.max(0, s - 1))}
-            disabled={step === 0 || loading}
-            className="inline-flex items-center gap-2 text-gray-500"
+            onClick={() => setStep((s) => Math.max(0, s - 1))}
+            disabled={step === 0 || saving}
+            className="inline-flex items-center gap-2"
+            style={{ visibility: step === 0 ? 'hidden' : 'visible' }}
           >
-            <ArrowLeft size={18} aria-hidden="true" /> Atrás
+            <ArrowLeft size={16} aria-hidden="true" /> Atrás
           </Button>
-
           {step < STEPS.length - 1 ? (
-            <Button onClick={handleNext} className="inline-flex items-center gap-2 px-6">
-              Siguiente <ArrowRight size={18} aria-hidden="true" />
+            <Button onClick={next} className="inline-flex items-center gap-2">
+              Siguiente <ArrowRight size={16} aria-hidden="true" />
             </Button>
           ) : (
-            <Button onClick={handleSubmit} disabled={loading} className="px-8">
-              {loading ? 'Generando contrato…' : 'Enviar a firma'}
+            <Button onClick={submit} disabled={saving || !property || !region}>
+              {saving ? 'Creando contrato…' : 'Crear contrato'}
             </Button>
           )}
         </div>

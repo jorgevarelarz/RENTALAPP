@@ -36,6 +36,25 @@ describe("POST /api/contracts: quién puede crear el contrato (A2)", () => {
     expect(String(res.body.contract.landlord)).toBe(LANDLORD_ID);
   });
 
+  it("acepta el cuerpo que arma el asistente /contracts/new, con todas sus cláusulas", async () => {
+    // Mismo cuerpo que buildContractPayload (frontend/src/pages/contracts/contractDraft.ts)
+    const clauses = [
+      { id: "duracion_prorroga", params: { mesesIniciales: 24, mesesProrroga: 12 } },
+      { id: "uso_vivienda", params: { permiteActividadProfesional: false } },
+      { id: "mascotas", params: { permitidas: true, limite: 2 } },
+      { id: "subarriendo", params: { permitido: false } },
+      { id: "retraso_pago", params: { diasGracia: 5, recargoPct: 0 } },
+      { id: "fianza_autonomica", params: {} },
+    ];
+    const res = await createAs(
+      LANDLORD_ID,
+      "landlord",
+      payload({ rent: 900.5, deposit: 900.5, endDate: "2028-11-01", clauses }),
+    ).expect(201);
+    expect(res.body.contract.clauses.map((c: any) => c.id)).toEqual(clauses.map((c) => c.id));
+    expect(res.body.contract.status).toBe("pending_signature");
+  });
+
   it("acepta identificadores en mayúsculas", async () => {
     await createAs(LANDLORD_ID, "landlord", payload({ landlord: LANDLORD_ID.toUpperCase() })).expect(201);
   });
