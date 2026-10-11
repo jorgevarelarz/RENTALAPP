@@ -119,6 +119,70 @@ describe('Fianza devuelta y disputas (webhook de Stripe)', () => {
     expect(refunded?.depositPaid).toBe(true);
     expect(await historyActions(contract._id)).toContain('depositRefunded');
     expect(listSessions).not.toHaveBeenCalled();
+    // El `Payment` de la fianza también queda devuelto (ya no tiene recibo).
+    const payment = await Payment.findOne({ stripePaymentIntentId: 'pi_dep_1' }).lean();
+    expect(payment).toMatchObject({ type: 'deposit', status: 'refunded', amountRefunded: 1600 });
+  });
+
+  it('el cobro de la fianza crea un solo pago de fianza, con recibo y en los cobros del contrato', async () => {
+    const contract = await makeContract();
+    const session = {
+      id: 'cs_dep_2',
+      payment_intent: 'pi_dep_2',
+      amount_total: 150000,
+      currency: 'eur',
+      metadata: { deposit: 'true', contractId: String(contract._id) },
+    };
+    await sendWebhook('checkout.session.completed', session, 'evt_dep_2').expect(200);
+    // Otro evento con la misma sesión (Stripe puede mandarlo dos veces con distinto id).
+    await sendWebhook('checkout.session.completed', session, 'evt_dep_2_bis').expect(200);
+
+    const payments = await Payment.find({ contract: contract._id }).lean();
+    expect(payments).toHaveLength(1);
+    expect(payments[0]).toMatchObject({
+      type: 'deposit',
+      status: 'succeeded',
+      amount: 1500,
+      concept: 'Fianza',
+      stripePaymentIntentId: 'pi_dep_2',
+    });
+    expect(String(payments[0].payer)).toBe(tenantId);
+    expect(String(payments[0].payee)).toBe(landlordId);
+    const paid = await Contract.findById(contract._id).lean();
+    expect(payments[0].paidAt?.getTime()).toBe(paid?.depositPaidAt?.getTime());
+    expect((await historyActions(contract._id)).filter(a => a === 'depositPaid')).toHaveLength(1);
+
+    const asLandlord = { 'x-user-id': landlordId, 'x-user-role': 'landlord', 'x-user-verified': 'true' };
+    const history = await request(app).get(`/api/contracts/${contract._id}/payments`).set(asLandlord).expect(200);
+    const list = Array.isArray(history.body) ? history.body : history.body.items || history.body.payments;
+    expect(list).toEqual([expect.objectContaining({ type: 'deposit', amount: 1500 })]);
+
+    const pdf = await request(app)
+      .get(`/api/payments/${payments[0]._id}/receipt.pdf`)
+      .set(asTenant)
+      .buffer(true)
+      .parse((res, cb) => {
+        const chunks: Buffer[] = [];
+        res.on('data', (c: Buffer) => chunks.push(c));
+        res.on('end', () => cb(null, Buffer.concat(chunks)));
+      })
+      .expect(200);
+    expect(pdf.headers['content-type']).toContain('application/pdf');
+    expect((pdf.body as Buffer).subarray(0, 5).toString()).toBe('%PDF-');
+  });
+
+  it('si el pago de la fianza no llegó a guardarse, el reintento del evento lo crea', async () => {
+    const contract = await makeContract();
+    await Contract.updateOne({ _id: contract._id }, { depositPaid: true, depositPaidAt: new Date('2026-10-01T10:00:00Z') });
+    await sendWebhook(
+      'checkout.session.completed',
+      { id: 'cs_dep_3', payment_intent: 'pi_dep_3', metadata: { deposit: 'true', contractId: String(contract._id) } },
+      'evt_dep_3',
+    ).expect(200);
+    const payment = await Payment.findOne({ stripePaymentIntentId: 'pi_dep_3' }).lean();
+    expect(payment).toMatchObject({ type: 'deposit', amount: 1600, status: 'succeeded' });
+    expect(payment?.paidAt?.toISOString()).toBe('2026-10-01T10:00:00.000Z');
+    expect(await historyActions(contract._id)).not.toContain('depositPaid');
   });
 
   it('una fianza cobrada antes del cambio se reconoce por su sesión de Checkout (devolución parcial)', async () => {
@@ -154,6 +218,9 @@ describe('Fianza devuelta y disputas (webhook de Stripe)', () => {
     saved = await Contract.findById(contract._id).lean();
     expect(saved?.depositDispute?.status).toBe('lost');
     expect(saved?.depositDispute?.closedAt).toBeInstanceOf(Date);
+    const payment = await Payment.findOne({ stripePaymentIntentId: 'pi_dep_1' }).lean();
+    expect(payment?.status).toBe('succeeded');
+    expect(payment?.dispute?.status).toBe('lost');
 
     const actions = await historyActions(contract._id);
     expect(actions.filter(a => a === 'paymentDisputed')).toHaveLength(1);

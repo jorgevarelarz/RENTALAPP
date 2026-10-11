@@ -83,6 +83,41 @@ async function findDepositContract(intentId: string, metadata?: Stripe.Metadata 
   );
 }
 
+/**
+ * Guarda la fianza cobrada por Checkout como `Payment` (tipo `deposit`), para que tenga recibo y
+ * salga en los cobros del contrato. Idempotente por PaymentIntent: los reenvíos no la duplican.
+ */
+async function recordDepositPayment(
+  contract: InstanceType<typeof Contract>,
+  intentId: string,
+  session: Stripe.Checkout.Session,
+  paidAt: Date,
+) {
+  const amount = typeof session.amount_total === 'number' ? session.amount_total / 100 : Number(contract.deposit);
+  try {
+    await Payment.updateOne(
+      { stripePaymentIntentId: intentId },
+      {
+        $setOnInsert: {
+          contract: contract._id,
+          payer: contract.tenant,
+          payee: contract.landlord,
+          amount,
+          currency: session.currency || 'eur',
+          status: 'succeeded',
+          type: 'deposit',
+          concept: 'Fianza',
+          paidAt,
+          stripePaymentIntentId: intentId,
+        },
+      },
+      { upsert: true },
+    );
+  } catch (err: any) {
+    if (err?.code !== 11000) throw err; // otro reenvío simultáneo ya lo creó
+  }
+}
+
 /** Copia de la disputa de Stripe que se guarda junto al cobro (importes en euros). */
 function disputeInfo(dispute: Stripe.Dispute, now: Date): PaymentDispute {
   const closed = CLOSED_DISPUTE_STATUSES.includes(dispute.status);
@@ -470,8 +505,9 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
             )
           : null;
 
+        const isDeposit = payment?.type === 'deposit';
         const contractRef = payment?.contract || rentPayment?.contractId;
-        if (contractRef) {
+        if (contractRef && !isDeposit) {
           await recordContractHistory(contractRef, fullRefund ? 'paymentRefunded' : 'paymentPartiallyRefunded', {
             paymentIntentId: intentId,
             amountRefunded,
@@ -479,11 +515,14 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
           });
           break;
         }
-        if (payment || rentPayment) break;
+        if (rentPayment || (payment && !isDeposit)) break;
 
-        // Devolución de la fianza: se anota en el contrato. `depositPaid` no cambia (el contrato
-        // sigue firmado o activo); qué significa una fianza devuelta lo decide quien la devolvió.
-        const depositContract = await findDepositContract(intentId, charge.metadata);
+        // Devolución de la fianza: se anota en el contrato (y en su `Payment`, si existe).
+        // `depositPaid` no cambia (el contrato sigue firmado o activo); qué significa una fianza
+        // devuelta lo decide quien la devolvió.
+        const depositContract = isDeposit
+          ? await Contract.findById(payment!.contract)
+          : await findDepositContract(intentId, charge.metadata);
         if (depositContract) {
           await Contract.updateOne(
             { _id: depositContract._id },
@@ -537,6 +576,14 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
         );
         let contractRef = payment?.contract || rentPayment?.contractId;
         let target = 'payment';
+        if (payment?.type === 'deposit' && payment.contract) {
+          // La ficha del contrato enseña la disputa de la fianza desde `depositDispute`.
+          await Contract.updateOne(
+            { _id: payment.contract, 'depositDispute.status': open },
+            { $set: { depositDispute: info } },
+          );
+          target = 'deposit';
+        }
         if (!payment && !rentPayment) {
           const known =
             (await Payment.exists({ stripePaymentIntentId: intentId })) ||
@@ -582,11 +629,17 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
           if (contractId && depositIntentId && Types.ObjectId.isValid(contractId)) {
             await Contract.updateOne({ _id: contractId }, { $set: { depositPaymentIntentId: depositIntentId } });
           }
-          if (contractId) {
+          if (contractId && Types.ObjectId.isValid(contractId)) {
             const contract = await Contract.findById(contractId);
+            const paidAt = contract?.depositPaidAt || new Date();
+            if (contract && depositIntentId) {
+              // Fuera del `if` de abajo: si un intento anterior falló después de marcar la fianza
+              // pagada, el reintento de Stripe crea el pago que faltaba.
+              await recordDepositPayment(contract, depositIntentId, session, paidAt);
+            }
             if (contract && !contract.depositPaid) {
               contract.depositPaid = true;
-              contract.depositPaidAt = new Date();
+              contract.depositPaidAt = paidAt;
               await contract.save();
               await recordContractHistory(contract.id, 'depositPaid', 'Fianza pagada a través de la plataforma');
 
