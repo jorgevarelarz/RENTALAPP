@@ -34,6 +34,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 34**: los mensajes de chat solo admiten adjuntos subidos a nuestro `/uploads` (relativos o bajo `APP_URL`, `FRONTEND_URL` o `UPLOADS_BASE_URL`). Si en producción `APP_URL` no es el dominio que devuelve la subida, los adjuntos darán 400 `attachment_domain_not_allowed`; conviene comprobar que `APP_URL` está puesto. Los mensajes antiguos con enlaces externos no se tocan. Además, ¿deben los adjuntos del chat ser privados (URL firmada que caduca)? Hoy son públicos para quien tenga el enlace, aunque el nombre ya no se puede adivinar.
 - **Incidencias (ronda 35), dos decisiones:** (1) el coste extra que aprueba el propietario se suma a lo que se libera al profesional (`releaseTicketEscrow`), pero el hold de Stripe solo retuvo el presupuesto, así que la captura pediría más de lo retenido. Va con el rediseño del escrow (P5); no se ha tocado. (2) Tanto el propietario («Validar») como el inquilino («Confirmar que está arreglado») liberan el pago del propietario al profesional. Desde la ronda 35, los dos solo después de que el profesional marque el trabajo terminado. ¿Debe poder liberarlo el inquilino, que no es quien paga?
 - **Recibos de renta (ronda 38)**: el PDF dice «Justificante del pago emitido por RentalApp en nombre del arrendador (art. 17.4 LAU)» y lleva nombres de arrendador y arrendatario, vivienda, periodo, fecha, importe y referencia de Stripe, sin DNI/NIF (no se guardan, ver ronda 21) ni los datos legales de RentalApp. Conviene que alguien con criterio legal revise ese texto y decida si el recibo debe llevar NIF de las partes y la razón social de RentalApp.
+- **Al desplegar la ronda 40**: las fianzas cobradas antes no tienen pago guardado, así que no tienen recibo ni salen en «Cobros y recibos». `npx ts-node scripts/backfill_deposit_payments.ts` cuenta las que faltan sin escribir nada; con `--apply` las crea (una vez por PaymentIntent, con la devolución si la hubo). Las que no tengan `depositPaymentIntentId` las lista aparte para revisarlas en Stripe. Ejecutarlo en producción es decisión tuya.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -1447,3 +1448,41 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: búsqueda de incidencias en el servidor (`q`), en móvil el historial de la ficha antes que la descripción, adjuntos de chat públicos, `console.*` fuera del logger.
 
 **Siguiente mejora propuesta.** Que el cobro de la fianza por Checkout (`checkout.session.completed` con `kind: deposit`) cree siempre su `Payment` `type: 'deposit'`, de forma idempotente por `stripePaymentIntentId`. Así la fianza tiene recibo y aparece en «Cobros y recibos». Después, la búsqueda de incidencias en el servidor.
+
+### Ronda 40 — 2026-10-12 01:13
+
+**Qué y por qué.** La fianza no tenía recibo, que era la mejora propuesta en la ronda 39. El cobro por Checkout solo marcaba `depositPaid` en el contrato y no creaba ningún `Payment`. Por eso la fianza no tenía recibo PDF ni aparecía en «Cobros y recibos» del casero ni en «Pagos y recibos» del inquilino, aunque las dos pantallas y el recibo ya la contemplaban. Es un hueco en el flujo de pago, el más crítico.
+
+1. **Webhook** (`routes/stripe.webhook.ts`, nuevo `services/depositPayment.service.ts`):
+   - `checkout.session.completed` con `deposit: 'true'` crea el `Payment` de la fianza: `type: 'deposit'`, `succeeded`, concepto «Fianza», pagador el inquilino, cobrador el casero, importe de `amount_total` (si falta, el del contrato) y la misma fecha que `depositPaidAt`;
+   - el pago se crea una sola vez por PaymentIntent (`$setOnInsert` sobre el índice único `stripePaymentIntentId`, e ignora el 11000 de una carrera). Se crea también si la fianza ya estaba marcada como pagada, así el reintento de un evento que falló a medias completa lo que faltaba;
+   - devoluciones (`charge.refunded`): ahora la fianza tiene `Payment` y el webhook lo encontraba primero, así que sin más cambios la devolución se habría quedado en el pago y no en el contrato (`depositAmountRefunded`/`depositRefundedAt`, que es lo que enseña la ficha). Para una fianza se actualizan las dos cosas y el historial dice `depositRefunded`, como antes;
+   - disputas: igual. Se guarda en el pago y en `depositDispute` del contrato, con `target: 'deposit'`.
+2. **Relleno de las fianzas anteriores** (`scripts/backfill_deposit_payments.ts`, `backfillDepositPayments`). Sin `--apply` solo cuenta. Con `--apply` crea el pago de cada contrato con `depositPaid` y `depositPaymentIntentId` que no lo tenga, con la devolución si la hubo, y es idempotente. Los contratos sin PaymentIntent guardado los lista aparte. No lo he ejecutado contra ninguna base real: queda en «Para Jorge».
+
+**Commits.**
+- `9f0ec87` Pagos: el cobro de la fianza por Checkout crea su pago de fianza (una vez por PaymentIntent), con recibo PDF y en las listas de cobros; devoluciones y disputas siguen anotándose en el contrato
+- `c66608b` Pagos: script de relleno de los pagos de fianza anteriores; `recordDepositPayment` pasa a `services/depositPayment.service`
+
+**Verificación (resultados reales).**
+- `npx tsc --noEmit` sin errores, y el script comprobado aparte con `tsc`, porque `tsconfig` solo incluye `src`.
+- Jest `--runInBand`:
+  - `payments.disputes`: 7/7 (antes 5). Casos nuevos:
+    - dos eventos con la misma sesión crean un solo pago, con importe de `amount_total`, pagador, cobrador y fecha iguales a los del contrato;
+    - el casero lo ve en `GET /api/contracts/:id/payments` y el inquilino descarga el PDF (`%PDF-`);
+    - el reintento crea el pago que faltaba sin repetir `depositPaid` en el historial;
+    - la devolución total deja el pago `refunded`;
+    - la disputa cerrada queda en el pago y en el contrato.
+  - Nuevo `deposit.backfill`: 1/1 (modo prueba, `--apply`, devolución y segunda ejecución sin duplicar).
+  - `refunds`, `receipt`, `history`, `duplicates`, `serviceOffer.payment` y `src/__tests__/webhook`: todo OK.
+  - e2e: 10/10.
+- Frontend: no se ha tocado, así que no he ejecutado su build ni sus tests. Ya titulaba «Fianza» y ofrecía su recibo (rondas 38 y 39).
+- GitNexus: `impact` no encuentra los símbolos porque el índice es del repo canónico y no conoce esta rama. `detect_changes` da riesgo medio por `maybePayAgencyRentFeeShare`, pero es un falso positivo por las líneas desplazadas: el diff no lo toca.
+
+**Qué queda.**
+- Ejecutar el relleno en producción (Jorge).
+- El inquilino no recibe correo al pagar la fianza (sí al pagar la renta), y el casero no recibe aviso de ninguno de los dos (hueco «Notificaciones» de la auditoría).
+- Sigue sin existir un flujo de devolución de la fianza dentro de la app; solo se reflejan las que se hacen desde Stripe.
+- Pendientes anteriores: búsqueda de incidencias en el servidor (`q`), en móvil el historial de la ficha antes que la descripción, adjuntos de chat públicos, `console.*` fuera del logger.
+
+**Siguiente mejora propuesta.** Llevan tres rondas en pagos; toca interfaz. La búsqueda de incidencias en el servidor (`q` escapado en `GET /api/tickets/my/*` y la lista usándolo) y, en la ficha móvil, la descripción antes que el historial.

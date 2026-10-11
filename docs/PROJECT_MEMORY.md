@@ -1251,3 +1251,9 @@ Rules:
 - `GET /api/contracts/:id/payments` (`contract.earnings.controller.getContractPayments`): only `succeeded` rent/deposit, projected fields (no Stripe ids/payer/dispute), sorted by `paidAt`, active co-tenant allowed, 404 `contract_not_found` for missing/invalid id.
 - Frontend: new `components/contracts/ContractReceiptsCard` («Cobros y recibos», 6 latest + «Ver los N anteriores», «Recibo PDF») in `ContractDetail` when signed; `utils/payments.ts` (`paymentTitle`, `saveReceiptPdf`) shared with tenant `Payments`. `Breadcrumbs` no longer shows Mongo id suffixes.
 - Verification: tsc clean; Jest `--runInBand` payments.history 3; frontend build + 130 tests; Playwright `/tmp/ra-shots39`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 40: deposit Payment on Checkout
+
+- `checkout.session.completed` (deposit) now upserts a `Payment` `type:'deposit'` via new `services/depositPayment.service.recordDepositPayment` (idempotent by `stripePaymentIntentId`, `paidAt` = `contract.depositPaidAt`), so the deposit has a receipt PDF and shows in contract/tenant payment lists. `charge.refunded` and disputes on a deposit `Payment` still update `contract.depositAmountRefunded/depositRefundedAt/depositDispute`.
+- New `scripts/backfill_deposit_payments.ts` (dry-run unless `--apply`) for deposits paid before; not run anywhere (Jorge).
+- Verification: tsc clean; Jest `--runInBand` payments.disputes 7, deposit.backfill 1, refunds/receipt/history/duplicates/serviceOffer/webhook OK, e2e 10/10. Frontend untouched.

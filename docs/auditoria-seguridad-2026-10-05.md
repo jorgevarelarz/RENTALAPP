@@ -61,7 +61,7 @@
 
 | Área | Estado | Esfuerzo |
 |------|--------|----------|
-| Devolución de la fianza | No existe: el pago de la fianza no se guarda como `Payment`, así que no se puede reembolsar. | L |
+| Devolución de la fianza | No existe un flujo de devolución en la app. Desde el 2026-10-12 (ronda 40) el cobro de la fianza sí se guarda como `Payment` (`type: 'deposit'`) y las devoluciones hechas en Stripe se reflejan; las fianzas anteriores se rellenan con `scripts/backfill_deposit_payments.ts`. | L |
 | Depósito de la fianza ante la comunidad autónoma | Sin campos ni justificante. Solo cubre 3 comunidades y el texto de Madrid cita el IVIMA. | M |
 | Actualización de renta por IPC/IRAV | No existe. | M-L |
 | Vencimiento, prórroga y preavisos | Ningún job revisa `endDate`, así que se siguen generando recibos después del fin. `/renew` solo envía un email. | M-L |
