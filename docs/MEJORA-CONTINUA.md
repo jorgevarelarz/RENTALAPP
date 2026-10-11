@@ -1405,3 +1405,45 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: búsqueda de incidencias en el servidor (`q`), en móvil el historial de la ficha antes que la descripción, adjuntos de chat públicos, `console.*` fuera del logger.
 
 **Siguiente mejora propuesta.** Recibos para el casero: en el detalle del contrato, la lista de meses cobrados con «Descargar recibo» (reutilizando `GET /api/contracts/:id/payments`, que ya devuelve los `Payment` cobrados del contrato). Después, la búsqueda de incidencias en el servidor.
+
+### Ronda 39 — 2026-10-12 00:59
+
+**Qué y por qué.** Recibos para el casero, la mejora propuesta en la ronda 38. El endpoint del recibo ya dejaba descargarlo al casero y a la agencia gestora, pero no tenían ninguna pantalla donde hacerlo: su «Pagos» es la conexión con Stripe y «Ganancias» solo exporta CSV.
+
+1. **Backend** (`controllers/contract.earnings.controller.ts`). `GET /api/contracts/:id/payments` existía, pero ninguna pantalla lo usaba y devolvía el documento `Payment` entero. Ahora:
+   - solo devuelve rentas y fianza cobradas (`succeeded`, `type` rent/deposit), sin los pagos de servicios;
+   - solo con los campos necesarios para la lista: tipo, importe, devolución, estado, concepto, mes, año y fechas. Sin `stripeChargeId`, `stripePaymentIntentId`, pagador ni disputa;
+   - ordenadas por fecha de pago, de la más reciente a la más antigua;
+   - las ve también el co-titular activo, igual que el recibo; el invitado que no ha aceptado sigue con 403;
+   - un id raro o un contrato inexistente dan 404 `contract_not_found` (el id raro antes daba 400, con el mensaje en texto libre). Los errores pasan a códigos (`forbidden`, `payments_failed`).
+2. **Interfaz**. En el detalle de un contrato firmado, activo o terminado hay una tarjeta nueva, «Cobros y recibos» (`components/contracts/ContractReceiptsCard.tsx`), en la columna de «Condiciones»:
+   - cada cobro con su título («Renta de octubre de 2026», «Fianza»), «Pagado el …», importe, «devueltos X €» si hubo devolución parcial y el enlace «Recibo PDF»;
+   - enseña los seis últimos y un «Ver los N cobros anteriores» para el resto;
+   - si no hay cobros, lo dice. Si la carga falla, lo explica. Sin permiso (403), la tarjeta no aparece.
+   - `paymentTitle` y la descarga del PDF pasan a `utils/payments.ts`, que comparten esta tarjeta y «Pagos y recibos».
+3. **De paso, la miga de pan** (`components/Breadcrumbs.tsx`) enseñaba el final del ID de Mongo («Contrato #C0D1», «Incidencia #…», «Propiedad #…»), lo que las rondas anteriores ya habían quitado de las cabeceras. Ahora dice «Contrato», «Contrato firmado», «Incidencia» o «Inmueble»; el título ya está en la cabecera de la página.
+
+**Commits.**
+- `052e4d1` Contratos: GET /api/contracts/:id/payments lista solo rentas y fianza cobradas, sin IDs de Stripe, con acceso del co-titular y 404 para un contrato inexistente
+- `40390b3` Contratos: el detalle de un contrato firmado muestra «Cobros y recibos» con «Recibo PDF»
+- `49a6360` Interfaz: la miga de pan nombra las fichas sin el ID interno
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` del nuevo `tests/contracts/payments.history.test.ts`: 3/3. Comprueba:
+  - de seis pagos (fianza, dos rentas cobradas, una pendiente, una devuelta y un servicio) solo salen las dos rentas cobradas y la fianza, en orden y sin campos de Stripe ni pagador;
+  - lo ven inquilino, co-titular `JOINED`, agencia `manage` y admin; reciben 403 el invitado, un casero ajeno y la agencia con `status_only`;
+  - un contrato inexistente y un id raro dan 404.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 35 ficheros y 130 tests OK (antes 33 y 123). Casos nuevos:
+  - `ContractReceiptsCard`, 4: lista con devolución y descarga, seis visibles más «Ver los 2 cobros anteriores», sin cobros y descarga fallida, 403 sin tarjeta y error de carga;
+  - `ContractDetail`, 1: el casero de un contrato activo ve la tarjeta y en un borrador no se pide;
+  - `Breadcrumbs`, 2.
+  - A los mocks de `services/contracts` de los dos tests de `ContractDetail` les faltaba `getPaymentHistory` y fallaban. Se ha añadido, y la tarjeta usa `await` para no depender de que el mock devuelva una promesa.
+- Playwright (vite local, `/api/*` simulado, casero con 11 cobros) a 1280 y 390 px (`/tmp/ra-shots39`): sin desbordamiento horizontal; tarjeta revisada en las dos anchuras.
+- GitNexus: `impact` LOW en `getContractPayments` (solo la ruta) y en `labelFor`. `detect_changes` da riesgo medio porque toca `Payments`: solo se movió `paymentTitle` a utils, y `Payments.test` pasa 4/4.
+
+**Qué queda.**
+- La tarjeta lista lo cobrado, no lo que se debe. Los meses pendientes del casero siguen sin vista propia; el inquilino los ve en «Pagos y recibos».
+- La fianza solo sale si existe su `Payment`; el cobro por Checkout no siempre lo crea (hueco de la auditoría, ronda 38).
+- Pendientes anteriores: búsqueda de incidencias en el servidor (`q`), en móvil el historial de la ficha antes que la descripción, adjuntos de chat públicos, `console.*` fuera del logger.
+
+**Siguiente mejora propuesta.** Que el cobro de la fianza por Checkout (`checkout.session.completed` con `kind: deposit`) cree siempre su `Payment` `type: 'deposit'`, de forma idempotente por `stripePaymentIntentId`. Así la fianza tiene recibo y aparece en «Cobros y recibos». Después, la búsqueda de incidencias en el servidor.

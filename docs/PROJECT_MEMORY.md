@@ -1245,3 +1245,9 @@ Rules:
 - Frontend `pages/tenant/Payments.tsx` restyled (2026 list), «Descargar recibo» via `services/payments.downloadReceipt`, pending first, «Pagar ahora» only for the payer.
 - Verification: tsc clean; Jest `--runInBand` payments.receipt 4, duplicates+refunds 12; frontend build + 123 tests; Playwright `/tmp/ra-shots38`.
 
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 39: landlord receipts in contract detail
+
+- `GET /api/contracts/:id/payments` (`contract.earnings.controller.getContractPayments`): only `succeeded` rent/deposit, projected fields (no Stripe ids/payer/dispute), sorted by `paidAt`, active co-tenant allowed, 404 `contract_not_found` for missing/invalid id.
+- Frontend: new `components/contracts/ContractReceiptsCard` («Cobros y recibos», 6 latest + «Ver los N anteriores», «Recibo PDF») in `ContractDetail` when signed; `utils/payments.ts` (`paymentTitle`, `saveReceiptPdf`) shared with tenant `Payments`. `Breadcrumbs` no longer shows Mongo id suffixes.
+- Verification: tsc clean; Jest `--runInBand` payments.history 3; frontend build + 130 tests; Playwright `/tmp/ra-shots39`.
