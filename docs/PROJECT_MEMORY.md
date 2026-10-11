@@ -1225,3 +1225,10 @@ Rules:
 - `upload.routes`: file name `crypto.randomBytes(16).hex`; images go through new `src/utils/stripImageMetadata.ts` (JPEG drops APP1/APP13/COM keeping a minimal EXIF with Orientation; PNG drops eXIf/tEXt/iTXt/zTXt/tIME; WebP drops EXIF/XMP + VP8X flags; unknown → unchanged); a 415 deletes the whole batch.
 - Chat `POST /:id/messages`: `attachmentUrl` must pass new `src/utils/uploadUrl.ts` `isOwnUploadUrl` (`<base>/<safe-name>`, bases `/uploads`, `APP_URL/uploads`, `FRONTEND_URL/uploads`, `UPLOADS_BASE_URL`). Any external URL now 400 `attachment_domain_not_allowed`.
 - Verification: tsc clean; Jest `--runInBand` uploads+chat+new unit 6 suites / 25 tests, unit+security+e2e 14 / 58, e2e config 10/10; frontend build + 111 tests.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 35: ticket flow fixed + Incidencias UI
+
+- Backend `ticket.routes`: `/resolve` requires `awaiting_validation`; `/complete` requires `escrowId` and status in `WORK_STATUSES` (`awaiting_schedule|scheduled|in_progress`); `GET /:id` adds `appointment {start,end,status}` and `pro.displayName`. `appointments.routes`: propose requires paid ticket in `awaiting_schedule|scheduled`; accept/reject require `proposed` (409 `appointment_not_proposed`); accept only moves `awaiting_schedule|scheduled` → `scheduled`.
+- Frontend: `TicketDetail` actions per role from real statuses (validate/resolve via new `validateTicket`/`resolveTicket`; removed nonexistent `closeTicket`/`openDispute`); `TicketsList` card rows + status chips; new `utils/tickets.ts` (service/history labels, es-ES dates, next step, error texts).
+- Verification: tsc clean; Jest `--runInBand` ticket.access 4, escrow.policy 1, appointments 3, recovery 6, rbac 8, e2e 10/10; frontend build + 114 tests; Playwright `/tmp/ra-shots35`.
+

@@ -32,6 +32,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 28**: `POST /api/auth/request-reset` responde `{ ok: true }` antes de buscar la cuenta, y el correo sale después. Si el SMTP falla, solo queda en el log (la respuesta ya era la misma con o sin cuenta). Además, la agencia gestora ve ya «Contratos» en su menú, abre el detalle y descarga el borrador de los contratos de inmuebles que gestiona, y ve los co-titulares sin poder tocarlos. El administrador, que antes veía «Contratos» vacío, ve ahora todos.
 - **Al desplegar la ronda 30**: en el panel de Stripe, el webhook (`/api/stripe/webhook`) tiene que tener suscritos `charge.dispute.created`, `charge.dispute.updated` y `charge.dispute.closed`. Si no, las disputas no llegan. Tres decisiones abiertas: (1) una disputa no tiene más aviso que el historial del contrato y un `console.error` en el log, porque no hay canal de alertas para el administrador; ¿correo a soporte, al casero, o un panel? (2) Si se pierde una disputa de renta, el recibo sigue `PAID`: ¿el mes vuelve a deberse? (3) Una fianza devuelta en Stripe deja `depositPaid: true` y anota `depositRefundedAt`: ¿la devolución al terminar el contrato es así, o debe cambiar algo más (estado del contrato, aviso)?
 - **Al desplegar la ronda 34**: los mensajes de chat solo admiten adjuntos subidos a nuestro `/uploads` (relativos o bajo `APP_URL`, `FRONTEND_URL` o `UPLOADS_BASE_URL`). Si en producción `APP_URL` no es el dominio que devuelve la subida, los adjuntos darán 400 `attachment_domain_not_allowed`; conviene comprobar que `APP_URL` está puesto. Los mensajes antiguos con enlaces externos no se tocan. Además, ¿deben los adjuntos del chat ser privados (URL firmada que caduca)? Hoy son públicos para quien tenga el enlace, aunque el nombre ya no se puede adivinar.
+- **Incidencias (ronda 35), dos decisiones:** (1) el coste extra que aprueba el propietario se suma a lo que se libera al profesional (`releaseTicketEscrow`), pero el hold de Stripe solo retuvo el presupuesto, así que la captura pediría más de lo retenido. Va con el rediseño del escrow (P5); no se ha tocado. (2) Tanto el propietario («Validar») como el inquilino («Confirmar que está arreglado») liberan el pago del propietario al profesional. Desde la ronda 35, los dos solo después de que el profesional marque el trabajo terminado. ¿Debe poder liberarlo el inquilino, que no es quien paga?
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -1249,3 +1250,56 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes de interfaz: «Incidencias» (`TicketsList` y `TicketDetail`), con fechas en inglés, sin tildes, mayúsculas en las cabeceras y una tabla que no cabe en móvil.
 
 **Siguiente mejora propuesta.** Interfaz: «Incidencias» (`TicketsList` y `TicketDetail`) al sistema RentalApp 2026, con fechas en `es-ES`, tildes, tarjetas en móvil y cabeceras sin mayúsculas. Lleva dos rondas propuesta y la ronda 33 ya era en parte de seguridad.
+
+### Ronda 35 — 2026-10-11 21:55
+
+**Qué y por qué.** «Incidencias», propuesta desde la ronda 33 como mejora de interfaz. Al revisarla, el flujo estaba roto después del pago, así que lo primero ha sido arreglarlo:
+
+1. **Flujo roto en la ficha** (`TicketDetail`). Los botones miraban estados que el backend nunca pone (`done`, `in_progress`, `awaiting_approval`) y una cita que `GET /tickets/:id` no devolvía. Pagado el presupuesto:
+   - el profesional no podía marcar el trabajo terminado;
+   - el inquilino no veía la cita para aceptarla;
+   - el propietario no tenía cómo validar y liberar el pago;
+   - «Cerrar incidencia» llamaba a `/close`, que no existe.
+
+   Ahora cada parte ve el paso que le toca según el estado real:
+   - el propietario: elegir profesional, «Aprobar y pagar», decidir el extra, «Validar trabajo y liberar el pago»;
+   - el profesional: presupuesto, proponer cita, extra, «Marcar trabajo terminado»;
+   - el inquilino: aceptar la cita o pedir otra fecha, «Confirmar que está arreglado».
+
+   Además, un «Siguiente paso» por parte y los errores del backend traducidos (`getTicketErrorText`). Se quitan `closeTicket` y `openDispute` (endpoints inexistentes) y entran `validateTicket` y `resolveTicket`.
+2. **Agujeros del backend en el mismo flujo**:
+   - `POST /tickets/:id/resolve` (inquilino) liberaba el pago al profesional nada más aprobarse el presupuesto, sin trabajo hecho. Ahora exige `awaiting_validation`, como `/validate`.
+   - `/complete` se podía llamar sin presupuesto pagado o con el ticket ya cerrado; ahora exige el hold y un estado de trabajo (`awaiting_schedule`, `scheduled` o `in_progress`).
+   - Proponer cita exige el presupuesto pagado. Aceptar o rechazar exige una propuesta pendiente (409 `appointment_not_proposed`), y aceptar ya no hace retroceder a `scheduled` un ticket terminado.
+   - `GET /tickets/:id` trae `appointment` (inicio, fin y estado de la última propuesta) y `pro.displayName`.
+3. **Interfaz al sistema 2026** (`TicketsList` y `TicketDetail`, nuevo `utils/tickets.ts`):
+   - la lista pasa de tabla a filas con tarjeta, como «Contratos», y cabe en móvil;
+   - las fechas salen en `es-ES` y hora de Madrid, y los servicios en español («Fontanería» en vez de `plumbing`);
+   - el filtro de estado son chips con los estados que existen; antes ofrecía `done` y `awaiting_approval` y no `awaiting_validation`;
+   - la búsqueda es por título o servicio, la paginación muestra «Página X de Y» y el subtítulo y el estado vacío cambian según el rol;
+   - en la ficha: insignia de estado compartida (antes había una propia en mayúsculas y en inglés), datos en lista (servicio, fecha, profesional, presupuesto, cita), historial en español y «Qué puedes hacer» arriba en móvil;
+   - fuera la «Ubicación desconocida» fija, el botón de volver duplicado con la miga de pan y la cabecera duplicada del chat.
+
+**Commits.**
+- `30d5c8a` Incidencias: el inquilino ya no libera el pago antes de que el profesional termine, no hay cita ni trabajo terminado sin presupuesto pagado y GET /tickets/:id trae la cita y el nombre del profesional
+- `5c92801` Incidencias: la ficha ofrece a cada parte el paso que le toca y lista y ficha pasan al sistema 2026
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`, suite a suite:
+  - `tests/escrow/ticket.access.test.ts` 4/4. El caso nuevo recorre el flujo entero: sin pagar, cita y «terminado» dan 409; pagado, `/resolve` da 409; la cita se ve en `GET /:id`; aceptar dos veces da 409; terminar dos veces da 409; y confirmar cierra el ticket.
+  - `escrow.policy` 1/1. Liberaba el pago justo después de aprobar y falló con 409 por la regla nueva; ahora el profesional termina antes.
+  - `appointments` 3/3, con el ticket de prueba ya pagado; `escrow.release.recovery` 6/6; `src/__tests__/rbac` 8/8; e2e (`jest.config.e2e.js`) 10/10.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 31 ficheros y 114 tests OK (antes 111). `TicketDetail.test.tsx` tiene 7 casos, 3 nuevos: el profesional marca terminado, el inquilino acepta la cita y el propietario valida, sin botón de cerrar.
+- Playwright (vite local, `/api/*` simulado) a 390 y 1280 px (`/tmp/ra-shots35`): lista del inquilino, ficha del inquilino con cita propuesta y ficha del propietario por validar. No hay desbordamiento horizontal en ninguna.
+- GitNexus: `impact` LOW en `TicketsList` y `TicketDetail` (solo la ruta). `detect_changes` sale medio, con los flujos esperados (`TicketDetail → GetTicket`, `HandleAction → GetTicket`).
+
+**Qué queda.**
+- `TicketCreatePage` («Comunicar una avería») sigue con inputs sin estilo del sistema 2026 y solo cuatro servicios.
+- En móvil, el historial de la ficha sale antes de la descripción (va en la misma columna que las acciones).
+- La búsqueda de la lista filtra solo la página cargada (20), porque el backend no admite `q`.
+- Decisiones en «Para Jorge»: el extra que supera el hold y el inquilino liberando el pago.
+- Pendientes anteriores: el paso «Contrato activo» con la fecha aunque esté pendiente, la visita del propietario como «Has propuesto» para la agencia, adjuntos de chat públicos y los `console.*` fuera del logger.
+
+**Siguiente mejora propuesta.** «Comunicar una avería» (`TicketCreatePage`) al sistema 2026: contrato preseleccionado si solo hay uno, servicios del catálogo, fotos con el subidor seguro y aviso al propietario por correo al crearla, que la auditoría de mejoras deja pendiente.
+
