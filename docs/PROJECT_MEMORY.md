@@ -1060,3 +1060,10 @@ Rules:
 - "Inbox"/"Conversaciones" → "Mensajes" (header, nav, Inbox title). `ContractWizard`: padding, € inputs fixed (icon overlapped), "año(s)", accents, es-ES review. Breadcrumbs: "Nuevo contrato", "Incidencia #".
 - Files: `frontend/src/pages/tenant/TenantHome.tsx` (+test), `frontend/src/layout/AppShell.tsx`, `frontend/src/config/nav.config.json`, `frontend/src/pages/Inbox.tsx`, `frontend/src/pages/contracts/ContractWizard.tsx`, `frontend/src/components/Breadcrumbs.tsx`.
 - Verification: frontend build + 37 tests OK; Playwright screenshots 1280/390 px. Open: no navigation on mobile (<1024 px).
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 9: AI rate limit, output caps, admin-only health test
+
+- `/api/ai` + `/api/assistant` share a per-user limiter (30 / 15 min, `AI_RATE_LIMIT_MAX`; in-memory) in `src/middleware/aiRateLimit.ts`; 429 body `{ error: <Spanish message>, code: 'too_many_requests' }`.
+- `getGeminiModel(apiKey, maxOutputTokens)` in `src/services/ai.service.ts` is the only Gemini factory (also used by `assistant.service.ts`): `maxOutputTokens` + 30 s timeout. `GET /api/ai/health?test=true` → 403 for non-admins.
+- Files: `src/app.ts`, `src/middleware/aiRateLimit.ts`, `src/services/ai.service.ts`, `src/services/assistant.service.ts`, `src/controllers/ai.controller.ts`, `src/__tests__/ai.routes.test.ts`, `src/__tests__/ai.limits.test.ts`, `docs/auditoria-seguridad-2026-10-05.md`.
+- Verification: tsc clean; Jest (`--runInBand`) `src/__tests__` 30/30, e2e smoke 9/9; frontend build + 37 tests OK.

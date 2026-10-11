@@ -17,6 +17,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 1**: comprobar que `FRONTEND_URL=https://app.rentalapp.es` está en el entorno de producción; el enlace de recuperación de contraseña depende de ello (sin la variable usaría `APP_URL` o `localhost`). Los tokens de recuperación emitidos antes del despliegue dejan de valer (ahora se guarda su hash); caducan en una hora, así que el efecto es mínimo.
 - **Ronda 4, cambio de producto**: la agencia ya no puede «Copiar enlace» de invitación (era justo la vulnerabilidad A4). Si quiere ofrecer un reenvío, habría que añadir un botón «Reenviar invitación» que vuelva a mandar el email al propietario.
 - **Al desplegar la ronda 2**: si en producción existen `DEPOSIT_SUCCESS_URL` o `DEPOSIT_CANCEL_URL`, mandan sobre las URLs nuevas (`FRONTEND_URL/contracts/<id>?deposit=success|cancel`); conviene borrarlas o comprobar que apuntan a app.rentalapp.es. El cambio de cobros no necesita migración.
+- **Al desplegar la ronda 9**: las consultas a la IA (asistente Clara y descripción de anuncios) quedan limitadas a 30 cada 15 minutos por usuario. Si te parece poco o mucho, se cambia con `AI_RATE_LIMIT_MAX` en el entorno, sin tocar código.
 
 ### Ronda 1 — 2026-10-11 04:55
 
@@ -284,3 +285,31 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - Siguen pendientes de la ronda 7: `payments.duplicates` intermitente, media de reseñas sin `$inc`, enlace del co-titular sin `frontendUrl()`.
 
 **Siguiente mejora propuesta.** Navegación en móvil: un menú desplegable en `AppShell` (botón en la cabecera que abre los mismos enlaces de `nav.config.json` en un `Drawer`, que ya existe en `components/ui`), con «Mensajes» dentro. Si se prefiere seguridad: límite de peticiones y `maxOutputTokens` en `/api/ai/*`, y cerrar `/api/ai/health?test=true`.
+
+### Ronda 9 — 2026-10-11 09:27
+
+**Qué y por qué.** Seguridad y coste: la alternativa propuesta en las rondas 7 y 8. La ronda 8 fue de interfaz, así que tocaba seguridad. Cualquier usuario verificado podía llamar a Gemini sin límite (asistente Clara y descripción de anuncios) y gastar en la cuenta de Google de la plataforma. Además, `GET /api/ai/health?test=true` lanzaba una llamada real al modelo para cualquiera. La sesión se cortó a mitad de ronda por la cuota; se retomó sin cambios a medias (el worktree estaba limpio).
+
+1. **Límite de consultas** (`src/middleware/aiRateLimit.ts`): 30 consultas cada 15 minutos por usuario, compartidas entre `/api/ai` y `/api/assistant`, y montadas detrás de `authenticate`, de modo que se cuenta por usuario y no por IP. Se ajusta con `AI_RATE_LIMIT_MAX`. El 429 trae `error` en castellano, porque `Assistant.tsx` y `PropertyFormRHF.tsx` muestran ese campo tal cual, y `code: 'too_many_requests'`.
+2. **Tope de salida y tiempo de espera**: `getGeminiModel()` en `ai.service.ts` es ahora el único sitio donde se crea el modelo (antes, tres copias). Lleva `maxOutputTokens` (descripción 2048, asistente 4096, salud 256) y una espera máxima de 30 s. Los topes son holgados a propósito: los modelos con razonamiento cuentan esos tokens dentro de `maxOutputTokens`, y un tope bajo devolvería respuestas vacías.
+3. **Salud de la IA**: `?test=true` da 403 a quien no es admin. La comprobación sin `test` sigue abierta a todos los usuarios verificados (no llama al modelo).
+
+**Commits.**
+- `4e48d7f` IA: límite de consultas por usuario, tope de tokens y prueba de salud solo para admin
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores; `tsc -p tsconfig.spec.json` sin errores en los ficheros tocados.
+- Jest `--runInBand`:
+  - nuevo `src/__tests__/ai.limits.test.ts` (2): el modelo se crea con `maxOutputTokens` y `timeout`; la tercera consulta del mismo usuario (mezclando `/api/ai` y `/api/assistant`, con límite 2) da 429 con el mensaje, y otro usuario sigue pasando;
+  - `ai.routes.test.ts` (5, antes 3): `?test=true` OK como admin y 403 como propietario; salud básica OK para un inquilino;
+  - todo `src/__tests__`: 8 suites, 30 tests OK;
+  - e2e `smoke.e2e.test.ts`: 9 OK.
+- Frontend (sin cambios): build OK; 16 ficheros, 37 tests OK.
+- GitNexus: `impact` LOW en `checkAiHealth`, `answerWithClara` y `generatePropertyDescription`. `detect_changes` sale «high» porque los 7 flujos `queryAssistant` pasan por `answerWithClara`; son justo los flujos que se querían cambiar. `buildPrompt` y las constantes solo aparecen por desplazamiento de líneas.
+
+**Qué queda.**
+- El límite vive en memoria, como el resto de limitadores: con varias instancias, cada una cuenta por su lado (ver auditoría de mejoras, «2.ª instancia»).
+- No hay tope diario ni de gasto total; si hiciera falta, un contador en Mongo por usuario y día.
+- Pendientes de rondas anteriores: navegación en móvil (lo más grave de la interfaz), `payments.duplicates` intermitente, media de reseñas sin `$inc`, enlace del co-titular sin `frontendUrl()`, `/metrics` público y enumeración de cuentas en el login.
+
+**Siguiente mejora propuesta.** Navegación en móvil (propuesta en la ronda 8): botón de menú en la cabecera de `AppShell` que abra los enlaces de `nav.config.json` en el `Drawer` de `components/ui`, con «Mensajes» dentro, revisado con capturas a 390 px. Si se prefiere seguridad: cerrar `/metrics` y quitar `NODE_ENV` de `/health`.
