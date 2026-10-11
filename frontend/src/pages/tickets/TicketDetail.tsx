@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams } from "react-router-dom";
 import {
   getTicket,
   assignPro,
@@ -9,30 +9,43 @@ import {
   requestExtra,
   decideExtra,
   completeWork,
-  closeTicket,
+  validateTicket,
+  resolveTicket,
 } from "../../services/tickets";
 import { proposeAppointment as proposeAppt, acceptAppointment, rejectAppointment } from "../../services/appointments";
 import ChatPanel from "../../components/ChatPanel";
 import { searchPros } from "../../services/pros";
 import { useAuth } from "../../context/AuthContext";
 import { useNotify } from "../../utils/notify";
-import CopyLinkButton from "../../components/CopyLinkButton";
 import Card from "../../components/ui/Card";
 import Button from "../../components/ui/Button";
 import Input from "../../components/ui/Input";
+import StatusBadge from "../../components/ui/StatusBadge";
 import PaymentModal from "../../components/payments/PaymentModal";
+import { Calendar, User } from "lucide-react";
 import {
-  ArrowLeft, CheckCircle, AlertCircle, Wrench,
-  User, MapPin, Calendar, MessageSquare
-} from "lucide-react";
+  formatEuros,
+  formatTicketDate,
+  formatTicketDateTime,
+  getHistoryLabel,
+  getServiceLabel,
+  getTicketErrorText,
+  getTicketNextStep,
+} from "../../utils/tickets";
+
+/** Estados en los que el profesional trabaja (pagado y sin terminar), como WORK_STATUSES del backend. */
+const WORK_STATUSES = ["awaiting_schedule", "scheduled", "in_progress"];
+
+const sectionTitle = "text-sm font-semibold text-gray-900";
+const panel = "space-y-3 rounded-lg border border-[var(--border)] bg-gray-50 p-3";
 
 export default function TicketDetail() {
   const { id } = useParams();
-  const nav = useNavigate();
   const { user } = useAuth();
   const [ticket, setTicket] = useState<any>(null);
   const [pros, setPros] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
 
   const [amount, setAmount] = useState<number>(0);
   const [note, setNote] = useState("");
@@ -59,251 +72,284 @@ export default function TicketDetail() {
 
   useEffect(() => { reload(); }, [reload]);
 
-  const can = (statuses: string[]) => statuses.includes(ticket?.status);
-
   const handleAction = async (actionFn: () => Promise<any>, successMsg: string) => {
+    setBusy(true);
     try {
       await actionFn();
       push("success", successMsg);
-      reload();
+      await reload();
     } catch (err: any) {
-      push("error", err?.response?.data?.error || "Error al realizar la acción");
+      push("error", getTicketErrorText(err));
+    } finally {
+      setBusy(false);
     }
   };
 
   const loadPros = async () => {
     setShowProSearch(true);
-    const list = await searchPros(ticket?.city, ticket?.service);
-    setPros(list.items || []);
-  };
-
-  const StatusBadge = ({ status }: { status: string }) => {
-    const styles: any = {
-      open: "bg-blue-100 text-blue-800 border-blue-200",
-      quoted: "bg-purple-100 text-purple-800 border-purple-200",
-      in_progress: "bg-orange-100 text-orange-800 border-orange-200",
-      awaiting_schedule: "bg-yellow-100 text-yellow-800 border-yellow-200",
-      done: "bg-green-100 text-green-800 border-green-200",
-      closed: "bg-gray-100 text-gray-800 border-gray-200",
-    };
-    return (
-      <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase border ${styles[status] || styles.closed}`}>
-        {status.replace('_', ' ')}
-      </span>
-    );
+    try {
+      const list = await searchPros(ticket?.city, ticket?.service);
+      setPros(list.items || []);
+    } catch {
+      setPros([]);
+    }
   };
 
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando detalles...</div>;
-  if (!ticket) return <div className="p-8 text-center text-red-500">Incidencia no encontrada</div>;
+  if (!ticket) return <div className="p-8 text-center text-red-600">Incidencia no encontrada</div>;
+
+  const status: string = ticket.status;
+  const paid = Boolean(ticket.escrowId);
+  const working = paid && WORK_STATUSES.includes(status);
+  const appointment = ticket.appointment as { start?: string; status?: string } | null;
+  const appointmentProposed = appointment?.status === "proposed";
+  const proName = ticket.pro?.displayName || "Profesional asignado";
+  const nextStep = getTicketNextStep(ticket, role);
+  const quoteAmount = formatEuros(ticket.quote?.amount);
+  const history = (ticket.history || []).slice().reverse();
+
+  const actions: React.ReactNode[] = [];
+
+  // Propietario: elegir profesional mientras no haya presupuesto pagado
+  if (role === "landlord" && !paid && ["open", "quoted"].includes(status)) {
+    actions.push(
+      ticket.proId ? (
+        <div key="pro" className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] p-3">
+          <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-gray-900">
+            <User size={16} className="shrink-0 text-gray-400" aria-hidden="true" /> <span className="truncate">{proName}</span>
+          </span>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => handleAction(() => unassignPro(ticket._id), "Profesional retirado")}
+            className="text-sm font-medium text-gray-600 underline-offset-2 hover:underline"
+          >
+            Cambiar
+          </button>
+        </div>
+      ) : (
+        <div key="pro" className="space-y-3">
+          <Button onClick={loadPros} className="w-full">Buscar profesional</Button>
+          {showProSearch && (
+            <ul className="max-h-60 space-y-2 overflow-y-auto">
+              {pros.length === 0 && <li className="text-sm text-gray-500">No hay profesionales disponibles para este servicio.</li>}
+              {pros.map(pro => (
+                <li key={pro._id} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] p-2 text-sm">
+                  <span className="min-w-0 truncate">
+                    <span className="block font-medium text-gray-900">{pro.displayName}</span>
+                    {pro.city && <span className="text-gray-500">{pro.city}</span>}
+                  </span>
+                  <Button size="sm" variant="secondary" disabled={busy} onClick={() => handleAction(() => assignPro(ticket._id, pro._id), "Profesional asignado")}>
+                    Asignar
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )
+    );
+  }
+
+  if (role === "landlord" && status === "quoted" && ticket.quote && !paid) {
+    actions.push(
+      <div key="approve" className={panel}>
+        <p className="text-sm text-gray-700">Presupuesto de {proName}: <strong className="tabular-nums text-gray-900">{quoteAmount}</strong></p>
+        {ticket.quote.note && <p className="text-sm text-gray-600">{ticket.quote.note}</p>}
+        <Button onClick={() => setShowPayment(true)} className="w-full">Aprobar y pagar</Button>
+      </div>
+    );
+  }
+
+  if (role === "landlord" && ticket.extra?.status === "pending") {
+    actions.push(
+      <div key="extra-decide" className={panel}>
+        <p className="text-sm text-gray-700">Coste extra solicitado: <strong className="tabular-nums text-gray-900">{formatEuros(ticket.extra.amount)}</strong></p>
+        {ticket.extra.reason && <p className="text-sm text-gray-600">{ticket.extra.reason}</p>}
+        <div className="flex gap-2">
+          <Button size="sm" disabled={busy} onClick={() => handleAction(() => decideExtra(ticket._id, "approved"), "Coste extra aprobado")} className="flex-1">Aprobar</Button>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => handleAction(() => decideExtra(ticket._id, "rejected"), "Coste extra rechazado")} className="flex-1">Rechazar</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (role === "landlord" && status === "awaiting_validation") {
+    actions.push(
+      <Button key="validate" disabled={busy} onClick={() => handleAction(() => validateTicket(ticket._id), "Trabajo validado y pago liberado")} className="w-full">
+        Validar trabajo y liberar el pago
+      </Button>
+    );
+  }
+
+  // Profesional: presupuesto hasta que se pague
+  if (role === "pro" && !paid && ["open", "quoted"].includes(status)) {
+    actions.push(
+      <div key="quote" className="space-y-3">
+        <p className={sectionTitle}>{ticket.quote ? "Actualizar presupuesto" : "Enviar presupuesto"}</p>
+        <div className="flex gap-2">
+          <Input type="number" min={1} placeholder="€" aria-label="Importe en euros" value={amount || ''} onChange={e => setAmount(Number(e.target.value))} className="w-24" />
+          <Input placeholder="Nota (opcional)" value={note} onChange={e => setNote(e.target.value)} className="flex-1" />
+        </div>
+        <Button onClick={() => handleAction(() => sendQuote(ticket._id, amount, note), "Presupuesto enviado")} disabled={!amount || busy} className="w-full">
+          Enviar presupuesto
+        </Button>
+      </div>
+    );
+  }
+
+  if (role === "pro" && paid && ["awaiting_schedule", "scheduled"].includes(status)) {
+    actions.push(
+      <div key="propose" className="space-y-3">
+        <p className={`${sectionTitle} flex items-center gap-2`}>
+          <Calendar size={16} aria-hidden="true" /> {appointment ? "Proponer otra fecha" : "Proponer cita"}
+        </p>
+        <input
+          type="datetime-local"
+          aria-label="Fecha y hora de la cita"
+          className="w-full rounded-lg border border-[var(--border)] p-2 text-sm"
+          value={when}
+          onChange={(e) => setWhen(e.target.value)}
+        />
+        <Button variant="secondary" onClick={() => handleAction(() => proposeAppt(ticket._id, when), "Cita propuesta")} disabled={!when || busy} className="w-full">
+          Enviar propuesta
+        </Button>
+      </div>
+    );
+  }
+
+  if (role === "pro" && working && !ticket.extra) {
+    actions.push(
+      <details key="extra" className="rounded-lg border border-[var(--border)] p-3">
+        <summary className="cursor-pointer text-sm font-medium text-gray-700">Solicitar un coste extra</summary>
+        <div className="mt-3 space-y-3">
+          <Input type="number" min={1} placeholder="Importe en €" value={extraAmount || ''} onChange={e => setExtraAmount(Number(e.target.value))} />
+          <Input placeholder="Motivo" value={extraReason} onChange={e => setExtraReason(e.target.value)} />
+          <Button variant="secondary" onClick={() => handleAction(() => requestExtra(ticket._id, extraAmount, extraReason), "Coste extra solicitado")} disabled={!extraAmount || busy} className="w-full">
+            Solicitar
+          </Button>
+        </div>
+      </details>
+    );
+  }
+
+  if (role === "pro" && working) {
+    actions.push(
+      <Button key="complete" disabled={busy} onClick={() => handleAction(() => completeWork(ticket._id), "Trabajo marcado como terminado")} className="w-full">
+        Marcar trabajo terminado
+      </Button>
+    );
+  }
+
+  // Inquilino: cita y confirmación final
+  if (role === "tenant" && appointmentProposed && ["awaiting_schedule", "scheduled"].includes(status)) {
+    actions.push(
+      <div key="appointment" className={panel}>
+        <p className="text-sm text-gray-700">Cita propuesta: <strong className="text-gray-900">{formatTicketDateTime(appointment?.start)}</strong></p>
+        <div className="flex flex-col gap-2">
+          <Button size="sm" disabled={busy} onClick={() => handleAction(() => acceptAppointment(ticket._id), "Cita aceptada")} className="w-full">Aceptar</Button>
+          <Button size="sm" variant="secondary" disabled={busy} onClick={() => handleAction(() => rejectAppointment(ticket._id), "Has pedido otra fecha")} className="w-full">Pedir otra fecha</Button>
+        </div>
+      </div>
+    );
+  }
+
+  if (role === "tenant" && status === "awaiting_validation") {
+    actions.push(
+      <Button key="resolve" disabled={busy} onClick={() => handleAction(() => resolveTicket(ticket._id), "Incidencia cerrada")} className="w-full">
+        Confirmar que está arreglado
+      </Button>
+    );
+  }
+
+  const facts: Array<[string, React.ReactNode]> = [
+    ["Servicio", getServiceLabel(ticket.service)],
+    ["Comunicada el", formatTicketDate(ticket.createdAt) || "—"],
+  ];
+  if (ticket.proId) facts.push(["Profesional", proName]);
+  if (quoteAmount) facts.push(["Presupuesto", <span className="tabular-nums">{quoteAmount}{paid ? " · pagado" : ""}</span>]);
+  if (appointment?.start) {
+    facts.push([
+      "Cita",
+      `${formatTicketDateTime(appointment.start)}${appointment.status === "accepted" ? "" : appointment.status === "proposed" ? " (propuesta)" : " (pendiente de nueva fecha)"}`,
+    ]);
+  }
 
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
+    <div className="mx-auto max-w-5xl space-y-6 pb-10">
+      <div className="space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h1 className="text-2xl font-semibold text-gray-900 [overflow-wrap:anywhere]">{ticket.title}</h1>
+          <StatusBadge status={status} />
+        </div>
+        {nextStep && <p className="text-sm text-gray-600"><span className="font-medium text-gray-900">Siguiente paso:</span> {nextStep}</p>}
+      </div>
 
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <button onClick={() => nav(-1)} className="mt-1 p-2 hover:bg-gray-100 rounded-full transition-colors">
-            <ArrowLeft size={20} className="text-gray-500" />
-          </button>
-          <div>
-            <div className="flex items-center gap-3 mb-1">
-              <h1 className="text-2xl font-bold text-gray-900">{ticket.title}</h1>
-              <StatusBadge status={ticket.status} />
-            </div>
-            <div className="flex items-center gap-4 text-sm text-gray-500">
-              <span className="flex items-center gap-1"><Wrench size={14}/> {ticket.service}</span>
-              <span className="flex items-center gap-1"><MapPin size={14}/> {ticket.propertyAddress || "Ubicación desconocida"}</span>
-              <span className="font-mono text-xs text-gray-400">#{ticket._id.slice(-6)}</span>
-            </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+        <div className="space-y-6 lg:col-span-2">
+          <Card className="p-5">
+            <h2 className={sectionTitle}>Descripción</h2>
+            <p className="mt-2 whitespace-pre-wrap text-gray-700 [overflow-wrap:anywhere]">{ticket.description}</p>
+            <dl className="mt-5 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-gray-100 pt-4 text-sm sm:grid-cols-2">
+              {facts.map(([label, value]) => (
+                <div key={label}>
+                  <dt className="text-gray-500">{label}</dt>
+                  <dd className="font-medium text-gray-900">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          </Card>
+
+          <div className="h-[560px] overflow-hidden">
+            <ChatPanel
+              kind="direct"
+              refId={role === 'landlord' || role === 'pro' ? ticket.openedBy : ticket.ownerId}
+            />
           </div>
         </div>
-        <div className="flex gap-2">
-          <CopyLinkButton />
-          {(role === "landlord" || role === "tenant") && can(["done"]) && (
-             <Button variant="secondary" onClick={() => handleAction(() => closeTicket(ticket._id), "Incidencia cerrada")}>
-               Cerrar Incidencia
-             </Button>
+
+        <div className="order-first space-y-6 lg:order-none">
+          <Card className="space-y-4 p-5">
+            <h2 className={sectionTitle}>Qué puedes hacer</h2>
+            {actions.length > 0 ? actions : (
+              <p className="text-sm text-gray-500">
+                {status === "closed" ? "Esta incidencia está cerrada." : "Ahora no te toca hacer nada. Te avisaremos cuando cambie."}
+              </p>
+            )}
+          </Card>
+
+          {history.length > 0 && (
+            <Card className="p-5">
+              <h2 className={sectionTitle}>Historial</h2>
+              <ol className="mt-3 space-y-3 border-l border-gray-200 pl-4">
+                {history.slice(0, 8).map((h: any, i: number) => (
+                  <li key={i} className="relative">
+                    <span className="absolute -left-[21px] top-1.5 h-2 w-2 rounded-full bg-gray-300" aria-hidden="true" />
+                    <p className="text-sm text-gray-900">{getHistoryLabel(h.action)}</p>
+                    <p className="text-xs text-gray-500">{formatTicketDateTime(h.ts || h.date)}</p>
+                  </li>
+                ))}
+              </ol>
+            </Card>
           )}
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        <div className="lg:col-span-2 space-y-6">
-
-          <Card className="p-6">
-            <h3 className="font-semibold text-gray-900 mb-2">Descripción del problema</h3>
-            <p className="text-gray-600 whitespace-pre-wrap">{ticket.description}</p>
-          </Card>
-
-          <div className="bg-white border border-gray-200 rounded-xl overflow-hidden shadow-sm h-[600px] flex flex-col">
-            <div className="p-4 border-b border-gray-100 bg-gray-50 flex items-center gap-2">
-              <MessageSquare size={18} className="text-gray-500"/>
-              <span className="font-semibold text-gray-700">Actividad y Comentarios</span>
-            </div>
-            <div className="flex-1 overflow-hidden">
-              <ChatPanel
-                kind="direct"
-                refId={
-                  role === 'tenant'
-                    ? ticket.ownerId
-                    : role === 'landlord'
-                      ? ticket.openedBy
-                      : role === 'pro'
-                        ? ticket.openedBy
-                        : ticket.ownerId
-                }
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-6">
-
-          <Card className="p-5 border-l-4 border-l-blue-500 shadow-md">
-            <h3 className="font-bold text-gray-900 mb-4 flex items-center gap-2">
-              <AlertCircle className="text-blue-500" size={20}/> Acciones Requeridas
-            </h3>
-
-            {role === "landlord" && can(["open", "quoted", "awaiting_schedule"]) && (
-              <div className="space-y-4">
-                {!ticket.pro ? (
-                  <>
-                    <p className="text-sm text-gray-600">No hay profesional asignado.</p>
-                    <Button onClick={loadPros} className="w-full">Buscar Profesional</Button>
-                    {showProSearch && (
-                      <div className="mt-4 space-y-2 max-h-60 overflow-y-auto border rounded p-2 bg-gray-50">
-                        {pros.length === 0 && <p className="text-xs text-gray-500 text-center">No se encontraron profesionales cercanos.</p>}
-                        {pros.map(pro => (
-                          <div key={pro._id} className="flex items-center justify-between bg-white p-2 rounded border text-sm">
-                            <div className="flex-1 truncate pr-2">
-                              <span className="font-medium block">{pro.displayName}</span>
-                              <span className="text-xs text-gray-500">{pro.city}</span>
-                            </div>
-                            <Button size="sm" variant="secondary" onClick={() => handleAction(() => assignPro(ticket._id, pro._id), "Profesional asignado")}>Asignar</Button>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="bg-blue-50 p-3 rounded-lg flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <User size={16} className="text-blue-600"/>
-                      <span className="text-sm font-medium text-blue-900">{ticket.pro.displayName}</span>
-                    </div>
-                    <button onClick={() => handleAction(() => unassignPro(ticket._id), "Desasignado")} className="text-xs text-red-600 hover:underline">Cambiar</button>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {role === "pro" && can(["open"]) && (
-              <div className="space-y-3">
-                <p className="text-sm font-medium text-gray-700">Enviar Presupuesto</p>
-                <div className="flex gap-2">
-                  <Input type="number" placeholder="€" value={amount || ''} onChange={e => setAmount(Number(e.target.value))} className="w-24"/>
-                  <Input placeholder="Nota (opcional)" value={note} onChange={e => setNote(e.target.value)} className="flex-1"/>
-                </div>
-                <Button onClick={() => handleAction(() => sendQuote(ticket._id, amount, note), "Presupuesto enviado")} disabled={!amount} className="w-full">Enviar Cotización</Button>
-              </div>
-            )}
-
-            {role === "landlord" && can(["quoted"]) && ticket.quote && (
-              <div className="space-y-3 bg-yellow-50 p-3 rounded-lg border border-yellow-100">
-                <p className="text-sm text-yellow-800">Presupuesto recibido: <strong>{ticket.quote.amount}€</strong></p>
-                {ticket.quote.note && <p className="text-xs text-yellow-700 italic">"{ticket.quote.note}"</p>}
-                <Button onClick={() => setShowPayment(true)} className="w-full">Aprobar y Pagar</Button>
-              </div>
-            )}
-
-            {role === "pro" && can(["in_progress", "awaiting_approval"]) && !ticket.extra && (
-              <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
-                <p className="text-sm font-medium text-gray-700">Solicitar Extra</p>
-                <Input type="number" placeholder="Importe €" value={extraAmount || ''} onChange={e => setExtraAmount(Number(e.target.value))} />
-                <Input placeholder="Motivo" value={extraReason} onChange={e => setExtraReason(e.target.value)} />
-                <Button variant="secondary" onClick={() => handleAction(() => requestExtra(ticket._id, extraAmount, extraReason), "Extra solicitado")} disabled={!extraAmount} className="w-full">Solicitar</Button>
-              </div>
-            )}
-
-            {role === "landlord" && ticket.extra?.status === "pending" && (
-              <div className="space-y-3 bg-orange-50 p-3 rounded-lg border border-orange-100 mt-4">
-                <p className="text-sm text-orange-800 font-bold">Solicitud de Extra: {ticket.extra.amount}€</p>
-                <p className="text-xs text-orange-700">{ticket.extra.reason}</p>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => handleAction(() => decideExtra(ticket._id, "approved"), "Extra Aprobado")} className="flex-1 bg-green-600 hover:bg-green-700">Aprobar</Button>
-                  <Button size="sm" variant="danger" onClick={() => handleAction(() => decideExtra(ticket._id, "rejected"), "Extra Rechazado")} className="flex-1">Rechazar</Button>
-                </div>
-              </div>
-            )}
-
-            {can(["quoted", "awaiting_schedule", "in_progress"]) && !ticket.appointment && (
-              <div className="mt-4 pt-4 border-t border-gray-100 space-y-3">
-                <p className="text-sm font-medium text-gray-700 flex items-center gap-2"><Calendar size={16}/> Proponer Cita</p>
-                <input
-                  type="datetime-local"
-                  className="w-full p-2 border border-gray-300 rounded text-sm"
-                  value={when}
-                  onChange={(e) => setWhen(e.target.value)}
-                />
-                <Button variant="secondary" onClick={() => handleAction(() => proposeAppt(ticket._id, when), "Cita propuesta")} disabled={!when} className="w-full">Enviar Propuesta</Button>
-              </div>
-            )}
-
-            {role === "tenant" && can(["awaiting_schedule"]) && ticket.appointment && !ticket.appointment.confirmed && (
-              <div className="mt-4 bg-blue-50 p-3 rounded space-y-2">
-                <p className="text-sm font-medium text-blue-900">Propuesta: {new Date(ticket.appointment.date).toLocaleString()}</p>
-                <div className="flex gap-2">
-                  <Button size="sm" onClick={() => handleAction(() => acceptAppointment(ticket._id), "Cita aceptada")} className="flex-1">Aceptar</Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleAction(() => rejectAppointment(ticket._id), "Cita rechazada")} className="flex-1 text-red-600">Rechazar</Button>
-                </div>
-              </div>
-            )}
-
-            {role === "pro" && can(["in_progress"]) && (
-              <div className="mt-6 pt-6 border-t border-gray-200">
-                <Button size="lg" onClick={() => handleAction(() => completeWork(ticket._id), "Trabajo completado")} className="w-full bg-green-600 hover:bg-green-700 text-white shadow-lg">
-                  <CheckCircle size={20} className="mr-2"/> Marcar Completado
-                </Button>
-              </div>
-            )}
-
-            {ticket.status === 'closed' && (
-              <p className="text-sm text-gray-500 italic text-center py-4">Esta incidencia está cerrada.</p>
-            )}
-          </Card>
-
-          <div className="space-y-4">
-            <Card className="p-4 bg-gray-50 border-gray-200">
-              <h4 className="text-xs font-bold text-gray-500 uppercase mb-3">Historial</h4>
-              <div className="space-y-3 pl-2 border-l-2 border-gray-200">
-                {ticket.history?.slice().reverse().slice(0, 5).map((h: any, i: number) => (
-                  <div key={i} className="relative pl-4">
-                    <div className="absolute -left-[5px] top-1.5 w-2 h-2 rounded-full bg-gray-300"></div>
-                    <p className="text-xs text-gray-800 font-medium">{h.action}</p>
-                    <p className="text-[10px] text-gray-500">{new Date(h.ts || h.date).toLocaleString()}</p>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          </div>
-
-        </div>
-      </div>
-      {ticket && ticket.quote && (
+      {ticket.quote && (
         <PaymentModal
           open={showPayment}
           onClose={() => setShowPayment(false)}
           amountEUR={ticket.quote.amount}
-          title="Aprobar Presupuesto"
-          description={`Vas a pagar la reparación de: ${ticket.title}`}
+          title="Aprobar presupuesto"
+          description={`Vas a pagar la reparación: ${ticket.title}`}
           onSuccess={async () => {
             try {
               await approveQuote(ticket._id);
               setShowPayment(false);
-              push("success", "Pago realizado y presupuesto aprobado con éxito");
+              push("success", "Presupuesto aprobado y pagado");
               reload();
-            } catch {
-              push("error", "El pago pasó, pero hubo un error al actualizar el ticket");
+            } catch (err) {
+              push("error", getTicketErrorText(err, "No se pudo aprobar el presupuesto"));
             }
           }}
         />

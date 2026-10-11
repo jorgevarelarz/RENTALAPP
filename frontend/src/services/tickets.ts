@@ -58,12 +58,14 @@ export async function completeWork(id: string, invoiceUrl?: string) {
   return data;
 }
 
-export async function closeTicket(id: string) {
-  const { data } = await axios.post(`/api/tickets/${id}/close`);
+/** El propietario valida el trabajo terminado y libera el pago al profesional. */
+export async function validateTicket(id: string) {
+  const { data } = await axios.post(`/api/tickets/${id}/validate`);
   return data;
 }
 
-export async function openDispute(id: string, reason: string) {
-  const { data } = await axios.post(`/api/tickets/${id}/dispute`, { reason });
+/** El inquilino confirma que la avería está arreglada (también libera el pago). */
+export async function resolveTicket(id: string) {
+  const { data } = await axios.post(`/api/tickets/${id}/resolve`);
   return data;
 }
