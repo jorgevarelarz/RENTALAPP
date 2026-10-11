@@ -149,6 +149,8 @@ const userSchema = new Schema(
     // Hash SHA-256 del token de recuperación (nunca el token en claro).
     resetToken: { type: String, select: false },
     resetTokenExp: { type: Date, select: false },
+    // Versión de sesión: va en el JWT (`tv`). Subirla invalida todas las sesiones abiertas.
+    tokenVersion: { type: Number, default: 0 },
     institutionScope: { type: institutionScopeSchema, default: undefined },
   },
   { timestamps: true },

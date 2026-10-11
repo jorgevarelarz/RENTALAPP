@@ -1,6 +1,5 @@
 import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
-import { getJwtSecret } from '../utils/getJwtSecret';
+import { signAuthToken } from '../utils/authToken';
 import { frontendUrl } from '../utils/frontendUrl';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 import {
@@ -53,12 +52,6 @@ function clearFlowCookie(res: Response) {
     sameSite: secure ? 'none' : 'lax',
     secure,
   });
-}
-
-function authPayload(user: any) {
-  const payload: any = { id: user._id, role: user.role };
-  if (user.isVerified) payload.isVerified = true;
-  return payload;
 }
 
 function publicUser(user: any) {
@@ -133,7 +126,7 @@ export const finishOAuth = async (req: Request, res: Response) => {
 export const exchangeOAuthCode = async (req: Request, res: Response) => {
   const result = await consumeOAuthLoginCode(req.body.code);
   if (!result) return res.status(400).json({ message: 'El acceso ha caducado. Inténtalo de nuevo.' });
-  const token = jwt.sign(authPayload(result.user), getJwtSecret(), { expiresIn: '7d' });
+  const token = signAuthToken(result.user);
   return res.json({
     token,
     user: publicUser(result.user),

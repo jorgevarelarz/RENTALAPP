@@ -1,19 +1,11 @@
 import { Request, Response } from 'express';
 import { User } from '../models/user.model';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { sendEmail } from '../utils/email';
-import { getJwtSecret } from '../utils/getJwtSecret';
+import { signAuthToken } from '../utils/authToken';
 import { frontendUrl } from '../utils/frontendUrl';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
-
-const EFFECTIVE_JWT_SECRET = getJwtSecret();
-const authTokenPayload = (user: any) => {
-  const payload: any = { id: user._id, role: user.role };
-  if (user.isVerified) payload.isVerified = true;
-  return payload;
-};
 
 export const INVALID_CREDENTIALS = 'Usuario o contraseña incorrectos';
 
@@ -42,7 +34,7 @@ export const register = async (req: Request, res: Response) => {
       meta: { userId: String(user._id), role: user.role },
     });
     const isVerified = Boolean((user as any).isVerified);
-    const token = jwt.sign(authTokenPayload(user), EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
+    const token = signAuthToken(user);
     res.status(201).json({
       token,
       user: { _id: user._id, email: user.email, role: user.role, isVerified },
@@ -76,7 +68,7 @@ export const login = async (req: Request, res: Response) => {
     });
     // Generate and return JWT
     const isVerified = Boolean((user as any).isVerified);
-    const token = jwt.sign(authTokenPayload(user), EFFECTIVE_JWT_SECRET, { expiresIn: '7d' });
+    const token = signAuthToken(user);
     res.json({
       token,
       user: { _id: user._id, email: user.email, role: user.role, isVerified },
@@ -132,6 +124,8 @@ export const resetPassword = async (req: Request, res: Response) => {
     user.passwordHash = await bcrypt.hash(password, 10);
     user.resetToken = undefined;
     user.resetTokenExp = undefined;
+    // Cierra las sesiones abiertas: quien tuviera la contraseña antigua deja de entrar.
+    (user as any).tokenVersion = (Number((user as any).tokenVersion) || 0) + 1;
     // Quien recupera la cuenta por email demuestra que controla ese correo.
     if (!(user as any).emailVerifiedAt) (user as any).emailVerifiedAt = new Date();
     await user.save();

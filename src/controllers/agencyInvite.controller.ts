@@ -1,7 +1,6 @@
 import type { Request, Response } from 'express';
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { z, ZodError } from 'zod';
 import { AgencyInvite } from '../models/agencyInvite.model';
 import { User } from '../models/user.model';
@@ -9,7 +8,7 @@ import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
 import { Verification } from '../models/verification.model';
 import { sendEmail } from '../utils/email';
-import { getJwtSecret } from '../utils/getJwtSecret';
+import { signAuthToken } from '../utils/authToken';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 import { logger } from '../utils/logger';
 import { frontendUrl } from '../utils/frontendUrl';
@@ -232,9 +231,7 @@ export async function acceptInvite(req: Request, res: Response) {
   });
 
   const isVerified = Boolean((user as any).isVerified);
-  const tokenPayload: any = { id: user._id, role: user.role };
-  if (isVerified) tokenPayload.isVerified = true;
-  const token = jwt.sign(tokenPayload, getJwtSecret(), { expiresIn: '7d' });
+  const token = signAuthToken(user);
   return res.status(201).json({
     token,
     user: { _id: user._id, email: user.email, role: user.role, name: user.name, isVerified },

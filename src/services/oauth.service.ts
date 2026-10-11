@@ -239,6 +239,8 @@ export async function resolveSocialUser(
       user.set('passwordHash', undefined);
       user.set('resetToken', undefined);
       user.set('resetTokenExp', undefined);
+      // Y se cierran las sesiones que ya tuviera abiertas con esa contraseña (A3).
+      user.set('tokenVersion', (Number((user as any).tokenVersion) || 0) + 1);
       (user as any).emailVerifiedAt = new Date();
     }
     if (!user.avatar && profile.avatar) user.avatar = profile.avatar;

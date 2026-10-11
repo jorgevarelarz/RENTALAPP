@@ -130,6 +130,7 @@ export const updateUser = async (req: Request, res: Response) => {
     delete updates.passwordHash;
     delete updates.resetToken;
     delete updates.resetTokenExp;
+    delete updates.tokenVersion;
     delete updates.stripeAccountId;
     delete updates.stripeCustomerId;
     delete updates.tenantPro;
