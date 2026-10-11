@@ -2,7 +2,9 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { authenticate } from '../middleware/auth.middleware';
+import { stripImageMetadata } from '../utils/stripImageMetadata';
 
 const router = Router();
 
@@ -45,7 +47,8 @@ async function detectFileType(filePath: string): Promise<{ mime: string; ext: st
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename: (_req, file, cb) => {
-    const name = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    // Nombre imposible de adivinar: los ficheros se sirven sin autenticación
+    const name = crypto.randomBytes(16).toString('hex');
     cb(null, name);
   },
 });
@@ -77,12 +80,23 @@ router.post('/uploads/images', authenticate as any, (req, res) => {
         for (const file of files) {
           const detected = await detectFileType(file.path);
           if (!detected || !ALLOWED_MIME.has(detected.mime) || !ALLOWED_EXT.has(detected.ext)) {
-            await fs.promises.unlink(file.path);
+            // Fuera también el resto del lote: nada a medias en /uploads
+            await Promise.all([
+              ...files.map(f => fs.promises.rm(f.path, { force: true })),
+              ...renamed.map(n => fs.promises.rm(path.join(UPLOAD_DIR, n), { force: true })),
+            ]);
             return res.status(415).json({ error: 'invalid_file_type' });
           }
           const targetName = `${path.basename(file.path)}.${detected.ext}`;
           const targetPath = path.join(UPLOAD_DIR, targetName);
-          await fs.promises.rename(file.path, targetPath);
+          if (detected.ext === 'pdf') {
+            await fs.promises.rename(file.path, targetPath);
+          } else {
+            // Sin EXIF (GPS, cámara, fecha), XMP ni comentarios
+            const original = await fs.promises.readFile(file.path);
+            await fs.promises.writeFile(targetPath, stripImageMetadata(original, detected.ext));
+            await fs.promises.unlink(file.path);
+          }
           renamed.push(targetName);
         }
         const base = process.env.APP_URL?.replace(/\/$/, '') || '';
