@@ -1304,7 +1304,7 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 **Siguiente mejora propuesta.** «Comunicar una avería» (`TicketCreatePage`) al sistema 2026: contrato preseleccionado si solo hay uno, servicios del catálogo, fotos con el subidor seguro y aviso al propietario por correo al crearla, que la auditoría de mejoras deja pendiente.
 
 
-### Ronda 36 — 2026-10-11 22:05
+### Ronda 36 — 2026-10-11 22:02
 
 **Qué y por qué.** «Comunicar una avería» (`TicketCreatePage`), la mejora propuesta en la ronda 35. Al revisarla salieron también fallos del backend en la misma ruta:
 
