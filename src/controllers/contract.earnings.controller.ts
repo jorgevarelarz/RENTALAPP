@@ -2,22 +2,31 @@ import { Request, Response } from 'express';
 import { Contract } from '../models/contract.model';
 import { Payment } from '../models/payment.model';
 // @ts-ignore
-import { ensureCanReadContract } from '../utils/contractAccess';
+import { ensureCanReadContract, isActiveCoTenant } from '../utils/contractAccess';
 import { csvRow } from '../utils/csv';
 
+// Lo justo para listar cobros y pedir su recibo; sin IDs de Stripe ni disputas.
+const CONTRACT_PAYMENT_FIELDS = 'type amount amountRefunded currency status concept billingMonth billingYear paidAt createdAt';
+
+/** Rentas y fianza cobradas de un contrato, de la más reciente a la más antigua. */
 export const getContractPayments = async (req: Request, res: Response) => {
   try {
     const { id } = req.params;
-    await ensureCanReadContract({ contractId: id, user: req.user as any });
-    const contract = await Contract.findById(id);
-    if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
+    if (!(await isActiveCoTenant(id, req.user?.id))) {
+      await ensureCanReadContract({ contractId: id, user: req.user as any });
+    }
 
-    const payments = await Payment.find({ contract: id, status: 'succeeded' }).sort({ createdAt: -1 }).lean();
+    const payments = await Payment.find({ contract: id, status: 'succeeded', type: { $in: ['rent', 'deposit'] } })
+      .select(CONTRACT_PAYMENT_FIELDS)
+      .sort({ paidAt: -1, createdAt: -1 })
+      .lean();
     res.json(payments);
   } catch (error: any) {
+    const status = error?.status;
+    if (status === 400 || status === 404) return res.status(404).json({ error: 'contract_not_found' });
+    if (status === 403) return res.status(403).json({ error: 'forbidden' });
     console.error('Error obteniendo historial de pagos', error);
-    const status = error?.status || 500;
-    res.status(status).json({ error: status === 403 ? 'forbidden' : 'Error al obtener historial' });
+    res.status(500).json({ error: 'payments_failed' });
   }
 };
 
