@@ -50,33 +50,39 @@ export function getContractActionSummary(contract: Contract, role?: UserRole): C
     case 'draft':
     case 'generated':
       return {
-        label: 'Expediente incompleto',
+        label: 'En borrador',
         tone: 'warning',
-        detail: 'El contrato sigue en borrador y todavía no se ha enviado a firma.',
+        detail: 'El contrato está en borrador y todavía no se ha enviado a firmar.',
         nextAction:
           role === 'landlord' || role === 'admin'
-            ? 'Revisar datos y enviarlo a firma'
+            ? 'Revisa los datos y envíalo a firmar'
             : role === 'agency'
-              ? 'Revisar los datos con el propietario, que lo envía a firma'
-              : 'Esperar validación del arrendador',
-        blockedReason: 'Faltan pasos previos antes de firma',
+              ? 'Revisa los datos con el propietario, que es quien lo envía a firmar'
+              : 'El propietario lo enviará a firmar cuando esté listo',
+        blockedReason: null,
       };
     case 'pending_signature':
     case 'signing':
       return {
         label: 'Firmas pendientes',
         tone: 'warning',
-        detail: 'El contrato ya está preparado, pero aún falta completar la firma electrónica.',
-        nextAction: 'Revisar las firmas del contrato',
-        blockedReason: 'La firma no está completada',
+        detail: 'El contrato está listo; falta completar la firma electrónica.',
+        nextAction: role === 'tenant' ? 'Revisa y firma el contrato' : 'Esperar a que firmen las partes',
+        blockedReason: null,
       };
     case 'signed':
       return {
         label: 'Contrato firmado',
         tone: 'info',
-        detail: 'El contrato está firmado y pendiente de activación operativa.',
-        nextAction: contract.depositPaid ? 'Revisar activación del contrato' : 'Confirmar fianza o pago inicial',
-        blockedReason: contract.depositPaid ? null : 'Falta completar el pago inicial',
+        detail: contract.depositPaid
+          ? `Firmado y con la fianza pagada. Se activa solo${startLabel ? ` el ${startLabel}` : ' en la fecha de inicio'}.`
+          : 'El contrato está firmado. Falta pagar la fianza para que se active en la fecha de inicio.',
+        nextAction: contract.depositPaid
+          ? 'No tienes que hacer nada más'
+          : role === 'tenant'
+            ? 'Paga la fianza'
+            : 'Esperar a que el inquilino pague la fianza',
+        blockedReason: contract.depositPaid ? null : 'Falta pagar la fianza',
         nextDate: startLabel,
       };
     case 'active':
@@ -95,16 +101,16 @@ export function getContractActionSummary(contract: Contract, role?: UserRole): C
       return {
         label: 'Contrato cerrado',
         tone: 'neutral',
-        detail: 'Este expediente ya no requiere gestión operativa normal.',
-        nextAction: 'Consultar histórico o documentación',
+        detail: 'Este contrato ya no está en vigor.',
+        nextAction: 'Puedes consultar el contrato y descargar su PDF',
         nextDate: endLabel,
       };
     default:
       return {
         label: getContractStatusLabel(contract.status),
         tone: 'neutral',
-        detail: 'Estado no clasificado todavía.',
-        nextAction: 'Revisar expediente',
+        detail: 'No reconocemos el estado de este contrato.',
+        nextAction: 'Revisa el contrato o escribe a soporte',
       };
   }
 }

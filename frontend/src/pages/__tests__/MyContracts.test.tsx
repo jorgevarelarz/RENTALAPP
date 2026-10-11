@@ -76,7 +76,7 @@ describe('MyContracts', () => {
     const shared = screen.getByText('Ático Retiro').closest('a')!;
     expect(shared).toHaveAttribute('href', '/contracts/c2');
     expect(within(shared).getByText('Co-titular')).toBeInTheDocument();
-    expect(within(shared).getByText(/El inquilino principal confirma la fianza/)).toBeInTheDocument();
+    expect(within(shared).getByText(/El inquilino principal paga la fianza/)).toBeInTheDocument();
     expect(screen.getByText('950,00 €/mes')).toBeInTheDocument();
     expect(screen.getByText('Arrendador: Luis Gómez')).toBeInTheDocument();
     expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
@@ -102,7 +102,7 @@ describe('MyContracts', () => {
     const row = (await screen.findByText('Piso Ensanche')).closest('a')!;
     expect(row).toHaveAttribute('href', '/contracts/c7');
     expect(within(row).getByText('Propietario: Luis Gómez · Inquilino: Ana Pérez')).toBeInTheDocument();
-    expect(within(row).getByText(/Revisar los datos con el propietario/)).toBeInTheDocument();
+    expect(within(row).getByText(/Revisa los datos con el propietario/)).toBeInTheDocument();
     expect(screen.getByText(/inmuebles que gestionas/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ver inmuebles' })).toHaveAttribute('href', '/agency/properties');
     expect(listInvitesMock).not.toHaveBeenCalled();

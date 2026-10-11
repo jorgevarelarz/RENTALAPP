@@ -55,7 +55,7 @@ const nextActionFor = (c: Contract, role: string | undefined, userRole?: string)
   const summary = getContractActionSummary(c, userRole);
   if (role !== 'cotenant') return summary;
   if (c.status === 'signed' && !c.depositPaid) {
-    return { ...summary, nextAction: 'El inquilino principal confirma la fianza', blockedReason: null };
+    return { ...summary, nextAction: 'El inquilino principal paga la fianza', blockedReason: null };
   }
   return summary;
 };
