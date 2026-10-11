@@ -354,6 +354,10 @@ jest.setTimeout(180_000);
       .post("/api/auth/request-reset")
       .send({ email: "tenant@test.com" })
       .expect(200);
+    // El correo sale en segundo plano, después de la respuesta.
+    for (let i = 0; i < 300 && sendSpy.mock.calls.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
 
     const user = await User.findOne({ email: "tenant@test.com" }).select("+resetToken +resetTokenExp");
     expect(user?.resetToken && user?.resetTokenExp).toBeTruthy();

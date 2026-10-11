@@ -7,6 +7,15 @@ import { User } from '../../src/models/user.model';
 import * as email from '../../src/utils/email';
 import { hashResetToken } from '../../src/controllers/auth.controller';
 
+// request-reset responde antes de mandar el correo: espera a que el envío en segundo plano ocurra.
+const waitForCall = async (spy: jest.SpyInstance, timeoutMs = 3000) => {
+  const start = Date.now();
+  while (spy.mock.calls.length === 0) {
+    if (Date.now() - start > timeoutMs) throw new Error('sendEmail no se llamó');
+    await new Promise((r) => setTimeout(r, 10));
+  }
+};
+
 let app: any;
 let mongo: MongoMemoryServer | undefined;
 
@@ -39,6 +48,28 @@ describe('Password reset flow', () => {
     expect(res.body).toEqual({ ok: true });
   });
 
+  it('responde sin esperar al correo, exista o no la cuenta (sin enumeración por tiempo)', async () => {
+    // Un SMTP que no contesta nunca: si la ruta lo esperase, la petición se colgaría.
+    const sendSpy = jest.spyOn(email, 'sendEmail').mockReturnValue(new Promise<any>(() => {}));
+    await User.create({
+      name: 'Slow SMTP',
+      email: 'slow@example.com',
+      passwordHash: await bcrypt.hash('password123', 10),
+      role: 'tenant',
+    });
+
+    const started = Date.now();
+    const res = await request(app).post('/api/auth/request-reset').send({ email: 'slow@example.com' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect(Date.now() - started).toBeLessThan(1000);
+
+    // El token se genera igual en segundo plano.
+    await waitForCall(sendSpy);
+    const stored = await User.findOne({ email: 'slow@example.com' }).select('+resetToken').lean();
+    expect(stored?.resetToken).toBeTruthy();
+  });
+
   it('guarda solo el hash del token y envía un enlace al frontend configurado', async () => {
     process.env.FRONTEND_URL = 'https://app.example.test/';
     const sendSpy = jest.spyOn(email, 'sendEmail').mockResolvedValue(undefined);
@@ -53,6 +84,7 @@ describe('Password reset flow', () => {
     const res = await request(app).post('/api/auth/request-reset').send({ email: user.email });
     expect(res.status).toBe(200);
 
+    await waitForCall(sendSpy);
     expect(sendSpy).toHaveBeenCalledTimes(1);
     const html = String(sendSpy.mock.calls[0][2]);
     const match = html.match(/https:\/\/app\.example\.test\/reset\?token=([a-f0-9]{64})/);

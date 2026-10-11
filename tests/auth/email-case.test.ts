@@ -5,6 +5,15 @@ import bcrypt from 'bcryptjs';
 import { startMongoMemoryServer } from '../../src/__tests__/utils/mongoMemoryServer';
 import { User } from '../../src/models/user.model';
 import { resolveSocialUser } from '../../src/services/oauth.service';
+
+// request-reset responde antes de mandar el correo: espera a que el envío en segundo plano ocurra.
+const waitForCall = async (spy: jest.SpyInstance, timeoutMs = 3000) => {
+  const start = Date.now();
+  while (spy.mock.calls.length === 0) {
+    if (Date.now() - start > timeoutMs) throw new Error('sendEmail no se llamó');
+    await new Promise((r) => setTimeout(r, 10));
+  }
+};
 import * as email from '../../src/utils/email';
 
 let app: any;
@@ -82,6 +91,7 @@ describe('Correo de la cuenta sin distinguir mayúsculas', () => {
     const user = await legacyUser('Ana@Example.com');
     const res = await request(app).post('/api/auth/request-reset').send({ email: 'ana@example.com' });
     expect(res.status).toBe(200);
+    await waitForCall(send);
     expect(send).toHaveBeenCalledTimes(1);
     expect(send.mock.calls[0][0]).toBe('Ana@Example.com');
     const stored = await User.findById(user._id).select('+resetToken').lean();

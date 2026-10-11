@@ -89,29 +89,36 @@ export const hashResetToken = (token: string) =>
 
 const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
-export const requestPasswordReset = async (req: Request, res: Response) => {
-  const { email } = req.body;
+/**
+ * Genera el token de recuperación y manda el correo. Se exporta para los tests;
+ * la ruta no lo espera (ver `requestPasswordReset`).
+ */
+export const issuePasswordReset = async (email: unknown) => {
   try {
     const user = await findUserByEmail(email);
-    if (user) {
-      const token = crypto.randomBytes(32).toString('hex');
-      user.resetToken = hashResetToken(token);
-      user.resetTokenExp = new Date(Date.now() + RESET_TOKEN_TTL_MS);
-      await user.save();
-      const link = frontendUrl('/reset', { token });
-      await sendEmail(
-        user.email,
-        'Restablece tu contraseña de RentalApp',
-        `<p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.</p>
+    if (!user) return;
+    const token = crypto.randomBytes(32).toString('hex');
+    user.resetToken = hashResetToken(token);
+    user.resetTokenExp = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+    await user.save();
+    const link = frontendUrl('/reset', { token });
+    await sendEmail(
+      user.email,
+      'Restablece tu contraseña de RentalApp',
+      `<p>Hemos recibido una solicitud para restablecer la contraseña de tu cuenta.</p>
 <p><a href="${link}">Elegir una contraseña nueva</a></p>
 <p>El enlace caduca en una hora y solo se puede usar una vez. Si no lo has pedido tú, ignora este correo.</p>`,
-      );
-    }
+    );
   } catch (error) {
     console.error('Error generating password reset token', error);
   }
+};
 
+// Responde antes de buscar la cuenta: si esperase al guardado y al SMTP, tardaría más
+// cuando el correo existe y la respuesta revelaría qué cuentas hay (enumeración por tiempo).
+export const requestPasswordReset = async (req: Request, res: Response) => {
   res.json({ ok: true });
+  void issuePasswordReset(req.body.email);
 };
 
 export const resetPassword = async (req: Request, res: Response) => {
