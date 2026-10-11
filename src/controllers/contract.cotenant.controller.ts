@@ -9,6 +9,7 @@ import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { sendCoTenantInviteEmail } from '../utils/email';
 import { frontendUrl } from '../utils/frontendUrl';
+import { isManagingAgency } from '../utils/propertyAccess';
 
 const redactEmail = (email?: string) => {
   if (!email || !email.includes('@')) return '';
@@ -270,7 +271,12 @@ export const getContractParties = async (req: Request, res: Response) => {
     const isLandlord = String(contract.landlord) === userId;
     const isParty = parties.some(p => String(p.userId) === userId) || String(contract.tenant) === userId;
     const isAdmin = user?.role === 'admin';
-    if (!isLandlord && !isParty && !isAdmin) {
+    // La agencia que aún gestiona el inmueble ve los co-titulares (solo lectura).
+    const isManagingAgencyOfContract =
+      user?.role === 'agency' &&
+      String((contract as any).agencyId || '') === userId &&
+      isManagingAgency(user, await Property.findById(contract.property).select('agencyId agencyAccess').lean());
+    if (!isLandlord && !isParty && !isAdmin && !isManagingAgencyOfContract) {
       return res.status(403).json({ error: 'forbidden' });
     }
 

@@ -638,10 +638,13 @@ export const getContract = async (req: Request, res: Response) => {
     const isLandlord = ownerId === user.id;
     const isTenant = tenantId === user.id;
     const isAdmin = user.role === 'admin';
+    // La agencia gestora ya pasó la comprobación de arriba; antes caía aquí en 403.
+    const isAgency = user.role === 'agency';
     // Co-titular que ya aceptó la invitación: puede ver el contrato que va a firmar.
-    const isCoTenant = !isLandlord && !isTenant && !isAdmin && (await isActiveCoTenant(c._id, user.id));
+    const isCoTenant =
+      !isLandlord && !isTenant && !isAdmin && !isAgency && (await isActiveCoTenant(c._id, user.id));
 
-    if (!isLandlord && !isTenant && !isAdmin && !isCoTenant) {
+    if (!isLandlord && !isTenant && !isAdmin && !isAgency && !isCoTenant) {
       return res.status(403).json({ error: 'No autorizado' });
     }
 
