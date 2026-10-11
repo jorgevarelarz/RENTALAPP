@@ -1067,3 +1067,10 @@ Rules:
 - `getGeminiModel(apiKey, maxOutputTokens)` in `src/services/ai.service.ts` is the only Gemini factory (also used by `assistant.service.ts`): `maxOutputTokens` + 30 s timeout. `GET /api/ai/health?test=true` → 403 for non-admins.
 - Files: `src/app.ts`, `src/middleware/aiRateLimit.ts`, `src/services/ai.service.ts`, `src/services/assistant.service.ts`, `src/controllers/ai.controller.ts`, `src/__tests__/ai.routes.test.ts`, `src/__tests__/ai.limits.test.ts`, `docs/auditoria-seguridad-2026-10-05.md`.
 - Verification: tsc clean; Jest (`--runInBand`) `src/__tests__` 30/30, e2e smoke 9/9; frontend build + 37 tests OK.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 10: mobile navigation
+
+- `AppShell`: below `lg` a menu button in the header opens a left `Drawer` with the same links (`NavSections`, shared with the desktop side nav), unread dot + count, user email; closes on link/route change/Escape. `useUnread` now polls once (was twice). `/agency` home link gets `end`.
+- `components/ui/Drawer`: closed panel is `visibility:hidden` + `aria-hidden` (links were tabbable off-screen); focus moves into the panel, Tab is trapped, focus returns to the opener; optional `label` prop.
+- Files: `frontend/src/layout/AppShell.tsx`, `frontend/src/layout/__tests__/AppShell.test.tsx`, `frontend/src/components/ui/Drawer.tsx`, `frontend/src/index.css`.
+- Verification: frontend build + 39 tests OK; Playwright screenshots 390/1280 px and keyboard focus check.

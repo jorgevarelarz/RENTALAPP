@@ -313,3 +313,54 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - Pendientes de rondas anteriores: navegación en móvil (lo más grave de la interfaz), `payments.duplicates` intermitente, media de reseñas sin `$inc`, enlace del co-titular sin `frontendUrl()`, `/metrics` público y enumeración de cuentas en el login.
 
 **Siguiente mejora propuesta.** Navegación en móvil (propuesta en la ronda 8): botón de menú en la cabecera de `AppShell` que abra los enlaces de `nav.config.json` en el `Drawer` de `components/ui`, con «Mensajes» dentro, revisado con capturas a 390 px. Si se prefiere seguridad: cerrar `/metrics` y quitar `NODE_ENV` de `/health`.
+
+### Ronda 10 — 2026-10-11 09:35
+
+**Qué y por qué.** Navegación en móvil, propuesta en las rondas 8 y 9 y el fallo de interfaz más grave que quedaba. Por debajo de 1024 px el menú lateral se oculta y no había otro menú; «Mensajes» desaparecía de la cabecera por debajo de 768 px. En el móvil solo se podía navegar con los enlaces de cada pantalla.
+
+1. **Menú del móvil** (`frontend/src/layout/AppShell.tsx`):
+   - botón de menú a la izquierda de la marca, solo por debajo de `lg`. Abre un panel lateral con los mismos enlaces del lateral de escritorio (`nav.config.json`): «General» con Mensajes y su contador, y la sección del rol. Al pie va el email, que la cabecera oculta en pantallas estrechas;
+   - si hay mensajes sin leer, el botón lleva un punto rojo y lo dice en su `aria-label`;
+   - se cierra al elegir un enlace (también el de la página actual), al cambiar de ruta, con Escape, con la X o tocando fuera;
+   - los enlaces salen de un único componente `NavSections`, compartido por los dos menús;
+   - antes `useUnread` se llamaba en la cabecera y en el lateral: dos sondeos de `/api/chat/conversations` cada 30 s. Ahora hay uno solo en `AppShell`;
+   - «Inicio» de la agencia (`/agency`) ya no queda marcado como activo en todas sus subpáginas (le faltaba el `end`).
+2. **`Drawer`** (`components/ui/Drawer.tsx`; lo usan también los filtros de `PropertiesList` y el detalle de `AdminTenantProPage`):
+   - cerrado, el panel seguía en el DOM fuera de la pantalla y sus enlaces recibían el foco con Tab. Ahora queda con `visibility: hidden` y `aria-hidden`; la ocultación espera a que acabe el deslizamiento;
+   - al abrir, el foco pasa al panel y el Tab da la vuelta dentro (es `aria-modal`); al cerrar, el foco vuelve al botón que lo abrió;
+   - Escape solo se escucha mientras el panel está abierto, y el panel lleva `aria-label`.
+
+**Commits.**
+- `9efde15` Drawer: foco dentro del panel, Tab que no se escapa y panel cerrado fuera del orden de tabulación
+- `e3f760e` Navegación en móvil: botón de menú en la cabecera con los enlaces del rol y aviso de mensajes sin leer
+
+**Verificación (resultados reales).**
+- Frontend: `npm run build` OK. `npm test`: 17 ficheros y 39 tests OK.
+- Nuevo `src/layout/__tests__/AppShell.test.tsx` (2 tests):
+  - el menú abre con «Abrir menú (2 mensajes sin leer)», muestra Mensajes con su contador y el email, navega a Pagos y se cierra;
+  - se cierra con Escape;
+  - `listConversations` se llama una sola vez.
+- Capturas con Playwright (vite local, `/api/*` simulado, inquilino con 3 mensajes sin leer):
+  - a 390 px, menú cerrado y abierto: se ve ordenado, en la línea del lateral de escritorio;
+  - a 1280 px el escritorio queda igual que antes.
+- Prueba de foco en el navegador real. El primer intento falló: la transición de `visibility` empezaba en «hidden» y `focus()` no entraba en el panel. Corregido. Ahora:
+  - al abrir, el foco está en el panel;
+  - Tab ×2 llega a «Mensajes»;
+  - Shift+Tab ×2 da la vuelta hasta «Perfil y cuenta»;
+  - en escritorio, el primer Tab va a la marca y no a enlaces ocultos.
+- Backend sin cambios (no se ejecutó tsc ni Jest).
+- GitNexus:
+  - `impact` LOW en `AppShell`, `useUnread` y `Drawer`;
+  - `detect_changes` sale medio y solo afecta a los cuatro flujos de `AppShell` (`ListConversations`, `UseAuth`, `IconFor`, `UnreadBadge`).
+
+**Qué queda.**
+- Las páginas públicas (`PublicLayout`) no se han revisado en móvil en esta ronda.
+- Sin probar a mano los otros dos usos de `Drawer` (filtros de pisos y detalle de Tenant PRO). Solo heredan el foco y la ocultación, y el build y los tests pasan.
+- Pendientes de rondas anteriores:
+  - `/metrics` público y `NODE_ENV` en `/health`;
+  - enumeración de cuentas en el login;
+  - `payments.duplicates` intermitente;
+  - media de reseñas sin `$inc`;
+  - enlace del co-titular sin `frontendUrl()`.
+
+**Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: cerrar `/metrics` (solo con un token o desde la red interna) y quitar `NODE_ENV` de `/health`. En la misma ronda, el enlace del co-titular con `frontendUrl()`. Si se prefiere interfaz: revisar en móvil la búsqueda de pisos y la ficha del inmueble (`PublicLayout`) con capturas a 390 px.
