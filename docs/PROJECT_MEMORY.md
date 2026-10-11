@@ -1053,3 +1053,10 @@ Rules:
 - `POST /api/reviews`: `relatedId` must be a signed contract between both parties (matching `roleContext`) or a paid/done service offer / closed ticket of the pro; duplicate → 409.
 - Files: `src/utils/email.ts`, `src/controllers/property.controller.ts`, `src/routes/review.routes.ts`, `tests/unit/email.escape.test.ts`, `tests/reviews/review.relation.test.ts`, `tests/properties/property.alerts.test.ts`, `docs/auditoria-seguridad-2026-10-05.md`.
 - Verification: tsc clean; Jest (`--runInBand`) new/updated 11/11, properties+contracts+security+chat+escrow 105/106 (one intermittent failure in untouched `payments.duplicates`, passes 3/3 alone), e2e smoke 9/9; frontend build + 35 tests OK.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 8: tenant home, "Mensajes", contract wizard
+
+- `TenantHome`: colored shortcut tiles and blue hero removed; new "Tu alquiler" card (rent/deposit es-ES, status, next step, "Pagar fianza" link); in-progress count now uses real statuses (`draft`, `generated`, `pending_signature`, `signing`).
+- "Inbox"/"Conversaciones" → "Mensajes" (header, nav, Inbox title). `ContractWizard`: padding, € inputs fixed (icon overlapped), "año(s)", accents, es-ES review. Breadcrumbs: "Nuevo contrato", "Incidencia #".
+- Files: `frontend/src/pages/tenant/TenantHome.tsx` (+test), `frontend/src/layout/AppShell.tsx`, `frontend/src/config/nav.config.json`, `frontend/src/pages/Inbox.tsx`, `frontend/src/pages/contracts/ContractWizard.tsx`, `frontend/src/components/Breadcrumbs.tsx`.
+- Verification: frontend build + 37 tests OK; Playwright screenshots 1280/390 px. Open: no navigation on mobile (<1024 px).
