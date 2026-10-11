@@ -77,3 +77,27 @@ export async function resolveTicket(id: string) {
   const { data } = await axios.post(`/api/tickets/${id}/resolve`);
   return data;
 }
+
+export type ProSummary = {
+  quotes: { toQuote: number; awaitingApproval: number; approved: number; quotedTotal: number };
+  billing: { pendingCount: number; pendingTotal: number; releasedCount: number; releasedTotal: number };
+};
+
+/** Recuento e importes del profesional sobre todas sus incidencias (no solo la página cargada). */
+export async function getProSummary() {
+  const { data } = await axios.get("/api/tickets/my/pro/summary");
+  return data as ProSummary;
+}
+
+/** Descarga el CSV con todos los trabajos facturables del profesional. */
+export async function downloadProBillingCsv() {
+  const res = await axios.get("/api/tickets/my/pro/billing.csv", { responseType: "blob" });
+  const url = URL.createObjectURL(res.data as Blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `rentalapp_facturacion_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
