@@ -6,6 +6,7 @@ import { sendEmail } from '../utils/email';
 import { signAuthToken } from '../utils/authToken';
 import { frontendUrl } from '../utils/frontendUrl';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
+import { emailInUse, findUserByEmail, normalizeEmail } from '../utils/userEmail';
 
 export const INVALID_CREDENTIALS = 'Usuario o contraseña incorrectos';
 
@@ -22,7 +23,10 @@ const dummyPasswordHash = () => {
  */
 export const register = async (req: Request, res: Response) => {
   try {
-    const { name, email, password, role } = req.body;
+    const { name, password, role } = req.body;
+    // El correo se guarda normalizado; «Ana@x.com» y «ana@x.com» son la misma cuenta.
+    const email = normalizeEmail(req.body.email);
+    if (await emailInUse(email)) return res.status(400).json({ error: 'Error al registrar' });
     // Generate the password hash
     const passwordHash = await bcrypt.hash(password, 10);
     // Save new user with hashed password
@@ -52,8 +56,7 @@ export const register = async (req: Request, res: Response) => {
 export const login = async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
-    // Find the user by email
-    const user = await User.findOne({ email }).select('+passwordHash');
+    const user = await findUserByEmail(email, '+passwordHash');
     // Misma respuesta y mismo coste (un bcrypt) si la cuenta no existe, es solo de Google/Apple
     // o la contraseña no coincide: el login no revela qué correos están registrados.
     const storedHash = (user?.passwordHash as string | undefined) || dummyPasswordHash();
@@ -87,7 +90,7 @@ const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 export const requestPasswordReset = async (req: Request, res: Response) => {
   const { email } = req.body;
   try {
-    const user = await User.findOne({ email });
+    const user = await findUserByEmail(email);
     if (user) {
       const token = crypto.randomBytes(32).toString('hex');
       user.resetToken = hashResetToken(token);

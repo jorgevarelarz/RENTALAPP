@@ -3,6 +3,7 @@ import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { z, ZodError } from 'zod';
 import { Types } from 'mongoose';
+import { emailInUse } from '../utils/userEmail';
 import { AgencyInvite } from '../models/agencyInvite.model';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
@@ -95,8 +96,7 @@ export async function createLandlordInvite(req: Request, res: Response) {
   }
 
   // Primer toque gana: no se puede reclamar a un usuario que ya existe.
-  const existingUser = await User.findOne({ email: data.landlordEmail }).select('_id').lean();
-  if (existingUser) {
+  if (await emailInUse(data.landlordEmail)) {
     return res.status(409).json({ error: 'landlord_already_exists' });
   }
   const pendingInvite = await AgencyInvite.findOne({
@@ -206,8 +206,7 @@ export async function resendLandlordInvite(req: Request, res: Response) {
   const stillValid = invite.expiresAt.getTime() > now;
   if (!stillValid) {
     // Mientras estaba caducada pudo darse de alta o invitarle otro colaborador.
-    const existingUser = await User.findOne({ email: invite.landlordEmail }).select('_id').lean();
-    if (existingUser) return res.status(409).json({ error: 'landlord_already_exists' });
+    if (await emailInUse(invite.landlordEmail)) return res.status(409).json({ error: 'landlord_already_exists' });
     const other = await AgencyInvite.findOne({
       _id: { $ne: invite._id },
       landlordEmail: invite.landlordEmail,
@@ -269,8 +268,7 @@ export async function acceptInvite(req: Request, res: Response) {
   if (invite.status === 'accepted') return res.status(409).json({ error: 'invite_already_accepted' });
   if (invite.expiresAt < new Date()) return res.status(410).json({ error: 'invite_expired' });
 
-  const existing = await User.findOne({ email: invite.landlordEmail }).select('_id').lean();
-  if (existing) return res.status(409).json({ error: 'user_already_exists' });
+  if (await emailInUse(invite.landlordEmail)) return res.status(409).json({ error: 'user_already_exists' });
 
   const passwordHash = await bcrypt.hash(data.password, 10);
   const user = new User({

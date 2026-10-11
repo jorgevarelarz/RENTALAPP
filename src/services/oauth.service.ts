@@ -4,6 +4,7 @@ import { Client, Issuer, generators } from 'openid-client';
 import { User } from '../models/user.model';
 import { OAuthLoginCode } from '../models/oauthLoginCode.model';
 import { getJwtSecret } from '../utils/getJwtSecret';
+import { findUserByEmail } from '../utils/userEmail';
 
 export type OAuthProvider = 'google' | 'apple';
 export type OAuthMode = 'login' | 'register';
@@ -213,7 +214,7 @@ export async function resolveSocialUser(
     throw new Error('El proveedor no confirmó un correo electrónico');
   }
 
-  user = await User.findOne({ email: profile.email });
+  user = await findUserByEmail(profile.email);
   if (!user && mode === 'login') {
     throw new OAuthAccountNotFoundError('No existe una cuenta vinculada');
   }

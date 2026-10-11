@@ -5,6 +5,7 @@ import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
 import bcrypt from 'bcryptjs';
 import { Types } from 'mongoose';
+import { emailInUse } from '../utils/userEmail';
 
 const toPublicUser = (u: any) => ({
   id: String(u._id),
@@ -95,8 +96,7 @@ export const createUser = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'invalid_payload' });
   }
 
-  const exists = await User.findOne({ email }).select('_id').lean();
-  if (exists) return res.status(409).json({ error: 'email_already_exists' });
+  if (await emailInUse(email)) return res.status(409).json({ error: 'email_already_exists' });
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await User.create({
