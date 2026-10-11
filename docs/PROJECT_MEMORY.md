@@ -1038,3 +1038,10 @@ Rules:
 - CSV: new `src/utils/csv.ts` (`csvCell`/`csvRow`/`csvRows`) prefixes formula-like cells with `'` (negative numbers untouched); used by all seven CSV exporters.
 - Files: `.dockerignore`, `.gitignore`, `README.md`, `docker-compose.dev.yml`, `src/utils/csv.ts`, the seven exporters, `tests/unit/csv.test.ts`, `tests/contracts/earnings.export.test.ts`, `docs/auditoria-seguridad-2026-10-05.md`.
 - Verification: tsc clean; Jest (`--runInBand`) 8 suites / 24 tests OK; `docker compose config` and a throwaway context build checked; frontend build + 34 tests OK.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 6: landlord dashboard
+
+- Backend: `getLandlordStats` matched `payee` with a string id inside `aggregate()` (no casting), so landlord earnings were always 0 €; now cast to `ObjectId`. Recent payments without `paidAt` fall back to `createdAt` (dashboard showed "Invalid Date").
+- Frontend `LandlordDashboard`: duplicate counters row removed, es-ES currency, quick links fixed (no longer to public `/properties`), plural/accents in alerts (`utils/landlordDashboard.ts`), inline icon on "Nueva propiedad".
+- Files: `src/controllers/user.controller.ts`, `tests/contracts/landlordStats.test.ts`, `frontend/src/pages/LandlordDashboard.tsx`, `frontend/src/utils/landlordDashboard.ts`, `frontend/src/pages/__tests__/LandlordDashboard.test.tsx`.
+- Verification: tsc clean; Jest contracts+auth 68/68 (`--runInBand`); frontend build + 35 tests OK; Playwright screenshots 1280/390 px.
