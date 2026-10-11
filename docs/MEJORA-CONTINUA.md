@@ -665,7 +665,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 
 **Siguiente mejora propuesta.** Interfaz: refrescar el usuario con `/api/users/me` al arrancar la app, para que rol, verificación y la insignia KYC coincidan con el backend (desde la ronda 17 el backend ya los lee de la base). En la misma ronda, «Cancelar invitación» de co-titular para invitaciones sin aceptar. Si se prefiere seguridad: rechazar en `authenticate` el token de un usuario borrado, ajustando los tests que usan identificadores inventados.
 
-### Ronda 19 — 2026-10-11 15:20
+### Ronda 19 — 2026-10-11 15:02
 
 **Qué y por qué.** Interfaz, propuesta en la ronda 18. Dos huecos que dejaban la interfaz desfasada respecto al backend:
 
