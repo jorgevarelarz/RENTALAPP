@@ -332,9 +332,18 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
             await publishSystem(direct.id, 'PAYMENT_FAILED', { offerId });
           }
         }
+        // Solo el intento vigente y no pagado pasa a FAILED: un fallo tardío de un intento
+        // anterior no debe deshacer un PAID ni pisar un reintento más nuevo.
         if (rentPaymentId) {
-          await RentPayment.findByIdAndUpdate(rentPaymentId, { status: 'FAILED' });
+          await RentPayment.updateOne(
+            { _id: rentPaymentId, status: { $ne: 'PAID' }, providerPaymentId: intent.id },
+            { status: 'FAILED' },
+          );
         }
+        await Payment.updateOne(
+          { stripePaymentIntentId: intent.id, status: { $in: ['pending', 'processing'] } },
+          { status: 'failed' },
+        );
         break;
       }
       case 'payment_intent.processing': {
@@ -350,7 +359,14 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
           }
         }
         if (rentPaymentId) {
-          await RentPayment.findByIdAndUpdate(rentPaymentId, { status: 'PROCESSING', providerPaymentId: intent.id });
+          await RentPayment.updateOne(
+            {
+              _id: rentPaymentId,
+              status: { $ne: 'PAID' },
+              $or: [{ providerPaymentId: intent.id }, { providerPaymentId: null }],
+            },
+            { status: 'PROCESSING', providerPaymentId: intent.id },
+          );
         }
         break;
       }

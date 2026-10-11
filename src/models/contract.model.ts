@@ -71,6 +71,8 @@ export interface IContract extends Document {
    */
   depositPaid?: boolean;
   depositPaidAt?: Date;
+  /** Última sesión de Stripe Checkout de la fianza; se reutiliza mientras siga abierta. */
+  depositCheckoutSessionId?: string;
   history?: {
     ts: Date;
     actorId?: string;
@@ -163,6 +165,7 @@ const contractSchema = new Schema<IContract>(
     // Deposit paid flag and timestamp
     depositPaid: { type: Boolean, default: false },
     depositPaidAt: { type: Date },
+    depositCheckoutSessionId: { type: String, select: false },
     signFeeCollected: { type: Boolean, default: false },
     signFeeCollectedAt: { type: Date },
     history: {

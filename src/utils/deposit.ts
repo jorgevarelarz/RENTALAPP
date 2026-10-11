@@ -1,55 +1,78 @@
 import { stripe } from './stripe';
 import { isProd, isMock } from '../config/flags';
 
+export interface DepositCheckout {
+  id: string;
+  url: string | null;
+  status: 'open' | 'complete' | 'expired';
+}
+
 /**
  * Creates a Stripe Checkout Session to collect the deposit.
- * Returns the session URL that the user should be redirected to.
  *
  * @param contractId The ID of the contract for which the deposit is paid.
  * @param amount The amount of the deposit in EUR.
  * @param successUrl The URL to redirect the user to after a successful payment.
  * @param cancelUrl The URL to redirect the user to after a canceled payment.
+ * @param idempotencyKey Same key → same session, so concurrent requests cannot open two checkouts.
  */
 export const depositToEscrow = async (
   contractId: string,
   amount: number,
   successUrl: string,
-  cancelUrl: string
-): Promise<string> => {
+  cancelUrl: string,
+  idempotencyKey?: string,
+): Promise<DepositCheckout> => {
   if (isMock(process.env.ESCROW_DRIVER)) {
     if (isProd()) {
       throw Object.assign(new Error('escrow_mock_not_allowed_in_prod'), { status: 503 });
     }
-    return `https://mock.checkout/${contractId}-${Date.now()}`;
+    return { id: `cs_mock_${contractId}`, url: `https://mock.checkout/${contractId}`, status: 'open' };
   }
-  const session = await stripe.checkout.sessions.create({
-    payment_method_types: ['card'],
-    line_items: [
-      {
-        price_data: {
-          currency: 'eur',
-          product_data: {
-            name: `Depósito para contrato ${contractId}`,
+  const session = await stripe.checkout.sessions.create(
+    {
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'eur',
+            product_data: {
+              name: `Depósito para contrato ${contractId}`,
+            },
+            unit_amount: Math.round(amount * 100), // amount in cents
           },
-          unit_amount: amount * 100, // amount in cents
+          quantity: 1,
         },
-        quantity: 1,
+      ],
+      mode: 'payment',
+      success_url: successUrl,
+      cancel_url: cancelUrl,
+      metadata: {
+        contractId,
+        deposit: 'true',
       },
-    ],
-    mode: 'payment',
-    success_url: successUrl,
-    cancel_url: cancelUrl,
-    metadata: {
-      contractId,
-      deposit: 'true',
     },
-  });
+    idempotencyKey ? { idempotencyKey } : undefined,
+  );
 
   if (!session.url) {
     throw new Error('Could not create Stripe Checkout session');
   }
 
-  return session.url;
+  return { id: session.id, url: session.url, status: (session.status || 'open') as DepositCheckout['status'] };
+};
+
+/** Reads an existing deposit Checkout Session (to reuse it while still open). */
+export const getDepositCheckout = async (sessionId: string): Promise<DepositCheckout> => {
+  if (isMock(process.env.ESCROW_DRIVER)) {
+    if (isProd()) {
+      throw Object.assign(new Error('escrow_mock_not_allowed_in_prod'), { status: 503 });
+    }
+    const contractId = sessionId.replace(/^cs_mock_/, '');
+    return { id: sessionId, url: `https://mock.checkout/${contractId}`, status: 'open' };
+  }
+  const session = await stripe.checkout.sessions.retrieve(sessionId);
+  return { id: session.id, url: session.url, status: (session.status || 'expired') as DepositCheckout['status'] };
 };
 
 /**

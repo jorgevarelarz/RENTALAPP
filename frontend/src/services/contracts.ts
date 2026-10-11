@@ -68,7 +68,7 @@ export const payDeposit = async (token: string, id: string) => {
   const res = await client.post(`/api/contracts/${id}/deposit`, {}, {
     ...withAuth(token),
   });
-  return res.data as { ok?: boolean; clientSecret?: string; amount?: number };
+  return res.data as { message?: string; sessionUrl?: string };
 };
 
 // Cobrar renta usando método guardado (off-session)
