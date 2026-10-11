@@ -15,6 +15,10 @@ export const SERVICE_LABELS: Record<string, string> = {
 export const TICKET_SERVICES = ['plumbing', 'electricity', 'appliances', 'locksmith', 'cleaning', 'painting', 'others'];
 export const TICKET_TITLE_MAX = 120;
 export const TICKET_DESCRIPTION_MAX = 2000;
+/** Fotos por avería y tamaño de cada una: los límites de POST /api/uploads/images. */
+export const TICKET_PHOTOS_MAX = 6;
+export const TICKET_PHOTO_BYTES_MAX = 10 * 1024 * 1024;
+export const TICKET_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp'];
 
 export function getServiceLabel(service?: string) {
   if (!service) return 'Sin servicio';
@@ -144,6 +148,8 @@ const ERROR_TEXTS: Record<string, string> = {
   invalid_service: 'Elige el tipo de avería.',
   invalid_title: 'Pon un título de hasta 120 caracteres.',
   invalid_description: 'Describe la avería (hasta 2.000 caracteres).',
+  invalid_photos: 'Alguna foto no es válida. Quítala y vuelve a subirla.',
+  invalid_file_type: 'Solo se admiten fotos JPG, PNG o WebP.',
   contract_not_active: 'Solo se pueden comunicar averías de un contrato activo.',
   contract_not_owned: 'Ese contrato no es tuyo.',
   missing_policy_acceptance: 'Antes tienes que aceptar las condiciones del servicio y el tratamiento de datos.',

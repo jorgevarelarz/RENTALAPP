@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { createTicket } from "../../services/tickets";
+import { ImagePlus, X } from "lucide-react";
+import { createTicket, uploadTicketPhotos } from "../../services/tickets";
 import { listContracts } from "../../services/contracts";
 import { useAuth } from "../../context/AuthContext";
 import { useNotify } from "../../utils/notify";
@@ -9,6 +10,9 @@ import Card from "../../components/ui/Card";
 import PageHeader from "../../components/ui/PageHeader";
 import {
   TICKET_DESCRIPTION_MAX,
+  TICKET_PHOTOS_MAX,
+  TICKET_PHOTO_BYTES_MAX,
+  TICKET_PHOTO_TYPES,
   TICKET_SERVICES,
   TICKET_TITLE_MAX,
   getServiceLabel,
@@ -45,6 +49,9 @@ export default function TicketCreatePage() {
   const [description, setDescription] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ["contracts", "active-for-ticket"],
@@ -58,16 +65,43 @@ export default function TicketCreatePage() {
     if (homes.length === 1) setContractId(homes[0].id);
   }, [homes]);
 
+  const addPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    setPhotoError(null);
+    const room = TICKET_PHOTOS_MAX - photos.length;
+    if (files.length > room) return setPhotoError(`Puedes adjuntar hasta ${TICKET_PHOTOS_MAX} fotos.`);
+    if (files.some(f => !TICKET_PHOTO_TYPES.includes(f.type))) return setPhotoError('Solo se admiten fotos JPG, PNG o WebP.');
+    if (files.some(f => f.size > TICKET_PHOTO_BYTES_MAX)) return setPhotoError('Cada foto puede ocupar hasta 10 MB.');
+    setUploading(true);
+    try {
+      const urls = await uploadTicketPhotos(files);
+      setPhotos(prev => [...prev, ...urls].slice(0, TICKET_PHOTOS_MAX));
+    } catch (err) {
+      setPhotoError(getTicketErrorText(err, 'No se pudieron subir las fotos. Inténtalo de nuevo.'));
+    } finally {
+      setUploading(false);
+    }
+  };
+
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!contractId) return setError('Elige la vivienda.');
     if (!service) return setError('Elige el tipo de avería.');
     if (!title.trim()) return setError('Pon un título a la avería.');
     if (!description.trim()) return setError('Describe qué pasa.');
+    if (uploading) return setError('Espera a que terminen de subirse las fotos.');
     setSending(true);
     setError(null);
     try {
-      const ticket = await createTicket({ contractId, service, title: title.trim(), description: description.trim() });
+      const ticket = await createTicket({
+        contractId,
+        service,
+        title: title.trim(),
+        description: description.trim(),
+        ...(photos.length ? { photos } : {}),
+      });
       push("success", "Avería comunicada. Hemos avisado a tu arrendador.");
       navigate(`/tickets/${ticket._id}`);
     } catch (err) {
@@ -188,6 +222,51 @@ export default function TicketCreatePage() {
             </p>
           </div>
 
+          <fieldset>
+            <legend className="text-sm font-medium text-gray-900">
+              Fotos <span className="font-normal text-gray-500">(opcional)</span>
+            </legend>
+            <p className="mt-0.5 text-xs text-gray-500">
+              Ayudan al profesional a presupuestar sin tener que ir antes. Hasta {TICKET_PHOTOS_MAX}, JPG, PNG o WebP.
+            </p>
+            <ul className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {photos.map((url, i) => (
+                <li key={url} className="relative aspect-square overflow-hidden rounded-lg border border-[var(--border)] bg-gray-50">
+                  <img src={url} alt={`Foto ${i + 1} de la avería`} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setPhotos(prev => prev.filter(p => p !== url))}
+                    aria-label={`Quitar la foto ${i + 1}`}
+                    className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-white"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+              {photos.length < TICKET_PHOTOS_MAX && (
+                <li>
+                  <label
+                    className={`flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-xs font-medium text-gray-600 hover:border-gray-400 hover:bg-gray-50 ${
+                      uploading ? 'pointer-events-none opacity-60' : ''
+                    }`}
+                  >
+                    <ImagePlus className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                    {uploading ? 'Subiendo…' : 'Añadir fotos'}
+                    <input
+                      type="file"
+                      multiple
+                      accept={TICKET_PHOTO_TYPES.join(',')}
+                      onChange={addPhotos}
+                      disabled={uploading}
+                      className="sr-only"
+                    />
+                  </label>
+                </li>
+              )}
+            </ul>
+            {photoError && <p role="alert" className="mt-2 text-sm text-red-700">{photoError}</p>}
+          </fieldset>
+
           {error && (
             <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
               {error}
@@ -196,7 +275,7 @@ export default function TicketCreatePage() {
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Link to="/tickets" className={secondaryLink}>Cancelar</Link>
-            <button type="submit" disabled={sending} className={primaryButton}>
+            <button type="submit" disabled={sending || uploading} className={primaryButton}>
               {sending ? 'Enviando…' : 'Comunicar avería'}
             </button>
           </div>

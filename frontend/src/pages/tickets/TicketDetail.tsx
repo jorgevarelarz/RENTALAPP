@@ -290,6 +290,22 @@ export default function TicketDetail() {
           <Card className="p-5">
             <h2 className={sectionTitle}>Descripción</h2>
             <p className="mt-2 whitespace-pre-wrap text-gray-700 [overflow-wrap:anywhere]">{ticket.description}</p>
+            {Array.isArray(ticket.photos) && ticket.photos.length > 0 && (
+              <ul className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-4" aria-label="Fotos de la avería">
+                {ticket.photos.map((url: string, i: number) => (
+                  <li key={url}>
+                    <a
+                      href={url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="block aspect-square overflow-hidden rounded-lg border border-[var(--border)] bg-gray-50 hover:opacity-90"
+                    >
+                      <img src={url} alt={`Foto ${i + 1} de la avería`} loading="lazy" className="h-full w-full object-cover" />
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            )}
             <dl className="mt-5 grid grid-cols-1 gap-x-6 gap-y-3 border-t border-gray-100 pt-4 text-sm sm:grid-cols-2">
               {facts.map(([label, value]) => (
                 <div key={label}>

@@ -7,6 +7,14 @@ export async function createTicket(payload: Record<string, unknown>) {
   return data;
 }
 
+/** Sube las fotos de una avería (sin EXIF, nombre aleatorio) y devuelve sus URLs de /uploads. */
+export async function uploadTicketPhotos(files: File[]): Promise<string[]> {
+  const form = new FormData();
+  files.forEach(file => form.append("files", file));
+  const { data } = await axios.post("/api/uploads/images", form);
+  return data?.urls || [];
+}
+
 export async function getTicket(id: string) {
   const { data } = await axios.get(`/api/tickets/${id}`);
   return data;

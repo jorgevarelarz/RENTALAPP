@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, within, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { Mock, vi } from 'vitest';
 import TicketDetail from '../TicketDetail';
@@ -32,7 +32,6 @@ const mockTicket = {
   service: 'plumbing',
   propertyAddress: 'Calle Falsa 123',
   history: [],
-  images: [],
 };
 
 const renderWithContext = (ui: React.ReactElement, role: string = 'tenant') => {
@@ -64,6 +63,17 @@ describe('TicketDetail Component', () => {
     expect(screen.getByText('Fontanería')).toBeInTheDocument();
     expect(screen.getByText('Abierta')).toBeInTheDocument();
     expect(screen.getByText(/Tu arrendador está buscando un profesional/)).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Fotos de la avería' })).not.toBeInTheDocument();
+  });
+
+  test('Muestra las fotos de la avería con enlace a cada una', async () => {
+    (ticketService.getTicket as Mock).mockResolvedValue({ ...mockTicket, photos: ['/uploads/a1.jpg', '/uploads/b2.png'] });
+    renderWithContext(<TicketDetail />);
+
+    const gallery = await screen.findByRole('list', { name: 'Fotos de la avería' });
+    const links = within(gallery).getAllByRole('link');
+    expect(links.map(a => a.getAttribute('href'))).toEqual(['/uploads/a1.jpg', '/uploads/b2.png']);
+    expect(within(gallery).getByAltText('Foto 2 de la avería')).toBeInTheDocument();
   });
 
   test('PRO: Muestra formulario de presupuesto cuando está abierta', async () => {

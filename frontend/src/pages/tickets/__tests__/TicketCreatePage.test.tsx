@@ -86,6 +86,33 @@ describe('TicketCreatePage', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('Solo se pueden comunicar averías de un contrato activo.');
   });
 
+  test('sube fotos, deja quitarlas y las manda con la avería; rechaza formatos no admitidos', async () => {
+    (contractService.listContracts as Mock).mockResolvedValue({ items: [contract('c1', 'Piso en Chamberí')] });
+    (ticketService.uploadTicketPhotos as Mock).mockResolvedValue(['/uploads/a1.jpg', '/uploads/b2.jpg']);
+    (ticketService.createTicket as Mock).mockResolvedValue({ _id: 't1' });
+    renderPage();
+
+    const input = (await screen.findByText('Añadir fotos')).querySelector('input') as HTMLInputElement;
+    await userEvent.upload(input, new File(['x'], 'casa.heic', { type: 'image/heic' }), { applyAccept: false });
+    expect(screen.getByRole('alert')).toHaveTextContent('Solo se admiten fotos JPG, PNG o WebP.');
+    expect(ticketService.uploadTicketPhotos).not.toHaveBeenCalled();
+
+    const files = [new File(['a'], 'a.jpg', { type: 'image/jpeg' }), new File(['b'], 'b.jpg', { type: 'image/jpeg' })];
+    await userEvent.upload(input, files);
+    expect(await screen.findByAltText('Foto 2 de la avería')).toBeInTheDocument();
+    expect(ticketService.uploadTicketPhotos).toHaveBeenCalledWith(files);
+    await userEvent.click(screen.getByRole('button', { name: 'Quitar la foto 1' }));
+    expect(screen.queryByAltText('Foto 2 de la avería')).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Electricidad' }));
+    await userEvent.type(screen.getByLabelText('Título'), 'Salta el diferencial');
+    await userEvent.type(screen.getByLabelText('Qué pasa'), 'Al encender el horno');
+    await userEvent.click(screen.getByRole('button', { name: 'Comunicar avería' }));
+    await waitFor(() =>
+      expect(ticketService.createTicket).toHaveBeenCalledWith(expect.objectContaining({ photos: ['/uploads/b2.jpg'] })),
+    );
+  });
+
   test('sin contrato activo explica por qué no se puede comunicar', async () => {
     (contractService.listContracts as Mock).mockResolvedValue({ items: [] });
     renderPage();
