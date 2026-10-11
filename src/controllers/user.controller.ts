@@ -6,6 +6,7 @@ import { Contract } from '../models/contract.model';
 import bcrypt from 'bcryptjs';
 import { Types } from 'mongoose';
 import { emailInUse } from '../utils/userEmail';
+import { logger } from '../utils/logger';
 
 const toPublicUser = (u: any) => ({
   id: String(u._id),
@@ -159,7 +160,7 @@ export const updateUser = async (req: Request, res: Response) => {
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
     res.json(isSelf ? toMeUser(user) : toPublicUser(user));
   } catch (error: any) {
-    console.error(error);
+    logger.error({ err: error }, 'Error al actualizar el usuario');
     res.status(500).json({ error: 'Error al actualizar el usuario' });
   }
 };
@@ -220,7 +221,7 @@ export const updateProfile = async (req: Request, res: Response) => {
     }
     res.json(toMeUser(user));
   } catch (error) {
-    console.error('Error actualizando perfil:', error);
+    logger.error({ err: error }, 'Error actualizando perfil');
     res.status(500).json({ message: 'Error al actualizar perfil' });
   }
 };

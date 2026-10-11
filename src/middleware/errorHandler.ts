@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { ZodError } from 'zod';
 import { logger } from '../utils/logger';
+import { pathWithoutQuery } from '../metrics';
 
 interface AppError extends Error {
   status?: number;
@@ -17,7 +18,7 @@ export function errorHandler(err: AppError, req: Request, res: Response, _next: 
   // Solo loguear stack trace si es error 500 o error desconocido
   if (status >= 500) {
     logger.error(
-      { requestId, method: req.method, url: req.url, userId: req.user?.id || 'Guest', err },
+      { requestId, method: req.method, url: pathWithoutQuery(req.originalUrl || req.url), userId: req.user?.id || 'Guest', err },
       err.message,
     );
   } else {

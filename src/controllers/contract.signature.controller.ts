@@ -200,7 +200,7 @@ export async function signatureWebhook(req: Request, res: Response) {
   if (eventType === 'signing_completed') status = 'completed';
 
   if (!incomingId) {
-    console.error('Webhook Error: Falta ID de documento/sobre', body);
+    console.error('Webhook Error: Falta ID de documento/sobre', { keys: Object.keys(body) });
     return res.status(400).json({ error: 'missing_id' });
   }
 
