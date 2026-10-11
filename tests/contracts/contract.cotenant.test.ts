@@ -15,6 +15,11 @@ jest.mock('../../src/utils/payment', () => ({
   createCustomerAndMandate: jest.fn(),
 }));
 
+jest.mock('../../src/utils/email', () => ({
+  ...jest.requireActual('../../src/utils/email'),
+  sendEmail: jest.fn().mockResolvedValue(undefined),
+}));
+
 describe('Co-tenants flows', () => {
   beforeAll(connectDb);
   afterAll(disconnectDb);
@@ -207,5 +212,37 @@ describe('Co-tenants flows', () => {
       .set('x-user-verified', 'true');
     expect(res.status).toBe(200);
     expect(res.body.items[0].email).not.toBe('tenant5@test.com');
+  });
+
+  it('sends the invite link to the configured frontend with a token that is stored only as a hash', async () => {
+    const { sendEmail } = jest.requireMock('../../src/utils/email');
+    const prevFrontend = process.env.FRONTEND_URL;
+    process.env.FRONTEND_URL = 'https://app.example.test/';
+    try {
+      const tenantId = '507f1f77bcf86cd799439021';
+      const landlordId = '507f1f77bcf86cd799439023';
+      await makeUser(tenantId, 'tenant', 'main@test.com');
+      await makeUser(landlordId, 'landlord', 'owner@test.com');
+      const property = await makeProperty(landlordId);
+      const contract = await makeContract(landlordId, tenantId, String(property._id));
+
+      const res = await request(app)
+        .post(`/api/contracts/${contract._id}/tenants/invite`)
+        .set('x-user-id', tenantId)
+        .set('x-user-role', 'tenant')
+        .set('x-user-verified', 'true')
+        .send({ email: 'Co@Test.com ' });
+      expect(res.status).toBe(200);
+
+      const html: string = sendEmail.mock.calls.at(-1)[2];
+      const match = html.match(/href="https:\/\/app\.example\.test\/invites\/accept\?token=([a-f0-9]{64})"/);
+      expect(match).not.toBeNull();
+      const party = await ContractParty.findById(res.body.partyId).lean();
+      expect(party?.email).toBe('co@test.com');
+      expect(party?.inviteTokenHash).toBe(crypto.createHash('sha256').update(match![1]).digest('hex'));
+    } finally {
+      if (prevFrontend === undefined) delete process.env.FRONTEND_URL;
+      else process.env.FRONTEND_URL = prevFrontend;
+    }
   });
 });

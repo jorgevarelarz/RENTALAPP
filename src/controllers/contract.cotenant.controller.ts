@@ -7,6 +7,7 @@ import { getNextSigningStatus } from '../domain/contracts/status';
 import { AdminRequest } from '../models/adminRequest.model';
 import { User } from '../models/user.model';
 import { sendEmail } from '../utils/email';
+import { frontendUrl } from '../utils/frontendUrl';
 
 const redactEmail = (email?: string) => {
   if (!email || !email.includes('@')) return '';
@@ -64,7 +65,7 @@ export const inviteCoTenant = async (req: Request, res: Response) => {
         inviteExpiresAt: expiresAt,
       });
     }
-    const link = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/invites/accept?token=${token}`;
+    const link = frontendUrl('/invites/accept', { token });
     await sendEmail(
       normalizedEmail,
       'Invitación para co-titular del contrato',
