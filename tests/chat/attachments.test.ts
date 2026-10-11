@@ -57,6 +57,31 @@ describe('Chat attachments whitelist', () => {
     expect(res.body?.error).toBe('attachment_domain_not_allowed');
   });
 
+  it.each([
+    'https://cdn.example.com/uploads.evil.com/a.jpg',
+    'https://cdn.example.com/uploads/../contracts/x.pdf',
+    'https://cdn.example.com/uploads/sub/a.jpg',
+    '/uploads/contracts/x.pdf',
+    '/uploads/../package.json',
+    'javascript:alert(1)',
+  ])('rejects %s', async (attachmentUrl) => {
+    const res = await request(app)
+      .post(`/api/chat/${conversationId}/messages`)
+      .set('x-user-id', proId)
+      .send({ body: 'hola', attachmentUrl });
+    expect(res.status).toBe(400);
+    expect(res.body?.error).toBe('attachment_domain_not_allowed');
+  });
+
+  it('accepts files uploaded to our own /uploads', async () => {
+    const res = await request(app)
+      .post(`/api/chat/${conversationId}/messages`)
+      .set('x-user-id', proId)
+      .send({ body: 'ok', attachmentUrl: '/uploads/0123456789abcdef0123456789abcdef.pdf' });
+    expect(res.status).toBe(201);
+    expect(res.body.attachmentUrl).toBe('/uploads/0123456789abcdef0123456789abcdef.pdf');
+  });
+
   it('accepts allowed attachment domains', async () => {
     const res = await request(app)
       .post(`/api/chat/${conversationId}/messages`)
