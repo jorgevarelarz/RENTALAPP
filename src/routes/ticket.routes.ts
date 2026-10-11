@@ -20,6 +20,7 @@ import { Property } from '../models/property.model';
 import { sendTicketOpenedEmail } from '../utils/email';
 import { logger } from '../utils/logger';
 import { isOwnUploadUrl } from '../utils/uploadUrl';
+import { csvRow } from '../utils/csv';
 
 const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
@@ -393,8 +394,11 @@ function buildListFilter(base: Record<string, string>, query: any): { filter?: a
   const filter: any = { ...base };
   const { status, q } = query;
   if (status !== undefined && status !== '') {
-    if (typeof status !== 'string' || !TICKET_STATUSES.includes(status)) return { error: 'invalid_status' };
-    filter.status = status;
+    // Uno o varios estados separados por comas («awaiting_validation,closed»).
+    if (typeof status !== 'string') return { error: 'invalid_status' };
+    const statuses = Array.from(new Set(status.split(',').map(s => s.trim())));
+    if (!statuses.every(s => TICKET_STATUSES.includes(s))) return { error: 'invalid_status' };
+    filter.status = statuses.length === 1 ? statuses[0] : { $in: statuses };
   }
   if (q !== undefined && typeof q !== 'string') return { error: 'invalid_query' };
   const term = (q || '').trim().slice(0, SEARCH_MAX);
@@ -464,6 +468,101 @@ function listMine(field: 'openedBy' | 'ownerId' | 'proId') {
     }
   };
 }
+
+/** Estados con el presupuesto aprobado y pagado: lo que el profesional puede facturar. */
+const PRO_BILLABLE_STATUSES = [...WORK_STATUSES, 'awaiting_validation', 'closed'];
+const PRO_BILLING_CSV_MAX = 5000;
+const STATUS_LABELS: Record<string, string> = {
+  open: 'Abierta',
+  quoted: 'Presupuestada',
+  awaiting_schedule: 'Por agendar',
+  scheduled: 'Agendada',
+  in_progress: 'En curso',
+  awaiting_validation: 'Por validar',
+  closed: 'Cerrada',
+  disputed: 'En disputa',
+};
+
+/** Presupuesto más el extra aprobado: lo que se libera al profesional (releaseTicketEscrow). */
+const billableAmountExpr = {
+  $add: [
+    { $ifNull: ['$quote.amount', 0] },
+    { $cond: [{ $eq: ['$extra.status', 'approved'] }, { $ifNull: ['$extra.amount', 0] }, 0] },
+  ],
+};
+
+/** Resumen del profesional, calculado sobre todas sus incidencias (no solo la página cargada). */
+r.get('/my/pro/summary', ...assertRole('pro'), async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const rows = await Ticket.aggregate([
+      { $match: { proId: userId } },
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 },
+          quoted: { $sum: { $ifNull: ['$quote.amount', 0] } },
+          billable: { $sum: billableAmountExpr },
+        },
+      },
+    ]);
+    const byStatus = new Map(rows.map(row => [String(row._id), row]));
+    const sum = (statuses: string[], key: 'count' | 'quoted' | 'billable') =>
+      statuses.reduce((acc, s) => acc + Number(byStatus.get(s)?.[key] || 0), 0);
+    const pendingStatuses = PRO_BILLABLE_STATUSES.filter(s => s !== 'closed');
+    res.json({
+      quotes: {
+        toQuote: sum(['open'], 'count'),
+        awaitingApproval: sum(['quoted'], 'count'),
+        approved: sum(PRO_BILLABLE_STATUSES, 'count'),
+        quotedTotal: rows.reduce((acc, row) => acc + Number(row.quoted || 0), 0),
+      },
+      billing: {
+        pendingCount: sum(pendingStatuses, 'count'),
+        pendingTotal: sum(pendingStatuses, 'billable'),
+        releasedCount: sum(['closed'], 'count'),
+        releasedTotal: sum(['closed'], 'billable'),
+      },
+    });
+  } catch (err: any) {
+    logger.error({ err }, 'pro summary failed');
+    res.status(500).json({ error: 'summary_failed', code: 500 });
+  }
+});
+
+/** CSV de los trabajos facturables del profesional (todos, no solo la página cargada). */
+r.get('/my/pro/billing.csv', ...assertRole('pro'), async (req, res) => {
+  try {
+    const userId = getUserId(req);
+    const items = await Ticket.find({ proId: userId, status: { $in: PRO_BILLABLE_STATUSES } })
+      .sort({ updatedAt: -1 })
+      .limit(PRO_BILLING_CSV_MAX)
+      .select('title service status quote extra updatedAt')
+      .lean();
+    const money = (n: number) => n.toFixed(2);
+    const lines = items.map((t: any) => {
+      const quote = Number(t.quote?.amount || 0);
+      const extra = t.extra?.status === 'approved' ? Number(t.extra?.amount || 0) : 0;
+      return csvRow([
+        t.updatedAt ? new Date(t.updatedAt).toISOString().slice(0, 10) : '',
+        t.title,
+        SERVICE_LABELS[t.service as ProService] || t.service || '',
+        STATUS_LABELS[t.status] || t.status,
+        money(quote),
+        money(extra),
+        money(quote + extra),
+        String(t._id),
+      ]);
+    });
+    const csv = ['Fecha,Trabajo,Servicio,Estado,Presupuesto (EUR),Extra aprobado (EUR),Total (EUR),Referencia', ...lines].join('\n');
+    res.header('Content-Type', 'text/csv; charset=utf-8');
+    res.attachment(`rentalapp_facturacion_${new Date().toISOString().slice(0, 10)}.csv`);
+    res.send(`\uFEFF${csv}\n`);
+  } catch (err: any) {
+    logger.error({ err }, 'pro billing csv failed');
+    res.status(500).json({ error: 'billing_csv_failed', code: 500 });
+  }
+});
 
 r.get('/my/tenant', ...assertRole('tenant'), listMine('openedBy'));
 r.get('/my/owner', ...assertRole('landlord'), listMine('ownerId'));

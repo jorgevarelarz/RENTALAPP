@@ -173,6 +173,8 @@ describe('Ticket access control', () => {
   it('accepts only own uploaded photos on a report and returns them in the ticket', async () => {
     const send = jest.spyOn(email, 'sendTicketOpenedEmail').mockResolvedValue('sent');
     try {
+      // La cuenta del propietario tiene que existir antes de abrir la incidencia: el aviso busca su correo.
+      const L = await token(LANDLORD, 'landlord');
       const T = await token(TENANT, 'tenant');
       const contract = await Contract.create({
         landlord: LANDLORD, tenant: TENANT, property: '507f1f77bcf86cd799439012',
@@ -195,7 +197,7 @@ describe('Ticket access control', () => {
 
       const created = await post({ ...base, photos: [own(1), own(2), own(1)] }).expect(201);
       expect(created.body.photos).toEqual([own(1), own(2)]); // sin duplicados
-      const read = await request(app).get(`/api/tickets/${created.body._id}`).set('Authorization', await token(LANDLORD, 'landlord')).expect(200);
+      const read = await request(app).get(`/api/tickets/${created.body._id}`).set('Authorization', L).expect(200);
       expect(read.body.photos).toEqual([own(1), own(2)]);
       for (let i = 0; i < 100 && !send.mock.calls.length; i++) await new Promise(resolve => setTimeout(resolve, 20));
       expect(send.mock.calls[0][1]).toMatchObject({ photoCount: 2 });
