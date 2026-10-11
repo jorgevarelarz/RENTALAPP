@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { ChevronRight, Search } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { listMyTickets } from "../../services/tickets";
 import { useAuth } from "../../context/AuthContext";
+import { useDebouncedValue } from "../../hooks/useDebouncedValue";
 import Card from "../../components/ui/Card";
 import PageHeader from "../../components/ui/PageHeader";
 import StatusBadge from "../../components/ui/StatusBadge";
@@ -35,9 +36,12 @@ export default function TicketsList() {
   const [page, setPage] = useState(() => Math.max(1, Number(sp.get('page')) || 1));
   const [q, setQ] = useState(() => sp.get('q') || "");
   const [status, setStatus] = useState(() => sp.get('status') || "");
+  // La búsqueda va al servidor (título o servicio) para que cubra todas las páginas, no solo la cargada.
+  const search = useDebouncedValue(q.trim(), 300);
   const { data, isLoading, isError } = useQuery({
-    queryKey: ["tickets", role, { page, status }],
-    queryFn: async () => listMyTickets(role, { page, status, limit: PAGE_SIZE }),
+    queryKey: ["tickets", role, { page, status, search }],
+    queryFn: async () => listMyTickets(role, { page, status, q: search || undefined, limit: PAGE_SIZE }),
+    placeholderData: keepPreviousData,
   });
 
   // Sincroniza query params ↔ estado
@@ -50,19 +54,11 @@ export default function TicketsList() {
   }, [page, q, status, sp, setSp]);
 
   const items = useMemo(() => data?.items || [], [data]);
-  const filtered = useMemo(() => {
-    const term = q.trim().toLowerCase();
-    if (!term) return items;
-    return items.filter(t =>
-      String(t.title || "").toLowerCase().includes(term) ||
-      getServiceLabel(t.service).toLowerCase().includes(term)
-    );
-  }, [items, q]);
 
   const total = data?.total || 0;
   const currentPage = data?.page || page;
   const pages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const nothingAtAll = !isLoading && !isError && total === 0 && !status;
+  const nothingAtAll = !isLoading && !isError && total === 0 && !status && !search && !q;
 
   return (
     <div className="space-y-6 pb-10">
@@ -81,7 +77,7 @@ export default function TicketsList() {
               type="search"
               placeholder="Buscar por título o servicio"
               value={q}
-              onChange={e => setQ(e.target.value)}
+              onChange={e => { setQ(e.target.value); setPage(1); }}
               className="w-full rounded-lg border border-[var(--border)] bg-[var(--card)] py-2 pl-9 pr-3 text-sm focus:border-gray-400 focus:outline-none"
             />
           </label>
@@ -117,13 +113,13 @@ export default function TicketsList() {
               <p className="mt-1 text-sm text-gray-500">{EMPTY_TEXT[role]}</p>
             </div>
           </div>
-        ) : filtered.length === 0 ? (
+        ) : items.length === 0 ? (
           <div className="px-5 py-6 text-sm text-gray-500">
-            {q ? 'Ninguna incidencia coincide con la búsqueda.' : 'No hay incidencias en este estado.'}
+            {search ? 'Ninguna incidencia coincide con la búsqueda.' : 'No hay incidencias en este estado.'}
           </div>
         ) : (
           <ul className="divide-y divide-gray-100">
-            {filtered.map(ticket => {
+            {items.map(ticket => {
               const updated = formatTicketDate(ticket.updatedAt || ticket.createdAt);
               const quote = formatEuros(ticket.quote?.amount);
               return (

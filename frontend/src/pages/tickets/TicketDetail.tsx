@@ -285,9 +285,10 @@ export default function TicketDetail() {
         {nextStep && <p className="text-sm text-gray-600"><span className="font-medium text-gray-900">Siguiente paso:</span> {nextStep}</p>}
       </div>
 
+      {/* En móvil las columnas se deshacen (contents) para ordenar: acciones, descripción, historial y chat. */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <Card className="p-5">
+        <div className="contents lg:col-span-2 lg:block lg:space-y-6">
+          <Card className="order-2 p-5 lg:order-none">
             <h2 className={sectionTitle}>Descripción</h2>
             <p className="mt-2 whitespace-pre-wrap text-gray-700 [overflow-wrap:anywhere]">{ticket.description}</p>
             {Array.isArray(ticket.photos) && ticket.photos.length > 0 && (
@@ -316,7 +317,7 @@ export default function TicketDetail() {
             </dl>
           </Card>
 
-          <div className="h-[560px] overflow-hidden">
+          <div className="order-4 h-[560px] overflow-hidden lg:order-none">
             <ChatPanel
               kind="direct"
               refId={role === 'landlord' || role === 'pro' ? ticket.openedBy : ticket.ownerId}
@@ -324,8 +325,8 @@ export default function TicketDetail() {
           </div>
         </div>
 
-        <div className="order-first space-y-6 lg:order-none">
-          <Card className="space-y-4 p-5">
+        <div className="contents lg:block lg:space-y-6">
+          <Card className="order-1 space-y-4 p-5 lg:order-none">
             <h2 className={sectionTitle}>Qué puedes hacer</h2>
             {actions.length > 0 ? actions : (
               <p className="text-sm text-gray-500">
@@ -335,7 +336,7 @@ export default function TicketDetail() {
           </Card>
 
           {history.length > 0 && (
-            <Card className="p-5">
+            <Card className="order-3 p-5 lg:order-none">
               <h2 className={sectionTitle}>Historial</h2>
               <ol className="mt-3 space-y-3 border-l border-gray-200 pl-4">
                 {history.slice(0, 8).map((h: any, i: number) => (
