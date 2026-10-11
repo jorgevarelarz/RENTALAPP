@@ -65,7 +65,7 @@
 | Depósito de la fianza ante la comunidad autónoma | Sin campos ni justificante. Solo cubre 3 comunidades y el texto de Madrid cita el IVIMA. | M |
 | Actualización de renta por IPC/IRAV | No existe. | M-L |
 | Vencimiento, prórroga y preavisos | Ningún job revisa `endDate`, así que se siguen generando recibos después del fin. `/renew` solo envía un email. | M-L |
-| Recibos PDF de renta | No existen, aunque el art. 17.4 de la LAU los exige. ~~`receiptUrl` usa `intent.charges`, que es un campo obsoleto~~ (corregido en la ronda 26: sale de `latest_charge`). | S-M |
+| Recibos PDF de renta | ~~No existen, aunque el art. 17.4 de la LAU los exige.~~ Hechos el 2026-10-12 (ronda 38): `GET /api/payments/:id/receipt.pdf` y «Descargar recibo» en «Pagos y recibos» del inquilino. Falta el botón en las pantallas del casero. ~~`receiptUrl` usa `intent.charges`, que es un campo obsoleto~~ (corregido en la ronda 26: sale de `latest_charge`). | S-M |
 | Impagos | No hay estado `OVERDUE` ni recordatorios automáticos. | S-M |
 | Notificaciones dentro de la app | No existen. Ni el pago de la renta ni el de la fianza avisan al arrendador. | M |
 | Cambio de contraseña desde la cuenta | Hecho (2026-10-11, ronda 25): `POST /api/auth/change-password` pide la actual, cierra las demás sesiones y avisa por correo; tarjeta «Contraseña» en el perfil. | S |

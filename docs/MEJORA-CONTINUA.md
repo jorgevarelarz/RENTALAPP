@@ -33,6 +33,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 30**: en el panel de Stripe, el webhook (`/api/stripe/webhook`) tiene que tener suscritos `charge.dispute.created`, `charge.dispute.updated` y `charge.dispute.closed`. Si no, las disputas no llegan. Tres decisiones abiertas: (1) una disputa no tiene más aviso que el historial del contrato y un `console.error` en el log, porque no hay canal de alertas para el administrador; ¿correo a soporte, al casero, o un panel? (2) Si se pierde una disputa de renta, el recibo sigue `PAID`: ¿el mes vuelve a deberse? (3) Una fianza devuelta en Stripe deja `depositPaid: true` y anota `depositRefundedAt`: ¿la devolución al terminar el contrato es así, o debe cambiar algo más (estado del contrato, aviso)?
 - **Al desplegar la ronda 34**: los mensajes de chat solo admiten adjuntos subidos a nuestro `/uploads` (relativos o bajo `APP_URL`, `FRONTEND_URL` o `UPLOADS_BASE_URL`). Si en producción `APP_URL` no es el dominio que devuelve la subida, los adjuntos darán 400 `attachment_domain_not_allowed`; conviene comprobar que `APP_URL` está puesto. Los mensajes antiguos con enlaces externos no se tocan. Además, ¿deben los adjuntos del chat ser privados (URL firmada que caduca)? Hoy son públicos para quien tenga el enlace, aunque el nombre ya no se puede adivinar.
 - **Incidencias (ronda 35), dos decisiones:** (1) el coste extra que aprueba el propietario se suma a lo que se libera al profesional (`releaseTicketEscrow`), pero el hold de Stripe solo retuvo el presupuesto, así que la captura pediría más de lo retenido. Va con el rediseño del escrow (P5); no se ha tocado. (2) Tanto el propietario («Validar») como el inquilino («Confirmar que está arreglado») liberan el pago del propietario al profesional. Desde la ronda 35, los dos solo después de que el profesional marque el trabajo terminado. ¿Debe poder liberarlo el inquilino, que no es quien paga?
+- **Recibos de renta (ronda 38)**: el PDF dice «Justificante del pago emitido por RentalApp en nombre del arrendador (art. 17.4 LAU)» y lleva nombres de arrendador y arrendatario, vivienda, periodo, fecha, importe y referencia de Stripe, sin DNI/NIF (no se guardan, ver ronda 21) ni los datos legales de RentalApp. Conviene que alguien con criterio legal revise ese texto y decida si el recibo debe llevar NIF de las partes y la razón social de RentalApp.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -1373,3 +1374,34 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: en móvil, el historial de la ficha sale antes de la descripción; la búsqueda de la lista filtra solo la página cargada (el backend no admite `q`); el paso «Contrato activo» con la fecha aunque esté pendiente; los `console.*` fuera del logger.
 
 **Siguiente mejora propuesta.** Búsqueda de incidencias en el servidor: `q` (título o servicio, con la expresión escapada) en `GET /api/tickets/my/*` y la lista usándolo, porque hoy solo filtra las 20 cargadas. De paso, en la ficha móvil, la descripción antes que el historial.
+
+### Ronda 38 — 2026-10-12 00:45
+
+**Qué y por qué.** Recibos PDF de la renta. Era un hueco de producto apuntado en la auditoría («Recibos PDF de renta: no existen, aunque el art. 17.4 de la LAU los exige»): el inquilino pagaba y no tenía más justificante que el recibo genérico de Stripe. Lo he preferido a la búsqueda de incidencias propuesta en la ronda 37 porque es una obligación legal en el flujo de pago, que es el más crítico, y llevaba cuatro rondas seguidas en incidencias.
+
+1. **Backend** (`services/rentReceiptPdf.ts`, `controllers/payment.controller.ts`, `routes/payments.routes.ts`):
+   - `GET /api/payments/:id/receipt.pdf` devuelve el recibo de una renta o fianza **cobrada** (`Payment` con `status: 'succeeded'`). Cada renta pagada ya genera su `Payment` (`type: 'rent'`, mes y año), así que vale para todo lo cobrado, también lo anterior a esta ronda;
+   - lo descargan quien pagó, quien cobró, el co-titular activo y quien puede leer el contrato (casero, inquilino, agencia gestora con `manage`, admin). A cualquier otro se le responde 404, como si no existiera;
+   - 409 `receipt_not_paid` si no está cobrado, 409 `receipt_refunded` si se devolvió entero; los pagos de servicios no tienen recibo (404);
+   - el contenido sale de `describeReceipt` (función pura, con test): número `R-AAAAMM-XXXXXX`, arrendador, arrendatario, vivienda, periodo, fecha de pago, forma de pago, referencia de Stripe, el concepto por separado («Renta de octubre de 2026»), el total y, si hubo devolución parcial, «Devuelto el …: X €». Diseño sobrio con Helvetica, sin logos ni adornos;
+   - `Cache-Control: private, no-store`.
+2. **Interfaz** (`pages/tenant/Payments.tsx`): «Pagos y recibos» pasa al sistema 2026, como la lista de incidencias. Lista en una tarjeta, cada pago titulado por su mes, importe en euros con formato español, «Vence el» o «Pagado el», estado con la etiqueta en español y «Descargar recibo» en lo cobrado. Lo pendiente sale primero. Se quita el «ID: 66f…» que se veía. De paso, un fallo: «Pagar ahora» salía en cualquier recibo pendiente de la lista, también en los que paga otra persona (la lista trae los pagos como pagador o como cobrador); ahora solo sale si pagas tú. El backend ya respondía 403.
+
+**Commits.**
+- `f92bf73` Pagos: recibo PDF de cada renta o fianza cobrada (art. 17.4 LAU) en GET /api/payments/:id/receipt.pdf
+- `913fdc3` Pagos: «Pagos y recibos» descarga el PDF de cada renta o fianza cobrada, pone lo pendiente primero y solo ofrece «Pagar ahora» a quien paga
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand`: nuevo `tests/contracts/payments.receipt.test.ts` 4/4 (inquilino y casero descargan un PDF que empieza por `%PDF-` con el nombre de fichero y `no-store`; la agencia gestora sí y un extraño, inquilino o casero, 404; los 409 y 404 de pendiente, devuelto, servicio e id raro; el contenido con periodo, partes, vivienda y devolución parcial, y el de una fianza). `payments.duplicates` y `payments.refunds`: 2 suites y 12 tests OK.
+- PDF de muestra renderizado a PNG y revisado (`/tmp/ra-shots38/recibo.png`).
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 33 ficheros y 123 tests OK (antes 32 y 119). El nuevo `Payments.test.tsx` tiene 4 casos: orden y botones (pendiente primero, sin «Pagar ahora» en el recibo de otro, sin recibo para la fianza devuelta), descarga del PDF, errores de descarga y de carga, y títulos por mes.
+- Playwright (vite local, `/api/*` simulado) a 390 y 1280 px (`/tmp/ra-shots38/pagos-*.png`): sin desbordamiento horizontal.
+- GitNexus `detect_changes`: riesgo bajo, sin flujos afectados (solo desplazamiento de líneas en `getMyPayments` y `payReceipt`, que no cambian).
+
+**Qué queda.**
+- El casero no tiene dónde descargar los recibos: su «Pagos» es la conexión con Stripe y «Ganancias» solo exporta CSV. El endpoint ya le deja; falta la lista en su lado (o un botón por mes en el detalle del contrato).
+- La fianza solo tiene recibo si existe su `Payment`; el pago de la fianza por Checkout no siempre lo crea (hueco «Devolución de la fianza» de la auditoría).
+- Texto legal del recibo y NIF de las partes: en «Para Jorge».
+- Pendientes anteriores: búsqueda de incidencias en el servidor (`q`), en móvil el historial de la ficha antes que la descripción, adjuntos de chat públicos, `console.*` fuera del logger.
+
+**Siguiente mejora propuesta.** Recibos para el casero: en el detalle del contrato, la lista de meses cobrados con «Descargar recibo» (reutilizando `GET /api/contracts/:id/payments`, que ya devuelve los `Payment` cobrados del contrato). Después, la búsqueda de incidencias en el servidor.

@@ -1238,3 +1238,10 @@ Rules:
 - `POST /api/tickets`: `service` must be in pro catalog (`plumbing|electricity|appliances|locksmith|cleaning|painting|others`, 400 `invalid_service`), trimmed `title` ≤120 / `description` ≤2000 required (400 `invalid_title|invalid_description`), contract `active` (409 `contract_not_active`). After responding, emails owner via new `sendTicketOpenedEmail` (`utils/email.ts`).
 - Frontend `TicketCreatePage` rewritten (single contract preselected, service chips, Spanish errors via `getTicketErrorText`, navigate to ticket). `/tickets/new` tenant-only. `utils/tickets.ts` gains `TICKET_SERVICES` and new labels.
 - Verification: tsc clean; Jest `--runInBand` escrow 3 suites / 13, rbac 8, e2e 10/10; frontend build + 117 tests; Playwright `/tmp/ra-shots36`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 38: rent receipt PDFs (LAU 17.4)
+
+- New `GET /api/payments/:id/receipt.pdf` (`payment.controller.downloadReceipt`, `services/rentReceiptPdf.ts` with pure `describeReceipt` + `renderReceiptPdf`): only `succeeded` rent/deposit Payments; payer, payee, active co-tenant or `ensureCanReadContract` readers; others 404; 409 `receipt_not_paid|receipt_refunded`.
+- Frontend `pages/tenant/Payments.tsx` restyled (2026 list), «Descargar recibo» via `services/payments.downloadReceipt`, pending first, «Pagar ahora» only for the payer.
+- Verification: tsc clean; Jest `--runInBand` payments.receipt 4, duplicates+refunds 12; frontend build + 123 tests; Playwright `/tmp/ra-shots38`.
+
