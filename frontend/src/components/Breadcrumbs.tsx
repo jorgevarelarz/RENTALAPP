@@ -2,12 +2,6 @@ import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import nav from '../config/nav.config.json';
 
-function prettyId(id: string) {
-  if (!id) return '';
-  const short = id.length > 6 ? id.slice(-6) : id;
-  return short.toUpperCase();
-}
-
 function labelFor(path: string): string {
   const cfg: any = nav;
   const all = (Object.values(cfg) as any[]).flat();
@@ -15,10 +9,11 @@ function labelFor(path: string): string {
   if (item?.label) return item.label;
   if (path === '/contracts/new') return 'Nuevo contrato';
   if (path === '/tickets/new') return 'Comunicar una avería';
-  // Dynamic labels for known patterns
-  if (/^\/contracts\/[a-z0-9]+/i.test(path)) return `Contrato #${prettyId(path.split('/').pop() || '')}`;
-  if (/^\/tickets\/[a-z0-9]+/i.test(path)) return `Incidencia #${prettyId(path.split('/').pop() || '')}`;
-  if (/^\/properties\/[a-z0-9]+/i.test(path)) return `Propiedad #${prettyId(path.split('/').pop() || '')}`;
+  // Fichas: sin el ID interno a la vista, el título ya está en la cabecera de la página.
+  if (/^\/contracts\/[a-z0-9]+\/signed$/i.test(path)) return 'Contrato firmado';
+  if (/^\/contracts\/[a-z0-9]+$/i.test(path)) return 'Contrato';
+  if (/^\/tickets\/[a-z0-9]+$/i.test(path)) return 'Incidencia';
+  if (/^\/properties\/[a-z0-9]+$/i.test(path)) return 'Inmueble';
   return path.split('/').pop() || '';
 }
 
