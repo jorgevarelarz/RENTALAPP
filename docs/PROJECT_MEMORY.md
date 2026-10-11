@@ -1219,3 +1219,9 @@ Rules:
 - New `src/middleware/rejectMongoOperators.ts` (after parsers/hpp in `app.ts`): 400 `invalid_input` when query or JSON body has a key starting with `$` (any depth). Webhooks mounted earlier are unaffected. Not `mongoose sanitizeFilter` (would wrap our own `$in/$or`).
 - Frontend `Badge`/`StatusBadge`/`.badge`: pill, sentence case, no uppercase/tracking. `getStatusLabel` translates ticket/payment statuses (`in_progress` → «En curso"…) and capitalises unknown ones; «Pendiente de firma».
 - Verification: tsc clean; full Jest `--runInBand` 77 suites / 343 tests (only the adapted cotenant case failed, now 14/14); new `tests/security/mongoOperators.test.ts` 5; frontend build + 111 tests (new `statusBadges.test.ts`); Playwright `/tmp/ra-shots33`.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 34: upload hardening
+
+- `upload.routes`: file name `crypto.randomBytes(16).hex`; images go through new `src/utils/stripImageMetadata.ts` (JPEG drops APP1/APP13/COM keeping a minimal EXIF with Orientation; PNG drops eXIf/tEXt/iTXt/zTXt/tIME; WebP drops EXIF/XMP + VP8X flags; unknown → unchanged); a 415 deletes the whole batch.
+- Chat `POST /:id/messages`: `attachmentUrl` must pass new `src/utils/uploadUrl.ts` `isOwnUploadUrl` (`<base>/<safe-name>`, bases `/uploads`, `APP_URL/uploads`, `FRONTEND_URL/uploads`, `UPLOADS_BASE_URL`). Any external URL now 400 `attachment_domain_not_allowed`.
+- Verification: tsc clean; Jest `--runInBand` uploads+chat+new unit 6 suites / 25 tests, unit+security+e2e 14 / 58, e2e config 10/10; frontend build + 111 tests.

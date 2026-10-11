@@ -31,6 +31,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 27**: la agencia que gestiona un inmueble (`agencyAccess: 'manage'`) ve ya sus candidatos (nombre, correo, mensaje y si tienen la solvencia verificada), propone y acepta visitas en nombre del propietario y prepara el contrato. Antes solo podía el propietario. Al traspasar el inmueble (`status_only`) pierde todo eso. Si el propietario debe dar su visto bueno antes de que la agencia vea a los candidatos, hay que decidirlo.
 - **Al desplegar la ronda 28**: `POST /api/auth/request-reset` responde `{ ok: true }` antes de buscar la cuenta, y el correo sale después. Si el SMTP falla, solo queda en el log (la respuesta ya era la misma con o sin cuenta). Además, la agencia gestora ve ya «Contratos» en su menú, abre el detalle y descarga el borrador de los contratos de inmuebles que gestiona, y ve los co-titulares sin poder tocarlos. El administrador, que antes veía «Contratos» vacío, ve ahora todos.
 - **Al desplegar la ronda 30**: en el panel de Stripe, el webhook (`/api/stripe/webhook`) tiene que tener suscritos `charge.dispute.created`, `charge.dispute.updated` y `charge.dispute.closed`. Si no, las disputas no llegan. Tres decisiones abiertas: (1) una disputa no tiene más aviso que el historial del contrato y un `console.error` en el log, porque no hay canal de alertas para el administrador; ¿correo a soporte, al casero, o un panel? (2) Si se pierde una disputa de renta, el recibo sigue `PAID`: ¿el mes vuelve a deberse? (3) Una fianza devuelta en Stripe deja `depositPaid: true` y anota `depositRefundedAt`: ¿la devolución al terminar el contrato es así, o debe cambiar algo más (estado del contrato, aviso)?
+- **Al desplegar la ronda 34**: los mensajes de chat solo admiten adjuntos subidos a nuestro `/uploads` (relativos o bajo `APP_URL`, `FRONTEND_URL` o `UPLOADS_BASE_URL`). Si en producción `APP_URL` no es el dominio que devuelve la subida, los adjuntos darán 400 `attachment_domain_not_allowed`; conviene comprobar que `APP_URL` está puesto. Los mensajes antiguos con enlaces externos no se tocan. Además, ¿deben los adjuntos del chat ser privados (URL firmada que caduca)? Hoy son públicos para quien tenga el enlace, aunque el nombre ya no se puede adivinar.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -1214,3 +1215,37 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: el paso «Contrato activo» muestra la fecha aunque esté pendiente, la visita del propietario sale como «Has propuesto» para la agencia, adjuntos de chat y avatares públicos sin caducidad, y los `console.*` sueltos fuera del logger.
 
 **Siguiente mejora propuesta.** Interfaz: «Incidencias» (`TicketsList` y `TicketDetail`) al sistema RentalApp 2026, con fechas en `es-ES`, tildes, lista en tarjetas en móvil en vez de tabla y sin mayúsculas en las cabeceras. Si se prefiere seguridad: los adjuntos de chat y los avatares, que son públicos y no caducan.
+
+### Ronda 34 — 2026-10-11 21:45
+
+**Qué y por qué.** Seguridad, el punto «Ficheros» de la auditoría, que seguía abierto. `/api/uploads/images` sirve las fotos de los inmuebles, los avatares y los adjuntos del chat, todo como estático público en `/uploads`.
+
+1. **Nombre imposible de adivinar.** Antes era `Date.now()_Math.random()` (pocos bits y predecible). Ahora son 16 bytes de `crypto.randomBytes` en hexadecimal.
+2. **Fuera los metadatos de las fotos.** Nuevo `src/utils/stripImageMetadata.ts`, sin dependencias ni recodificación (no hay `sharp` en el proyecto).
+   - JPEG: quita APP1 (EXIF con GPS, cámara y fecha, y XMP), APP13 (IPTC) y comentarios, y conserva JFIF, el perfil ICC y la imagen. Si la foto tenía orientación distinta de 1, deja un EXIF mínimo con solo ese dato, para que las fotos del móvil no salgan giradas.
+   - PNG: quita `eXIf`, `tEXt`, `iTXt`, `zTXt` y `tIME`.
+   - WebP: quita `EXIF` y `XMP `, apaga sus marcas en `VP8X` y corrige el tamaño RIFF.
+   - Si el fichero no se puede interpretar, se guarda tal cual. Los PDF no se tocan.
+   De paso, si un fichero del lote se rechaza (415), se borran también los demás. Antes quedaban en `/uploads` sin extensión.
+3. **Adjuntos del chat solo de `/uploads` propios** (nuevo `src/utils/uploadUrl.ts`). Sin `UPLOADS_BASE_URL` valía cualquier `http(s)://`: un píxel de rastreo o una imagen de phishing en el chat del otro. Con la variable, el `startsWith` dejaba pasar `https://cdn…/uploads.evil.com/…` y `…/uploads/../contracts/…`. Ahora se acepta solo `<base>/<nombre>`, con un nombre sin barras ni `..`, y la base puede ser `/uploads`, `APP_URL/uploads`, `FRONTEND_URL/uploads` o las de `UPLOADS_BASE_URL`.
+
+**Commits.**
+- `d312822` Subidas: nombre aleatorio con crypto, las fotos pierden EXIF/GPS, XMP, IPTC y comentarios
+- `fd6351f` Chat: los adjuntos solo pueden ser ficheros de /uploads propios
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - Los nuevos `tests/unit/stripImageMetadata.test.ts` (5) y `tests/unit/uploadUrl.test.ts` (2), el caso nuevo de `upload.routes.test.ts` (nombre de 32 hex y sin EXIF en disco) y 7 casos nuevos en `tests/chat/attachments.test.ts`: `tests/uploads`, `tests/chat` y los dos unitarios, 6 suites y 25 tests OK.
+  - `tests/unit`, `tests/security` y `tests/e2e`: 14 suites y 58 tests OK. e2e (`jest.config.e2e.js`): 10 OK.
+- Con imágenes reales generadas con Pillow (JPEG, PNG y WebP de 40×20 con orientación 6, fabricante, software y GPS), las tres salen sin rastro de esos datos, se decodifican igual (mismos píxeles) y el JPEG conserva solo `Orientation=6` (`/tmp/ra34`).
+- Frontend (sin cambios): build OK y `npm test` con 31 ficheros y 111 tests OK.
+- GitNexus: `impact` LOW en `detectFileType`. `detect_changes` sale bajo, sin flujos afectados (`storage` de `upload.routes` y el router del chat).
+
+**Qué queda.**
+- Los adjuntos del chat siguen siendo públicos para quien tenga el enlace y no caducan. Hacerlos privados exige URL firmadas o servirlos por la API con autenticación. Queda anotado en «Para Jorge».
+- Los ficheros ya subidos conservan su EXIF. Limpiarlos es tocar datos de usuarios (D2), así que no se ha hecho.
+- PNG y WebP pierden también la orientación EXIF (es raro que la tengan). HEIC no se admite.
+- Pendientes de interfaz: «Incidencias» (`TicketsList` y `TicketDetail`), con fechas en inglés, sin tildes, mayúsculas en las cabeceras y una tabla que no cabe en móvil.
+
+**Siguiente mejora propuesta.** Interfaz: «Incidencias» (`TicketsList` y `TicketDetail`) al sistema RentalApp 2026, con fechas en `es-ES`, tildes, tarjetas en móvil y cabeceras sin mayúsculas. Lleva dos rondas propuesta y la ronda 33 ya era en parte de seguridad.
