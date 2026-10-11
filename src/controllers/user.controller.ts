@@ -4,6 +4,7 @@ import { Payment } from '../models/payment.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
 import bcrypt from 'bcryptjs';
+import { Types } from 'mongoose';
 
 const toPublicUser = (u: any) => ({
   id: String(u._id),
@@ -222,15 +223,16 @@ export const updateProfile = async (req: Request, res: Response) => {
 export const getLandlordStats = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
-    const userObjectId = (req as any).user?._id;
-    if (!userId) {
+    if (!userId || !Types.ObjectId.isValid(String(userId))) {
       return res.status(403).json({ message: 'No autorizado' });
     }
+    // aggregate() no convierte tipos: req.user lleva el id como texto.
+    const userObjectId = new Types.ObjectId(String(userId));
 
     const earningsAgg = await Payment.aggregate([
       {
         $match: {
-          payee: userObjectId || userId,
+          payee: userObjectId,
           status: 'succeeded',
         },
       },
@@ -257,7 +259,7 @@ export const getLandlordStats = async (req: Request, res: Response) => {
       payee: userId,
       status: 'succeeded',
     })
-      .sort({ paidAt: -1 })
+      .sort({ paidAt: -1, createdAt: -1 })
       .limit(5)
       .populate({
         path: 'contract',
@@ -284,7 +286,7 @@ export const getLandlordStats = async (req: Request, res: Response) => {
       recentPayments: recentPayments.map((p: any) => ({
         id: p._id,
         amount: p.amount,
-        date: p.paidAt,
+        date: p.paidAt || p.createdAt,
         concept: p.concept,
         propertyName: p.contract?.property?.title || p.contract?.property?.address || 'Propiedad',
       })),
