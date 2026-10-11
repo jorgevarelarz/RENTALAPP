@@ -7,7 +7,7 @@ import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import { requirePolicies } from '../middleware/requirePolicies';
 import type { PolicyType } from '../models/policy.model';
-import { getMyPayments, payReceipt } from '../controllers/payment.controller';
+import { downloadReceipt, getMyPayments, payReceipt } from '../controllers/payment.controller';
 
 const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
@@ -44,6 +44,12 @@ r.get(
   authenticate,
   requirePolicies(REQUIRED_POLICIES),
   asyncHandler(getMyPayments),
+);
+
+r.get(
+  '/payments/:id/receipt.pdf',
+  authenticate,
+  asyncHandler(downloadReceipt),
 );
 
 r.post(

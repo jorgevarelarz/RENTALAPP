@@ -3,6 +3,81 @@ import { Payment } from '../models/payment.model';
 import { stripe } from '../utils/stripe';
 import { Contract } from '../models/contract.model';
 import { RESUMABLE_INTENT_STATUSES, STALE_CLAIM_MS } from '../services/rentPaymentAttempt.service';
+import { Types } from 'mongoose';
+import { User } from '../models/user.model';
+import { Property } from '../models/property.model';
+import { ensureCanReadContract, isActiveCoTenant } from '../utils/contractAccess';
+import { describeReceipt, renderReceiptPdf } from '../services/rentReceiptPdf';
+import { logger } from '../utils/logger';
+
+/**
+ * GET /api/payments/:id/receipt.pdf — recibo de una renta o fianza cobrada.
+ * Lo descargan quien pagó, quien cobró y quien puede leer el contrato (casero, inquilino,
+ * co-titular, agencia gestora o administrador).
+ */
+export const downloadReceipt = async (req: Request, res: Response) => {
+  const { id } = req.params;
+  const user = (req as any).user;
+  const userId = user?.id ? String(user.id) : undefined;
+  if (!userId) return res.status(401).json({ error: 'unauthorized' });
+  if (!Types.ObjectId.isValid(id)) return res.status(404).json({ error: 'receipt_not_found' });
+
+  const payment = await Payment.findById(id).lean();
+  if (!payment || (payment.type !== 'rent' && payment.type !== 'deposit') || !payment.contract) {
+    return res.status(404).json({ error: 'receipt_not_found' });
+  }
+
+  const contractId = String(payment.contract);
+  const isParty = String(payment.payer) === userId || String(payment.payee || '') === userId;
+  if (!isParty && !(await isActiveCoTenant(contractId, userId))) {
+    try {
+      await ensureCanReadContract({ contractId, user });
+    } catch (err: any) {
+      // Un recibo ajeno se trata como inexistente.
+      if (err?.status === 403 || err?.status === 404) return res.status(404).json({ error: 'receipt_not_found' });
+      throw err;
+    }
+  }
+
+  if (payment.status === 'refunded') return res.status(409).json({ error: 'receipt_refunded' });
+  if (payment.status !== 'succeeded') return res.status(409).json({ error: 'receipt_not_paid' });
+
+  const contract: any = await Contract.findById(contractId).select('landlord tenant property').lean();
+  if (!contract) return res.status(404).json({ error: 'receipt_not_found' });
+  const [landlord, tenant, property]: any[] = await Promise.all([
+    User.findById(payment.payee || contract.landlord).select('name').lean(),
+    User.findById(payment.payer).select('name').lean(),
+    Property.findById(contract.property).select('address city').lean(),
+  ]);
+
+  const content = describeReceipt({
+    paymentId: String(payment._id),
+    type: payment.type,
+    amount: Number(payment.amount),
+    amountRefunded: payment.amountRefunded,
+    refundedAt: payment.refundedAt,
+    billingMonth: payment.billingMonth,
+    billingYear: payment.billingYear,
+    paidAt: payment.paidAt,
+    reference: payment.stripeChargeId || payment.stripePaymentIntentId,
+    landlordName: landlord?.name || 'Arrendador',
+    tenantName: tenant?.name || 'Arrendatario',
+    propertyAddress: property?.address || 'Vivienda',
+    propertyCity: property?.city,
+  });
+
+  let pdf: Buffer;
+  try {
+    pdf = await renderReceiptPdf(content);
+  } catch (err) {
+    logger.error({ err, paymentId: id }, 'receipt_pdf_failed');
+    return res.status(500).json({ error: 'receipt_pdf_failed' });
+  }
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename="${content.fileName}"`);
+  res.setHeader('Cache-Control', 'private, no-store');
+  return res.send(pdf);
+};
 
 export const getMyPayments = async (req: Request, res: Response) => {
   try {
