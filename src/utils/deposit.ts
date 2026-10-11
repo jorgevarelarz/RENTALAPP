@@ -51,6 +51,15 @@ export const depositToEscrow = async (
         contractId,
         deposit: 'true',
       },
+      // El cargo hereda los metadatos del PaymentIntent: así las devoluciones y disputas
+      // (charge.refunded, charge.dispute.*) llegan con el contrato de la fianza.
+      payment_intent_data: {
+        metadata: {
+          contractId,
+          deposit: 'true',
+          type: 'deposit',
+        },
+      },
     },
     idempotencyKey ? { idempotencyKey } : undefined,
   );

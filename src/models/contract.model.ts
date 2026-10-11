@@ -1,4 +1,5 @@
 import { Schema, model, Document, Types } from 'mongoose';
+import { paymentDisputeSchema, type PaymentDispute } from './paymentDispute.schema';
 import { ALL_CONTRACT_STATUSES, type PersistedContractStatus } from '../domain/contracts/status';
 
 /**
@@ -73,6 +74,13 @@ export interface IContract extends Document {
   depositPaidAt?: Date;
   /** Última sesión de Stripe Checkout de la fianza; se reutiliza mientras siga abierta. */
   depositCheckoutSessionId?: string;
+  /** PaymentIntent del Checkout de la fianza, para reconocer sus devoluciones y disputas. */
+  depositPaymentIntentId?: string;
+  /** Euros de la fianza devueltos en Stripe (también parciales); `depositRefundedAt` solo si es total. */
+  depositAmountRefunded?: number;
+  depositRefundedAt?: Date;
+  /** Disputa (contracargo) abierta sobre el cobro de la fianza. */
+  depositDispute?: PaymentDispute;
   history?: {
     ts: Date;
     actorId?: string;
@@ -166,6 +174,10 @@ const contractSchema = new Schema<IContract>(
     depositPaid: { type: Boolean, default: false },
     depositPaidAt: { type: Date },
     depositCheckoutSessionId: { type: String, select: false },
+    depositPaymentIntentId: { type: String, index: { sparse: true } },
+    depositAmountRefunded: { type: Number },
+    depositRefundedAt: { type: Date },
+    depositDispute: { type: paymentDisputeSchema, default: undefined },
     signFeeCollected: { type: Boolean, default: false },
     signFeeCollectedAt: { type: Date },
     history: {

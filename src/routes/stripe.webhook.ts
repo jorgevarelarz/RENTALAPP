@@ -21,6 +21,7 @@ import { PartnerEarning } from '../models/partnerEarning.model';
 import { Property } from '../models/property.model';
 import { calcPartnerShareCents, parsePositiveInt } from '../utils/partnerEarnings';
 import { getAgencySharePct } from '../services/agencyShare.service';
+import { CLOSED_DISPUTE_STATUSES, type PaymentDispute } from '../models/paymentDispute.schema';
 
 const r = Router();
 
@@ -54,6 +55,45 @@ async function chargeReceipt(intent: Stripe.PaymentIntent): Promise<{ chargeId?:
     console.error('[stripe] no se pudo leer el cargo', latest, err);
     return { chargeId: latest };
   }
+}
+
+const intentIdOf = (value: string | Stripe.PaymentIntent | null | undefined): string | undefined =>
+  typeof value === 'string' ? value : value?.id;
+
+/**
+ * Contrato cuya fianza se cobró con este PaymentIntent. Las fianzas cobradas antes de guardar
+ * `depositPaymentIntentId` (y sin metadatos en el intent) se buscan por su sesión de Checkout.
+ * Si Stripe no responde, el error sube y el evento se reintenta.
+ */
+async function findDepositContract(intentId: string, metadata?: Stripe.Metadata | null) {
+  const byIntent = await Contract.findOne({ depositPaymentIntentId: intentId });
+  if (byIntent) return byIntent;
+
+  let contractId = metadata?.deposit === 'true' ? metadata.contractId : undefined;
+  if (!contractId) {
+    const sessions = await stripe.checkout.sessions.list({ payment_intent: intentId, limit: 1 });
+    const session = sessions.data[0];
+    if (session?.metadata?.deposit === 'true') contractId = session.metadata.contractId;
+  }
+  if (!contractId || !Types.ObjectId.isValid(contractId)) return null;
+  return Contract.findOneAndUpdate(
+    { _id: contractId, depositPaymentIntentId: { $in: [null, intentId] } },
+    { $set: { depositPaymentIntentId: intentId } },
+    { new: true },
+  );
+}
+
+/** Copia de la disputa de Stripe que se guarda junto al cobro (importes en euros). */
+function disputeInfo(dispute: Stripe.Dispute, now: Date): PaymentDispute {
+  const closed = CLOSED_DISPUTE_STATUSES.includes(dispute.status);
+  return {
+    id: dispute.id,
+    status: dispute.status,
+    reason: dispute.reason || undefined,
+    amount: Math.round(dispute.amount || 0) / 100,
+    openedAt: dispute.created ? new Date(dispute.created * 1000) : now,
+    ...(closed ? { closedAt: now } : {}),
+  };
 }
 
 async function maybePayAgencyRentFeeShare(params: {
@@ -437,16 +477,111 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
             amountRefunded,
             period: rentPayment?.period,
           });
+          break;
         }
+        if (payment || rentPayment) break;
+
+        // Devolución de la fianza: se anota en el contrato. `depositPaid` no cambia (el contrato
+        // sigue firmado o activo); qué significa una fianza devuelta lo decide quien la devolvió.
+        const depositContract = await findDepositContract(intentId, charge.metadata);
+        if (depositContract) {
+          await Contract.updateOne(
+            { _id: depositContract._id },
+            fullRefund
+              ? { $set: { depositAmountRefunded: amountRefunded, depositRefundedAt: refundedAt } }
+              : { $set: { depositAmountRefunded: amountRefunded } },
+          );
+          await recordContractHistory(
+            depositContract._id,
+            fullRefund ? 'depositRefunded' : 'depositPartiallyRefunded',
+            { paymentIntentId: intentId, amountRefunded },
+          );
+          break;
+        }
+        console.warn('[stripe] devolución sin pago asociado', { intentId, chargeId: charge.id });
+        break;
+      }
+      case 'charge.dispute.created':
+      case 'charge.dispute.updated':
+      case 'charge.dispute.closed': {
+        // Contracargo: se guarda en el pago, el recibo de renta o la fianza y queda en el
+        // historial del contrato. Los estados de cobro no cambian; un evento tardío no reabre
+        // una disputa ya cerrada.
+        const dispute = event.data.object as Stripe.Dispute;
+        let intentId = intentIdOf(dispute.payment_intent);
+        let chargeMetadata: Stripe.Metadata | null = null;
+        if (!intentId || typeof dispute.charge === 'string') {
+          const charge =
+            typeof dispute.charge === 'string' ? await stripe.charges.retrieve(dispute.charge) : dispute.charge;
+          intentId = intentId || intentIdOf(charge?.payment_intent);
+          chargeMetadata = charge?.metadata || null;
+        } else {
+          chargeMetadata = dispute.charge?.metadata || null;
+        }
+        if (!intentId) {
+          console.warn('[stripe] disputa sin PaymentIntent', { disputeId: dispute.id });
+          break;
+        }
+        const info = disputeInfo(dispute, new Date());
+        const open = { $nin: CLOSED_DISPUTE_STATUSES };
+
+        const payment = await Payment.findOneAndUpdate(
+          { stripePaymentIntentId: intentId, 'dispute.status': open },
+          { $set: { dispute: info } },
+          { new: true },
+        );
+        const rentPayment = await RentPayment.findOneAndUpdate(
+          { providerPaymentId: intentId, 'dispute.status': open },
+          { $set: { dispute: info } },
+          { new: true },
+        );
+        let contractRef = payment?.contract || rentPayment?.contractId;
+        let target = 'payment';
         if (!payment && !rentPayment) {
-          console.warn('[stripe] devolución sin pago asociado', { intentId, chargeId: charge.id });
+          const known =
+            (await Payment.exists({ stripePaymentIntentId: intentId })) ||
+            (await RentPayment.exists({ providerPaymentId: intentId }));
+          if (known) break; // ya cerrada: reenvío o evento tardío
+          const depositContract = await findDepositContract(intentId, chargeMetadata);
+          if (!depositContract) {
+            console.warn('[stripe] disputa sin cobro asociado', { disputeId: dispute.id, intentId });
+            break;
+          }
+          const updated = await Contract.updateOne(
+            { _id: depositContract._id, 'depositDispute.status': open },
+            { $set: { depositDispute: info } },
+          );
+          if (!updated.matchedCount) break; // ya cerrada
+          contractRef = depositContract._id;
+          target = 'deposit';
         }
+
+        console.error('[stripe] disputa', { disputeId: dispute.id, status: dispute.status, intentId, target });
+        if (!contractRef) break;
+        if (event.type === 'charge.dispute.updated') break;
+        await recordContractHistory(
+          contractRef,
+          event.type === 'charge.dispute.created' ? 'paymentDisputed' : 'paymentDisputeClosed',
+          {
+            paymentIntentId: intentId,
+            disputeId: dispute.id,
+            status: dispute.status,
+            reason: dispute.reason,
+            amount: info.amount,
+            target,
+            period: rentPayment?.period,
+          },
+        );
         break;
       }
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         if (session.metadata?.deposit === 'true') {
           const contractId = session.metadata?.contractId;
+          const depositIntentId = intentIdOf(session.payment_intent);
+          if (contractId && depositIntentId && Types.ObjectId.isValid(contractId)) {
+            await Contract.updateOne({ _id: contractId }, { $set: { depositPaymentIntentId: depositIntentId } });
+          }
           if (contractId) {
             const contract = await Contract.findById(contractId);
             if (contract && !contract.depositPaid) {

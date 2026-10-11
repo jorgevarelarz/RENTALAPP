@@ -1,4 +1,5 @@
 import { Schema, model, Document, Types } from 'mongoose';
+import { paymentDisputeSchema, type PaymentDispute } from './paymentDispute.schema';
 
 // REFUNDED: el cobro se devolvió entero en Stripe (charge.refunded). No se vuelve a cobrar solo.
 export type RentPaymentStatus = 'DUE' | 'PROCESSING' | 'PAID' | 'FAILED' | 'REFUNDED';
@@ -12,6 +13,7 @@ export interface IRentPayment extends Document {
   providerPaymentId?: string;
   paidAt?: Date;
   refundedAt?: Date;
+  dispute?: PaymentDispute;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -26,6 +28,7 @@ const rentPaymentSchema = new Schema<IRentPayment>(
     providerPaymentId: { type: String },
     paidAt: { type: Date },
     refundedAt: { type: Date },
+    dispute: { type: paymentDisputeSchema, default: undefined },
   },
   { timestamps: true },
 );

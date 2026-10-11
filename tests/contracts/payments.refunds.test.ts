@@ -168,6 +168,7 @@ describe('Devoluciones de renta y recibo del cargo (webhook de Stripe)', () => {
   });
 
   it('una devolución de un intento desconocido no falla ni toca nada', async () => {
+    jest.spyOn(stripe.checkout.sessions, 'list').mockResolvedValue({ data: [] } as any);
     await sendWebhook(
       'charge.refunded',
       { id: 'ch_x', payment_intent: 'pi_desconocido', amount: 1000, amount_refunded: 1000, refunded: true },

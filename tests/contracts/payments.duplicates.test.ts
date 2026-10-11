@@ -213,6 +213,12 @@ describe('Pagos sin cobros duplicados', () => {
       const [params, opts] = createSession.mock.calls[0];
       expect(params.success_url).toBe(`https://app.example.test/contracts/${contract._id}?deposit=success`);
       expect(params.cancel_url).toBe(`https://app.example.test/contracts/${contract._id}?deposit=cancel`);
+      // El PaymentIntent lleva el contrato: sus devoluciones y disputas se reconocen como fianza.
+      expect(params.payment_intent_data.metadata).toEqual({
+        contractId: String(contract._id),
+        deposit: 'true',
+        type: 'deposit',
+      });
       expect(params.line_items[0].price_data.unit_amount).toBe(160000);
       expect(opts.idempotencyKey).toBe(`deposit:${contract._id}:first`);
 
