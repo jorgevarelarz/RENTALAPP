@@ -1,4 +1,3 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
 import { Types } from 'mongoose';
 import { Contract } from '../models/contract.model';
 import { Payment } from '../models/payment.model';
@@ -8,8 +7,7 @@ import Appointment from '../models/appointment.model';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { getLatestLauDocument, upsertLatestLauDocument } from './legalDocuments.service';
-
-const MODEL_NAME = 'gemini-flash-latest';
+import { getGeminiModel, MAX_OUTPUT_TOKENS } from './ai.service';
 
 const STOP_WORDS = new Set([
   'el', 'la', 'los', 'las', 'de', 'del', 'y', 'o', 'a', 'en', 'por', 'para', 'un', 'una', 'que',
@@ -202,8 +200,7 @@ export async function answerWithClara(query: string, platformContext: Record<str
     },
   });
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+  const model = getGeminiModel(apiKey, MAX_OUTPUT_TOKENS.assistant);
   const result = await model.generateContent(prompt);
   const text = result.response.text()?.trim();
   if (!text) {

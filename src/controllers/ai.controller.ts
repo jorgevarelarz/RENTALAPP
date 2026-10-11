@@ -8,6 +8,11 @@ export async function generateDescription(req: Request, res: Response) {
 
 export async function health(req: Request, res: Response) {
   const runTest = String(req.query.test || '').toLowerCase() === 'true';
+  // La prueba real llama al modelo (y cuesta dinero): solo para administradores.
+  if (runTest && req.user?.role !== 'admin') {
+    res.status(403).json({ error: 'forbidden' });
+    return;
+  }
   const result = await checkAiHealth(runTest);
   res.status(result.ok ? 200 : 500).json(result);
 }

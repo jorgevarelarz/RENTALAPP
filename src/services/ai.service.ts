@@ -1,7 +1,25 @@
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import type { AiDescriptionInput } from '../validators/ai.schema';
 
-const MODEL_NAME = 'gemini-flash-latest';
+export const MODEL_NAME = 'gemini-flash-latest';
+
+// Topes de salida por llamada. Son holgados porque los modelos con razonamiento
+// cuentan esos tokens dentro de maxOutputTokens; su objetivo es acotar el coste.
+export const MAX_OUTPUT_TOKENS = {
+  description: 2048,
+  assistant: 4096,
+  health: 256,
+} as const;
+
+const REQUEST_TIMEOUT_MS = 30_000;
+
+export function getGeminiModel(apiKey: string, maxOutputTokens: number) {
+  const genAI = new GoogleGenerativeAI(apiKey);
+  return genAI.getGenerativeModel(
+    { model: MODEL_NAME, generationConfig: { maxOutputTokens } },
+    { timeout: REQUEST_TIMEOUT_MS },
+  );
+}
 
 const languageMap: Record<AiDescriptionInput['language'], string> = {
   es: 'espanol',
@@ -33,8 +51,7 @@ export async function generatePropertyDescription(input: AiDescriptionInput) {
     throw err;
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+  const model = getGeminiModel(apiKey, MAX_OUTPUT_TOKENS.description);
   const prompt = buildPrompt(input);
 
   const result = await model.generateContent(prompt);
@@ -59,8 +76,7 @@ export async function checkAiHealth(runTest: boolean) {
     return { ok: true, model: MODEL_NAME, test: 'skipped' as const };
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
+  const model = getGeminiModel(apiKey, MAX_OUTPUT_TOKENS.health);
   const result = await model.generateContent('Responde solo con la palabra OK.');
   const text = result.response.text()?.trim() || '';
   const ok = text.toLowerCase().includes('ok');
