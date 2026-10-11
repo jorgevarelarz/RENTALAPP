@@ -1192,3 +1192,11 @@ Rules:
 - `frontend/src/pages/ContractDetail.tsx`: render only (logic unchanged). Header = property title + `ContractStatusBadge` + address, no ID/colour band; actions full-width on mobile; «Siguiente paso»; timeline as progress line (`ol`, `aria-current`); «Condiciones»/«Partes» as `dl`; preview in sans, no italic/watermark; not-found card with link to `/contracts`. `CoTenantsCard` title restyled.
 - Tests mock `Link` from react-router-dom now.
 - Verification: frontend build + 104 tests (2 new in `ContractDetail.test.tsx`); Playwright `/tmp/ra-shots29` (tenant/agency, 390/1280, no horizontal overflow).
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 30: deposit refunds + Stripe disputes
+
+- `depositToEscrow` sets `payment_intent_data.metadata` (`contractId`, `deposit`, `type:'deposit'`); `checkout.session.completed` stores `Contract.depositPaymentIntentId`.
+- `charge.refunded` on a deposit (lookup: `depositPaymentIntentId` → charge metadata → `checkout.sessions.list({payment_intent})` for old deposits) sets `depositAmountRefunded`/`depositRefundedAt` + history `depositRefunded|depositPartiallyRefunded`; `depositPaid` untouched.
+- `charge.dispute.created|updated|closed` store `dispute` (shared `src/models/paymentDispute.schema.ts`) on `Payment`, `RentPayment` or `Contract.depositDispute`; history `paymentDisputed|paymentDisputeClosed`; payment statuses unchanged; closed disputes not reopened.
+- Verification: tsc clean; Jest `--runInBand` contracts+chat+escrow+agency 29 suites / 136 tests (new `payments.disputes.test.ts` 5), e2e 10/10; frontend build + 104 tests.
+

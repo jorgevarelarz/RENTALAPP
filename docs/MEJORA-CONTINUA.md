@@ -30,6 +30,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 26**: en el panel de Stripe, el endpoint del webhook (`/api/stripe/webhook`) tiene que tener suscrito `charge.refunded`; si no, las devoluciones no llegan y nada cambia. Dos decisiones abiertas: (1) cuando se devuelve una renta entera, ¿hay que revertir la transferencia de la parte de la agencia (`PartnerEarning`)? Ahora no se revierte. (2) Un mes devuelto queda `REFUNDED` y el inquilino no puede volver a pagarlo (409 `rent_refunded`). ¿Debe poder volver a pagarse, o una devolución significa que ese mes no se debe?
 - **Al desplegar la ronda 27**: la agencia que gestiona un inmueble (`agencyAccess: 'manage'`) ve ya sus candidatos (nombre, correo, mensaje y si tienen la solvencia verificada), propone y acepta visitas en nombre del propietario y prepara el contrato. Antes solo podía el propietario. Al traspasar el inmueble (`status_only`) pierde todo eso. Si el propietario debe dar su visto bueno antes de que la agencia vea a los candidatos, hay que decidirlo.
 - **Al desplegar la ronda 28**: `POST /api/auth/request-reset` responde `{ ok: true }` antes de buscar la cuenta, y el correo sale después. Si el SMTP falla, solo queda en el log (la respuesta ya era la misma con o sin cuenta). Además, la agencia gestora ve ya «Contratos» en su menú, abre el detalle y descarga el borrador de los contratos de inmuebles que gestiona, y ve los co-titulares sin poder tocarlos. El administrador, que antes veía «Contratos» vacío, ve ahora todos.
+- **Al desplegar la ronda 30**: en el panel de Stripe, el webhook (`/api/stripe/webhook`) tiene que tener suscritos `charge.dispute.created`, `charge.dispute.updated` y `charge.dispute.closed`. Si no, las disputas no llegan. Tres decisiones abiertas: (1) una disputa no tiene más aviso que el historial del contrato y un `console.error` en el log, porque no hay canal de alertas para el administrador; ¿correo a soporte, al casero, o un panel? (2) Si se pierde una disputa de renta, el recibo sigue `PAID`: ¿el mes vuelve a deberse? (3) Una fianza devuelta en Stripe deja `depositPaid: true` y anota `depositRefundedAt`: ¿la devolución al terminar el contrato es así, o debe cambiar algo más (estado del contrato, aviso)?
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -1080,3 +1081,37 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: la visita del propietario sale como «Has propuesto» para la agencia, la agencia no puede crear ni editar inmuebles, disputas de Stripe, `contractId` en el PaymentIntent de la fianza y «Cancelar invitación» de propietario.
 
 **Siguiente mejora propuesta.** Volver a pagos y seguridad: `payment_intent_data.metadata.contractId` en el Checkout de la fianza, para que `charge.refunded` reconozca su devolución, y gestionar `charge.dispute.created` (marcar el pago como disputado y avisar). Si se sigue con la interfaz: textos de `getContractActionSummary` y la insignia `Badge` sin mayúsculas.
+
+### Ronda 30 — 2026-10-11 20:30
+
+**Qué y por qué.** Pagos y seguridad, como proponía la ronda 29. Quedaban dos huecos en el webhook de Stripe, anotados como pendientes en la auditoría:
+
+1. **Las devoluciones de la fianza no se reconocían.** El Checkout de la fianza ponía `contractId` en la sesión, pero no en el PaymentIntent. El cargo que llega en `charge.refunded` no traía nada, y la fianza no tiene `Payment`, así que la devolución acababa en «devolución sin pago asociado».
+   - `depositToEscrow` añade `payment_intent_data.metadata` (`contractId`, `deposit`, `type: 'deposit'`).
+   - `checkout.session.completed` guarda `depositPaymentIntentId` en el contrato.
+   - `charge.refunded`, si no es un pago ni un recibo de renta, busca el contrato de la fianza. Lo hace por `depositPaymentIntentId`, después por los metadatos del cargo y, para fianzas cobradas antes de este cambio, por la sesión de Checkout de ese intent (`checkout.sessions.list({ payment_intent })`). Anota `depositAmountRefunded`, `depositRefundedAt` (solo si es total) y el historial `depositRefunded` o `depositPartiallyRefunded`. `depositPaid` no cambia (decisión para Jorge).
+2. **Las disputas (contracargos) no se gestionaban.**
+   - `charge.dispute.created`, `.updated` y `.closed` guardan la disputa (id, estado, motivo, importe y fechas) en `Payment.dispute`, `RentPayment.dispute` o `Contract.depositDispute`. Es un subesquema nuevo y compartido, `src/models/paymentDispute.schema.ts`.
+   - Si la disputa no trae `payment_intent`, se lee del cargo.
+   - El historial del contrato recoge `paymentDisputed` al abrirse y `paymentDisputeClosed` (ganada o perdida) al cerrarse. Además, queda un `console.error` en el log.
+   - Los estados de cobro no cambian, y un evento tardío o reenviado no reabre una disputa cerrada.
+
+**Commits.**
+- `f749a8d` Stripe: devoluciones de la fianza y disputas (contracargos) en el webhook
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - El nuevo `tests/contracts/payments.disputes.test.ts` tiene 5 casos: la fianza pagada guarda el intent y una devolución total queda en el contrato; una fianza antigua se reconoce por su sesión de Checkout (devolución parcial); la disputa de la fianza se abre y se cierra (`lost`) sin que un `updated` tardío la reabra, con una sola entrada de historial de cada tipo; la disputa de la renta, sin `payment_intent`, se guarda en el pago y en el recibo, que siguen `succeeded` y `PAID`; y un cobro desconocido no toca nada. Con el webhook anterior fallan 4 de los 5 (comprobado).
+  - `payments.duplicates.test.ts` comprueba ya los metadatos del PaymentIntent de la fianza.
+  - `tests/contracts`, `tests/chat`, `tests/escrow` y `tests/agency`: 29 suites y 136 tests OK. e2e (`jest.config.e2e.js`): 2 suites y 10 tests OK.
+- Frontend (sin cambios): build OK y `npm test` con 30 ficheros y 104 tests OK.
+- GitNexus: `impact` LOW en `depositToEscrow` (solo lo llama `payDeposit`). `detect_changes` sale medio. Los flujos que marca son los de `maybePayAgencyRentFeeShare`, que solo aparecen porque sus líneas se desplazan al añadir los helpers encima; la función no cambia.
+
+**Qué queda.**
+- No hay aviso al usuario de la disputa ni de la fianza devuelta. Tampoco se ven en la interfaz (detalle del contrato, pagos del casero).
+- Al perder una disputa no se revierte la parte de la agencia (`PartnerEarning`), igual que en las devoluciones (ronda 26).
+- Pendientes de interfaz de la ronda 29: textos de `getContractActionSummary` e insignia `Badge` en mayúsculas.
+- Pendientes anteriores: la visita del propietario sale como «Has propuesto» para la agencia, la agencia no puede crear ni editar inmuebles, y falta «Cancelar invitación» de propietario.
+
+**Siguiente mejora propuesta.** Interfaz: en el detalle del contrato, mostrar «Fianza devuelta» (con importe y fecha) y un aviso discreto si hay una disputa abierta sobre la fianza o la renta. De paso, los textos de `getContractActionSummary` y la insignia `Badge` sin mayúsculas.
