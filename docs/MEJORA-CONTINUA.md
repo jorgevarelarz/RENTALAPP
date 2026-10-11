@@ -1082,7 +1082,7 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 
 **Siguiente mejora propuesta.** Volver a pagos y seguridad: `payment_intent_data.metadata.contractId` en el Checkout de la fianza, para que `charge.refunded` reconozca su devolución, y gestionar `charge.dispute.created` (marcar el pago como disputado y avisar). Si se sigue con la interfaz: textos de `getContractActionSummary` y la insignia `Badge` sin mayúsculas.
 
-### Ronda 30 — 2026-10-11 20:30
+### Ronda 30 — 2026-10-11 20:13
 
 **Qué y por qué.** Pagos y seguridad, como proponía la ronda 29. Quedaban dos huecos en el webhook de Stripe, anotados como pendientes en la auditoría:
 
