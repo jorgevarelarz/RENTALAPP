@@ -28,6 +28,9 @@ describe('Pagos sin cobros duplicados', () => {
 
   beforeAll(async () => {
     await connectDb();
+    // Los índices únicos se crean en segundo plano al conectar; sin ellos, dos upsert simultáneos
+    // crean dos recibos y la prueba de concurrencia falla según la carga de la máquina.
+    await Promise.all([RentPayment.init(), Payment.init()]);
     process.env.STRIPE_WEBHOOK_SECRET = process.env.STRIPE_WEBHOOK_SECRET || 'whsec_test_duplicates';
   });
   afterAll(disconnectDb);
