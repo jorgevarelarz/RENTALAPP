@@ -10,6 +10,7 @@ import SignaturitWidget from '../components/SignaturitWidget';
 import CoTenantsCard from '../components/contracts/CoTenantsCard';
 import { ContractStatusBadge } from '../components/ContractStatusBadge';
 import { getContractActionSummary } from '../utils/contractWorkflow';
+import type { PaymentDispute } from '../types/contract';
 import { CheckCircle2, Circle, Clock3, Download, PenTool, Wallet } from 'lucide-react';
 
 const secondaryButton =
@@ -32,12 +33,45 @@ function apiErrorMessage(error: any, fallback: string) {
   return typeof message === 'string' && message ? message : fallback;
 }
 
+// Mismos estados finales que el backend (`CLOSED_DISPUTE_STATUSES`).
+const CLOSED_DISPUTE_STATUSES = ['won', 'lost', 'warning_closed'];
+
+const DISPUTE_REASONS: Record<string, string> = {
+  fraudulent: 'cargo no reconocido',
+  unrecognized: 'cargo no reconocido',
+  duplicate: 'cargo duplicado',
+  product_not_received: 'servicio no recibido',
+  subscription_canceled: 'servicio cancelado',
+  credit_not_processed: 'devolución no recibida',
+};
+
+const monthLabel = (period: string) => {
+  const [year, month] = period.split('-').map(Number);
+  if (!year || !month) return period;
+  return new Date(year, month - 1, 1).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+};
+
+/** Disputas sin resolver de la fianza y de los recibos de renta, para el aviso del detalle. */
+function openDisputes(contract: any) {
+  const isOpen = (d?: PaymentDispute) => !!d?.id && !CLOSED_DISPUTE_STATUSES.includes(d.status);
+  const items: Array<{ key: string; label: string; dispute: PaymentDispute }> = [];
+  if (isOpen(contract?.depositDispute)) {
+    items.push({ key: 'deposit', label: 'Fianza', dispute: contract.depositDispute });
+  }
+  for (const rent of Array.isArray(contract?.rentDisputes) ? contract.rentDisputes : []) {
+    if (isOpen(rent)) items.push({ key: rent.period, label: `Renta de ${monthLabel(rent.period)}`, dispute: rent });
+  }
+  return items;
+}
+
 function buildContractTimeline(contract: any) {
   const status = contract?.status || 'draft';
   const completed = new Set(['signed', 'active', 'completed']);
   const generated = status !== 'draft';
   const signed = completed.has(status) || !!contract?.signedAt || !!contract?.signature?.signedAt;
   const depositPaid = !!contract?.depositPaid || status === 'active' || status === 'completed';
+  const depositRefunded = !!contract?.depositRefundedAt;
+  const depositPartlyRefunded = !depositRefunded && Number(contract?.depositAmountRefunded) > 0;
 
   return [
     {
@@ -64,9 +98,15 @@ function buildContractTimeline(contract: any) {
     {
       id: 'deposit',
       title: 'Pago de fianza',
-      detail: depositPaid ? 'Fianza marcada como pagada' : 'Pendiente de pago o conciliación',
+      detail: depositRefunded
+        ? 'Fianza devuelta'
+        : depositPartlyRefunded
+          ? `Pagada; devueltos ${euros(contract.depositAmountRefunded)}`
+          : depositPaid
+            ? 'Fianza pagada'
+            : 'Pendiente de pago',
       state: depositPaid ? 'done' : signed ? 'current' : 'todo',
-      date: formatTimelineDate(contract?.depositPaidAt),
+      date: formatTimelineDate(depositRefunded ? contract.depositRefundedAt : contract?.depositPaidAt),
     },
     {
       id: 'active',
@@ -230,6 +270,8 @@ export default function ContractDetail() {
     !contract.depositPaid &&
     !depositConfirming;
   const formatDate = (value?: string) => (value ? new Date(value).toLocaleDateString('es-ES') : '—');
+  const disputes = openDisputes(contract);
+  const depositRefundedAmount = Number(contract.depositAmountRefunded) > 0 ? Number(contract.depositAmountRefunded) : 0;
   const actionButton = 'inline-flex w-full items-center justify-center gap-2 whitespace-nowrap text-sm sm:w-auto';
 
   return (
@@ -300,6 +342,31 @@ export default function ContractDetail() {
         </div>
       </div>
 
+      {disputes.length > 0 && (
+        <div role="status" className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <p className="font-semibold text-gray-900">
+            {disputes.length === 1 ? 'Hay una reclamación abierta sobre un cobro' : 'Hay reclamaciones abiertas sobre varios cobros'}
+          </p>
+          <p className="mt-1 text-sm text-gray-600">
+            El titular de la tarjeta ha pedido a su banco que devuelva el cargo. Stripe está revisando la reclamación;
+            mientras tanto, el cobro sigue registrado.
+          </p>
+          <ul className="mt-2 space-y-1 text-sm text-gray-900">
+            {disputes.map(({ key, label, dispute }) => {
+              const reason = dispute.reason ? DISPUTE_REASONS[dispute.reason] : undefined;
+              return (
+                <li key={key}>
+                  <span className="font-medium">{label}</span>
+                  {typeof dispute.amount === 'number' && <span className="tabular-nums"> · {euros(dispute.amount)}</span>}
+                  {reason && <span className="text-gray-600"> · {reason}</span>}
+                  {dispute.openedAt && <span className="text-gray-600"> · desde el {formatDate(dispute.openedAt)}</span>}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
+
       <Card className="px-5 py-4">
         <h2 className="text-sm font-medium text-gray-500">Siguiente paso</h2>
         <p className="mt-1 font-semibold text-gray-900">{actionSummary.nextAction}</p>
@@ -354,6 +421,16 @@ export default function ContractDetail() {
               {[
                 { label: 'Renta mensual', value: euros(rent), strong: true },
                 { label: 'Fianza', value: euros(deposit) },
+                ...(depositRefundedAmount
+                  ? [
+                      {
+                        label: contract.depositRefundedAt ? 'Fianza devuelta' : 'Fianza devuelta (parcial)',
+                        value: contract.depositRefundedAt
+                          ? `${euros(depositRefundedAmount)} · ${formatDate(contract.depositRefundedAt)}`
+                          : euros(depositRefundedAmount),
+                      },
+                    ]
+                  : []),
                 { label: 'Inicio', value: formatDate(contract.startDate) },
                 { label: 'Fin', value: formatDate(contract.endDate) },
               ].map((row) => (

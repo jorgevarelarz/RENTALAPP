@@ -23,6 +23,7 @@ import { evaluateAndPersist } from '../modules/rentalPublic';
 // @ts-ignore
 import { ensureCanReadContract, isActiveCoTenant } from '../utils/contractAccess';
 import { ContractParty } from '../models/contractParty.model';
+import { RentPayment } from '../models/rentPayment.model';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i).transform((s: string) => s.toLowerCase());
 
@@ -648,8 +649,16 @@ export const getContract = async (req: Request, res: Response) => {
       return res.status(403).json({ error: 'No autorizado' });
     }
 
+    // Disputas (contracargos) de recibos de renta, para avisar en el detalle; la de la fianza
+    // ya viene en el contrato (`depositDispute`).
+    const disputedRent = await RentPayment.find({ contractId: c._id, 'dispute.id': { $exists: true } })
+      .select('period amount dispute')
+      .sort({ period: 1 })
+      .lean();
+
     const result: any = {
       ...toContractView(c as any, user as any),
+      rentDisputes: disputedRent.map((rp: any) => ({ period: rp.period, amount: rp.amount, ...rp.dispute })),
       ownerId,
       tenantId,
       landlordName: landlord?.name,

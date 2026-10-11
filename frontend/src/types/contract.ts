@@ -23,6 +23,16 @@ export type ContractParty = {
   email?: string;
 };
 
+/** Disputa (contracargo) de Stripe sobre un cobro; `status` es el de Stripe. */
+export type PaymentDispute = {
+  id: string;
+  status: string;
+  reason?: string;
+  amount?: number;
+  openedAt?: string;
+  closedAt?: string;
+};
+
 export interface Contract {
   _id?: string;
   id?: string;
@@ -30,6 +40,13 @@ export interface Contract {
   rent: number;
   deposit: number;
   depositPaid?: boolean;
+  /** Euros de la fianza devueltos en Stripe (también parciales). */
+  depositAmountRefunded?: number;
+  /** Solo si la devolución fue total. */
+  depositRefundedAt?: string;
+  depositDispute?: PaymentDispute;
+  /** Recibos de renta con disputa (solo en el detalle). */
+  rentDisputes?: Array<PaymentDispute & { period: string }>;
   signedAt?: string;
   startDate?: string;
   endDate?: string;

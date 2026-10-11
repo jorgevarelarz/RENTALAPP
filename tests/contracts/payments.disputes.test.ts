@@ -182,6 +182,12 @@ describe('Fianza devuelta y disputas (webhook de Stripe)', () => {
     expect(receipt?.status).toBe('PAID');
     expect(receipt?.dispute?.id).toBe('dp_rent');
     expect(await historyActions(contract._id)).toContain('paymentDisputed');
+
+    // El detalle del contrato la trae para avisar a las partes.
+    const detail = await request(app).get(`/api/contracts/${contract._id}`).set(asTenant).expect(200);
+    expect(detail.body.rentDisputes).toEqual([
+      expect.objectContaining({ period: rent!.period, amount: 800, id: 'dp_rent', status: 'needs_response' }),
+    ]);
   });
 
   it('una disputa de un cobro desconocido no falla ni toca nada', async () => {

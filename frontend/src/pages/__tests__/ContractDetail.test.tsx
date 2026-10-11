@@ -98,7 +98,7 @@ describe('ContractDetail', () => {
 
     render(<ContractDetail />);
 
-    await screen.findByText(/revisar las firmas del contrato/i);
+    await screen.findByText(/esperar a que firmen las partes/i);
     expect(screen.queryByRole('button', { name: /firmar contrato/i })).toBeNull();
   });
 
@@ -225,6 +225,42 @@ describe('ContractDetail', () => {
     expect(screen.getByText('Calle Fuencarral 120, Madrid')).toBeInTheDocument();
     expect(screen.queryByText(/ABCDEF/)).toBeNull();
     expect(screen.queryByRole('button', { name: /pagar fianza|firmar contrato/i })).toBeNull();
+  });
+
+  test('Muestra la fianza devuelta y avisa de las disputas abiertas, no de las cerradas', async () => {
+    setAuth({ _id: 'u1', role: 'landlord' });
+    (contracts.getContract as Mock).mockResolvedValue({
+      ...signedContract,
+      status: 'active',
+      depositPaid: true,
+      depositAmountRefunded: 1800,
+      depositRefundedAt: '2027-11-05T10:00:00.000Z',
+      depositDispute: { id: 'dp_dep', status: 'lost', amount: 1800 },
+      rentDisputes: [
+        { id: 'dp_rent', period: '2026-12', status: 'needs_response', amount: 900, reason: 'fraudulent', openedAt: '2026-12-10T10:00:00.000Z' },
+      ],
+    });
+
+    render(<ContractDetail />);
+
+    expect(await screen.findByText('Fianza devuelta', { selector: 'dt' })).toBeInTheDocument();
+    expect(screen.getByText(/1\.?800,00\s*€ · 5\/11\/2027/)).toBeInTheDocument();
+    expect(screen.getByText(/hay una reclamación abierta sobre un cobro/i)).toBeInTheDocument();
+    expect(screen.getByText('Renta de diciembre de 2026')).toBeInTheDocument();
+    expect(screen.getByText(/cargo no reconocido/)).toBeInTheDocument();
+    // La disputa de la fianza ya está cerrada: no entra en el aviso.
+    expect(screen.queryByText('Fianza', { selector: 'li span' })).toBeNull();
+  });
+
+  test('Sin disputas abiertas no hay aviso', async () => {
+    setAuth({ _id: 'u1', role: 'landlord' });
+    (contracts.getContract as Mock).mockResolvedValue({ ...signedContract, rentDisputes: [{ id: 'd', period: '2026-12', status: 'won' }] });
+
+    render(<ContractDetail />);
+
+    await screen.findByRole('heading', { name: /^condiciones$/i });
+    expect(screen.queryByText(/reclamaci/i)).toBeNull();
+    expect(screen.queryByText(/fianza devuelta/i)).toBeNull();
   });
 
   test('Si el contrato no carga, ofrece volver a la lista', async () => {
