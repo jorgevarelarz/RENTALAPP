@@ -1,3 +1,6 @@
+# Solo para desarrollo local: Mongo sin contraseña publicado en 27017 y JWT_SECRET de prueba.
+# No se carga solo (antes era docker-compose.override.yml); hay que pedirlo con -f:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 version: "3.9"
 
 services:
