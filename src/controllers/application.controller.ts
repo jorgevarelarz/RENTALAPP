@@ -67,6 +67,8 @@ export async function proposeVisit(req: Request, res: Response) {
   const { id } = req.params;
   const { visitDate } = req.body || {};
   if (!visitDate) return res.status(400).json({ error: 'visitDate_required' });
+  const proposed = new Date(visitDate);
+  if (Number.isNaN(proposed.getTime())) return res.status(400).json({ error: 'invalid_visit_date' });
 
   const app = await Application.findById(id);
   if (!app) return res.status(404).json({ error: 'application_not_found' });
@@ -79,7 +81,7 @@ export async function proposeVisit(req: Request, res: Response) {
   const isAdmin = user?.role === 'admin';
   if (!isOwner && !isTenant && !isAdmin) return res.status(403).json({ error: 'forbidden' });
 
-  app.proposedDate = new Date(visitDate);
+  app.proposedDate = proposed;
   app.proposedBy = isOwner || isAdmin ? 'landlord' : 'tenant';
   app.status = 'proposed';
   await app.save();
