@@ -1519,3 +1519,39 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: correo al inquilino al pagar la fianza y aviso al casero de los cobros; flujo de devolución de fianza en la app; adjuntos de chat públicos; `console.*` fuera del logger.
 
 **Siguiente mejora propuesta.** Avisos de cobro: correo al inquilino al pagar la fianza (como ya tiene la renta) y al casero cuando se cobra una renta o una fianza, con enlace a «Cobros y recibos». Es el hueco «Notificaciones» de la auditoría, en el flujo de pago.
+
+### Ronda 42 — 2026-10-12 01:41
+
+**Qué y por qué.** La mejora propuesta en la ronda 41: los avisos de cobro, que es el hueco «Notificaciones» de la auditoría, dentro del flujo de pago. Al revisarlo aparecieron dos fallos pequeños en el webhook.
+
+1. **Avisos** (nuevo `services/paymentNotice.service.ts`, `notifyPaymentSucceeded`; plantilla `paymentNoticeEmail` en `utils/email.ts`, que sustituye a `sendPaymentReceiptEmail`):
+   - a quien paga le llega un justificante: concepto como en el recibo PDF («Renta de octubre de 2026», «Fianza»), importe, fecha y vivienda, con «Descargar el recibo» hacia `/tenant/payments`. Si el pago no tiene recibo PDF (servicios), no hay botón;
+   - al casero, si es renta o fianza, le llega «Cobro recibido: Renta de octubre de 2026 · 800,00 €», con quién ha pagado y qué vivienda, y «Ver cobros y recibos» hacia el contrato;
+   - la fianza no avisaba a nadie. Ahora avisa cuando se crea su `Payment` (una vez por PaymentIntent, ronda 40);
+   - el envío no bloquea la respuesta a Stripe, nunca lanza y los errores van al logger;
+   - el texto no dice que el dinero ya esté en la cuenta del casero, porque eso depende del reparto (P1, reservado).
+2. **Fallos del webhook** (`payment_intent.succeeded`):
+   - el justificante de la renta salía en cada reintento del mismo evento (Stripe reintenta si el proceso falló a medias). Ahora solo sale cuando el pago pasa a cobrado;
+   - cada reenvío reescribía `paidAt`, y con él la fecha del recibo PDF. Ahora un pago ya cobrado conserva su fecha y solo refresca el cargo y la URL del recibo de Stripe.
+3. `rentReceiptPdf.ts` exporta `rentPeriodLabel` y `receiptConcept`, que usan el PDF y el correo, para que el concepto sea el mismo en los dos.
+
+**Commits.**
+- `010fa33` Pagos: justificante al inquilino y aviso de cobro al casero, una sola vez por pago; un reenvío ya no cambia la fecha de pago
+
+**Verificación (resultados reales).**
+- `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - nuevo `tests/contracts/payments.notice.test.ts`, 3/3: (1) la renta cobrada manda dos correos (inquilina con `hasReceipt`; casero con quién paga, vivienda y contrato), y el reenvío con otro id de evento no manda más ni cambia `paidAt`, pero sí actualiza el cargo; (2) una renta ya devuelta no vuelve a cobrarse ni avisa; (3) la fianza con la sesión repetida avisa una sola vez a cada uno, con 1.600 €;
+  - `tests/unit/email.escape.test.ts`: 6/6 (el caso del recibo pasa a la plantilla nueva y hay dos nuevos: aviso al casero con enlace al contrato y justificante sin botón cuando no hay PDF);
+  - `tests/contracts` completo, `tests/unit`, `serviceOffer.payment` y `src/__tests__/webhook`: 38 suites, 160 tests OK;
+  - e2e: 10/10.
+- Frontend: no se ha tocado, así que no he ejecutado su build ni sus tests.
+- GitNexus `detect_changes`: riesgo medio por `sendContractActiveEmail` y `fee`. Es un falso positivo por las líneas desplazadas, porque el diff no los toca. `sendPaymentReceiptEmail` desaparece; solo lo usaba el webhook.
+
+**Qué queda.**
+- La agencia gestora no recibe aviso de cobro. ¿Debe recibirlo, además del propietario o en su lugar? No lo he decidido.
+- Sin SMTP en producción, los correos solo se anotan en el log (como los demás).
+- El co-titular que paga recibe su justificante, pero el inquilino principal no se entera.
+- Pendientes anteriores: flujo de devolución de la fianza en la app; adjuntos de chat públicos; `console.*` fuera del logger; `Billing` y `Quotes` del profesional filtran en el cliente.
+
+**Siguiente mejora propuesta.** Hace dos rondas que no toco la interfaz. Propongo las pantallas del profesional, `Billing` y `Quotes`: usar la búsqueda y la paginación del servidor (como la lista de incidencias de la ronda 41) y pasarlas al sistema 2026.

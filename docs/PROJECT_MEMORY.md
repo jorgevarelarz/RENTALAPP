@@ -1263,3 +1263,9 @@ Rules:
 - `GET /api/tickets/my/{tenant,owner,pro}` share `listMine(field)`: `q` (escaped title regex or Spanish service label, accent-insensitive, ≤100 chars), `status` validated against model statuses (400 `invalid_status`; non-string `q` 400 `invalid_query`). Removed dead nested `publishSystem` copy.
 - Frontend `TicketsList` sends debounced `q` to the server (page reset, `keepPreviousData`); `TicketDetail` mobile order: actions, description, history, chat (`contents` wrappers).
 - Verification: tsc clean; Jest `--runInBand` ticket.list 5, escrow 19, security 16, e2e 10/10; frontend build + 132 tests; Playwright `/tmp/ra-shots41`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 42: payment notices (tenant receipt + landlord collected)
+
+- New `services/paymentNotice.service.notifyPaymentSucceeded` + `utils/email.paymentNoticeEmail` (replaces `sendPaymentReceiptEmail`): payer gets receipt email (link `/tenant/payments` for rent/deposit), landlord gets «Cobro recibido» (link `/contracts/:id`) for rent/deposit. Fire-and-forget, never throws.
+- Webhook `payment_intent.succeeded`: notifies only on first transition to `succeeded`; redelivery keeps `paidAt`, only refreshes charge/receiptUrl. Deposit notifies when `recordDepositPayment` creates the Payment. `rentReceiptPdf` exports `receiptConcept`/`rentPeriodLabel`.
+- Verification: tsc clean; Jest `--runInBand` payments.notice 3, email.escape 6, tests/contracts+unit+webhook 160, e2e 10/10. Frontend untouched.
