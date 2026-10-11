@@ -1179,3 +1179,10 @@ Rules:
 - `src/routes/stripe.webhook.ts`: new `charge.refunded` (full → `Payment.status='refunded'` + `amountRefunded/refundedAt`, `RentPayment.status='REFUNDED'` (new enum value, `refundedAt`); partial → `amountRefunded` only; contract history `paymentRefunded|paymentPartiallyRefunded`). Late `succeeded/processing/payment_failed` don't overwrite refunded. `chargeReceipt()` reads `latest_charge` (API 2022-11-15 has no `intent.charges`) → `receiptUrl` + `stripeChargeId`.
 - `claimRentPayment` returns `{kind:'refunded'}`; `/pay-rent` and `/payments/:period/pay` → 409 `rent_refunded`.
 - Verification: tsc clean; Jest `--runInBand` contracts+chat+escrow 26 suites / 110 tests (new `payments.refunds.test.ts` 5); e2e 10/10; frontend build + 98 tests.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 28: reset timing + managing agency contracts
+
+- `src/controllers/auth.controller.ts`: `requestPasswordReset` answers `{ok:true}` first; lookup/token/email run in exported `issuePasswordReset` (not awaited) → no timing enumeration. Tests wait for the background `sendEmail`.
+- `getContract` no longer 403s the managing agency after letting it through; `getContractParties` allows the managing agency read-only (`isManagingAgency` + contract `agencyId`).
+- Frontend: `/contracts` and `/contracts/:id` allow `agency`; agency nav gets «Contratos»; `MyContracts` keeps all items for agency/admin (was filtering to contracts where the user is a party → always empty) and shows «Propietario · Inquilino»; `getContractActionSummary` draft text for agency.
+- Verification: tsc clean; Jest `--runInBand` auth 46, e2e 10, contracts+agency 113; frontend build + 102 tests; Playwright `/tmp/ra-shots28`.
