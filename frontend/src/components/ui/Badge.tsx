@@ -7,12 +7,14 @@ const Badge: React.FC<{
   style?: React.CSSProperties;
 }> = ({ children, tone='default', className, style }) => {
   const base: React.CSSProperties = {
-    display: 'inline-block',
-    padding: '2px 6px',
-    borderRadius: 6,
-    fontSize: 11,
-    letterSpacing: '.06em',
-    textTransform: 'uppercase',
+    display: 'inline-flex',
+    alignItems: 'center',
+    padding: '2px 8px',
+    borderRadius: 999,
+    fontSize: 12,
+    fontWeight: 500,
+    lineHeight: 1.5,
+    whiteSpace: 'nowrap',
     border: '1px solid var(--border)',
     background: 'var(--card)'
   };

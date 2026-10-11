@@ -25,8 +25,8 @@ const CONTRACT_BADGE_LABELS: Record<string, string> = {
   proposed: 'Visita propuesta',
   scheduled: 'Visita agendada',
   rejected: 'Rechazada',
-  pending_signature: 'Pendiente firma',
-  signing: 'Pendiente firma',
+  pending_signature: 'Pendiente de firma',
+  signing: 'Pendiente de firma',
   signed: 'Firmado',
 };
 
