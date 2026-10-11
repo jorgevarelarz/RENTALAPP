@@ -4,6 +4,7 @@ import { PipelineStage } from 'mongoose';
 import { ComplianceStatus } from '../modules/rentalPublic/models/complianceStatus.model';
 import { parseDateRange } from '../utils/dateRange';
 import { getInstitutionCaseIdSalt } from '../utils/getInstitutionCaseIdSalt';
+import { csvRows } from '../utils/csv';
 
 const CASEID_SALT = getInstitutionCaseIdSalt();
 
@@ -156,9 +157,7 @@ function buildInstitutionComplianceCsv(data: InstitutionDashboardData) {
     i.checkedAt ? new Date(i.checkedAt).toISOString() : '',
   ]);
 
-  return [header, ...rows]
-    .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
-    .join('\n');
+  return csvRows([header, ...rows]);
 }
 
 export const getInstitutionComplianceDashboard = async (req: Request, res: Response) => {

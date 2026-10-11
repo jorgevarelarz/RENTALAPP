@@ -1,4 +1,5 @@
 import { SystemEvent } from '../models/systemEvent.model';
+import { csvRows } from '../utils/csv';
 
 export type SystemEventFilters = {
   type?: string;
@@ -64,7 +65,5 @@ export function buildSystemEventsCsv(items: any[]) {
     ];
   });
 
-  return [header, ...rows]
-    .map(r => r.map(v => `"${String(v ?? '').replace(/"/g, '""')}"`).join(','))
-    .join('\n');
+  return csvRows([header, ...rows]);
 }

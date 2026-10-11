@@ -19,6 +19,7 @@ import { ComplianceStatus } from '../modules/rentalPublic/models/complianceStatu
 import { buildSystemEventsCsv, listSystemEvents, listSystemEventsAll } from '../services/systemEvents.service';
 import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
 import { getJwtSecret } from '../utils/getJwtSecret';
+import { csvRow, csvRows } from '../utils/csv';
 
 const ADMIN_JWT_SECRET = getJwtSecret();
 
@@ -127,9 +128,7 @@ export const listAuditTrails = async (req: Request, res: Response) => {
         i.auditHash || '',
         i.auditPdfUrl || '',
       ]);
-      const csv = [header, ...rows]
-        .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
-        .join('\n');
+      const csv = csvRows([header, ...rows]);
 
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
       res.setHeader('Content-Disposition', 'attachment; filename="audit-trails.csv"');
@@ -368,8 +367,7 @@ export const exportComplianceDashboardCsv = async (req: Request, res: Response) 
         String((row as any).status ?? ''),
         (row as any).checkedAt ? new Date((row as any).checkedAt).toISOString() : '',
       ];
-      const line = values.map(v => `"${v.replace(/"/g, '""')}"`).join(',');
-      res.write(`${line}\n`);
+      res.write(`${csvRow(values)}\n`);
     }
     return res.end();
   } catch (error: any) {

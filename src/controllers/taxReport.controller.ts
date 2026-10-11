@@ -4,6 +4,7 @@ import PlatformEarning from '../models/platformEarning.model';
 import ServiceOffer from '../models/serviceOffer.model';
 import { calcPlatformFeeOnRent } from '../utils/rentFees';
 import PDFDocument from 'pdfkit';
+import { csvRows } from '../utils/csv';
 
 type TaxReportItem = {
   date: string;
@@ -234,7 +235,7 @@ export async function exportTaxReportCsv(req: Request, res: Response) {
       ]),
     ];
 
-    res.send(lines.map(r => r.map((v: unknown) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n'));
+    res.send(csvRows(lines));
   } catch (error: any) {
     const status = error?.status || 500;
     res.status(status).json({ error: error?.message || 'tax_report_export_failed' });

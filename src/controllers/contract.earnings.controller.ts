@@ -3,6 +3,7 @@ import { Contract } from '../models/contract.model';
 import { Payment } from '../models/payment.model';
 // @ts-ignore
 import { ensureCanReadContract } from '../utils/contractAccess';
+import { csvRow } from '../utils/csv';
 
 export const getContractPayments = async (req: Request, res: Response) => {
   try {
@@ -108,11 +109,15 @@ export const exportEarningsReport = async (req: Request, res: Response) => {
       const contract = contractMap[String(p.contract)] || {};
       const date = p.paidAt ? new Date(p.paidAt).toLocaleDateString('es-ES') : '-';
       const amount = Number(p.amount || 0).toFixed(2);
-      const clean = (v: string) => `"${(v || '').replace(/"/g, '""')}"`;
-      const cleanConcept = clean(p.concept || '');
-      const cleanAddress = clean(contract.propertyAddress || 'Propiedad');
-      const cleanTenant = clean(contract.tenantName || 'Inquilino');
-      csv += `${date},${cleanConcept},${cleanAddress},${cleanTenant},${amount},Pagado,${p.stripePaymentIntentId || ''}\n`;
+      csv += `${csvRow([
+        date,
+        p.concept || '',
+        contract.propertyAddress || 'Propiedad',
+        contract.tenantName || 'Inquilino',
+        amount,
+        'Pagado',
+        p.stripePaymentIntentId || '',
+      ])}\n`;
     });
 
     res.header('Content-Type', 'text/csv');

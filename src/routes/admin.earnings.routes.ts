@@ -1,6 +1,7 @@
 import { Router } from "express";
 import PlatformEarning from "../models/platformEarning.model";
 import { startOfDay, endOfDay, subDays } from "date-fns";
+import { csvRow } from "../utils/csv";
 
 const r = Router();
 
@@ -79,7 +80,7 @@ r.get("/earnings/export.csv", async (req, res) => {
   const header = "createdAt,ticketId,escrowId,gross,fee,netToPro,currency,releaseRef\n";
   const body = rows
     .map((r) =>
-      [
+      csvRow([
         r.createdAt?.toISOString(),
         r.ticketId,
         r.escrowId,
@@ -88,7 +89,7 @@ r.get("/earnings/export.csv", async (req, res) => {
         r.netToPro?.toFixed(2),
         r.currency || "EUR",
         r.releaseRef || "",
-      ].join(",")
+      ])
     )
     .join("\n");
 

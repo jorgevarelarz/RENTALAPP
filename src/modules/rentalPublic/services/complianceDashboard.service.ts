@@ -1,6 +1,7 @@
 import { ComplianceStatus } from '../models/complianceStatus.model';
 import { PipelineStage } from 'mongoose';
 import { parseDateRange } from '../../../utils/dateRange';
+import { csvRows } from '../../../utils/csv';
 
 type DashboardData = {
   totals: { evaluated: number; risk: number };
@@ -242,7 +243,5 @@ export function buildComplianceCsv(data: DashboardData) {
     i.checkedAt ? new Date(i.checkedAt).toISOString() : '',
   ]);
 
-  return [header, ...rows]
-    .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
-    .join('\n');
+  return csvRows([header, ...rows]);
 }
