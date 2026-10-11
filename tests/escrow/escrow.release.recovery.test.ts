@@ -1,7 +1,7 @@
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { bearer } from '../utils/sessionToken';
 import { Contract } from '../../src/models/contract.model';
 import Ticket from '../../src/models/ticket.model';
 import Escrow from '../../src/models/escrow.model';
@@ -10,12 +10,12 @@ import * as payment from '../../src/utils/payment';
 import { resumeStuckEscrowReleases, ESCROW_RELEASE_TTL_MS } from '../../src/services/ticketEscrow.service';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
-const token = (_id: string, role: string) => `Bearer ${jwt.sign({ _id, role }, JWT_SECRET)}`;
+const token = bearer;
 
 const LANDLORD = '507f1f77bcf86cd799439011';
 const TENANT = '507f1f77bcf86cd799439010';
 const PRO = '507f1f77bcf86cd799439020';
-const L = token(LANDLORD, 'landlord');
+let L = '';
 
 describe('Escrow release recovery', () => {
   const originalBypass = process.env.ALLOW_POLICY_BYPASS;
@@ -37,6 +37,7 @@ describe('Escrow release recovery', () => {
 
   /** Ticket con presupuesto aprobado (escrow held) y trabajo completado, listo para validar. */
   const readyTicket = async () => {
+    L = await token(LANDLORD, 'landlord');
     const contract = await Contract.create({
       landlord: LANDLORD, tenant: TENANT, property: '507f1f77bcf86cd799439012',
       rent: 700, deposit: 700, startDate: new Date(), endDate: new Date(Date.now() + 365 * 86400000),
@@ -44,14 +45,14 @@ describe('Escrow release recovery', () => {
     });
     const res = await request(app)
       .post('/api/tickets')
-      .set('Authorization', token(TENANT, 'tenant'))
+      .set('Authorization', await token(TENANT, 'tenant'))
       .send({ contractId: String(contract._id), service: 'maintenance', title: 'Grifo', description: 'Gotea' })
       .expect(201);
     const ticketId = res.body._id as string;
     await Ticket.updateOne({ _id: ticketId }, { $set: { proId: PRO } });
-    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', token(PRO, 'pro')).send({ amount: 100 }).expect(200);
+    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', await token(PRO, 'pro')).send({ amount: 100 }).expect(200);
     await request(app).post(`/api/tickets/${ticketId}/approve`).set('Authorization', L).send({ customerId: 'cus_mock' }).expect(200);
-    await request(app).post(`/api/tickets/${ticketId}/complete`).set('Authorization', token(PRO, 'pro')).send({}).expect(200);
+    await request(app).post(`/api/tickets/${ticketId}/complete`).set('Authorization', await token(PRO, 'pro')).send({}).expect(200);
     const t = await Ticket.findById(ticketId).lean();
     return { ticketId, escrowId: String(t!.escrowId) };
   };
@@ -117,7 +118,7 @@ describe('Escrow release recovery', () => {
     const capture = jest.spyOn(payment, 'releasePayment');
     const [a, b] = await Promise.all([
       request(app).post(`/api/tickets/${ticketId}/validate`).set('Authorization', L),
-      request(app).post(`/api/tickets/${ticketId}/resolve`).set('Authorization', token(TENANT, 'tenant')),
+      request(app).post(`/api/tickets/${ticketId}/resolve`).set('Authorization', await token(TENANT, 'tenant')),
     ]);
     expect([a.status, b.status].sort()).toEqual([200, 409]);
     expect(capture).toHaveBeenCalledTimes(1);

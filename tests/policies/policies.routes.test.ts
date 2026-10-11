@@ -1,7 +1,7 @@
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { connectDb, clearDb, disconnectDb } from '../utils/db';
+import { sessionToken } from '../utils/sessionToken';
 
 let app: any;
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
@@ -9,7 +9,7 @@ const DEFAULT_VERSION = { policyType: 'privacy_policy', version: 'v1.0' };
 const DEFAULT_ACCEPT = { policyType: 'privacy_policy', policyVersion: 'v1.0' };
 
 const signToken = (userId: string, role?: string) =>
-  jwt.sign({ _id: userId, email: 'user@test.com', ...(role ? { role } : {}) }, JWT_SECRET);
+  sessionToken({ _id: userId, email: 'user@test.com', ...(role ? { role } : {}) });
 
 describe('Policy routes', () => {
   beforeAll(async () => {
@@ -25,7 +25,7 @@ describe('Policy routes', () => {
 
   const createVersion = async () => {
     const userId = new mongoose.Types.ObjectId().toHexString();
-    const token = signToken(userId, 'admin');
+    const token = await signToken(userId, 'admin');
     await request(app)
       .post('/api/policies/version')
       .set('Authorization', `Bearer ${token}`)
@@ -55,7 +55,7 @@ describe('Policy routes', () => {
 
   test('returns 400 when required fields are missing', async () => {
     const userId = new mongoose.Types.ObjectId().toHexString();
-    const token = signToken(userId);
+    const token = await signToken(userId);
     await createVersion();
 
     const res = await request(app)
@@ -68,7 +68,7 @@ describe('Policy routes', () => {
 
   test('creates a policy acceptance (201)', async () => {
     const userId = new mongoose.Types.ObjectId().toHexString();
-    const token = signToken(userId);
+    const token = await signToken(userId);
     await createVersion();
 
     const res = await request(app)
@@ -83,7 +83,7 @@ describe('Policy routes', () => {
 
   test('is idempotent for the same user/policy/version', async () => {
     const userId = new mongoose.Types.ObjectId().toHexString();
-    const token = signToken(userId);
+    const token = await signToken(userId);
     await createVersion();
 
     const first = await request(app)
@@ -102,7 +102,7 @@ describe('Policy routes', () => {
 
   test('returns accepted policies for the user', async () => {
     const userId = new mongoose.Types.ObjectId().toHexString();
-    const token = signToken(userId);
+    const token = await signToken(userId);
     await createVersion();
 
     await request(app)
@@ -120,7 +120,7 @@ describe('Policy routes', () => {
     expect(res.body.data[0]?.policyType).toBe('privacy_policy');
   });
   it('only lets admins publish a new policy version', async () => {
-    const token = signToken(new mongoose.Types.ObjectId().toHexString(), 'tenant');
+    const token = await signToken(new mongoose.Types.ObjectId().toHexString(), 'tenant');
     await request(app)
       .post('/api/policies/version')
       .set('Authorization', `Bearer ${token}`)

@@ -1,14 +1,14 @@
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { sessionToken } from '../utils/sessionToken';
 import { Contract } from '../../src/models/contract.model';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
-const signToken = (payload: any) => jwt.sign(payload, JWT_SECRET);
+const signToken = sessionToken;
 
 describe('Contract audit trail PDF', () => {
   beforeAll(async () => {
@@ -20,7 +20,7 @@ describe('Contract audit trail PDF', () => {
   it('generates and serves audit PDF on completed signature', async () => {
     process.env.SIGN_WEBHOOK_SECRET = 'secret';
     const landlordId = '507f1f77bcf86cd799439011';
-    const landlordToken = signToken({ _id: landlordId, role: 'landlord', isVerified: true });
+    const landlordToken = await signToken({ _id: landlordId, role: 'landlord', isVerified: true });
 
     const contract = await Contract.create({
       landlord: landlordId,

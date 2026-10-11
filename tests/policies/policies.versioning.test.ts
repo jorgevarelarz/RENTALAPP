@@ -1,13 +1,13 @@
 import request, { Test } from 'supertest';
-import jwt from 'jsonwebtoken';
 import mongoose from 'mongoose';
 import { connectDb, clearDb, disconnectDb } from '../utils/db';
+import { sessionToken } from '../utils/sessionToken';
 
 let app: any;
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 
 const signToken = (userId: string, role?: string) =>
-  jwt.sign({ _id: userId, email: 'user@test.com', ...(role ? { role } : {}) }, JWT_SECRET);
+  sessionToken({ _id: userId, email: 'user@test.com', ...(role ? { role } : {}) });
 
 const createVersion = (
   token: string,
@@ -42,8 +42,8 @@ describe('Policy versioning and expiration', () => {
   it('rejects acceptance of obsolete version (409) and returns latest active', async () => {
     const adminId = new mongoose.Types.ObjectId().toHexString();
     const userId = new mongoose.Types.ObjectId().toHexString();
-    const adminToken = signToken(adminId, 'admin');
-    const userToken = signToken(userId);
+    const adminToken = await signToken(adminId, 'admin');
+    const userToken = await signToken(userId);
 
     // Create v1.0 active
     await createVersion(adminToken, 'privacy_policy', 'v1.0').expect(201);
@@ -84,8 +84,8 @@ describe('Policy versioning and expiration', () => {
   it('treats expired policies as inactive', async () => {
     const adminId = new mongoose.Types.ObjectId().toHexString();
     const userId = new mongoose.Types.ObjectId().toHexString();
-    const adminToken = signToken(adminId, 'admin');
-    const userToken = signToken(userId);
+    const adminToken = await signToken(adminId, 'admin');
+    const userToken = await signToken(userId);
 
     // Create version that is already expired
     const past = new Date(Date.now() - 1000 * 60);

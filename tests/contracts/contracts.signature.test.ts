@@ -1,12 +1,12 @@
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import crypto from 'crypto';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { sessionToken } from '../utils/sessionToken';
 import { Contract } from '../../src/models/contract.model';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
-const signToken = (payload: any) => jwt.sign(payload, JWT_SECRET);
+const signToken = sessionToken;
 
 describe('Contract signature flow', () => {
   beforeAll(async () => {
@@ -18,7 +18,7 @@ describe('Contract signature flow', () => {
 
   it('initializes signature and updates status on webhook', async () => {
     process.env.SIGN_WEBHOOK_SECRET = 'secret';
-    const landlordToken = signToken({ _id: '507f1f77bcf86cd799439011', role: 'landlord', isVerified: true });
+    const landlordToken = await signToken({ _id: '507f1f77bcf86cd799439011', role: 'landlord', isVerified: true });
     // create contract
     const contract = await Contract.create({
       landlord: '507f1f77bcf86cd799439011',

@@ -1,12 +1,12 @@
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { sessionToken } from '../utils/sessionToken';
 import { seedContractParties } from '../utils/contractParties';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 
-const signToken = (payload: any) => jwt.sign(payload, JWT_SECRET);
+const signToken = sessionToken;
 
 const defaultPayload = {
   landlord: '507f1f77bcf86cd799439011',
@@ -21,7 +21,7 @@ const defaultPayload = {
 };
 
 const createVersion = async (policyType: string, version: string) => {
-  const token = signToken({ _id: '000000000000000000000999', role: 'admin' });
+  const token = await signToken({ _id: '000000000000000000000999', role: 'admin' });
   await request(app)
     .post('/api/policies/version')
     .set('Authorization', `Bearer ${token}`)
@@ -44,7 +44,7 @@ describe('Contracts require policy acceptance', () => {
 
   it('returns 409 until required policies are accepted', async () => {
     await seedContractParties();
-    const userToken = signToken({ _id: '507f1f77bcf86cd799439011', role: 'landlord' });
+    const userToken = await signToken({ _id: '507f1f77bcf86cd799439011', role: 'landlord' });
 
     await createVersion('terms_of_service', 'v2.0');
     await createVersion('data_processing', 'v3.0');

@@ -12,14 +12,14 @@ export const SESSION_EXPIRED = 'Tu sesión ha caducado. Vuelve a iniciar sesión
  * Lee la cuenta del token: versión de sesión (`tokenVersion`), rol e `isVerified`.
  * El token es de la versión vigente si coincide con `tokenVersion`; tokens anteriores a esta
  * comprobación no llevan `tv` y cuentan como versión 0, igual que los usuarios sin el campo.
- * Si la cuenta no existe se deja pasar con los datos del token, como antes: cada ruta responde.
+ * Si la cuenta ya no existe (borrada), el token deja de valer igual que uno revocado.
  * Sin conexión a Mongo no se comprueba (la ruta fallará igualmente al consultar la base).
  */
 const loadSessionUser = async (decoded: any): Promise<{ revoked: boolean; user?: any }> => {
   const id = decoded?._id || decoded?.id;
   if (mongoose.connection.readyState !== 1 || !id || !mongoose.isValidObjectId(id)) return { revoked: false };
   const user = await User.findById(id).select('tokenVersion role isVerified').lean();
-  if (!user) return { revoked: false };
+  if (!user) return { revoked: true };
   const revoked = (Number((user as any).tokenVersion) || 0) !== (Number(decoded.tv) || 0);
   return { revoked, user };
 };

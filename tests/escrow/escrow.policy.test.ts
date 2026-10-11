@@ -1,15 +1,15 @@
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { sessionToken } from '../utils/sessionToken';
 import { Contract } from '../../src/models/contract.model';
 import Ticket from '../../src/models/ticket.model';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
-const signToken = (payload: any) => jwt.sign(payload, JWT_SECRET);
+const signToken = sessionToken;
 
 const createVersion = async (policyType: string, version: string) => {
-  const token = signToken({ _id: '000000000000000000000999', role: 'admin' });
+  const token = await signToken({ _id: '000000000000000000000999', role: 'admin' });
   await request(app)
     .post('/api/policies/version')
     .set('Authorization', `Bearer ${token}`)
@@ -34,8 +34,8 @@ describe('Escrow flows require policy acceptance', () => {
   afterEach(clearDb);
 
   const bootstrapTicket = async () => {
-    const tenantToken = signToken({ _id: '507f1f77bcf86cd799439010', role: 'tenant' });
-    const proToken = signToken({ _id: '507f1f77bcf86cd799439020', role: 'pro' });
+    const tenantToken = await signToken({ _id: '507f1f77bcf86cd799439010', role: 'tenant' });
+    const proToken = await signToken({ _id: '507f1f77bcf86cd799439020', role: 'pro' });
 
     // El ticket se abre sobre un contrato real del inquilino (propietario e inmueble salen de ahí)
     const contract = await Contract.create({
@@ -75,7 +75,7 @@ describe('Escrow flows require policy acceptance', () => {
     await createVersion('terms_of_service', 'v1.0');
     await createVersion('data_processing', 'v1.0');
 
-    const landlordToken = signToken({ _id: '507f1f77bcf86cd799439011', role: 'landlord' });
+    const landlordToken = await signToken({ _id: '507f1f77bcf86cd799439011', role: 'landlord' });
     const { ticketId, tenantToken } = await bootstrapTicket();
 
     // Landlord without policies -> 409

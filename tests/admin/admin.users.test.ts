@@ -1,11 +1,11 @@
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { sessionToken } from '../utils/sessionToken';
 import { User } from '../../src/models/user.model';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
-const adminToken = jwt.sign({ id: '507f1f77bcf86cd799439000', role: 'admin' }, JWT_SECRET);
+const adminSession = () => sessionToken({ id: '507f1f77bcf86cd799439000', role: 'admin' });
 
 describe('Admin users API', () => {
   beforeAll(connectDb);
@@ -15,7 +15,7 @@ describe('Admin users API', () => {
   it('creates an agency user and returns email in the users list', async () => {
     const created = await request(app)
       .post('/api/users')
-      .set('Authorization', `Bearer ${adminToken}`)
+      .set('Authorization', `Bearer ${await adminSession()}`)
       .send({
         name: 'Inmo Norte',
         email: 'agency-admin@test.com',
@@ -31,7 +31,7 @@ describe('Admin users API', () => {
 
     const list = await request(app)
       .get('/api/users?role=agency')
-      .set('Authorization', `Bearer ${adminToken}`)
+      .set('Authorization', `Bearer ${await adminSession()}`)
       .expect(200);
 
     expect(list.body.items).toHaveLength(1);
@@ -59,7 +59,7 @@ describe('Admin users API', () => {
 
     await request(app)
       .post('/api/users')
-      .set('Authorization', `Bearer ${adminToken}`)
+      .set('Authorization', `Bearer ${await adminSession()}`)
       .send({
         name: 'Inmo Norte',
         email: 'agency-admin@test.com',

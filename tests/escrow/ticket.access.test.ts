@@ -1,13 +1,13 @@
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { bearer } from '../utils/sessionToken';
 import { Contract } from '../../src/models/contract.model';
 import Ticket from '../../src/models/ticket.model';
 import Escrow from '../../src/models/escrow.model';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
-const token = (_id: string, role: string) => `Bearer ${jwt.sign({ _id, role }, JWT_SECRET)}`;
+const token = bearer;
 
 const LANDLORD = '507f1f77bcf86cd799439011';
 const OTHER_LANDLORD = '507f1f77bcf86cd799439031';
@@ -39,7 +39,7 @@ describe('Ticket access control', () => {
     });
     const res = await request(app)
       .post('/api/tickets')
-      .set('Authorization', token(TENANT, 'tenant'))
+      .set('Authorization', await token(TENANT, 'tenant'))
       .send({ contractId: String(contract._id), ownerId: OTHER_LANDLORD, service: 'maintenance', title: 'Grifo', description: 'Gotea' })
       .expect(201);
     return { contract, ticketId: res.body._id as string, ticket: res.body };
@@ -52,7 +52,7 @@ describe('Ticket access control', () => {
     expect(ticket.ownerId).toBe(LANDLORD); // ownerId del body ignorado
     await request(app)
       .post('/api/tickets')
-      .set('Authorization', token(OTHER_TENANT, 'tenant'))
+      .set('Authorization', await token(OTHER_TENANT, 'tenant'))
       .send({ contractId: String(contract._id), service: 'x', title: 'x', description: 'x' })
       .expect(403);
   });
@@ -60,36 +60,36 @@ describe('Ticket access control', () => {
   it('only lets the involved parties act on and read the ticket', async () => {
     const { ticketId } = await openTicket();
     // Sin seleccionar, ningún profesional puede presupuestar ni ver el ticket
-    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', token(PRO, 'pro')).send({ amount: 100 }).expect(403);
-    await request(app).get(`/api/tickets/${ticketId}`).set('Authorization', token(PRO, 'pro')).expect(403);
+    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', await token(PRO, 'pro')).send({ amount: 100 }).expect(403);
+    await request(app).get(`/api/tickets/${ticketId}`).set('Authorization', await token(PRO, 'pro')).expect(403);
     await selectPro(ticketId);
-    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', token(PRO, 'pro')).send({ amount: 100 }).expect(200);
-    await request(app).get(`/api/tickets/${ticketId}`).set('Authorization', token(PRO, 'pro')).expect(200);
+    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', await token(PRO, 'pro')).send({ amount: 100 }).expect(200);
+    await request(app).get(`/api/tickets/${ticketId}`).set('Authorization', await token(PRO, 'pro')).expect(200);
 
     // Otro pro no puede re-presupuestar ni completar un ticket ya asignado
-    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', token(OTHER_PRO, 'pro')).send({ amount: 1 }).expect(403);
-    await request(app).post(`/api/tickets/${ticketId}/complete`).set('Authorization', token(OTHER_PRO, 'pro')).send({}).expect(403);
+    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', await token(OTHER_PRO, 'pro')).send({ amount: 1 }).expect(403);
+    await request(app).post(`/api/tickets/${ticketId}/complete`).set('Authorization', await token(OTHER_PRO, 'pro')).send({}).expect(403);
     // Otro propietario no puede aprobar, asignar ni leer
-    await request(app).post(`/api/tickets/${ticketId}/approve`).set('Authorization', token(OTHER_LANDLORD, 'landlord')).send({ customerId: 'cus_x' }).expect(403);
-    await request(app).post(`/api/tickets/${ticketId}/unassign`).set('Authorization', token(OTHER_LANDLORD, 'landlord')).expect(403);
-    await request(app).get(`/api/tickets/${ticketId}`).set('Authorization', token(OTHER_LANDLORD, 'landlord')).expect(403);
-    await request(app).get(`/api/tickets/${ticketId}`).set('Authorization', token(TENANT, 'tenant')).expect(200);
+    await request(app).post(`/api/tickets/${ticketId}/approve`).set('Authorization', await token(OTHER_LANDLORD, 'landlord')).send({ customerId: 'cus_x' }).expect(403);
+    await request(app).post(`/api/tickets/${ticketId}/unassign`).set('Authorization', await token(OTHER_LANDLORD, 'landlord')).expect(403);
+    await request(app).get(`/api/tickets/${ticketId}`).set('Authorization', await token(OTHER_LANDLORD, 'landlord')).expect(403);
+    await request(app).get(`/api/tickets/${ticketId}`).set('Authorization', await token(TENANT, 'tenant')).expect(200);
   });
 
   it('releases the escrow only once, only by its owner, and only after the work is completed', async () => {
     const { ticketId } = await openTicket();
-    const L = token(LANDLORD, 'landlord');
+    const L = await token(LANDLORD, 'landlord');
     await selectPro(ticketId);
-    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', token(PRO, 'pro')).send({ amount: 100 }).expect(200);
+    await request(app).post(`/api/tickets/${ticketId}/quote`).set('Authorization', await token(PRO, 'pro')).send({ amount: 100 }).expect(200);
     await request(app).post(`/api/tickets/${ticketId}/approve`).set('Authorization', L).send({ customerId: 'cus_mock' }).expect(200);
 
     await request(app).post(`/api/tickets/${ticketId}/validate`).set('Authorization', L).expect(409); // trabajo sin completar
-    await request(app).post(`/api/tickets/${ticketId}/complete`).set('Authorization', token(PRO, 'pro')).send({}).expect(200);
-    await request(app).post(`/api/tickets/${ticketId}/validate`).set('Authorization', token(TENANT, 'tenant')).expect(403);
-    await request(app).post(`/api/tickets/${ticketId}/validate`).set('Authorization', token(OTHER_LANDLORD, 'landlord')).expect(403);
+    await request(app).post(`/api/tickets/${ticketId}/complete`).set('Authorization', await token(PRO, 'pro')).send({}).expect(200);
+    await request(app).post(`/api/tickets/${ticketId}/validate`).set('Authorization', await token(TENANT, 'tenant')).expect(403);
+    await request(app).post(`/api/tickets/${ticketId}/validate`).set('Authorization', await token(OTHER_LANDLORD, 'landlord')).expect(403);
 
     await request(app).post(`/api/tickets/${ticketId}/validate`).set('Authorization', L).expect(200);
-    const again = await request(app).post(`/api/tickets/${ticketId}/resolve`).set('Authorization', token(TENANT, 'tenant'));
+    const again = await request(app).post(`/api/tickets/${ticketId}/resolve`).set('Authorization', await token(TENANT, 'tenant'));
     expect(again.status).toBe(409);
     const t = await Ticket.findById(ticketId).lean();
     expect((await Escrow.findById(t?.escrowId).lean())?.status).toBe('released');

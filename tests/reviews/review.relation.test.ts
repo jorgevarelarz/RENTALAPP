@@ -1,7 +1,7 @@
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { bearer } from '../utils/sessionToken';
 import { Contract } from '../../src/models/contract.model';
 import { User } from '../../src/models/user.model';
 import ServiceOffer from '../../src/models/serviceOffer.model';
@@ -9,15 +9,18 @@ import Ticket from '../../src/models/ticket.model';
 import Review from '../../src/models/review.model';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
-const token = (_id: string, role: string) => `Bearer ${jwt.sign({ _id, role }, JWT_SECRET)}`;
+const token = bearer;
 
 const LANDLORD = '507f1f77bcf86cd799439011';
 const TENANT = '507f1f77bcf86cd799439010';
 const STRANGER = '507f1f77bcf86cd799439030';
 const PRO = '507f1f77bcf86cd799439020';
 
-const review = (from: string, role: string, body: Record<string, unknown>) =>
-  request(app).post('/api/reviews').set('Authorization', token(from, role)).send(body);
+// La sesión necesita la cuenta en la base: se crea al enviar, después de sembrar cada test.
+const review = (from: string, role: string, body: Record<string, unknown>) => ({
+  expect: async (status: number) =>
+    request(app).post('/api/reviews').set('Authorization', await token(from, role)).send(body).expect(status),
+});
 
 describe('Reseñas: solo entre partes de una relación real', () => {
   beforeAll(connectDb);
