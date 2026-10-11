@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { register as apiRegister } from "../../services/auth";
+import { register as apiRegister, passwordPolicyError, PASSWORD_MIN_LENGTH } from "../../services/auth";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../api/client";
 import SocialAuthButtons from "../../components/SocialAuthButtons";
@@ -29,6 +29,8 @@ export default function RegisterPage() {
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const policyError = passwordPolicyError(password);
+    if (policyError) { setErr(policyError); return; }
     setErr(null); setLoading(true);
     try {
       await apiRegister(name.trim(), email.trim(), password, role);
@@ -124,8 +126,9 @@ export default function RegisterPage() {
             required
             className="auth-input"
             value={password}
+            minLength={PASSWORD_MIN_LENGTH}
             onChange={e=>setPassword(e.target.value)}
-            placeholder="Mínimo 8 caracteres"
+            placeholder={`Mínimo ${PASSWORD_MIN_LENGTH} caracteres`}
             autoComplete="new-password"
           />
         </label>

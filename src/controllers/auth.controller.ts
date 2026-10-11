@@ -126,7 +126,7 @@ export const resetPassword = async (req: Request, res: Response) => {
     });
 
     if (!user) {
-      return res.status(400).json({ error: 'Token inválido o expirado' });
+      return res.status(400).json({ error: 'El enlace no es válido o ha caducado. Pide uno nuevo.' });
     }
 
     user.passwordHash = await bcrypt.hash(password, 10);

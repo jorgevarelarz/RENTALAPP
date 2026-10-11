@@ -1,5 +1,17 @@
 import { api as axios } from "../api/client";
 
+// Mensaje del backend (auth.controller.ts) para cualquier fallo de credenciales.
+export const INVALID_CREDENTIALS_MESSAGE = "Usuario o contraseña incorrectos";
+
+// Igual que el backend (auth.routes.ts): mínimo 8 caracteres en registro y restablecimiento.
+export const PASSWORD_MIN_LENGTH = 8;
+
+export function passwordPolicyError(password: string): string | null {
+  return password.length < PASSWORD_MIN_LENGTH
+    ? `La contraseña debe tener al menos ${PASSWORD_MIN_LENGTH} caracteres.`
+    : null;
+}
+
 export type User = {
   _id: string;
   email: string;

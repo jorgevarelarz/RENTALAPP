@@ -5,6 +5,7 @@ import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../api/client";
 import SocialAuthButtons from "../../components/SocialAuthButtons";
 import { safeInternalPath } from "../../services/coTenants";
+import { INVALID_CREDENTIALS_MESSAGE } from "../../services/auth";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -90,7 +91,12 @@ export default function LoginPage() {
         {(err || socialError) && (
           <div className="auth-alert" role="alert">
             <AlertCircle size={17} className="auth-alert-icon" />
-            <span>{err || socialError}</span>
+            <span>
+              {err || socialError}
+              {err === INVALID_CREDENTIALS_MESSAGE && (
+                <>. Si creaste la cuenta con Google o Apple, entra con ese botón.</>
+              )}
+            </span>
           </div>
         )}
         <button type="submit" className="auth-button" disabled={loading}>
