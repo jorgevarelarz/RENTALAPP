@@ -1116,7 +1116,7 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 
 **Siguiente mejora propuesta.** Interfaz: en el detalle del contrato, mostrar «Fianza devuelta» (con importe y fecha) y un aviso discreto si hay una disputa abierta sobre la fianza o la renta. De paso, los textos de `getContractActionSummary` y la insignia `Badge` sin mayúsculas.
 
-### Ronda 31 — 2026-10-11 20:35
+### Ronda 31 — 2026-10-11 20:26
 
 **Qué y por qué.** Interfaz, como proponía la ronda 30. Desde esa ronda el webhook guarda las devoluciones de la fianza y las disputas (contracargos), pero nadie las veía. Además, el «Siguiente paso» del contrato usaba jerga interna («pendiente de activación operativa», «Faltan pasos previos antes de firma», «Confirmar fianza o pago inicial») y daba la misma instrucción a todas las partes.
 
