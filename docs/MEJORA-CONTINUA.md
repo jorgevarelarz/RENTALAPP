@@ -1216,7 +1216,7 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 
 **Siguiente mejora propuesta.** Interfaz: «Incidencias» (`TicketsList` y `TicketDetail`) al sistema RentalApp 2026, con fechas en `es-ES`, tildes, lista en tarjetas en móvil en vez de tabla y sin mayúsculas en las cabeceras. Si se prefiere seguridad: los adjuntos de chat y los avatares, que son públicos y no caducan.
 
-### Ronda 34 — 2026-10-11 21:45
+### Ronda 34 — 2026-10-11 21:20
 
 **Qué y por qué.** Seguridad, el punto «Ficheros» de la auditoría, que seguía abierto. `/api/uploads/images` sirve las fotos de los inmuebles, los avatares y los adjuntos del chat, todo como estático público en `/uploads`.
 
