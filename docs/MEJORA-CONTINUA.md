@@ -24,6 +24,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 17**: rol e `isVerified` salen de la base en cada petición, no del token. Un administrador degradado o una cuenta a la que se retira la verificación lo nota en la siguiente petición. No hay migración ni consulta extra (es la misma de `tokenVersion`).
 - **Al desplegar la ronda 20**: crear un contrato exige ser el propietario del inmueble, su agencia gestora (`agencyAccess: 'manage'`) o administrador, y que el arrendador sea el dueño del inmueble. Quien antes creaba contratos con IDs a mano sobre inmuebles ajenos recibirá 403/400. Conviene comprobar también, con una consulta de solo lectura, que en producción existe el índice único `contractId_1_period_1` de `rentpayments`. Si había recibos duplicados, Mongoose no lo habrá podido crear, y la protección contra el doble cobro de la renta (P3) depende de él.
 - **Al desplegar la ronda 22**: conviene comprobar en producción, con una consulta de solo lectura, si hay cuentas cuyo correo solo se diferencia en mayúsculas (`db.users.aggregate([{$group:{_id:{$toLower:'$email'},n:{$sum:1},emails:{$push:'$email'}}},{$match:{n:{$gt:1}}}])`). Si las hay, quien entra con el correo exacto llega a la suya, pero con otras mayúsculas entra en una cualquiera de las dos; habría que decidir cuál se conserva. Además, el token de una cuenta borrada deja de valer en la siguiente petición.
+- **Al desplegar la ronda 23**: las visitas que el casero propuso antes desde «Solicitudes» se guardaron con la hora desplazada (el servidor leía «10:00» como UTC: 2 h tarde en verano y 1 h en invierno). No se corrigen solas. Si hay visitas futuras en producción, conviene revisarlas con una consulta de solo lectura (`db.applications.find({proposedBy:'landlord', proposedDate:{$gt:new Date()}})`) y avisar a los afectados. Además, `POST /api/contracts` toma ya la región del inmueble y rechaza con 400 `region_mismatch` una región distinta en el cuerpo.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -808,3 +809,44 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - La agencia no tiene `/contracts/new` ni «Cancelar invitación» de propietario.
 
 **Siguiente mejora propuesta.** Contratos, que dejó pendientes la ronda 21: que `POST /api/contracts` derive la región del inmueble en vez de fiarse del cuerpo, y abrir el asistente a la agencia gestora desde su panel. Si se prefiere interfaz pura: «Cancelar invitación» para la agencia en «Propietarios», con el patrón de co-titulares.
+
+### Ronda 23 — 2026-10-11 16:22
+
+**Qué y por qué.** Contratos, como proponía la ronda 22, y el modal de candidatos, que es la única entrada al asistente:
+
+1. **La región del contrato sale del inmueble.** `POST /api/contracts` aceptaba la `region` del cuerpo sin compararla con la del inmueble. Quien creaba el contrato podía elegir otra comunidad y, con ella, otra cláusula de fianza autonómica (otro organismo de depósito) y otro texto en el PDF.
+   - Ahora el backend traduce la región libre del inmueble a la clave del catálogo con `contractRegionKey` (`src/policies/clauses/index.ts`, misma regla que `contractRegion` del asistente) y usa esa.
+   - El cuerpo puede omitir `region`. Si la manda y es otra, da 400 `region_mismatch` (con `propertyRegion`). Si el inmueble está fuera del catálogo, da `region_not_supported`.
+   - La comprobación de quién crea el contrato (A2) va antes que la de las cláusulas. Un inmueble ajeno da 403 aunque el cuerpo tenga además otros errores.
+   - El asistente traduce `region_mismatch` al español.
+2. **Modal «Solicitudes» del casero (`ApplicantsModal`)**, tres fallos:
+   - **Candidato inventado**: si fallaba `GET /properties/:id/applications`, mostraba un «Carlos Inquilino» falso con `tenant_1`, y «Crear contrato» llevaba al asistente con ese id. Ahora dice «No se pudieron cargar los candidatos» y ofrece «Reintentar».
+   - **Hora de la visita desplazada**: mandaba el valor de `datetime-local` sin zona («2026-10-16T18:00») y el servidor, en UTC, lo guardaba como 18:00 UTC: 2 h tarde en verano. Ahora manda el instante en ISO. El backend rechaza una fecha inválida con 400 `invalid_visit_date` (antes daba 500 al guardar).
+   - **Errores tragados**: proponer una visita avisaba de éxito aunque el servidor fallara, y aceptarla no capturaba el error. Ahora los dos muestran el error en español y recargan la lista desde el servidor.
+   - Apariencia, con el estilo de las rondas 12 y 21: estado en una línea de texto de color («El candidato propone visita el…», «Visita el…», «Sin visita») en lugar de pastillas con icono, «Solvencia verificada» en lugar de la pegatina «SOLVENTE», el mensaje sin cursiva ni comillas, botones en minúscula inicial («Crear contrato» ya no aparece medio transparente) y scroll dentro del modal para listas largas en móvil.
+
+La agencia gestora sigue sin acceso al asistente. Al revisarlo, su panel no tiene ni lista de inmuebles gestionados ni de candidatos, y `GET /properties/:id/applications` es solo del dueño. Es una funcionalidad entera, no un enlace; queda como propuesta.
+
+**Commits.**
+- `fed0cfe` Contratos: la región (y la fianza autonómica) sale del inmueble; una región distinta en el cuerpo da 400 region_mismatch
+- `73a89fd` Candidatos: el modal no inventa un candidato si falla la carga, la visita se manda en ISO y los errores se muestran; el backend rechaza fechas inválidas con 400
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - `tests/contracts`: 18 suites y 80 tests OK. Nuevos en `create-contract.authz.test.ts` (5): sin región usa la del inmueble; «A Coruña, Galicia» da `galicia`; región distinta da `region_mismatch`; inmueble en Andalucía da `region_not_supported`; región inexistente da `region_not_supported`. Ajustado `contract.integration.test.ts`, que no sembraba el inmueble.
+  - `tests/agency/agencyReferral.test.ts` (también crea contratos): 14 OK.
+  - Nuevo `tests/applications/visit-proposal.test.ts` (4): instante ISO guardado tal cual, fecha inválida da 400 sin tocar la solicitud, falta de fecha, y casero ajeno da 403.
+  - e2e: 2 suites y 10 tests OK.
+- Frontend: build OK; `npm test` 28 ficheros y 94 tests OK (antes 27 y 90). Nuevo `ApplicantsModal.test.tsx` (4): sin candidatos falsos y reintento, fecha en ISO con error `forbidden` en español, aceptar visita y recargar, y «Crear contrato» que abre el asistente.
+- Playwright (vite local, `/api/*` simulado, sesión de casero, `TZ=Europe/Madrid`) a 390 y 1280 px (`/tmp/ra-shots23`): lista de tres candidatos y formulario de visita. Las 18:00 de Madrid llegan al servidor como `2026-10-16T16:00:00.000Z`.
+- GitNexus: `impact` LOW en `create`, `proposeVisit` y `ApplicantsModal`. `detect_changes` sale alto en la primera parte solo por el desplazamiento de líneas en `index.ts` (`getCatalogByRegion` no cambia); en la segunda sale medio, limitado al flujo `ApplicantsModal → GetPropertyApplications`.
+
+**Qué queda.**
+- Visitas ya guardadas con la hora desplazada en producción: anotado en «Para Jorge».
+- La agencia gestora no puede ver candidatos ni crear contratos desde la interfaz.
+- `LandlordDashboard` sigue enviando a mano `Authorization` en varias llamadas, aunque ya lo pone el cliente; es redundante, no un fallo.
+- Pendientes anteriores: enumeración por tiempo en `request-reset` y «Cancelar invitación» de propietario para la agencia.
+
+**Siguiente mejora propuesta.** Agencia: `GET /api/agency/properties` con los inmuebles que gestiona (`agencyAccess: 'manage'`), abrir `GET /properties/:id/applications` y la propuesta de visitas a esa agencia, y una página «Inmuebles» en su panel que reutilice `ApplicantsModal` y lleve al asistente (abriendo `/contracts/new` al rol `agency`). Si se prefiere algo más corto: «Cancelar invitación» de propietario en «Propietarios», con el patrón de co-titulares.
+

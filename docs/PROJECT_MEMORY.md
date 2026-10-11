@@ -1154,3 +1154,11 @@ Rules:
 - New `src/utils/userEmail.ts` (`normalizeEmail`, `findUserByEmail` exact-lowercase then collation strength 2 fallback for legacy mixed-case, `emailInUse`). Used by `register` (stores lowercase, rejects case-variant duplicates), `login`, `requestPasswordReset`, `resolveSocialUser`, admin `createUser`, agency invite existence checks.
 - `authenticate`/`loadSessionUser`: token of a user that no longer exists → 401 `session_expired`. Tests that sign JWTs must seed the user: use `tests/utils/sessionToken.ts` (`sessionToken`, `bearer`).
 - Verification: tsc clean; full Jest `--runInBand --forceExit` 69 suites / 296 tests; e2e 10/10; frontend build + 90 tests.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 23: contract region from property + applicants modal fixes
+
+- `POST /api/contracts`: region derived from the property via `contractRegionKey` (`src/policies/clauses/index.ts`, same rule as frontend `contractRegion`); body `region` optional, mismatch → 400 `region_mismatch`; authz check (A2) now runs before clause validation.
+- `ApplicantsModal`: no fake applicant on load error (error + retry), visit date sent as ISO (`datetime-local` was stored as UTC, 2 h late), propose/accept errors shown; `proposeVisit` rejects invalid dates with 400 `invalid_visit_date`.
+- Files: `src/controllers/contract.controller.ts`, `src/controllers/application.controller.ts`, `src/policies/clauses/index.ts`, `frontend/src/components/ApplicantsModal.tsx`, `frontend/src/pages/contracts/contractDraft.ts`, tests `tests/contracts/create-contract.authz.test.ts`, `tests/contracts/contract.integration.test.ts`, `tests/applications/visit-proposal.test.ts`, `frontend/src/components/__tests__/ApplicantsModal.test.tsx`.
+- Verification: tsc clean; Jest `--runInBand` tests/contracts 80/80, applications 4/4, agencyReferral 14/14, e2e 10/10; frontend build + 94 tests; Playwright 390/1280 px.
+
