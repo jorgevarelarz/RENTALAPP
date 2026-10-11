@@ -23,6 +23,10 @@ router.post('/start', authenticate, async (req, res) => {
 // Webhook from Stripe Identity — public but HMAC-verified when secret is configured
 router.post('/webhook', async (req, res) => {
   const secret = process.env.STRIPE_IDENTITY_WEBHOOK_SECRET;
+  // Sin secreto el cuerpo no se verifica: en producción no se acepta
+  if (!secret && process.env.NODE_ENV === 'production') {
+    return res.status(503).json({ error: 'identity_webhook_secret_missing' });
+  }
 
   if (secret) {
     const sig = req.headers['stripe-signature'];

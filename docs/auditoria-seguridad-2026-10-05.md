@@ -49,7 +49,7 @@
 - **Stripe, eventos:** reembolsos y disputas sin gestionar. `payment_intent.processing` puede devolver el estado a `PROCESSING`. Importes sin `Math.round` (`deposit.ts`).
 - **Contraseñas:** ~~token de reset en claro en la BD y sin `select:false`; enlace a `https://frontend/reset`~~ corregido el 2026-10-11 (hash SHA-256, `select:false`, `FRONTEND_URL`). Sigue pendiente: enumeración de cuentas en el login ("Esta cuenta utiliza Google o Apple") y contraseña mínima de 6 caracteres.
 - **Ficheros:** adjuntos de chat y avatares públicos y sin caducidad. El nombre se genera con `Math.random` y no se borra el EXIF.
-- **Observabilidad:** `/metrics` es público y `/health` expone `NODE_ENV`. Hay PII en logs (emails y body de webhooks).
+- **Observabilidad:** ~~`/metrics` es público y `/health` expone `NODE_ENV`~~ corregido el 2026-10-11: `/metrics` exige `Authorization: Bearer <METRICS_TOKEN>` y sin la variable da 404; `/health` ya no dice el entorno; los logs de peticiones (estructurado y morgan) guardan la ruta sin la query, así que no quedan códigos OAuth ni tokens. El webhook de `/api/kyc` sin `STRIPE_IDENTITY_WEBHOOK_SECRET` se rechaza en producción (503). Sigue pendiente: PII en otros logs (emails y body de webhooks).
 - **Mongo:** no hay `sanitizeFilter` global (`?status[$ne]=x`). El impacto es bajo porque los filtros ya están acotados al usuario.
 - **Dependencias y plataforma:**
   - `npm audit` encuentra 8 avisos en la raíz (4 altos), 14 en el frontend (11 altos) y 2 en el portal institucional.

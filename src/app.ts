@@ -64,7 +64,7 @@ import { createAiRateLimiter } from './middleware/aiRateLimit';
 import { requestId } from './middleware/requestId';
 import { adminRateLimit } from './middleware/adminRateLimit';
 import { loadEnv } from './config/env';
-import { metricsMiddleware, metricsHandler } from './metrics';
+import { metricsMiddleware, metricsHandler, pathWithoutQuery } from './metrics';
 import { firmaWebhook, signatureWebhook } from './controllers/contract.signature.controller';
 import { authorizeRoles } from './middleware/role.middleware';
 import { loadInstitutionScope } from './middleware/institutionScope';
@@ -155,7 +155,9 @@ if (process.env.NODE_ENV !== 'test') {
 }
 
 if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('dev'));
+  // Igual que 'dev', pero sin la query (códigos OAuth, tokens)
+  morgan.token('path', (req: any) => pathWithoutQuery(req.originalUrl || req.url));
+  app.use(morgan(':method :path :status :response-time ms - :res[content-length]'));
 }
 
 // Stripe webhook BEFORE JSON parser (uses express.raw)
@@ -278,7 +280,7 @@ app.get('/api/legal/privacy-policy', (_req, res) => {
 });
 
 app.get('/health', (_req, res) =>
-  res.json({ ok: true, env: process.env.NODE_ENV, mongo: { state: mongoose.connection.readyState } }),
+  res.json({ ok: true, mongo: { state: mongoose.connection.readyState } }),
 );
 app.get('/ready', (_req, res) => {
   if (mongoose.connection.readyState !== 1) {
