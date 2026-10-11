@@ -5,6 +5,7 @@ import { Mock, vi } from 'vitest';
 // Mock router param id
 vi.mock('react-router-dom', () => ({
   useParams: () => ({ id: (global as any).__mockId || 'c1' }),
+  useSearchParams: () => [new URLSearchParams((global as any).__mockSearch || ''), (global as any).__mockSetSearch || (() => {})],
 }), { virtual: true });
 
 // Mock AuthContext with configurable user
@@ -34,6 +35,7 @@ vi.mock('../../services/contracts', () => ({
   __esModule: true,
   getContract: vi.fn(),
   createSignSession: vi.fn(),
+  payDeposit: vi.fn(),
 }));
 
 import ContractDetail from '../ContractDetail';
@@ -55,6 +57,8 @@ describe('ContractDetail polling', () => {
     vi.useFakeTimers();
     (global as any).__mockAuth = { token: 't', user: null };
     (global as any).__mockId = 'c1';
+    (global as any).__mockSearch = '';
+    (global as any).__mockSetSearch = undefined;
   });
 
   afterEach(() => {

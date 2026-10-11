@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useCallback } from 'react';
-import { useParams } from 'react-router-dom';
-import { getContract, createSignSession, downloadPdf, downloadSignedPdf } from '../services/contracts';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { getContract, createSignSession, downloadPdf, downloadSignedPdf, payDeposit } from '../services/contracts';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import Card from '../components/ui/Card';
@@ -9,13 +9,23 @@ import Modal from '../components/ui/Modal';
 import SignaturitWidget from '../components/SignaturitWidget';
 import { ContractStatusBadge } from '../components/ContractStatusBadge';
 import { getContractActionSummary } from '../utils/contractWorkflow';
-import { CheckCircle2, Circle, Clock3, FileCheck, User, ShieldCheck, Download, PenTool } from 'lucide-react';
+import { CheckCircle2, Circle, Clock3, FileCheck, User, ShieldCheck, Download, PenTool, Wallet } from 'lucide-react';
 
 function formatTimelineDate(value?: string) {
   if (!value) return null;
   const parsed = new Date(value);
   if (Number.isNaN(parsed.getTime())) return null;
   return parsed.toLocaleDateString('es-ES');
+}
+
+const euros = (value?: number) =>
+  typeof value === 'number' && Number.isFinite(value)
+    ? value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })
+    : '—';
+
+function apiErrorMessage(error: any, fallback: string) {
+  const message = error?.response?.data?.error;
+  return typeof message === 'string' && message ? message : fallback;
 }
 
 function buildContractTimeline(contract: any) {
@@ -68,11 +78,25 @@ export default function ContractDetail() {
   const { id } = useParams();
   const { user, token } = useAuth();
   const { push } = useToast();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [contract, setContract] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [isSigning, setIsSigning] = useState(false);
   const [signingUrl, setSigningUrl] = useState<string | null>(null);
+  const [payingDeposit, setPayingDeposit] = useState(false);
+  // Vuelta desde Stripe Checkout: FRONTEND_URL/contracts/:id?deposit=success|cancel
+  const [depositReturn] = useState(() => {
+    const value = searchParams.get('deposit');
+    return value === 'success' || value === 'cancel' ? value : null;
+  });
+
+  useEffect(() => {
+    if (!searchParams.has('deposit')) return;
+    const next = new URLSearchParams(searchParams);
+    next.delete('deposit');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const loadContract = useCallback(async () => {
     try {
@@ -107,6 +131,19 @@ export default function ContractDetail() {
       console.error(error);
       push({ title: 'Error al iniciar firma segura', tone: 'error' });
       setIsSigning(false);
+    }
+  };
+
+  const handlePayDeposit = async () => {
+    if (!token || !contract?._id) return;
+    setPayingDeposit(true);
+    try {
+      const { sessionUrl } = await payDeposit(token, contract._id);
+      if (!sessionUrl) throw new Error('No se recibió la URL de pago');
+      window.location.assign(sessionUrl);
+    } catch (error) {
+      push({ title: apiErrorMessage(error, 'No se pudo iniciar el pago de la fianza'), tone: 'error' });
+      setPayingDeposit(false);
     }
   };
 
@@ -161,9 +198,52 @@ export default function ContractDetail() {
   const downloadLabel = isActive || contract.status === 'signed' ? 'Descargar contrato' : 'Descargar borrador';
   const timeline = buildContractTimeline(contract);
   const actionSummary = getContractActionSummary(contract, user?.role);
+  const rent = contract.rent ?? contract.rentAmount;
+  const deposit = contract.deposit ?? contract.depositAmount;
+  const property = typeof contract.property === 'object' ? contract.property : null;
+  const address = property?.address || contract.propertyAddress || contract.address;
+  const signedAt = contract.signedAt || contract.signature?.signedAt;
+  const isSigned = ['signed', 'active', 'completed'].includes(contract.status) || !!signedAt;
+  const depositConfirming = depositReturn === 'success' && !contract.depositPaid;
+  const canPayDeposit =
+    isTenant &&
+    (contract.status === 'signed' || contract.status === 'active') &&
+    !contract.depositPaid &&
+    !depositConfirming;
+  const formatDate = (value?: string) => (value ? new Date(value).toLocaleDateString('es-ES') : '—');
 
   return (
     <div className="max-w-5xl mx-auto p-4 md:p-8 space-y-6">
+      {depositReturn === 'success' && (
+        <div
+          role="status"
+          className={`flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between ${
+            contract.depositPaid ? 'border-emerald-200 bg-emerald-50' : 'border-blue-200 bg-blue-50'
+          }`}
+        >
+          <div>
+            <p className="font-semibold text-gray-900">
+              {contract.depositPaid ? 'Fianza pagada' : 'Pago de la fianza recibido'}
+            </p>
+            <p className="text-sm text-gray-600">
+              {contract.depositPaid
+                ? `Hemos registrado el pago de ${euros(deposit)}.`
+                : 'Stripe está confirmando el cobro. La fianza aparecerá como pagada en unos instantes.'}
+            </p>
+          </div>
+          {!contract.depositPaid && (
+            <Button variant="secondary" size="sm" onClick={loadContract}>
+              Actualizar estado
+            </Button>
+          )}
+        </div>
+      )}
+      {depositReturn === 'cancel' && !contract.depositPaid && (
+        <div role="status" className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <p className="font-semibold text-gray-900">Pago de la fianza cancelado</p>
+          <p className="text-sm text-gray-600">No se ha hecho ningún cargo. Puedes volver a intentarlo cuando quieras.</p>
+        </div>
+      )}
       <div className={`p-6 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-4 ${
         isActive ? 'bg-green-50 border-green-200' : 'bg-indigo-50 border-indigo-200'
       }`}>
@@ -194,20 +274,30 @@ export default function ContractDetail() {
               style={{ fontSize: 12, padding: '4px 10px' }}
             />
           </div>
-          <Button variant="secondary" className="flex items-center gap-2" onClick={handleDownloadDraft}>
+          <Button variant="secondary" className="flex items-center gap-2 whitespace-nowrap" onClick={handleDownloadDraft}>
             <Download size={16} /> {downloadLabel}
           </Button>
           {hasSignedPdf && (
-            <Button variant="secondary" className="flex items-center gap-2" onClick={handleDownloadSigned}>
+            <Button variant="secondary" className="flex items-center gap-2 whitespace-nowrap" onClick={handleDownloadSigned}>
               <Download size={16} /> Descargar firmado
             </Button>
           )}
           {needsMySignature && (
             <Button
               onClick={handleStartSigning}
-              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center gap-2"
+              className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg flex items-center gap-2 whitespace-nowrap"
             >
-              <PenTool size={18} /> Firmar con Signaturit
+              <PenTool size={18} /> Firmar contrato
+            </Button>
+          )}
+          {canPayDeposit && (
+            <Button
+              onClick={handlePayDeposit}
+              disabled={payingDeposit}
+              className="flex items-center gap-2 whitespace-nowrap"
+              style={{ opacity: payingDeposit ? 0.7 : 1 }}
+            >
+              <Wallet size={18} /> {payingDeposit ? 'Abriendo pago…' : `Pagar fianza · ${euros(deposit)}`}
             </Button>
           )}
         </div>
@@ -254,7 +344,7 @@ export default function ContractDetail() {
         </div>
       </Card>
 
-      <Card>
+      <Card className="p-5">
         <h3 className="font-bold text-gray-400 text-xs uppercase mb-4 tracking-wider">Siguiente acción</h3>
         <div className="space-y-2">
           <p className="text-base font-semibold text-gray-900">{actionSummary.nextAction}</p>
@@ -269,28 +359,28 @@ export default function ContractDetail() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="space-y-6">
-          <Card>
+          <Card className="p-5">
             <h3 className="font-bold text-gray-400 text-xs uppercase mb-4 tracking-wider">Resumen Económico</h3>
             <div className="space-y-4">
               <div className="flex justify-between items-center border-b border-gray-100 pb-2">
                 <span className="text-gray-600 text-sm">Renta Mensual</span>
-                <span className="font-bold text-lg">{contract.rentAmount} €</span>
+                <span className="font-bold text-lg">{euros(rent)}</span>
               </div>
               <div className="flex justify-between items-center border-b border-gray-100 pb-2">
                 <span className="text-gray-600 text-sm">Fianza</span>
-                <span className="font-medium">{contract.depositAmount} €</span>
+                <span className="font-medium">{euros(deposit)}</span>
               </div>
               <div className="flex justify-between items-center pt-1">
                 <span className="text-gray-600 text-sm">Duración</span>
                 <span className="font-medium text-sm text-right">
-                  {new Date(contract.startDate).toLocaleDateString()} <br/> al <br/>
-                  {new Date(contract.endDate).toLocaleDateString()}
+                  {formatDate(contract.startDate)} <br/> al <br/>
+                  {formatDate(contract.endDate)}
                 </span>
               </div>
             </div>
           </Card>
 
-          <Card>
+          <Card className="p-5">
             <h3 className="font-bold text-gray-400 text-xs uppercase mb-4 tracking-wider">Intervinientes</h3>
             <div className="space-y-4">
               <div className="flex items-start gap-3">
@@ -313,7 +403,7 @@ export default function ContractDetail() {
 
         <div className="lg:col-span-2">
           <div className="bg-gray-50 border border-gray-200 rounded-xl p-8 min-h-[600px] shadow-inner relative overflow-hidden">
-            {!isActive && (
+            {!isSigned && (
               <div className="absolute inset-0 pointer-events-none flex items-center justify-center opacity-[0.03] rotate-[-45deg]">
                 <span className="text-9xl font-black uppercase">Borrador</span>
               </div>
@@ -321,7 +411,7 @@ export default function ContractDetail() {
 
             <div className="max-w-2xl mx-auto bg-white shadow-sm border border-gray-200 p-8 min-h-[800px] text-sm text-gray-800 font-serif leading-relaxed">
               <h2 className="text-center font-bold text-xl uppercase mb-8 border-b pb-4">Contrato de Arrendamiento</h2>
-              <p className="mb-4">En {contract.city || 'Madrid'}, a {new Date().toLocaleDateString()}.</p>
+              <p className="mb-4">En {property?.city || contract.city || '—'}, a {signedAt ? formatDate(signedAt) : new Date().toLocaleDateString('es-ES')}.</p>
               <p className="mb-4">
                 <strong>REUNIDOS:</strong><br/>
                 De una parte, D./Dña {contract.landlordName} (ARRENDADOR).<br/>
@@ -329,34 +419,36 @@ export default function ContractDetail() {
               </p>
               <p className="mb-4">
                 <strong>ACUERDAN:</strong><br/>
-                El arrendamiento de la finca urbana sita en {contract.propertyAddress || contract.address || 'Dirección'},
-                con renta mensual de {contract.rentAmount}€.
+                El arrendamiento de la finca urbana sita en {address || '—'},
+                con renta mensual de {euros(rent)}.
               </p>
               <div className="pl-4 border-l-2 border-gray-200 my-6 space-y-2 italic text-gray-600">
-                <p>1. Duración: Del {contract.startDate} al {contract.endDate}.</p>
-                <p>2. Renta: {contract.rentAmount}€ mensuales pagaderos los primeros 5 días.</p>
-                <p>3. Fianza: {contract.depositAmount}€.</p>
+                <p>1. Duración: Del {formatDate(contract.startDate)} al {formatDate(contract.endDate)}.</p>
+                <p>2. Renta: {euros(rent)} mensuales pagaderos los primeros 5 días.</p>
+                <p>3. Fianza: {euros(deposit)}.</p>
                 {contract.petsAllowed ? <p>4. Mascotas: Permitidas.</p> : <p>4. Mascotas: No permitidas.</p>}
               </div>
               <div className="mt-12 pt-8 border-t border-gray-300 grid grid-cols-2 gap-8">
-                <div className="text-center">
-                  <div className="h-16 flex items-end justify-center">
-                    <span className="font-handwriting text-xl text-blue-900">{contract.landlordName}</span>
+                {[
+                  { label: 'El Arrendador', name: contract.landlordName },
+                  { label: 'El Arrendatario', name: contract.tenantName },
+                ].map((party) => (
+                  <div key={party.label} className="text-center">
+                    <div className="h-16 flex flex-col items-center justify-center rounded border border-dashed border-gray-200 bg-gray-50 font-sans text-xs">
+                      {isSigned ? (
+                        <>
+                          <span className="font-semibold text-gray-700">{party.name || 'Firmado'}</span>
+                          <span className="text-gray-500">
+                            Firmado electrónicamente{signedAt ? ` · ${formatDate(signedAt)}` : ''}
+                          </span>
+                        </>
+                      ) : (
+                        <span className="text-gray-400">Pendiente de firma electrónica</span>
+                      )}
+                    </div>
+                    <p className="text-xs uppercase font-bold border-t border-gray-300 pt-2 mt-2">{party.label}</p>
                   </div>
-                  <p className="text-xs uppercase font-bold border-t border-gray-300 pt-2">El Arrendador</p>
-                </div>
-                <div className="text-center relative">
-                   {isActive ? (
-                     <div className="absolute inset-0 flex items-center justify-center">
-                       <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/e/e4/Signature_sample.svg/1200px-Signature_sample.svg.png" className="h-12 opacity-50 -rotate-12" alt="Firma" />
-                     </div>
-                   ) : (
-                     <div className="h-16 flex items-center justify-center text-gray-300 text-xs italic bg-gray-50 border border-dashed border-gray-200 rounded">
-                       Espacio para firma certificada
-                     </div>
-                   )}
-                  <p className="text-xs uppercase font-bold border-t border-gray-300 pt-2 relative z-10">El Arrendatario</p>
-                </div>
+                ))}
               </div>
             </div>
           </div>

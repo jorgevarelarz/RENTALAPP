@@ -218,7 +218,7 @@ export const ActiveContractWidget: React.FC = () => {
               )}
               {activeContract.status === 'signed' && !activeContract.depositPaid && contractId && (
                 <Link to={`/contracts/${contractId}`} className="flex-1">
-                  <Button variant="primary" className="w-full" style={{ background: '#16a34a' }}>
+                  <Button variant="primary" className="w-full">
                     Pagar fianza
                   </Button>
                 </Link>
