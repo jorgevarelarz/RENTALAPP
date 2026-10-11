@@ -287,11 +287,19 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
         // Partner/agency earnings: share a % of platform rent fee via Stripe Connect transfer.
         await maybePayAgencyRentFeeShare({ eventId: event.id, intent });
         if (offerId) {
-          const offer = await ServiceOffer.findById(offerId);
+          // Paso atómico a `confirmed`: un reenvío del evento no duplica avisos ni la ganancia.
+          // Solo cuenta el intento vigente de la oferta (o cualquiera en ofertas antiguas sin él).
+          const offer = await ServiceOffer.findOneAndUpdate(
+            {
+              _id: offerId,
+              status: { $nin: ['confirmed', 'done', 'cancelled'] },
+              $or: [{ paymentIntentId: intent.id }, { paymentIntentId: null }],
+            },
+            { status: 'confirmed', paymentIntentId: intent.id },
+            { new: true },
+          );
           if (offer) {
             const fee = calcServiceFee(offer.amount);
-            offer.status = 'confirmed';
-            await offer.save();
             if (offer.appointmentId) {
               await Appointment.findByIdAndUpdate(offer.appointmentId, { status: 'confirmed' });
             }
@@ -325,6 +333,11 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
         const offerId = intent.metadata?.offerId as string | undefined;
         const rentPaymentId = intent.metadata?.rentPaymentId as string | undefined;
         if (offerId) {
+          // El propietario puede reintentar el pago: la oferta vuelve a `scheduled`.
+          await ServiceOffer.updateOne(
+            { _id: offerId, status: 'payment_pending', paymentIntentId: intent.id },
+            { status: 'scheduled' },
+          );
           const offer = await ServiceOffer.findById(offerId);
           if (offer) {
             await publishSystem(offer.conversationId, 'PAYMENT_FAILED', { offerId });
