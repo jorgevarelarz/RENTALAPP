@@ -7,6 +7,7 @@ import { Property } from '../../src/models/property.model';
 import { Contract } from '../../src/models/contract.model';
 import { AgencyInvite } from '../../src/models/agencyInvite.model';
 import { Verification } from '../../src/models/verification.model';
+import * as email from '../../src/utils/email';
 import {
   parseShareTiers,
   pctForActiveCount,
@@ -20,7 +21,17 @@ const TENANT_C = '6500000000000000000000c1';
 describe('Agency landlord referral (captación)', () => {
   beforeAll(connectDb);
   afterAll(disconnectDb);
-  afterEach(clearDb);
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    await clearDb();
+  });
+
+  // El enlace solo viaja en el email al propietario; se lee del envío simulado.
+  const spyEmail = () => jest.spyOn(email, 'sendEmail').mockResolvedValue(undefined as any);
+  const tokenFromEmail = (spy: jest.SpyInstance) => {
+    const html = String(spy.mock.calls[spy.mock.calls.length - 1][2]);
+    return html.match(/\/invite\/([a-f0-9]+)/)![1];
+  };
 
   const makeAgency = () =>
     User.create({
@@ -43,14 +54,15 @@ describe('Agency landlord referral (captación)', () => {
     });
 
   const inviteAndAccept = async () => {
-    const inviteRes = await request(app)
+    const sendSpy = spyEmail();
+    await request(app)
       .post('/api/agency/landlords/invite')
       .set('x-user-id', AGENCY_ID)
       .set('x-user-role', 'agency')
       .send({ landlordName: 'Paco Prop', landlordEmail: 'paco@test.com', propertyAddress: 'Calle Real 1' })
       .expect(201);
 
-    const token = inviteRes.body.invite.inviteUrl.split('/invite/')[1];
+    const token = tokenFromEmail(sendSpy);
     const acceptRes = await request(app)
       .post(`/api/agency-invites/${token}/accept`)
       .send({ password: 'supersegura1' })
@@ -69,6 +81,75 @@ describe('Agency landlord referral (captación)', () => {
     const invite: any = await AgencyInvite.findOne({ landlordEmail: 'paco@test.com' }).lean();
     expect(invite.status).toBe('accepted');
     expect(String(invite.landlordId)).toBe(landlordId);
+  });
+
+  it('la agencia no recibe el enlace de invitación y el token se guarda como hash (A4)', async () => {
+    await makeAgency();
+    const sendSpy = spyEmail();
+    const res = await request(app)
+      .post('/api/agency/landlords/invite')
+      .set('x-user-id', AGENCY_ID)
+      .set('x-user-role', 'agency')
+      .send({ landlordName: 'Paco Prop', landlordEmail: 'paco@test.com' })
+      .expect(201);
+
+    expect(JSON.stringify(res.body)).not.toMatch(/invite\/|token/i);
+    const token = tokenFromEmail(sendSpy);
+    expect(sendSpy.mock.calls[0][0]).toBe('paco@test.com');
+
+    const stored: any = await AgencyInvite.findOne({ landlordEmail: 'paco@test.com' }).select('+token').lean();
+    expect(stored.token).not.toBe(token);
+    expect(stored.token).toHaveLength(64);
+
+    // Ni el listado de la agencia ni la ficha pública exponen el token.
+    const list = await request(app)
+      .get('/api/agency/landlords')
+      .set('x-user-id', AGENCY_ID)
+      .set('x-user-role', 'agency')
+      .expect(200);
+    expect(JSON.stringify(list.body)).not.toContain(stored.token);
+    await request(app).get(`/api/agency-invites/${token}`).expect(200);
+
+    // El hash guardado no sirve como token.
+    await request(app).get(`/api/agency-invites/${stored.token}`).expect(404);
+    await request(app).post(`/api/agency-invites/${stored.token}/accept`).send({ password: 'supersegura1' }).expect(404);
+
+    const accept = await request(app)
+      .post(`/api/agency-invites/${token}/accept`)
+      .send({ password: 'supersegura1' })
+      .expect(201);
+    const landlord: any = await User.findById(accept.body.user._id).lean();
+    expect(landlord.emailVerifiedAt).toBeTruthy();
+  });
+
+  it('escapa los datos de la agencia en el HTML del email', async () => {
+    await makeAgency();
+    const sendSpy = spyEmail();
+    await request(app)
+      .post('/api/agency/landlords/invite')
+      .set('x-user-id', AGENCY_ID)
+      .set('x-user-role', 'agency')
+      .send({ landlordName: '<a href="https://phish.example">Paco</a>', landlordEmail: 'paco@test.com', propertyAddress: '<img src=x>' })
+      .expect(201);
+    const html = String(sendSpy.mock.calls[0][2]);
+    expect(html).not.toContain('<a href="https://phish.example">');
+    expect(html).not.toContain('<img src=x>');
+    expect(html).toContain('&lt;img src=x&gt;');
+  });
+
+  it('acepta invitaciones antiguas con el token guardado en claro', async () => {
+    await makeAgency();
+    const legacy = 'a'.repeat(48);
+    await AgencyInvite.create({
+      agencyId: AGENCY_ID,
+      landlordName: 'Paco Prop',
+      landlordEmail: 'paco@test.com',
+      token: legacy,
+      status: 'invited',
+      expiresAt: new Date(Date.now() + 86400000),
+    });
+    await request(app).get(`/api/agency-invites/${legacy}`).expect(200);
+    await request(app).post(`/api/agency-invites/${legacy}/accept`).send({ password: 'supersegura1' }).expect(201);
   });
 
   it('no permite invitar a un email ya registrado (primer toque gana)', async () => {

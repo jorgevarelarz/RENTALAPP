@@ -24,7 +24,8 @@ const agencyInviteSchema = new Schema<IAgencyInvite>(
     landlordPhone: { type: String, trim: true },
     propertyAddress: { type: String, trim: true },
     propertyCity: { type: String, trim: true },
-    token: { type: String, required: true, unique: true, index: true },
+    // SHA-256 del token del enlace (las invitaciones antiguas lo guardaban en claro).
+    token: { type: String, required: true, unique: true, index: true, select: false },
     status: { type: String, enum: ['invited', 'accepted', 'expired'], default: 'invited' },
     landlordId: { type: Schema.Types.ObjectId, ref: 'User' },
     acceptedAt: { type: Date },

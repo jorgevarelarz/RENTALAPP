@@ -36,7 +36,7 @@ export type AgencyEarningsSummary = {
 
 export async function createLandlordInvite(input: LandlordInviteInput) {
   const { data } = await client.post('/api/agency/landlords/invite', input);
-  return data.invite as { id: string; inviteUrl: string; landlordEmail: string };
+  return data.invite as { id: string; landlordEmail: string; status: string; expiresAt: string };
 }
 
 export async function listLandlordInvites(): Promise<LandlordInviteItem[]> {

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, Circle, Copy, Plus, X } from 'lucide-react';
+import { CheckCircle2, Circle, Plus, X } from 'lucide-react';
 import {
   createLandlordInvite,
   listLandlordInvites,
@@ -31,8 +31,7 @@ export default function AgencyLandlords() {
   const [form, setForm] = useState({ landlordName: '', landlordEmail: '', landlordPhone: '', propertyAddress: '' });
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [lastInviteEmail, setLastInviteEmail] = useState<string | null>(null);
 
   const load = async () => {
     try {
@@ -54,7 +53,7 @@ export default function AgencyLandlords() {
         landlordPhone: form.landlordPhone || undefined,
         propertyAddress: form.propertyAddress || undefined,
       });
-      setLastInviteUrl(invite.inviteUrl);
+      setLastInviteEmail(invite.landlordEmail);
       setForm({ landlordName: '', landlordEmail: '', landlordPhone: '', propertyAddress: '' });
       setShowForm(false);
       await load();
@@ -69,10 +68,6 @@ export default function AgencyLandlords() {
     } finally {
       setSubmitting(false);
     }
-  };
-
-  const copyLink = async (url: string) => {
-    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
   };
 
   return (
@@ -92,12 +87,9 @@ export default function AgencyLandlords() {
         </button>
       </div>
 
-      {lastInviteUrl && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <span>Invitación enviada por email. También puedes compartir el enlace directamente.</span>
-          <button onClick={() => copyLink(lastInviteUrl)} className="inline-flex items-center gap-1.5 font-semibold hover:underline shrink-0">
-            <Copy size={14} /> {copied ? 'Copiado' : 'Copiar enlace'}
-          </button>
+      {lastInviteEmail && (
+        <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          Invitación enviada a <strong className="font-semibold">{lastInviteEmail}</strong>. El enlace de activación solo le llega a esa dirección y caduca en 30 días.
         </div>
       )}
 
