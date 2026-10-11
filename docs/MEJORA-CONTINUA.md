@@ -19,6 +19,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 2**: si en producción existen `DEPOSIT_SUCCESS_URL` o `DEPOSIT_CANCEL_URL`, mandan sobre las URLs nuevas (`FRONTEND_URL/contracts/<id>?deposit=success|cancel`); conviene borrarlas o comprobar que apuntan a app.rentalapp.es. El cambio de cobros no necesita migración.
 - **Al desplegar la ronda 9**: las consultas a la IA (asistente Clara y descripción de anuncios) quedan limitadas a 30 cada 15 minutos por usuario. Si te parece poco o mucho, se cambia con `AI_RATE_LIMIT_MAX` en el entorno, sin tocar código.
 - **Al desplegar la ronda 11**: `/metrics` deja de ser público. Si algo lo lee (Prometheus, un panel), hay que poner `METRICS_TOKEN` en el entorno y mandar `Authorization: Bearer <token>`; sin la variable, `/metrics` da 404. `/health` ya no devuelve `env`. Si en producción no está `STRIPE_IDENTITY_WEBHOOK_SECRET`, el webhook de `/api/kyc` responde 503 (hoy la verificación de identidad es un stub y nadie lo usa).
+- **Al desplegar la ronda 15**: cada petición autenticada hace una consulta más a Mongo (`tokenVersion` del usuario, por `_id`). Los JWT ya emitidos siguen valiendo (cuentan como versión 0); no hace falta migración. Quien restablezca la contraseña cierra todas sus sesiones abiertas, también la del propio dispositivo.
 - **Co-titulares (ronda 12), dos decisiones de producto:**
   - «Firmar como co-titular» solo cambia el estado en la base (`POST /tenants/:partyId/sign`, backend de antes); no es una firma electrónica con proveedor. ¿Vale así o el co-titular debe firmar con Firma.dev como el inquilino principal?
   - Aceptar la invitación exige tener la identidad verificada (`requireVerified` está en toda `/api`). La página lo explica y enlaza a `/tenant/kyc`, pero ¿debe poder unirse antes y verificar después?
@@ -514,3 +515,42 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - Pendientes anteriores: A3 (sin revocación de JWT), `request-reset` con enumeración por tiempo, email sin normalizar a minúsculas, `payments.duplicates` intermitente, media de reseñas sin `$inc`, `returnUrl` libre en `/api/kyc/start`.
 
 **Siguiente mejora propuesta.** Seguridad, que esta ronda fue de interfaz: `tokenVersion` en el usuario (A3), comprobado en `authenticate`, que invalida los JWT al restablecer la contraseña y al anular la contraseña de una cuenta vinculada (A1). Toca la ruta caliente de autenticación, así que necesita una ronda propia con tests. Si se prefiere interfaz: un email de invitación de co-titular con quién invita y qué vivienda es, y «Reenviar invitación» en la tarjeta «Co-titulares».
+
+### Ronda 15 — 2026-10-11 10:54
+
+**Qué y por qué.** Seguridad, propuesta en la ronda 14 (que fue de interfaz): A3, el JWT sin revocación. Era lo último pendiente de A1. Si alguien creó una cuenta con el correo de otra persona, o tenía la contraseña antigua, conservaba el token hasta 7 días aunque la víctima restableciera la contraseña o vinculara Google.
+
+1. **Backend.**
+   - `tokenVersion` en el usuario (por defecto 0).
+   - Todos los JWT de sesión se firman en un solo sitio, `signAuthToken` (`src/utils/authToken.ts`), con `tv`. Antes había tres copias del payload (login y registro, OAuth e invitación de agencia).
+   - `authenticate` pasa a ser asíncrono: lee `tokenVersion` y, si no coincide, responde 401 con `code: 'session_expired'`. Un token mal formado o caducado sigue dando 401, ahora con `code: 'invalid_token'`.
+   - Los tokens sin `tv` cuentan como 0, así que los ya emitidos siguen valiendo y no hay migración.
+   - Si el usuario no existe o Mongo no está conectado, no se comprueba nada (comportamiento de antes).
+   - `optionalAuthenticate` trata un token revocado como anónimo, para que el listado público no falle.
+   - Suben `tokenVersion`: `resetPassword` y la anulación de contraseña de A1 en `resolveSocialUser`. `updateUser` lo ignora.
+2. **Interfaz.** Antes, un token caducado o revocado dejaba la app llena de errores sin salida. Ahora el interceptor de respuesta de `api/client.ts` (`handleSessionLost`) borra la sesión guardada ante esos dos códigos y vuelve a `/login?session=expired&redirect=<página>`. El login muestra un aviso neutro, «Tu sesión ha caducado o se cerró al cambiar la contraseña», y al entrar devuelve a la página de origen.
+
+**Commits.**
+- `c66b753` Auth: revocación de sesiones con tokenVersion (A3); restablecer la contraseña y vincular una cuenta sin verificar cierran los JWT abiertos
+- `e3adfd0` Interfaz: al perder la sesión se borra y se vuelve al login con aviso y destino conservado
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`, suite completa: 64 suites y 254 tests OK. e2e: 2 suites y 10 tests OK.
+- Nuevo `tests/auth/session-revocation.test.ts` (5 tests):
+  - tras el reset, el token viejo da 401 `session_expired` y el nuevo (`tv: 1`) funciona;
+  - un token antiguo sin `tv` sigue valiendo;
+  - vincular Google a una cuenta sin verificar invalida el token del que la creó;
+  - un token revocado en `/api/properties` se trata como anónimo (200);
+  - `tokenVersion` no se puede cambiar por `PATCH /api/users/:id`.
+- Frontend: build OK; `npm test` 23 ficheros y 66 tests OK (antes 22 y 60). Nuevos `api/__tests__/sessionLost.test.ts` (4) y 2 casos del aviso en `passwordPolicy.test.tsx`.
+- Playwright (vite local, `/api/*` respondiendo 401 `session_expired`) a 390 y 1280 px: al abrir `/contracts` con sesión guardada, se borra y se llega a `/login?session=expired&redirect=%2Fcontracts` con el aviso.
+- GitNexus: `impact` LOW en `authenticate`, `resetPassword` y `resolveSocialUser`. El índice no ve el `app.use`, así que en la práctica `authenticate` afecta a todas las rutas; por eso se pasó la suite completa. `detect_changes` sale alto por número de flujos, pero solo afecta a login, registro, OAuth, middleware y `LoginPage`.
+
+**Qué queda.**
+- Rol e `isVerified` siguen saliendo del token: un cambio de rol o de verificación no se aplica hasta volver a entrar. Ahora que `authenticate` ya consulta al usuario, se podrían leer de la base, pero muchos tests fabrican tokens con `isVerified` que no está en la base. Merece una ronda propia.
+- Sin «Cerrar sesión en todos los dispositivos» ni cambio de contraseña con sesión iniciada (no existe el endpoint). Ambos se apoyan ya en `tokenVersion`.
+- Un usuario borrado conserva su token (no se rechaza si no existe, para no romper tests con identificadores inventados).
+- Pendientes anteriores: `request-reset` con enumeración por tiempo, email sin normalizar a minúsculas, `payments.duplicates` intermitente, media de reseñas sin `$inc`, `returnUrl` libre en `/api/kyc/start`, email de invitación de co-titular sin quién invita ni qué vivienda.
+
+**Siguiente mejora propuesta.** Interfaz, que esta ronda fue de seguridad: el email de invitación de co-titular con quién invita y qué vivienda es (con `escapeHtml`), y «Reenviar invitación» en la tarjeta «Co-titulares» para invitaciones caducadas. Si se prefiere seguridad: `returnUrl` libre en `/api/kyc/start` (redirección abierta) y normalizar el email a minúsculas en el registro y el login (sin migrar producción).
