@@ -7,6 +7,9 @@ import { listContracts } from "../../services/contracts";
 import { useAuth } from "../../context/AuthContext";
 import { useNotify } from "../../utils/notify";
 import Card from "../../components/ui/Card";
+import Input from "../../components/ui/Input";
+import Select from "../../components/ui/Select";
+import { buttonClassName } from "../../components/ui/Button";
 import PageHeader from "../../components/ui/PageHeader";
 import {
   TICKET_DESCRIPTION_MAX,
@@ -19,12 +22,7 @@ import {
   getTicketErrorText,
 } from "../../utils/tickets";
 
-const fieldClass =
-  'w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-gray-400 focus:outline-none';
-const primaryButton =
-  'inline-flex items-center justify-center rounded-lg bg-[var(--primary)] px-4 py-2.5 text-sm font-semibold text-white hover:opacity-90 disabled:cursor-default disabled:opacity-60';
-const secondaryLink =
-  'inline-flex items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50';
+const secondaryLink = buttonClassName('secondary');
 
 type Home = { id: string; title: string; address: string };
 
@@ -154,26 +152,23 @@ export default function TicketCreatePage() {
         <form onSubmit={submit} noValidate className="space-y-6">
           {homes.length === 1 && selectedHome ? (
             <div>
-              <p className="text-sm font-medium text-gray-900">Vivienda</p>
+              <p className="ra-field-label">Vivienda</p>
               <p className="mt-1 text-sm text-gray-700">{selectedHome.title}</p>
               {selectedHome.address && <p className="text-sm text-gray-500">{selectedHome.address}</p>}
             </div>
           ) : (
-            <label className="block space-y-1.5">
-              <span className="text-sm font-medium text-gray-900">Vivienda</span>
-              <select value={contractId} onChange={e => setContractId(e.target.value)} className={fieldClass}>
-                <option value="">Elige la vivienda</option>
-                {homes.map(h => (
-                  <option key={h.id} value={h.id}>
-                    {h.address ? `${h.title} · ${h.address}` : h.title}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <Select label="Vivienda" value={contractId} onChange={e => setContractId(e.target.value)}>
+              <option value="">Elige la vivienda</option>
+              {homes.map(h => (
+                <option key={h.id} value={h.id}>
+                  {h.address ? `${h.title} · ${h.address}` : h.title}
+                </option>
+              ))}
+            </Select>
           )}
 
           <fieldset>
-            <legend className="text-sm font-medium text-gray-900">Tipo de avería</legend>
+            <legend className="ra-field-label">Tipo de avería</legend>
             <div className="mt-2 flex flex-wrap gap-2">
               {TICKET_SERVICES.map(key => (
                 <button
@@ -181,10 +176,10 @@ export default function TicketCreatePage() {
                   type="button"
                   aria-pressed={service === key}
                   onClick={() => setService(key)}
-                  className={`rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
+                  className={`min-h-[36px] rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
                     service === key
-                      ? 'border-gray-900 bg-gray-900 text-white'
-                      : 'border-[var(--border)] bg-[var(--card)] text-gray-700 hover:bg-gray-50'
+                      ? 'border-[var(--ra-ink)] bg-[var(--ra-ink)] text-white'
+                      : 'border-[var(--ra-line)] bg-white text-[var(--ra-ink)] hover:bg-[var(--ra-paper)]'
                   }`}
                 >
                   {getServiceLabel(key)}
@@ -193,19 +188,16 @@ export default function TicketCreatePage() {
             </div>
           </fieldset>
 
-          <label className="block space-y-1.5">
-            <span className="text-sm font-medium text-gray-900">Título</span>
-            <input
-              value={title}
-              onChange={e => setTitle(e.target.value)}
-              maxLength={TICKET_TITLE_MAX}
-              placeholder="Por ejemplo: gotea el grifo de la cocina"
-              className={fieldClass}
-            />
-          </label>
+          <Input
+            label="Título"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            maxLength={TICKET_TITLE_MAX}
+            placeholder="Por ejemplo: gotea el grifo de la cocina"
+          />
 
-          <div className="space-y-1.5">
-            <label htmlFor="ticket-description" className="block text-sm font-medium text-gray-900">Qué pasa</label>
+          <div className="ra-field">
+            <label htmlFor="ticket-description" className="ra-field-label">Qué pasa</label>
             <textarea
               id="ticket-description"
               aria-describedby="ticket-description-help"
@@ -214,19 +206,19 @@ export default function TicketCreatePage() {
               maxLength={TICKET_DESCRIPTION_MAX}
               rows={5}
               placeholder="Desde cuándo pasa, en qué parte de la casa y qué has probado."
-              className={`${fieldClass} resize-y`}
+              className="ra-input resize-y"
             />
-            <p id="ticket-description-help" className="flex justify-between gap-3 text-xs text-gray-500">
+            <p id="ticket-description-help" className="ra-field-hint flex justify-between gap-3">
               <span>Indica también cuándo puede entrar el profesional.</span>
               <span className="tabular-nums">{description.length}/{TICKET_DESCRIPTION_MAX}</span>
             </p>
           </div>
 
           <fieldset>
-            <legend className="text-sm font-medium text-gray-900">
-              Fotos <span className="font-normal text-gray-500">(opcional)</span>
+            <legend className="ra-field-label">
+              Fotos <span className="font-normal text-[var(--ra-muted)]">(opcional)</span>
             </legend>
-            <p className="mt-0.5 text-xs text-gray-500">
+            <p className="ra-field-hint mt-0.5">
               Ayudan al profesional a presupuestar sin tener que ir antes. Hasta {TICKET_PHOTOS_MAX}, JPG, PNG o WebP.
             </p>
             <ul className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
@@ -275,7 +267,7 @@ export default function TicketCreatePage() {
 
           <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Link to="/tickets" className={secondaryLink}>Cancelar</Link>
-            <button type="submit" disabled={sending || uploading} className={primaryButton}>
+            <button type="submit" disabled={sending || uploading} className={buttonClassName('primary')}>
               {sending ? 'Enviando…' : 'Comunicar avería'}
             </button>
           </div>
