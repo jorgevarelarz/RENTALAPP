@@ -10,6 +10,7 @@ import Pro from '../models/pro.model';
 import { User } from '../models/user.model';
 import { Contract } from '../models/contract.model';
 import { getUserId } from '../utils/getUserId';
+import Review from '../models/review.model';
 import { ensureDirectConversation } from '../utils/ensureDirectConversation';
 import { holdPayment } from '../utils/payment';
 import { releaseTicketEscrow } from '../services/ticketEscrow.service';
@@ -591,11 +592,16 @@ r.get('/:id', async (req, res) => {
     const userIds = [t.ownerId, t.openedBy];
     const proIds = t.proId ? [t.proId] : [];
 
-    const [users, pros, appointment, property] = await Promise.all([
+    // Quien abrió la incidencia o el propietario valoran al profesional cuando se cierra
+    const userId = getUserId(req);
+    const reviewer = t.status === 'closed' && t.proId && (userId === t.ownerId || userId === t.openedBy);
+
+    const [users, pros, appointment, property, myReview] = await Promise.all([
       User.find({ _id: { $in: userIds } }, { ratingAvg: 1, reviewCount: 1 }).lean(),
       Pro.find({ userId: { $in: proIds } }, { userId: 1, displayName: 1, ratingAvg: 1, reviewCount: 1 }).lean(),
       Appointment.findOne({ ticketId: String(t._id) }).sort({ createdAt: -1 }).select('start end status').lean(),
       t.propertyId && Types.ObjectId.isValid(t.propertyId) ? Property.findById(t.propertyId).select('city').lean() : null,
+      reviewer ? Review.findOne({ fromUserId: userId, toUserId: t.proId, relatedId: String(t._id) }).select('score comment createdAt').lean() : null,
     ]);
 
     const userMap = new Map(users.map(u => [String(u._id), u]));
@@ -625,6 +631,10 @@ r.get('/:id', async (req, res) => {
       propertyCity: (property as any)?.city || undefined,
       // Última cita propuesta por el profesional (el inquilino la acepta o la rechaza)
       appointment: appointment ? { start: appointment.start, end: appointment.end, status: appointment.status } : null,
+      // Valoración del profesional: solo para quien puede dejarla (POST /api/reviews con relatedId = la incidencia)
+      proReview: reviewer
+        ? { canReview: !myReview, mine: myReview ? { score: myReview.score, comment: myReview.comment, createdAt: myReview.createdAt } : null }
+        : undefined,
     };
 
     res.json(result);

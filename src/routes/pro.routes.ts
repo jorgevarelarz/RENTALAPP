@@ -4,6 +4,8 @@ import Pro, { type ProService } from '../models/pro.model';
 import { getUserId } from '../utils/getUserId';
 import { authorizeRoles } from '../middleware/role.middleware';
 import { logger } from '../utils/logger';
+import Review from '../models/review.model';
+import { User } from '../models/user.model';
 
 const r = Router();
 
@@ -141,6 +143,53 @@ r.get('/:id', async (req, res) => {
     res.json(pro);
   } catch (err: any) {
     logger.error({ err }, 'pro read failed');
+    res.status(500).json({ error: 'pro_read_failed', code: 500 });
+  }
+});
+
+/** «Laura M.»: nombre y la inicial del primer apellido; nunca el nombre completo ni el correo. */
+export function reviewerLabel(name: unknown) {
+  const parts = typeof name === 'string' ? name.trim().split(/\s+/).filter(Boolean) : [];
+  if (parts.length === 0) return 'Usuario de RentalApp';
+  const first = parts[0].slice(0, 30);
+  return parts[1] ? `${first} ${parts[1].charAt(0).toUpperCase()}.` : first;
+}
+
+/**
+ * Opiniones del profesional, las más recientes primero
+ * GET /api/pros/:id/reviews?page=1&limit=5
+ */
+r.get('/:id/reviews', async (req, res) => {
+  try {
+    if (!Types.ObjectId.isValid(req.params.id)) return res.status(404).json({ error: 'not found', code: 404 });
+    const pro = await Pro.findById(req.params.id).select('userId').lean();
+    if (!pro) return res.status(404).json({ error: 'not found', code: 404 });
+    const page = Math.max(1, parseInt((req.query.page as string) || '1', 10) || 1);
+    const limit = Math.min(20, Math.max(1, parseInt((req.query.limit as string) || '5', 10) || 5));
+
+    const q = { toUserId: String(pro.userId), roleContext: 'pro' };
+    const [reviews, total] = await Promise.all([
+      Review.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).select('fromUserId score comment createdAt').lean(),
+      Review.countDocuments(q),
+    ]);
+    const authorIds = reviews.map(rv => rv.fromUserId).filter(id => Types.ObjectId.isValid(id));
+    const authors = await User.find({ _id: { $in: authorIds } }).select('name').lean();
+    const names = new Map(authors.map(u => [String(u._id), (u as any).name]));
+
+    res.json({
+      items: reviews.map(rv => ({
+        id: String(rv._id),
+        score: rv.score,
+        comment: rv.comment || undefined,
+        createdAt: rv.createdAt,
+        author: reviewerLabel(names.get(rv.fromUserId)),
+      })),
+      total,
+      page,
+      limit,
+    });
+  } catch (err: any) {
+    logger.error({ err }, 'pro reviews read failed');
     res.status(500).json({ error: 'pro_read_failed', code: 500 });
   }
 });

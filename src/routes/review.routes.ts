@@ -66,6 +66,19 @@ async function isReviewableRelation(
     : toUserId === landlord && fromUserId === tenant;
 }
 
+/**
+ * Media y número de reseñas calculados de nuevo desde la colección. Antes se sumaba la
+ * nueva nota a la media guardada (leer, calcular, guardar), y dos reseñas a la vez
+ * perdían una de las dos.
+ */
+async function refreshRating(toUserId: string, roleContext: 'tenant' | 'owner' | 'pro') {
+  const match = roleContext === 'pro' ? { toUserId, roleContext: 'pro' } : { toUserId, roleContext: { $ne: 'pro' } };
+  const [agg] = await Review.aggregate([{ $match: match }, { $group: { _id: null, avg: { $avg: '$score' }, n: { $sum: 1 } } }]);
+  const rating = { ratingAvg: Number((agg?.avg ?? 0).toFixed(2)), reviewCount: agg?.n ?? 0 };
+  if (roleContext === 'pro') await Pro.updateOne({ userId: toUserId }, { $set: rating });
+  else if (isValidObjectId(toUserId)) await User.updateOne({ _id: toUserId }, { $set: rating });
+}
+
 r.post('/', async (req, res) => {
   try {
     const fromUserId = getUserId(req);
@@ -87,7 +100,11 @@ r.post('/', async (req, res) => {
     if (isNaN(numericScore) || numericScore < 0 || numericScore > 5) {
       return res.status(400).json({ error: 'score must be between 0 and 5', code: 400 });
     }
-    if (comment && String(comment).length > 1000) {
+    if (comment !== undefined && comment !== null && typeof comment !== 'string') {
+      return res.status(400).json({ error: 'invalid comment', code: 400 });
+    }
+    const cleanComment = typeof comment === 'string' ? comment.trim() : '';
+    if (cleanComment.length > 1000) {
       return res.status(400).json({ error: 'comment too long', code: 400 });
     }
 
@@ -106,30 +123,10 @@ r.post('/', async (req, res) => {
       roleContext,
       relatedId,
       score: numericScore,
-      comment
+      comment: cleanComment || undefined,
     });
 
-    if (roleContext === 'pro') {
-      const pro = await Pro.findOne({ userId: toUserId });
-      if (pro) {
-        const newCount = pro.reviewCount + 1;
-        const newAvg = ((pro.ratingAvg * pro.reviewCount) + numericScore) / newCount;
-        pro.reviewCount = newCount;
-        pro.ratingAvg = Number(newAvg.toFixed(2));
-        await pro.save();
-      }
-    } else {
-      const user = await User.findById(toUserId);
-      if (user) {
-        const currentAvg = (user as any).ratingAvg || 0;
-        const currentCount = (user as any).reviewCount || 0;
-        const newCount = currentCount + 1;
-        const newAvg = ((currentAvg * currentCount) + numericScore) / newCount;
-        (user as any).reviewCount = newCount;
-        (user as any).ratingAvg = Number(newAvg.toFixed(2));
-        await user.save();
-      }
-    }
+    await refreshRating(toUserId, roleContext);
 
     res.status(201).json(rev);
   } catch (err: any) {
