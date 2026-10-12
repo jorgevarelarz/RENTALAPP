@@ -14,7 +14,9 @@ import {
   canAccept,
   canPropose,
   localDateTimeMin,
+  upcomingVisit,
   visitError,
+  visitWhen,
   type TenantApplication,
   type Tone,
 } from '../../utils/tenantApplications';
@@ -46,6 +48,8 @@ function ApplicationRow({ app, onChanged }: { app: TenantApplication; onChanged:
   const place = [property?.address, property?.city].filter(Boolean).join(', ');
   const status = applicationStatus(app);
   const closed = app.status === 'rejected';
+  // Con una visita concertada por delante, proponer otra fecha es pedir un cambio
+  const reschedule = app.status === 'scheduled' && !!upcomingVisit(app);
 
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
@@ -124,9 +128,9 @@ function ApplicationRow({ app, onChanged }: { app: TenantApplication; onChanged:
         )}
 
         {proposing ? (
-          <form onSubmit={submitProposal} className="mt-3 flex flex-col gap-2 sm:flex-row sm:items-end">
+          <form onSubmit={submitProposal} className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
             <label className="flex flex-col gap-1 text-sm text-gray-700">
-              Día y hora que te viene bien
+              {reschedule ? 'Nueva fecha para la visita' : 'Día y hora que te viene bien'}
               <input
                 type="datetime-local"
                 value={when}
@@ -138,7 +142,7 @@ function ApplicationRow({ app, onChanged }: { app: TenantApplication; onChanged:
             </label>
             <div className="flex gap-2">
               <button type="submit" disabled={busy} className={primaryButton}>
-                Enviar propuesta
+                {reschedule ? 'Proponer cambio' : 'Enviar propuesta'}
               </button>
               <button
                 type="button"
@@ -149,6 +153,11 @@ function ApplicationRow({ app, onChanged }: { app: TenantApplication; onChanged:
                 Cancelar
               </button>
             </div>
+            {reschedule && (
+              <p className="text-sm text-gray-500 sm:basis-full sm:order-last">
+                Mientras el propietario no acepte la nueva fecha, sigue en pie la visita {visitWhen(app.visitDate)}.
+              </p>
+            )}
           </form>
         ) : (
           <div className="mt-3 flex flex-wrap gap-2">
@@ -159,7 +168,7 @@ function ApplicationRow({ app, onChanged }: { app: TenantApplication; onChanged:
             )}
             {canPropose(app) && (
               <button type="button" disabled={busy} onClick={() => { setProposing(true); setError(null); }} className={secondaryButton}>
-                Proponer otra fecha
+                {reschedule ? 'Cambiar fecha' : 'Proponer otra fecha'}
               </button>
             )}
             {app.contractId && (

@@ -22,6 +22,7 @@ const VISIT_ERRORS: Record<string, string> = {
   visit_date_in_past: 'Esa fecha ya ha pasado. Elige una a partir de ahora.',
   proposed_date_passed: 'La fecha que propuso el candidato ya pasó. Propón otra.',
   application_closed: 'Esta solicitud ya está cerrada.',
+  same_visit_date: 'Esa es la hora que ya tenéis concertada. Elige otra.',
 };
 
 const visitError = (error: any) =>
@@ -39,6 +40,15 @@ function statusLabel(app: Application): { text: string; className: string } {
     return { text: `Visita el ${fmtDate(app.visitDate)}`, className: 'text-[var(--ra-blue)]' };
   }
   if (app.status === 'proposed') {
+    // Propuesta sobre una visita concertada que aún no ha llegado: es un cambio de fecha y la concertada sigue en pie
+    const standing = app.visitDate && new Date(app.visitDate).getTime() >= Date.now();
+    if (standing) {
+      const who = app.proposedBy === 'tenant' ? 'El candidato propone cambiar' : 'Has propuesto cambiar';
+      return {
+        text: `${who} la visita del ${fmtDate(app.visitDate)} al ${fmtDate(app.proposedDate)}`,
+        className: 'text-amber-700',
+      };
+    }
     const who = app.proposedBy === 'tenant' ? 'El candidato propone' : 'Has propuesto';
     return { text: `${who} visita el ${fmtDate(app.proposedDate)}`, className: 'text-amber-700' };
   }

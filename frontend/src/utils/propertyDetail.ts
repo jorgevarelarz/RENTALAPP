@@ -73,6 +73,12 @@ export function applicationText(a: PropertyViewerApplication): { title: string; 
           : sent,
       };
     case 'proposed':
+      if (a.visitDate && new Date(a.visitDate).getTime() >= Date.now()) {
+        return {
+          title: a.proposedBy === 'landlord' ? 'Te proponen cambiar la visita' : 'Has pedido cambiar la visita',
+          detail: `Mientras no se acepte la nueva fecha, sigue en pie la del ${longDate(a.visitDate)} a las ${new Date(a.visitDate).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}.`,
+        };
+      }
       return a.proposedBy === 'landlord'
         ? { title: 'Te han propuesto una visita', detail: 'Acéptala o propón otra fecha desde tus solicitudes.' }
         : { title: 'Has propuesto una fecha', detail: 'Falta que el propietario la confirme.' };

@@ -156,6 +156,70 @@ describe('Mis solicitudes', () => {
     await waitFor(() => expect(within(row).getByRole('alert')).toHaveTextContent('Esta solicitud ya está cerrada.'));
   });
 
+  it('una visita concertada se puede cambiar; la concertada sigue en pie y la misma hora se explica', async () => {
+    proposeMock.mockRejectedValueOnce({ response: { data: { error: 'same_visit_date' } } });
+    proposeMock.mockResolvedValueOnce({ ok: true });
+    renderPage();
+    const row = await rowOf('Piso en Malasaña');
+    fireEvent.click(within(row).getByRole('button', { name: 'Cambiar fecha' }));
+    expect(row).toHaveTextContent(/sigue en pie la visita el miércoles, 20 de marzo/);
+    fireEvent.change(within(row).getByLabelText('Nueva fecha para la visita'), { target: { value: '2030-03-20T17:30' } });
+    fireEvent.click(within(row).getByRole('button', { name: 'Proponer cambio' }));
+    expect(await within(row).findByRole('alert')).toHaveTextContent('Esa es la hora que ya tenéis concertada');
+
+    fireEvent.change(within(row).getByLabelText('Nueva fecha para la visita'), { target: { value: '2030-03-22T11:00' } });
+    fireEvent.click(within(row).getByRole('button', { name: 'Proponer cambio' }));
+    await waitFor(() =>
+      expect(proposeMock).toHaveBeenLastCalledWith('a-scheduled', new Date('2030-03-22T11:00').toISOString()),
+    );
+    await waitFor(() => expect(getMock).toHaveBeenCalledTimes(2));
+  });
+
+  it('un cambio de fecha pendiente enseña las dos fechas; una visita ya pasada no se cambia', async () => {
+    getMock.mockResolvedValueOnce({
+      data: {
+        items: [
+          {
+            _id: 'a-change-landlord',
+            status: 'proposed',
+            proposedBy: 'landlord',
+            proposedDate: '2030-03-22T09:00:00.000Z',
+            visitDate: '2030-03-20T16:30:00.000Z',
+            property: property('p6', 'Loft en Chueca'),
+          },
+          {
+            _id: 'a-change-mine',
+            status: 'proposed',
+            proposedBy: 'tenant',
+            proposedDate: '2030-03-22T09:00:00.000Z',
+            visitDate: '2030-03-20T16:30:00.000Z',
+            property: property('p7', 'Piso en Arganzuela'),
+          },
+          {
+            _id: 'a-visited',
+            status: 'scheduled',
+            visitDate: '2020-03-20T16:30:00.000Z',
+            property: property('p8', 'Bajo en Usera'),
+          },
+        ],
+      },
+    });
+    renderPage();
+    const fromLandlord = await rowOf('Loft en Chueca');
+    expect(fromLandlord).toHaveTextContent(
+      /El propietario propone cambiar la visita al viernes, 22 de marzo a las \d{2}:00\. Mientras no aceptes, sigue en pie la del miércoles, 20 de marzo/,
+    );
+    expect(within(fromLandlord).getByRole('button', { name: 'Aceptar visita' })).toBeInTheDocument();
+
+    const mine = await rowOf('Piso en Arganzuela');
+    expect(mine).toHaveTextContent(/Has pedido cambiar la visita al viernes, 22 de marzo.*sigue en pie la del miércoles, 20 de marzo/);
+    expect(within(mine).queryByRole('button')).toBeNull();
+
+    const visited = await rowOf('Bajo en Usera');
+    expect(visited).toHaveTextContent('Visitaste el piso');
+    expect(within(visited).queryByRole('button', { name: 'Cambiar fecha' })).toBeNull();
+  });
+
   it('sin solicitudes invita a buscar pisos; si falla la carga lo dice', async () => {
     getMock.mockResolvedValueOnce({ data: { items: [] } });
     const { unmount } = renderPage();

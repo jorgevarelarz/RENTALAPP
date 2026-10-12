@@ -38,6 +38,13 @@ export function visitWhen(value?: string): string {
 
 export type Tone = 'action' | 'waiting' | 'done' | 'closed';
 
+/** Visita concertada que aún no ha llegado (sigue en pie aunque haya un cambio de fecha pendiente). */
+export function upcomingVisit(a: TenantApplication, now = new Date()): Date | null {
+  if (a.status !== 'scheduled' && a.status !== 'proposed') return null;
+  const when = valid(a.visitDate);
+  return when && when >= now ? when : null;
+}
+
 /** Una línea de estado para la tarjeta: qué ha pasado y si te toca hacer algo. */
 export function applicationStatus(a: TenantApplication, now = new Date()): { text: string; tone: Tone } {
   switch (a.status) {
@@ -48,6 +55,17 @@ export function applicationStatus(a: TenantApplication, now = new Date()): { tex
     }
     case 'proposed': {
       const when = valid(a.proposedDate);
+      // Propuesta sobre una visita concertada: es un cambio de fecha y la concertada sigue en pie
+      if (upcomingVisit(a, now)) {
+        const before = visitWhen(a.visitDate).replace(/^el /, '');
+        const after = visitWhen(a.proposedDate).replace(/^el /, '');
+        if (when && when < now) {
+          return { text: `Visita concertada el ${before}. La nueva fecha que se propuso ya pasó.`, tone: 'done' };
+        }
+        return a.proposedBy === 'landlord'
+          ? { text: `El propietario propone cambiar la visita al ${after}. Mientras no aceptes, sigue en pie la del ${before}.`, tone: 'action' }
+          : { text: `Has pedido cambiar la visita al ${after}. Mientras el propietario no confirme, sigue en pie la del ${before}.`, tone: 'waiting' };
+      }
       if (when && when < now) {
         return a.proposedBy === 'landlord'
           ? { text: 'La fecha que te propusieron ya pasó. Propón otra.', tone: 'action' }
@@ -70,8 +88,12 @@ export function canAccept(a: TenantApplication, now = new Date()): boolean {
   return a.status === 'proposed' && a.proposedBy === 'landlord' && !!when && when >= now;
 }
 
-/** ¿Puede proponer una fecha? Cuando el propietario ya ha propuesto una, o la suya ha caducado. */
+/**
+ * ¿Puede proponer una fecha? Cuando el propietario ya ha propuesto una, cuando la suya ha caducado
+ * o, para cambiarla, cuando tiene una visita concertada que aún no ha llegado.
+ */
 export function canPropose(a: TenantApplication, now = new Date()): boolean {
+  if (a.status === 'scheduled') return !!upcomingVisit(a, now);
   if (a.status !== 'proposed') return false;
   if (a.proposedBy === 'landlord') return true;
   const when = valid(a.proposedDate);
@@ -90,6 +112,7 @@ export const VISIT_ERRORS: Record<string, string> = {
   visit_date_in_past: 'Esa fecha ya ha pasado. Elige una a partir de ahora.',
   proposed_date_passed: 'La fecha propuesta ya pasó. Propón otra.',
   application_closed: 'Esta solicitud ya está cerrada.',
+  same_visit_date: 'Esa es la hora que ya tenéis concertada. Elige otra.',
   application_not_found: 'Esta solicitud ya no existe.',
   no_proposed_date: 'No hay ninguna fecha que aceptar.',
   forbidden: 'No puedes cambiar esta solicitud.',
