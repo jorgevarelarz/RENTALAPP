@@ -41,7 +41,7 @@ import tenantProRoutes from './routes/tenantPro.routes';
 import tenantProMeRoutes from './routes/tenantPro.me';
 import adminTenantProRoutes from './routes/admin.tenantPro.routes';
 import institutionRoutes from './routes/institution.routes';
-import { purgeOldTenantProDocs } from './jobs/tenantProRetention';
+import { startTenantProRetentionJob } from './jobs/tenantProRetention';
 import { startContractActivationJob } from './jobs/contractActivation.job';
 import { startRentGenerationJob } from './jobs/rentGeneration.job';
 import { startLauUpdateJob } from './jobs/lauUpdate.job';
@@ -154,6 +154,7 @@ if (process.env.NODE_ENV !== 'test') {
   startRentGenerationJob();
   startLauUpdateJob();
   startEscrowRecoveryJob();
+  startTenantProRetentionJob();
 }
 
 if (process.env.NODE_ENV !== 'test') {

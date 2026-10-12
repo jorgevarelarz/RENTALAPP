@@ -7,6 +7,7 @@ import { authorizeRoles } from '../middleware/role.middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { User } from '../models/user.model';
 import { ensureTenantProDir, encryptAndSaveTP } from '../services/tenantProStorage';
+import { tenantProDocsTtlDays } from '../jobs/tenantProRetention';
 
 const router = Router();
 const upload = multer({
@@ -96,8 +97,7 @@ router.get(
       .select('email tenantPro')
       .lean();
     if (!u) return res.sendStatus(404);
-    const ttlDays = parseInt(String(process.env.TENANT_PRO_DOCS_TTL_DAYS || '365')) || 365;
-    res.json({ ...(u.tenantPro || {}), ttlDays });
+    res.json({ ...(u.tenantPro || {}), ttlDays: tenantProDocsTtlDays() });
   }),
 );
 

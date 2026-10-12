@@ -37,8 +37,13 @@ export function readDecryptedTP(file: string): Buffer {
 
 export function deleteTP(file: string) {
   if (!file) return;
-  const p = path.join(DIR, file);
-  if (fs.existsSync(p)) fs.unlinkSync(p);
+  // Solo nombres de fichero dentro de DIR: nunca rutas que salgan de él
+  const p = path.join(DIR, path.basename(String(file)));
+  try {
+    fs.unlinkSync(p);
+  } catch (err: any) {
+    if (err?.code !== 'ENOENT') throw err;
+  }
 }
 
 export { DIR as TENANT_PRO_DIR };
