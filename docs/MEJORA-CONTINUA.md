@@ -2852,3 +2852,30 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 
 **Siguiente mejora propuesta.** Volver a la interfaz: `ui/Badge`, `Alert`, `Pagination` y `Drawer` sin estilos en línea y con tokens `--ra-*`, con capturas. Si se prefiere seguridad: el mismo test de rutas públicas para `/api/users`, `/api/tickets` y `/api/chat`.
 
+
+### Ronda 74 — 2026-10-12 21:34
+
+**Qué y por qué.** Lo que proponía la ronda 73: volver a la interfaz con los componentes base que seguían con estilos en línea y colores de la plantilla antigua. Las pastillas de estado salen en casi todas las listas (contratos, incidencias, pagos, propietarios de la agencia) y el panel lateral es el menú del móvil.
+
+1. **`ui/Badge` con tokens 2026.** Fuera los estilos en línea (borde `var(--border)`, índigo en `highlight`, cian en `new`). Ahora clases `.ra-badge` y `.ra-badge-<tono>` con los cinco tonos de estado de `getStatusTone`: neutro (`--ra-paper`, `--ra-line`), info (azul de marca oscurecido, `#2f4fd6`, porque `--ra-blue` sobre su fondo da 4,0:1 y no llega a AA), éxito, aviso y error (estos tres sin token `--ra-*`; se dejan como colores de estado). Contraste medido: entre 5,8:1 y 8,8:1.
+   - `StatusBadge` y `ContractStatusBadge` pasan el tono en vez de copiar `background/borderColor/color`; `STATUS_TONE_STYLES` desaparece.
+   - «Propietarios» de la agencia tenía su propia pastilla con clases de Tailwind; ahora usa `Badge`.
+2. **`ui/Drawer` sin estilos en línea** (salvo el ancho, que es una prop). Borde, sombra, desplazamiento y visibilidad pasan a `.drawer-panel-left/right` e `.is-open`, con `--ra-line` y la sombra en tinta del sistema. El truco de `visibility` (que los enlaces del panel cerrado no reciban el foco) se mantiene en CSS. Respeta `prefers-reduced-motion`. El fondo pierde el desenfoque y pasa por encima de la barra superior (antes `z-index` 40, por debajo de ella).
+3. **Código muerto fuera:** `ui/Alert` y `ui/Pagination` (nadie los importaba), y `pages/Verification` con `services/verification`: pantalla sin ruta, con el estado en inglés («unverified») y un botón «Marcar como verificado (dev)».
+
+**Commits.**
+- `e0d3646` Interfaz: pastillas de estado y panel lateral con tokens 2026
+- `85b7c1f` Limpieza: fuera ui/Alert, ui/Pagination, pages/Verification y services/verification
+- Docs: este registro y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- `npm --prefix frontend run lint`: sin errores. `npm --prefix frontend run build`: OK.
+- `npm --prefix frontend test`: **63 ficheros y 260 tests OK** (5 nuevos: `Badge.test.tsx` con tono por clase, sin `style`, y el tono de `StatusBadge`/`ContractStatusBadge`; `Drawer.test.tsx` cerrado oculto y sin fondo, abierto con foco en el panel, Escape y clic en el fondo).
+- Capturas con Playwright y la API simulada (`/tmp/ra-shots74`): lista de contratos a 1280 px (Activo, Pendiente de firma, Borrador, Rescindido), incidencias a 390 px y el menú móvil abierto. En el navegador real, el menú recibe el foco al abrir y, tras Escape, queda oculto y el foco vuelve a «Abrir menú».
+- **GitNexus.** `impact` de `Badge` y `Drawer`: LOW. `detect_changes`: marca «high» por nueve flujos que pintan pastillas (`TenantDashboard`, `TenantApplications`, `ComplianceDashboard`, `AgencyLandlords`); `load` y `submit` de `AgencyLandlords` solo aparecen por el desplazamiento de líneas del import. Sin cambios de lógica.
+
+**Qué queda.**
+- `ComplianceDashboard` (administración) pinta sus propias pastillas con colores sueltos y en mayúsculas, y el título está en inglés («Compliance (Rental Public)», «Demo mode»).
+- Pendientes anteriores: `pro/Profile`; `.auth-input` frente a `.ra-input`; «Ingresos» fuera del menú del casero; las fotos externas en los anuncios (píxeles de rastreo).
+
+**Siguiente mejora propuesta.** Cambiar de terreno: el test de rutas públicas de la ronda 73 para `/api/users`, `/api/tickets` y `/api/chat` (qué responde sin sesión). Si se vuelve a la interfaz: `ComplianceDashboard` en español y con `Badge`.

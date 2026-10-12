@@ -1450,3 +1450,9 @@ Rules:
 - New `tests/security/contract-public-routes.test.ts`: Firma.dev, signature callback and Stripe webhooks reach their controllers without JWT; 23 private `/api/contracts` routes return 401 (incl. `/signature/webhook` and `/:id/signature/callback`, open item #9).
 - Verification: tsc clean; Jest properties+uploads 43/43, new test 26/26; frontend lint/build OK, 61 files / 255 tests. Details in `docs/MEJORA-CONTINUA.md` round 73.
 
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 74: Badge and Drawer on 2026 tokens + dead UI removed
+
+- `ui/Badge` now takes `tone: StatusTone` and renders `.ra-badge .ra-badge-<tone>` classes (index.css); `StatusBadge`, `ContractStatusBadge` and `AgencyLandlords` use it. `STATUS_TONE_STYLES` removed. `ui/Drawer` styling moved to `.drawer-panel-left/right` + `.is-open` classes (only `width` stays inline).
+- Removed unused `ui/Alert`, `ui/Pagination`, unrouted `pages/Verification` and `services/verification`.
+- Verification: frontend lint/build OK, 63 files / 260 tests; Playwright `/tmp/ra-shots74`. Details in `docs/MEJORA-CONTINUA.md` round 74.
