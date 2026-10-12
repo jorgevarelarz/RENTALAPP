@@ -14,6 +14,7 @@
     "backup:mongo:valeris": "bash scripts/mongo_backup_valeris.sh",
     "test": "jest",
     "test:backend": "jest --config jest.config.js",
+    "test:backend:serial": "jest --config jest.config.js --maxWorkers=1 --forceExit",
     "test:frontend": "npm --prefix frontend test",
     "test:all": "npm run test:backend -- --runInBand --forceExit && npm run test:frontend && npm --prefix institution-frontend run build",
     "dev:all": "concurrently -k -n back,front,institution \"npm run dev\" \"npm --prefix frontend start\" \"npm --prefix institution-frontend run dev\"",

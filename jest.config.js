@@ -4,6 +4,10 @@ module.exports = {
   testMatch: ['**/src/__tests__/**/*.test.ts', '**/tests/**/!(*.e2e).test.ts'],
   // Backend integration tests can be slow on CI runners
   testTimeout: 60000,
+  // La suite completa en un solo proceso (--runInBand) agota 2 GB de memoria hacia la suite 70.
+  // Con --maxWorkers=1 (npm run test:backend:serial) va igual de una en una, pero el worker
+  // se reinicia al pasar de 1 GB. Con --runInBand este límite no se aplica.
+  workerIdleMemoryLimit: '1GB',
   // Ignore frontend React tests here; they require a jsdom setup.
   // Frontend tests should run with the frontend tooling/config instead.
   testPathIgnorePatterns: [
