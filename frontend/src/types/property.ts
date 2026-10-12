@@ -1,4 +1,4 @@
-export type PropertyStatus = 'draft' | 'active' | 'rented' | 'inactive';
+export type PropertyStatus = 'draft' | 'active' | 'archived' | 'rented' | 'inactive';
 
 export interface PropertyLocation {
   type?: 'Point';
@@ -49,9 +49,26 @@ export interface Property {
   requiredTenantProMaxRent?: number;
   status?: PropertyStatus;
   location?: PropertyLocation;
+  floor?: number;
+  hasElevator?: boolean;
+  condition?: 'obra_nueva' | 'reformado' | 'buen_estado' | 'a_reformar';
+  yearBuilt?: number;
+  viewsCount?: number;
   owner?: string;
   ownerId?: string;
   _liked?: boolean;
+  /** Solo en la ficha: quien la ve es el propietario, su agencia o un administrador. */
+  _mine?: boolean;
+  /** Solo en la ficha y para el inquilino que ya la ha solicitado. */
+  _application?: PropertyViewerApplication;
+}
+
+export interface PropertyViewerApplication {
+  status: PropertyApplication['status'];
+  createdAt?: string;
+  visitDate?: string;
+  proposedDate?: string;
+  proposedBy?: 'tenant' | 'landlord';
 }
 
 export interface PropertyListResponse {

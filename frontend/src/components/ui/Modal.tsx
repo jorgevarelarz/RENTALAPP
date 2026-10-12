@@ -11,9 +11,15 @@ type ModalProps = {
 const Modal: React.FC<ModalProps>
   = ({ open, onClose, title, children, className }) => {
   const containerRef = useRef<HTMLDivElement>(null);
+  // onClose suele ser una función nueva en cada render: si fuera dependencia del efecto,
+  // el foco volvería al primer botón cada vez que el padre se pinta
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   useEffect(() => {
+    // Cerrado no bloquea el scroll ni escucha el teclado (muchas páginas lo dejan montado)
+    if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
       if (e.key === 'Tab') {
         const root = containerRef.current; if (!root) return;
         const focusables = root.querySelectorAll<HTMLElement>(
@@ -36,7 +42,7 @@ const Modal: React.FC<ModalProps>
       focusable?.focus();
     }, 0);
     return () => { window.removeEventListener('keydown', onKey); document.body.style.overflow = bodyOverflow; };
-  }, [onClose]);
+  }, [open]);
 
   if (!open) return null;
   return (
