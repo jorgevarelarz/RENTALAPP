@@ -12,6 +12,7 @@ import { User } from '../models/user.model';
 import { isValidObjectId } from 'mongoose';
 import { ensureDirectConversation } from '../utils/ensureDirectConversation';
 import { isOwnUploadUrl } from '../utils/uploadUrl';
+import { sendRouteError } from '../utils/routeError';
 
 const r = Router();
 
@@ -212,7 +213,7 @@ r.get('/conversations', async (req, res) => {
     }));
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'chat_request_failed');
   }
 });
 
@@ -235,7 +236,7 @@ r.post('/conversations/ensure', async (req, res) => {
     });
     res.json({ ...(conv.toObject ? conv.toObject() : conv), participantsInfo });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'chat_request_failed');
   }
 });
 
@@ -305,7 +306,7 @@ r.get('/related-users', async (req, res) => {
     });
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'chat_request_failed');
   }
 });
 
@@ -354,7 +355,7 @@ r.post('/:conversationId/messages', async (req, res) => {
     await conv.save();
     res.status(201).json(msg);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'chat_request_failed');
   }
 });
 
@@ -373,7 +374,7 @@ r.get('/:conversationId/messages', async (req, res) => {
     const msgs = await Message.find(q).sort({ createdAt: -1 }).limit(Number(limit)).lean();
     res.json(msgs);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'chat_request_failed');
   }
 });
 
@@ -391,7 +392,7 @@ r.post('/:conversationId/read', async (req, res) => {
     await Message.updateMany({ conversationId, readBy: { $ne: userId } }, { $addToSet: { readBy: userId } });
     res.json({ ok: true });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'chat_request_failed');
   }
 });
 

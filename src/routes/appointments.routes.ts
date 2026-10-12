@@ -4,6 +4,7 @@ import Conversation from '../models/conversation.model';
 import Message from '../models/message.model';
 import Appointment from '../models/appointment.model';
 import Ticket from '../models/ticket.model';
+import { sendRouteError } from '../utils/routeError';
 
 const r = Router();
 
@@ -58,7 +59,7 @@ r.post('/appointments/:ticketId/propose', async (req, res) => {
     if (conv) await publishSystem(conv.id, userId, 'SLOT_PROPOSED', { start, end, timezone, appointmentId: String(a._id) });
     return res.json(a);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message || 'error' });
+    sendRouteError(res, err, 'appointment_request_failed');
   }
 });
 
@@ -79,7 +80,7 @@ r.post('/appointments/:ticketId/accept', async (req, res) => {
     await Ticket.updateOne({ _id: ticketId, status: { $in: ['awaiting_schedule', 'scheduled'] } }, { status: 'scheduled' });
     return res.json(a);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message || 'error' });
+    sendRouteError(res, err, 'appointment_request_failed');
   }
 });
 
@@ -99,7 +100,7 @@ r.post('/appointments/:ticketId/reject', async (req, res) => {
     if (conv) await publishSystem(conv.id, userId, 'APPOINTMENT_REJECTED', { appointmentId: String(a._id), reason });
     return res.json(a);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message || 'error' });
+    sendRouteError(res, err, 'appointment_request_failed');
   }
 });
 

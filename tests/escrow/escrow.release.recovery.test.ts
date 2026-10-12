@@ -66,7 +66,9 @@ describe('Escrow release recovery', () => {
     // La BD falla justo después de cobrar
     jest.spyOn(PlatformEarning, 'updateOne').mockRejectedValueOnce(new Error('db down'));
 
-    await request(app).post(`/api/tickets/${ticketId}/validate`).set('Authorization', L).expect(500);
+    const failed = await request(app).post(`/api/tickets/${ticketId}/validate`).set('Authorization', L).expect(500);
+    // El cliente no ve el error interno, solo un código fijo
+    expect(failed.body).toEqual({ error: 'ticket_request_failed', code: 500 });
     let esc = await Escrow.findById(escrowId).lean();
     expect(esc?.status).toBe('releasing');
     expect(esc?.releaseRef).toBeTruthy();

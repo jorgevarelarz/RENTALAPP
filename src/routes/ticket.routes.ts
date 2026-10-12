@@ -22,6 +22,7 @@ import { sendTicketOpenedEmail } from '../utils/email';
 import { logger } from '../utils/logger';
 import { isOwnUploadUrl } from '../utils/uploadUrl';
 import { csvRow } from '../utils/csv';
+import { sendRouteError } from '../utils/routeError';
 
 const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
@@ -154,7 +155,7 @@ r.post('/', ...assertRole('tenant'), async (req, res) => {
       logger.error({ type: 'ticket_owner_notify_error', ticketId: String(t._id), err }, 'Aviso de avería no enviado'),
     );
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 
@@ -176,7 +177,7 @@ r.post('/:id/quote', ...assertRole('pro'), async (req, res) => {
     await t.save();
     res.json(t);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 
@@ -221,7 +222,7 @@ r.post('/:id/approve', ...assertRole('landlord'), requirePolicies(REQUIRED_POLIC
     // El canal de cita (pro<->tenant) se abrirá en la primera propuesta
     res.json({ ticket: t, escrow: esc });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 
@@ -239,7 +240,7 @@ r.post('/:id/extra', ...assertRole('pro'), async (req, res) => {
     await t.save();
     res.json(t);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 
@@ -257,7 +258,7 @@ r.post('/:id/extra/decide', ...assertRole('landlord'), async (req, res) => {
     await t.save();
     res.json(t);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 
@@ -278,7 +279,7 @@ r.post('/:id/complete', ...assertRole('pro'), async (req, res) => {
     await t.save();
     res.json(t);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 
@@ -297,7 +298,7 @@ r.post('/:id/request-close', ...assertRole('pro'), async (req, res) => {
     if (conv) await publishSystem(conv.id, userId, 'CLOSE_REQUESTED', { ticketId: String(t._id) });
     res.json(t);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 
@@ -315,7 +316,7 @@ r.post('/:id/resolve', ...assertRole('tenant'), requirePolicies(REQUIRED_POLICIE
     if (conv) await publishSystem(conv.id, userId, 'CLOSED_BY_TENANT', { ticketId: String(t._id) });
     res.json({ ticket, escrow });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 
@@ -330,7 +331,7 @@ r.post('/:id/validate', ...assertRole('landlord'), requirePolicies(REQUIRED_POLI
     const { ticket, escrow } = await releaseTicketEscrow(String(t._id), userId, 'validated_and_released');
     res.json({ ticket, escrow });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 
@@ -362,7 +363,7 @@ r.post('/:id/assign', async (req, res) => {
 
     res.json({ ticket });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 
@@ -381,7 +382,7 @@ r.post('/:id/unassign', async (req, res) => {
 
     res.json({ ticket });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 
@@ -470,7 +471,7 @@ function listMine(field: 'openedBy' | 'ownerId' | 'proId') {
 
       res.json({ items: hydrated, total, page, limit });
     } catch (err: any) {
-      res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+      sendRouteError(res, err, 'ticket_request_failed');
     }
   };
 }
@@ -628,7 +629,7 @@ r.get('/:id', async (req, res) => {
 
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'ticket_request_failed');
   }
 });
 

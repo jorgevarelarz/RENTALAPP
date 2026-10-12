@@ -5,6 +5,7 @@ import { IdentityCheck } from '../models/identityCheck.model';
 import { authenticate } from '../middleware/auth.middleware';
 import { getUserId } from '../utils/getUserId';
 import { frontendUrl } from '../utils/frontendUrl';
+import { sendRouteError } from '../utils/routeError';
 
 const router = Router();
 
@@ -37,7 +38,7 @@ router.post('/start', authenticate, async (req, res) => {
     await IdentityCheck.create({ userId, provider: 'stripe', sessionId: session.sessionId, status: 'created' });
     res.json(session);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'identity_start_failed');
   }
 });
 
@@ -58,8 +59,8 @@ router.post('/webhook', async (req, res) => {
       const rawBody: Buffer = (req as any).rawBody;
       if (!rawBody) return res.status(400).json({ error: 'missing_raw_body' });
       event = stripe.webhooks.constructEvent(rawBody, sig as string, secret);
-    } catch (err: any) {
-      return res.status(400).json({ error: `webhook_signature_invalid: ${err.message}` });
+    } catch {
+      return res.status(400).json({ error: 'webhook_signature_invalid' });
     }
 
     const session = event.data?.object;

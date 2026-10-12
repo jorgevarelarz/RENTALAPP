@@ -3,6 +3,7 @@ import { Verification } from '../models/verification.model';
 import { getUserId } from '../utils/getUserId';
 import { authenticate } from '../middleware/auth.middleware';
 import { requireAdmin } from '../middleware/requireAdmin';
+import { sendRouteError } from '../utils/routeError';
 
 const router = Router();
 
@@ -14,7 +15,7 @@ router.get('/me', authenticate, async (req, res) => {
     if (!v) return res.json({ status: 'unverified' });
     res.json(v);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'verification_request_failed');
   }
 });
 
@@ -30,7 +31,7 @@ router.post('/submit', authenticate, async (req, res) => {
     );
     res.status(201).json(v);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'verification_request_failed');
   }
 });
 
@@ -45,7 +46,7 @@ router.post('/:userId/approve', requireAdmin, async (req, res) => {
     );
     res.json(v);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'verification_request_failed');
   }
 });
 
@@ -61,7 +62,7 @@ router.post('/:userId/reject', requireAdmin, async (req, res) => {
     );
     res.json(v);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'verification_request_failed');
   }
 });
 
@@ -81,6 +82,6 @@ router.post('/dev/verify', async (req, res) => {
     );
     res.json(v);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'verification_request_failed');
   }
 });

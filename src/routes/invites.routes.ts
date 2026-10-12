@@ -4,6 +4,7 @@ import { getUserId } from '../utils/getUserId';
 import { User } from '../models/user.model';
 import { Types } from 'mongoose';
 import crypto from 'crypto';
+import { sendRouteError } from '../utils/routeError';
 
 const r = Router();
 
@@ -37,7 +38,7 @@ r.post('/accept', async (req, res) => {
     await party.save();
     res.json({ ok: true, partyId: party._id, contractId: party.contractId });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message || 'invite_accept_failed' });
+    sendRouteError(res, err, 'invite_accept_failed');
   }
 });
 

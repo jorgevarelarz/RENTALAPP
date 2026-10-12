@@ -7,6 +7,7 @@ import { Contract } from '../models/contract.model';
 import ServiceOffer from '../models/serviceOffer.model';
 import Ticket from '../models/ticket.model';
 import { getUserId } from '../utils/getUserId';
+import { sendRouteError } from '../utils/routeError';
 
 const r = Router();
 
@@ -134,7 +135,7 @@ r.post('/', async (req, res) => {
   } catch (err: any) {
     // Dos envíos simultáneos: el índice único deja pasar solo uno.
     if (err?.code === 11000) return res.status(409).json({ error: 'already reviewed', code: 409 });
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'review_request_failed');
   }
 });
 
@@ -149,7 +150,7 @@ r.get('/user/:userId', async (req, res) => {
     ]);
     res.json({ items, total, page, limit });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'review_request_failed');
   }
 });
 
@@ -163,7 +164,7 @@ r.get('/user/:userId/avg', async (req, res) => {
     const count = agg[0]?.count || 0;
     res.json({ avgScore, count });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'review_request_failed');
   }
 });
 

@@ -10,6 +10,7 @@ import { stripe } from '../utils/stripe';
 import PlatformEarning from '../models/platformEarning.model';
 import { Contract } from '../models/contract.model';
 import { User } from '../models/user.model';
+import { sendRouteError } from '../utils/routeError';
 
 const r = Router();
 
@@ -49,7 +50,7 @@ r.post('/service-offers', async (req, res) => {
     await publishSystem(conversationId, userId, 'SERVICE_OFFERED', { offerId: offer.id, amount });
     res.status(201).json(offer);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
@@ -72,7 +73,7 @@ r.post('/service-offers/:offerId/decision', async (req, res) => {
     }
     res.json(offer);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
@@ -106,7 +107,7 @@ r.post('/service-offers/:offerId/schedule', async (req, res) => {
     }
     res.json({ offer, appointment });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
@@ -179,7 +180,7 @@ r.post('/service-offers/:offerId/accept-slot', async (req, res) => {
       paymentIntent: { id: paymentIntent.id, client_secret: paymentIntent.client_secret, status: paymentIntent.status },
     });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
@@ -209,7 +210,7 @@ r.post('/appointments/:id/reschedule', async (req, res) => {
     }
     res.json(a);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
@@ -235,7 +236,7 @@ r.post('/appointments/:id/cancel', async (req, res) => {
     }
     res.json(a);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
@@ -253,7 +254,7 @@ r.post('/service-offers/:offerId/complete', async (req, res) => {
     await publishSystem(offer.conversationId, userId, 'SERVICE_DONE', { offerId, invoiceUrl });
     res.json(offer);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
