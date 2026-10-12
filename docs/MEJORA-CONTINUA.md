@@ -2150,3 +2150,62 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 
 **Siguiente mejora propuesta.** Pasar `EmptyState` y `SkeletonGrid` a los tokens 2026. Son componentes compartidos del listado y otras páginas, y son lo último con bordes grises y estilos en línea del recorrido del inquilino.
 
+
+### Ronda 57 — 2026-10-12 10:55
+
+**Qué y por qué.** La ronda 56 proponía pasar `EmptyState` y `SkeletonGrid` al sistema 2026. Al revisar dónde se usan, el listado de pisos (`/properties`, la página pública más importante) tenía tres fallos:
+
+1. **«Borrar filtros» no borraba nada.** Ni el botón del vacío ni el del embudo de `FilterBar` funcionaban: los dos llamaban a `setFilters({})`, que mezcla con los filtros actuales y solo vuelve a la página 1. Además, la barra guarda su propio estado y no se enteraba cuando cambiaba la URL. Ahora:
+   - `usePropertyFilters` tiene `clearFilters`, que vacía la URL;
+   - `FilterBar` recibe `onClear` y se vuelve a montar con la URL (`key={search}`), así que también se pone al día al ir atrás o adelante.
+2. **Guardar un piso que falla.** El corazón se quedaba marcado sin guardarse. Ahora se deshace y avisa «No se pudo actualizar tus guardados», como en la ficha.
+3. **Quitar un piso de guardados.** `_liked` se calculaba con `|| it._liked`. El listado nunca lo manda, así que no tenía efecto, pero si lo mandara el corazón no se podría vaciar. Se quita.
+
+**Apariencia.**
+- `EmptyState`, `SkeletonGrid`, `SkeletonDetail` y `ErrorCard` pasan a los tokens `--ra-*` y dejan los estilos en línea.
+- El esqueleto del listado copia la rejilla y la foto 4:3 de `PropertyCard`. El de la ficha copia su maqueta: galería, texto y tarjeta de precio. Los dos llevan `role="status"` con «Cargando…» para lectores de pantalla, y no se animan si se pide movimiento reducido.
+- **Listado.**
+  - Título h1 «Viviendas en alquiler» y recuento en es-ES («24 viviendas disponibles»).
+  - El vacío distingue «No hay viviendas con esos filtros» (con «Borrar filtros») de «Todavía no hay viviendas publicadas».
+  - Un fallo de carga dice «No se pudo cargar el listado. Comprueba tu conexión…» con «Reintentar». Antes salía el mensaje de axios en inglés y no se podía reintentar.
+  - La paginación usa los botones del sistema.
+- «Favoritos» usa `EmptyState`.
+- El vacío de «Mensajes» lleva tildes y vale para todos los roles.
+- Se borra `ui/Skeleton.tsx`, que nadie importaba.
+
+**Commits.**
+- `041dc4a` Interfaz: componentes de vacío, carga y error al sistema 2026
+- `9802038` Interfaz: «Borrar filtros» funciona, el corazón se deshace si falla y estados del listado
+
+**Verificación (resultados reales).**
+- **Backend:** sin cambios.
+- **Frontend.**
+  - `tsc --noEmit` del frontend: sin errores.
+  - `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`: 48 ficheros y 199 tests OK.
+  - Nuevo `pages/properties/__tests__/PropertiesList.test.tsx`, con 8 tests:
+    - recuento y detección de filtros;
+    - listado;
+    - «Borrar filtros» desde el vacío y desde el embudo (la URL queda vacía y el campo «Ciudad» también);
+    - vacío sin filtros;
+    - error en español con reintento;
+    - fallo al guardar, que deshace el corazón y avisa;
+    - quitar un guardado.
+- **Playwright** (vite local, `/api/*` simulado), a 1280 y 390 px, capturas en `/tmp/ra-shots57`:
+  - carga del listado y de la ficha, vacío con filtros, error y listado;
+  - no hay desbordamiento horizontal;
+  - tras pulsar «Borrar filtros», la URL queda `/properties`.
+  - El error tarda unos segundos en salir porque el `QueryClient` de la app reintenta antes de rendirse.
+- **GitNexus.**
+  - `impact`: `usePropertyFilters` y `FilterBar`, LOW.
+  - `detect_changes` (staged): riesgo bajo, sin flujos afectados.
+
+**Qué queda.**
+- `FilterBar` sigue con el estilo antiguo:
+  - índigo en las pastillas y el foco;
+  - los campos «Hab+» y «Baño+» son tan estrechos que el texto de ejemplo se corta («Bañc»);
+  - el orden dice «Precio: Bajo a Alto».
+- `setFilters` llama a `setSp` y a `navigate` a la vez, así que cada búsqueda podría dejar dos entradas en el historial. No lo he comprobado.
+- Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador.
+
+**Siguiente mejora propuesta.** Pasar `FilterBar` al sistema 2026: campos de habitaciones y baños legibles, pastillas con `--ra-blue` en vez de índigo y orden «Más baratos primero». De paso, comprobar el doble paso por el historial de `setFilters` y dejar una sola navegación.

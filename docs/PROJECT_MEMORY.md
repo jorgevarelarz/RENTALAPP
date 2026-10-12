@@ -1354,3 +1354,9 @@ Rules:
 - Frontend: `utils/tenantApplications` `upcomingVisit`, `canPropose` allows future `scheduled`, change texts; `Applications.tsx` «Cambiar fecha»/«Proponer cambio» with note; `ApplicantsModal` and `propertyDetail.applicationText` show both dates.
 - Verification: tsc clean; Jest `--runInBand` tests/applications 20; frontend build + 191 tests; Playwright `/tmp/ra-shots56`.
 
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 57: listing states + clear filters fix
+
+- Bug: «Borrar filtros» (empty state and FilterBar funnel) called `setFilters({})`, which merges → nothing cleared. New `clearFilters()` in `usePropertyFilters`; `FilterBar` takes `onClear` and is keyed on `location.search` so its inputs follow the URL. Failed favorite in the list now reverts the heart + toast.
+- `EmptyState`, `SkeletonGrid` (mirrors PropertyCard), `SkeletonDetail` (mirrors PropertyDetail), `ErrorCard` moved to 2026 tokens; dead `ui/Skeleton.tsx` removed. Listing: h1, es-ES count, filtered vs. no-listings empty, Spanish error + retry.
+- Verification: frontend build + 199 tests (new `pages/properties/__tests__/PropertiesList.test.tsx`); Playwright `/tmp/ra-shots57`.
