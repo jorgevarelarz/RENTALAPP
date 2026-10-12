@@ -5,6 +5,7 @@ import Button from './ui/Button';
 import { getPropertyApplications, type Application } from '../services/properties';
 import { acceptApplicationVisit, proposeApplicationVisit } from '../services/appointments';
 import { useToast } from '../context/ToastContext';
+import { localDateTimeMin } from '../utils/tenantApplications';
 
 interface Props {
   property: any;
@@ -18,6 +19,9 @@ const VISIT_ERRORS: Record<string, string> = {
   forbidden: 'Solo el propietario del inmueble o la agencia que lo gestiona pueden proponer visitas.',
   application_not_found: 'Esta solicitud ya no existe.',
   no_proposed_date: 'No hay ninguna fecha propuesta que aceptar.',
+  visit_date_in_past: 'Esa fecha ya ha pasado. Elige una a partir de ahora.',
+  proposed_date_passed: 'La fecha que propuso el candidato ya pasó. Propón otra.',
+  application_closed: 'Esta solicitud ya está cerrada.',
 };
 
 const visitError = (error: any) =>
@@ -182,6 +186,7 @@ export default function ApplicantsModal({ property, isOpen, onClose }: Props) {
                         type="datetime-local"
                         className="auth-input !w-auto text-sm"
                         value={visitDate}
+                        min={localDateTimeMin()}
                         onChange={(e) => setVisitDate(e.target.value)}
                       />
                       <Button size="sm" onClick={handleScheduleVisit} disabled={!visitDate || busy}>
