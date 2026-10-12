@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Heart, MapPin, Share2, ShieldCheck } from 'lucide-react';
 import { applyToProperty, favoriteProperty, getProperty, incrementView, unfavoriteProperty } from '../../services/properties';
@@ -34,6 +34,9 @@ const MANAGE_LINKS: Record<string, string> = {
   admin: '/admin/properties',
 };
 
+// Los mismos roles que admite POST /api/properties/:id/favorite
+const FAVORITE_ROLES = ['tenant', 'landlord', 'admin'];
+
 // Igual que APPLICATION_MESSAGE_MAX en el backend
 const MESSAGE_MAX = 1000;
 
@@ -49,6 +52,9 @@ export default function PropertyDetail() {
   const [applying, setApplying] = useState(false);
   const [message, setMessage] = useState('');
   const messageRef = useRef<HTMLTextAreaElement>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const intent = searchParams.get('intent');
+  const intentDone = useRef(false);
 
   const { data: property, isLoading, isError } = useQuery({
     queryKey: ['property', id, user?._id || 'anon'],
@@ -69,6 +75,38 @@ export default function PropertyDetail() {
   useEffect(() => {
     if (id) incrementView(id);
   }, [id]);
+
+  // Vuelta del login o del registro: completa lo que pidió sin sesión (guardar o pedir visita)
+  useEffect(() => {
+    if (!intent || !user || !property || intentDone.current) return;
+    intentDone.current = true;
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete('intent');
+        return next;
+      },
+      { replace: true },
+    );
+    if (intent === 'save' && !property._mine && !property._liked && FAVORITE_ROLES.includes(user.role)) {
+      const key = ['property', id, user._id];
+      favoriteProperty(property._id)
+        .then(() => {
+          qc.setQueryData<Property>(key, (prev) => (prev ? { ...prev, _liked: true } : prev));
+          toast.push({ title: 'Guardado en Favoritos', tone: 'success' });
+        })
+        .catch(() => toast.push({ title: 'No se pudo guardar el piso', tone: 'error' }));
+    }
+    if (intent === 'apply') {
+      // El campo aparece en el mismo render que la ficha con sesión
+      setTimeout(() => {
+        const field = messageRef.current;
+        if (!field) return;
+        field.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+        field.focus({ preventScroll: true });
+      }, 0);
+    }
+  }, [intent, user, property, id, qc, toast, setSearchParams]);
 
   if (isLoading) return <SkeletonDetail />;
   if (isError || !property) {
@@ -315,7 +353,7 @@ export default function PropertyDetail() {
         )}
       </div>
 
-      <LoginPrompt open={!!promptLogin} reason={promptLogin || undefined} onClose={() => setPromptLogin(null)} />
+      <LoginPrompt open={!!promptLogin} reason={promptLogin || undefined} resume onClose={() => setPromptLogin(null)} />
     </div>
   );
 }

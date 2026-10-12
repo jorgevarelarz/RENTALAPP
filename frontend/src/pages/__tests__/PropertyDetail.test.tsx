@@ -2,7 +2,7 @@ import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PropertyDetail from '../properties/PropertyDetail';
 
@@ -49,16 +49,21 @@ const PROPERTY = {
   _mine: false,
 };
 
-const renderPage = () =>
+const renderPage = (entry = '/properties/p1') =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <MemoryRouter initialEntries={['/properties/p1']}>
+      <MemoryRouter initialEntries={[entry]}>
         <Routes>
-          <Route path="/properties/:id" element={<PropertyDetail />} />
+          <Route path="/properties/:id" element={<><PropertyDetail /><LocationProbe /></>} />
         </Routes>
       </MemoryRouter>
     </QueryClientProvider>,
   );
+
+function LocationProbe() {
+  const loc = useLocation();
+  return <output data-testid="location">{loc.pathname + loc.search}</output>;
+}
 
 /** La tarjeta del precio; la barra de móvil repite precio y estado. */
 const card = () => within(screen.getByRole('complementary'));
@@ -86,6 +91,46 @@ describe('Ficha del anuncio', () => {
     expect(mocks.applyToProperty).not.toHaveBeenCalled();
     const prompt = await screen.findByRole('dialog', { name: 'Pide una visita' });
     expect(within(prompt).getByRole('link', { name: 'Ya tengo cuenta' }).getAttribute('href')).toMatch(/^\/login\?redirect=%2Fproperties%2Fp1/);
+  });
+
+  it('al volver de entrar con ?intent=save guarda el piso una vez, lo avisa y limpia la URL', async () => {
+    mocks.user = { _id: 't1', role: 'tenant' };
+    mocks.getProperty.mockResolvedValue({ ...PROPERTY, _liked: false });
+    mocks.favoriteProperty.mockResolvedValue({ ok: true });
+    renderPage('/properties/p1?from=list&intent=save');
+
+    expect(await screen.findByRole('button', { name: 'Guardado' })).toHaveAttribute('aria-pressed', 'true');
+    expect(mocks.favoriteProperty).toHaveBeenCalledTimes(1);
+    expect(mocks.favoriteProperty).toHaveBeenCalledWith('p1');
+    expect(mocks.push).toHaveBeenCalledWith({ title: 'Guardado en Favoritos', tone: 'success' });
+    await vi.waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/properties\/p1\?from=list$/));
+  });
+
+  it('?intent=save no vuelve a guardar un piso ya guardado ni lo intenta con roles sin favoritos', async () => {
+    mocks.user = { _id: 't1', role: 'tenant' };
+    mocks.getProperty.mockResolvedValue({ ...PROPERTY, _liked: true });
+    const { unmount } = renderPage('/properties/p1?intent=save');
+    expect(await screen.findByRole('button', { name: 'Guardado' })).toBeInTheDocument();
+    await vi.waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/properties\/p1$/));
+    unmount();
+
+    mocks.user = { _id: 'a1', role: 'agency' };
+    mocks.getProperty.mockResolvedValue({ ...PROPERTY, _liked: false });
+    renderPage('/properties/p1?intent=save');
+    expect(await screen.findByRole('heading', { name: 'Piso luminoso en Malasaña' })).toBeInTheDocument();
+    await vi.waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/properties\/p1$/));
+    expect(mocks.favoriteProperty).not.toHaveBeenCalled();
+  });
+
+  it('al volver con ?intent=apply lleva al campo del mensaje sin enviar nada', async () => {
+    mocks.user = { _id: 't1', role: 'tenant' };
+    mocks.getProperty.mockResolvedValue({ ...PROPERTY });
+    renderPage('/properties/p1?intent=apply');
+
+    const field = await screen.findByLabelText(/Mensaje para el propietario/);
+    await vi.waitFor(() => expect(field).toHaveFocus());
+    expect(mocks.applyToProperty).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(screen.getByTestId('location')).toHaveTextContent(/^\/properties\/p1$/));
   });
 
   it('la galería no repite fotos y el visor pasa de una a otra', async () => {

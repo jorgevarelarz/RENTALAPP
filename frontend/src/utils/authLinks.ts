@@ -13,3 +13,10 @@ export function authHref(base: '/login' | '/register', where: Where): string {
   const back = returnPath(where);
   return back ? `${base}?redirect=${encodeURIComponent(back)}` : base;
 }
+
+// Lo que el usuario quería hacer antes de entrar: la página lo completa al volver (?intent=save).
+export function withIntent(where: Where, intent: string): Where {
+  const params = new URLSearchParams(where.search || '');
+  params.set('intent', intent);
+  return { ...where, search: `?${params.toString()}` };
+}
