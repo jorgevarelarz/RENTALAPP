@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -14,6 +14,9 @@ import RentSuggestionCard from './RentSuggestionCard';
 import { generateDescription } from '../services/ai';
 import { useToast } from '../context/ToastContext';
 
+// Un campo numérico vacío llega como NaN (valueAsNumber); sin mensaje propio, zod diría «Expected number, received nan»
+const num = (message: string) => z.coerce.number({ invalid_type_error: message, required_error: message });
+
 const schema = z.object({
   title: z.string().min(5, 'El título necesita al menos 5 caracteres'),
   address: z.string().min(5, 'Escribe la dirección'),
@@ -21,25 +24,24 @@ const schema = z.object({
   region: z.string().min(2, 'Escribe la región o provincia'),
   city: z.string().min(2, 'Escribe la ciudad'),
   location: z.object({
-    lat: z.coerce.number().min(-90).max(90),
-    lng: z.coerce.number().min(-180).max(180),
+    lat: num('Escribe la latitud').min(-90, 'La latitud va de -90 a 90').max(90, 'La latitud va de -90 a 90'),
+    lng: num('Escribe la longitud').min(-180, 'La longitud va de -180 a 180').max(180, 'La longitud va de -180 a 180'),
   }),
-  sizeM2: z.coerce.number().min(10, 'El tamaño mínimo es 10 m²'),
-  rooms: z.coerce.number().min(0, 'Revisa las habitaciones'),
-  bathrooms: z.coerce.number().min(0, 'Revisa los baños'),
+  sizeM2: num('Escribe el tamaño').min(10, 'El tamaño mínimo es 10 m²'),
+  rooms: num('Escribe las habitaciones').min(0, 'Revisa las habitaciones'),
+  bathrooms: num('Escribe los baños').min(0, 'Revisa los baños'),
   furnished: z.boolean().default(false),
   petsAllowed: z.boolean().default(false),
   condition: z.enum(['obra_nueva', 'reformado', 'buen_estado', 'a_reformar']).default('buen_estado'),
-  floor: z.coerce.number().min(0, 'Revisa la planta').max(60, 'Revisa la planta').optional(),
+  floor: num('Revisa la planta').min(0, 'Revisa la planta').max(60, 'Revisa la planta').optional(),
   hasElevator: z.boolean().optional(),
-  yearBuilt: z.coerce
-    .number()
+  yearBuilt: num('Revisa el año')
     .min(1800, 'Revisa el año')
     .max(new Date().getFullYear() + 2, 'Revisa el año')
     .optional(),
-  images: z.array(z.string().url()).min(3, 'Sube al menos 3 fotos para publicar').max(20),
-  price: z.coerce.number().min(100, 'La renta mínima es 100 €'),
-  deposit: z.coerce.number().min(0, 'Revisa la fianza'),
+  images: z.array(z.string().url()).min(3, 'Sube al menos 3 fotos para publicar').max(20, 'Caben 20 fotos como máximo'),
+  price: num('Escribe la renta mensual').min(100, 'La renta mínima es 100 €'),
+  deposit: num('Escribe la fianza (0 si no hay)').min(0, 'Revisa la fianza'),
   availableFrom: z.string().min(2, 'Elige la fecha'),
   onlyTenantPro: z.boolean().optional().default(false),
   requiredTenantProMaxRent: z.coerce.number().min(0).optional().default(0),
@@ -107,6 +109,8 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
   const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  // Dirección ya confirmada (sugerencia elegida o la guardada al editar): no se busca, la lista se abriría sola
+  const pickedAddress = useRef<string | null>(String(defaultValues?.address || '').trim() || null);
   const { push } = useToast();
 
   const {
@@ -176,16 +180,18 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
 
   useEffect(() => {
     const query = String(addressValue || '').trim();
-    if (query.length < 4) {
+    if (query.length < 4 || query === pickedAddress.current) {
       setAddressSuggestions([]);
       setIsSearchingAddress(false);
       return;
     }
+    pickedAddress.current = null;
 
+    // «Buscando…» desde que se escribe, para que la pista de «no aparece» no salga durante la espera
+    setIsSearchingAddress(true);
     const controller = new AbortController();
     const timeout = setTimeout(async () => {
       try {
-        setIsSearchingAddress(true);
         const params = new URLSearchParams({
           q: query,
           format: 'jsonv2',
@@ -204,9 +210,9 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
           setAddressSuggestions([]);
         }
       } finally {
-        setIsSearchingAddress(false);
+        if (!controller.signal.aborted) setIsSearchingAddress(false);
       }
-    }, 350);
+    }, 1000); // Nominatim admite como mucho 1 petición por segundo
 
     return () => {
       clearTimeout(timeout);
@@ -222,6 +228,7 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
     const lat = Number(suggestion?.lat);
     const lng = Number(suggestion?.lon);
 
+    pickedAddress.current = address.trim() || null;
     if (address) setValue('address', address, { shouldValidate: true });
     if (city) setValue('city', city, { shouldValidate: true });
     if (region) setValue('region', region, { shouldValidate: true });
@@ -387,7 +394,7 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
                   </ul>
                 )}
               </div>
-              {!isSearchingAddress && addressQuery.length >= 4 && addressSuggestions.length === 0 && (
+              {!isSearchingAddress && addressQuery.length >= 4 && addressQuery !== pickedAddress.current && addressSuggestions.length === 0 && (
                 <p className="ra-field-hint">
                   Si no aparece la dirección, sigue con la que has escrito y completa ciudad, región y coordenadas.
                 </p>

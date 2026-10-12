@@ -4,9 +4,6 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import PropertyFormRHF from '../PropertyFormRHF';
 
-// setupTests sustituye zodResolver por uno que nunca da errores; aquí hace falta el real
-vi.unmock('@hookform/resolvers/zod');
-
 const push = vi.fn();
 vi.mock('../../context/ToastContext', () => ({ useToast: () => ({ push }) }));
 vi.mock('../../services/ai', () => ({ generateDescription: vi.fn() }));
@@ -97,5 +94,52 @@ describe('PropertyFormRHF', () => {
     expect(screen.getByText('Revisa la fianza')).toBeInTheDocument();
     expect(push).toHaveBeenCalledWith(expect.objectContaining({ tone: 'error' }));
     expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('un número vacío da un mensaje en español, no el de zod en inglés', async () => {
+    const images = ['https://x.test/1.jpg', 'https://x.test/2.jpg', 'https://x.test/3.jpg'];
+    const { onSubmit } = renderForm({ ...filled, images, price: 900 });
+    userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
+    await screen.findByLabelText('Habitaciones');
+    userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
+    await screen.findByRole('button', { name: 'Quitar la foto 1' });
+    userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
+    const deposit = await screen.findByLabelText('Fianza');
+    userEvent.clear(deposit);
+    userEvent.click(screen.getByRole('button', { name: 'Crear anuncio' }));
+    expect(await screen.findByText('Escribe la fianza (0 si no hay)')).toBeInTheDocument();
+    expect(screen.queryByText(/Expected number/)).toBeNull();
+    expect(onSubmit).not.toHaveBeenCalled();
+  });
+
+  it('elegir una sugerencia rellena la dirección y no vuelve a buscar ni abre la lista', async () => {
+    const suggestion = {
+      place_id: 1,
+      display_name: 'Calle de Alcalá, 42, Madrid, Comunidad de Madrid, España',
+      lat: '40.4189',
+      lon: '-3.6969',
+      address: { city: 'Madrid', state: 'Comunidad de Madrid' },
+    };
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => [suggestion] }));
+    vi.stubGlobal('fetch', fetchMock);
+    renderForm();
+    userEvent.type(screen.getByLabelText('Dirección completa'), 'Alcalá 42');
+    userEvent.click(await screen.findByRole('button', { name: suggestion.display_name }, { timeout: 3000 }));
+
+    expect(screen.getByLabelText('Dirección completa')).toHaveValue(suggestion.display_name);
+    expect(screen.getByLabelText('Ciudad')).toHaveValue('Madrid');
+    expect(screen.getByLabelText('Latitud')).toHaveValue(40.4189);
+    await new Promise((r) => setTimeout(r, 1300));
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole('button', { name: suggestion.display_name })).toBeNull();
+    expect(screen.queryByText(/Si no aparece la dirección/)).toBeNull();
+  });
+
+  it('al editar un anuncio no busca la dirección guardada', async () => {
+    const fetchMock = vi.fn(async () => ({ ok: true, json: async () => [] }));
+    vi.stubGlobal('fetch', fetchMock);
+    renderForm(filled);
+    await new Promise((r) => setTimeout(r, 1300));
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });
