@@ -2072,3 +2072,34 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 
 **Siguiente mejora propuesta.** Hace una ronda que la interfaz solo cambia por dentro. Propongo la página «Favoritos» al sistema 2026 (estilos en línea y botón gris) y borrar `pages/Favorites.tsx`, que es código muerto.
 
+
+### Ronda 55 — 2026-10-12 10:31
+
+**Qué y por qué.** Era la mejora que proponía la ronda 54: llevar «Favoritos» al sistema 2026, después de una ronda sin cambios en la interfaz. Al revisarla salió un fallo visible:
+
+1. **El inicio del inquilino siempre decía 0 favoritos.** `TenantHome` contaba los favoritos de `localStorage` (`utils/favorites.ts`), pero desde que se guardan en el servidor nada escribe ahí. Ahora los cuenta con `GET /api/properties/favorites`, en paralelo con los contratos. Si ese recuento falla, muestra «–» y los contratos se ven igual. Se borran `pages/Favorites.tsx` (no tenía ruta) y `utils/favorites.ts`.
+2. **«Favoritos» (`/me/favorites`) en el sistema 2026.**
+   - Recuento en el encabezado («1 piso guardado» o «3 pisos guardados») y la misma rejilla y tarjeta que el listado.
+   - Esqueleto mientras carga. Si no hay nada guardado, una tarjeta con «Buscar pisos» (antes salían dos botones y estilos en línea).
+   - Si la carga falla, se explica el error y se ofrece «Reintentar». Antes se ignoraba el error y la página decía «Aún no has guardado ningún piso».
+   - Quitar un piso muestra «Has quitado «…» de favoritos. Deshacer», que lo vuelve a guardar en el mismo sitio. Si quitarlo falla, el piso vuelve a su sitio y se muestra el error (antes desaparecía igualmente).
+
+**Commits.**
+- `d2241b3` Interfaz: el inicio del inquilino cuenta sus favoritos del servidor; se borra el código muerto
+- `b682b58` Interfaz: «Favoritos» pasa al sistema 2026
+
+**Verificación (resultados reales).**
+- Backend sin cambios.
+- Frontend:
+  - `npm --prefix frontend run build` OK.
+  - `npm --prefix frontend test`: 47 ficheros y 188 tests OK. En la primera pasada, `AppShell.test.tsx` falló por un timeout de la ejecución en paralelo. No lo he tocado: pasó solo y luego en la suite completa.
+  - Nuevos: `pages/properties/__tests__/FavoritesPage.test.tsx` (6 tests: recuento, quitar y deshacer, fallo al quitar, error de carga con reintento, vacío). `TenantHome.test.tsx` simula ya el servicio y tiene 2 casos más (recuento del servidor y fallo sin tapar los contratos).
+- Playwright con la API simulada (`/tmp/ra-shots55`): lista, quitado con «Deshacer» y vacío, a 1280 y 390 px, sin desbordamiento horizontal.
+- GitNexus: `impact` LOW en `TenantHome`, `FavoritesPage` y `getFavorites`. `detect_changes` solo toca `FavoritesPage`, `onFavToggle` y `TenantHome` (y sus flujos, uno de ellos el de `getFavorites` que se sustituye).
+
+**Qué queda.**
+- `SkeletonGrid` y `EmptyState` siguen con el estilo antiguo (bordes grises, estilos en línea). Los usan otras páginas.
+- La ruta deja entrar a caseros y administradores (`["tenant", "landlord", "admin"]`), pero su menú no enlaza «Favoritos».
+- Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); una visita concertada no se puede cambiar desde «Solicitudes»; `/landlord/services` es un marcador.
+
+**Siguiente mejora propuesta.** Pasar `EmptyState` y `SkeletonGrid` a los tokens 2026 (los usan el listado y otras páginas) o, con más valor de producto, dejar cambiar una visita ya concertada desde «Solicitudes». El backend ya lo admite y solo falta la interfaz.
