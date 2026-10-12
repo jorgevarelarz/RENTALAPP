@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { Property } from '../models/property.model';
 import { UserFavorite } from '../models/userFavorite.model';
 import { AlertSubscription } from '../models/alertSubscription.model';
@@ -281,16 +282,54 @@ const visibilityFilter = (req: Request): Record<string, unknown> | null => {
   return { $or: [{ status: 'active' }, { owner: userId }, { agencyId: userId }] };
 };
 
+// Campos internos del anuncio: quién lo gestiona y su historial no son para cualquiera que lo vea
+const PRIVATE_PROPERTY_FIELDS = ['owner', 'agencyId', 'refAgencyId', 'agencyAccess', 'agencyTransferredAt', 'history'];
+
+const viewerId = (req: Request) => String((req as any).user?.id || (req as any).user?._id || '');
+
+const canManageProperty = (req: Request, p: any) => {
+  if ((req as any).user?.role === 'admin') return true;
+  const userId = viewerId(req);
+  return !!userId && (String(p.owner) === userId || String(p.agencyId || '') === userId);
+};
+
+const toPropertyView = (req: Request, p: any) => {
+  const o = typeof p?.toObject === 'function' ? p.toObject() : { ...p };
+  if (canManageProperty(req, p)) return o;
+  for (const field of PRIVATE_PROPERTY_FIELDS) delete o[field];
+  return o;
+};
+
 export async function getById(req: Request, res: Response) {
+  if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(404).json({ error: 'not_found' });
   const p = await Property.findById(req.params.id);
   if (!p) return res.status(404).json({ error: 'not_found' });
-  const visibility = visibilityFilter(req);
-  if (visibility && p.status !== 'active') {
-    const userId = String((req as any).user?.id || '');
-    const isOwner = userId && (String(p.owner) === userId || String((p as any).agencyId || '') === userId);
-    if (!isOwner) return res.status(404).json({ error: 'not_found' });
+  const mine = canManageProperty(req, p);
+  if (p.status !== 'active' && !mine) return res.status(404).json({ error: 'not_found' });
+
+  const view: any = toPropertyView(req, p);
+  view._mine = mine;
+  const userId = viewerId(req);
+  if (userId && Types.ObjectId.isValid(userId)) {
+    const [fav, application] = await Promise.all([
+      UserFavorite.exists({ userId, propertyId: p._id }),
+      (req as any).user?.role === 'tenant'
+        ? Application.findOne({ propertyId: p._id, tenantId: userId }).select('status visitDate proposedDate proposedBy createdAt').lean()
+        : null,
+    ]);
+    view._liked = !!fav;
+    if (application) {
+      const a: any = application;
+      view._application = {
+        status: a.status,
+        createdAt: a.createdAt,
+        visitDate: a.visitDate,
+        proposedDate: a.proposedDate,
+        proposedBy: a.proposedBy,
+      };
+    }
   }
-  res.json(p);
+  res.json(view);
 }
 
 export async function search(req: Request, res: Response) {
@@ -386,7 +425,7 @@ export async function search(req: Request, res: Response) {
     meta: { city, region, priceMin, priceMax, roomsMin, roomsMax, onlyTenantPro: onlyProParam, total },
   });
 
-  res.json({ items, page: pg, limit: lim, total });
+  res.json({ items: items.map((p) => toPropertyView(req, p)), page: pg, limit: lim, total });
 }
 
 export async function favorite(req: Request, res: Response) {
@@ -436,13 +475,18 @@ export async function unsubscribePriceAlert(req: Request, res: Response) {
 }
 
 export async function countView(req: Request, res: Response) {
-  await Property.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
+  if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(404).json({ error: 'not_found' });
+  // Solo cuentan las visitas a anuncios publicados
+  const r = await Property.updateOne({ _id: req.params.id, status: 'active' }, { $inc: { viewsCount: 1 } });
+  if (!r.matchedCount) return res.status(404).json({ error: 'not_found' });
   res.json({ ok: true });
 }
 
 export async function apply(req: Request, res: Response) {
+  if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(404).json({ error: 'not_found' });
   const property = await Property.findById(req.params.id);
-  if (!property) return res.status(404).json({ error: 'not_found' });
+  // Un borrador o un anuncio retirado no admite solicitudes (y para quien no lo gestiona, no existe)
+  if (!property || property.status !== 'active') return res.status(404).json({ error: 'not_found' });
 
   if (property.onlyTenantPro) {
     const required = property.requiredTenantProMaxRent || property.price;
