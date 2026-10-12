@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api as axios } from '../api/client';
 import { Link } from 'react-router-dom';
-import { createProperty, listProperties } from '../services/properties';
+import { createProperty, listMyProperties } from '../services/properties';
 import { listContracts } from '../services/contracts';
 import { userService } from '../services/user';
 import Button from '../components/ui/Button';
@@ -67,13 +67,11 @@ const LandlordDashboard: React.FC = () => {
   const { push } = useToast();
 
   const refresh = useCallback(async () => {
-    const all = await listProperties({ limit: 200, sort: 'createdAt', dir: 'desc' });
-    const ownerId = String(user?._id || '');
-    const myProps = all.filter((p: any) => {
-      const owner = p.ownerId || p.owner;
-      return owner && String(owner) === ownerId;
-    });
-    setMine(myProps);
+    try {
+      setMine(await listMyProperties());
+    } catch {
+      setMine([]);
+    }
     if (token) {
       try {
         const [{ items }, ...inProgress] = await Promise.all(

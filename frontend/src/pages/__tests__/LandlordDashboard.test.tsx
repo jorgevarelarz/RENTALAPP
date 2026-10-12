@@ -16,7 +16,7 @@ vi.mock('../../api/client', () => ({
 }));
 
 vi.mock('../../services/properties', () => ({
-  listProperties: vi.fn().mockResolvedValue([
+  listMyProperties: vi.fn().mockResolvedValue([
     { _id: 'p1', owner: 'u1', title: 'Piso Centro', address: 'Calle Mayor 1', city: 'Santiago', price: 950, status: 'active', images: ['a', 'b', 'c'] },
     { _id: 'p2', owner: 'u1', title: 'Estudio', address: 'Rúa Nova 3', city: 'Santiago', price: 620, status: 'draft', images: [] },
   ]),

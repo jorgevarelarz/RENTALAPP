@@ -5,6 +5,8 @@ import { useAuth } from '../context/AuthContext';
 
 /** Lista de incidencias de cada rol: la ficha /tickets/:id cuelga de la suya, no de «Mis incidencias». */
 const TICKET_LISTS: Record<string, string> = { landlord: '/landlord/issues', pro: '/pro/tickets' };
+/** Prefijos sin página propia (/me/favorites): enlazarlos lleva a un 404. */
+const NO_PAGE = new Set(['/me']);
 
 function labelFor(path: string): string {
   const cfg: any = nav;
@@ -33,12 +35,13 @@ const Breadcrumbs: React.FC = () => {
   }
   const ticketList = role ? TICKET_LISTS[role] : undefined;
   if (ticketList && crumbs[0] === '/tickets' && crumbs.length > 1) crumbs[0] = ticketList;
-  if (crumbs.length === 0) return null;
+  const visible = crumbs.filter((c) => !NO_PAGE.has(c));
+  if (visible.length === 0) return null;
   return (
     <nav aria-label="breadcrumb" style={{ fontSize: 12, marginBottom: 12, color: 'var(--muted)' }}>
-      {crumbs.map((c, i) => (
+      {visible.map((c, i) => (
         <span key={c}>
-          {i < crumbs.length - 1 ? (
+          {i < visible.length - 1 ? (
             <>
               <Link to={c}>{labelFor(c)}</Link>
               <span style={{ margin: '0 6px' }}>/</span>

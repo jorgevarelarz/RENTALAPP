@@ -13,6 +13,13 @@ const at = (path: string) =>
   );
 
 describe('Breadcrumbs', () => {
+  it('no enlaza /me, que no tiene página', () => {
+    at('/me/favorites');
+    const nav = screen.getByRole('navigation', { name: 'breadcrumb' });
+    expect(nav).not.toHaveTextContent(/^me/);
+    expect(screen.queryByRole('link')).toBeNull();
+  });
+
   it('las fichas se nombran sin el ID interno', () => {
     at('/contracts/66f1a2b3c4d5e6f7a8b9c0d1');
     const nav = screen.getByRole('navigation', { name: 'breadcrumb' });

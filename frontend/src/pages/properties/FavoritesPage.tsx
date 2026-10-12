@@ -35,7 +35,7 @@ export default function FavoritesPage() {
     <div style={{ padding: '24px', display: 'grid', gap: 12 }}>
       <PageHeader
         title="Favoritos"
-        subtitle="Guarda pisos para revisarlos mas tarde."
+        subtitle="Guarda pisos para revisarlos más tarde."
         cta={(
           <Link to="/properties" className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
             Explorar pisos
@@ -48,8 +48,8 @@ export default function FavoritesPage() {
         ))}
         {!items.length && (
           <EmptyState
-            title="No tienes favoritos aun"
-            detail="Guarda tus pisos preferidos para compararlos despues."
+            title="Aún no has guardado ningún piso"
+            detail="Pulsa el corazón de un anuncio para tenerlo aquí y compararlo después."
             cta={(
               <Link to="/properties" className="rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-700 hover:bg-gray-50">
                 Explorar pisos

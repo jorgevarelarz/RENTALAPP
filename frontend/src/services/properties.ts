@@ -41,6 +41,19 @@ export const listProperties = async (params: Partial<SearchParams> = {}) => {
   return Array.isArray(data.items) ? data.items : [];
 };
 
+// Todos los inmuebles que gestiona la cuenta (dueño o agencia), página a página
+export const listMyProperties = async (params: { status?: 'draft' | 'active' | 'archived' } = {}) => {
+  const limit = 100;
+  const items: Property[] = [];
+  for (let page = 1; page <= 20; page += 1) {
+    const { data } = await client.get('/api/properties/mine', { params: { ...params, page, limit } });
+    const batch = Array.isArray(data?.items) ? (data.items as Property[]) : [];
+    items.push(...batch);
+    if (batch.length < limit || items.length >= Number(data?.total || 0)) break;
+  }
+  return items;
+};
+
 export const getProperty = async (id: string) => {
   const res = await client.get(`/api/properties/${id}`);
   return res.data as Property;

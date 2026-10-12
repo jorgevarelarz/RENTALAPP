@@ -1,7 +1,8 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { MapPin, BedDouble, Bath, Ruler, Heart } from 'lucide-react';
+import { Heart, ImageOff } from 'lucide-react';
 import { toAbsoluteUrl } from '../utils/media';
+import { formatRent, propertyFacts } from '../utils/propertyDetail';
 import type { Property } from '../types/property';
 
 type Props = {
@@ -10,73 +11,61 @@ type Props = {
 };
 
 export default function PropertyCard({ p, onFavToggle }: Props) {
-  const image = toAbsoluteUrl(p.images?.[0] || 'https://via.placeholder.com/1000x600?text=Sin+Foto');
+  const photo = p.images?.[0];
   const liked = !!p._liked;
+  const facts = propertyFacts(p);
+  const href = `/properties/${p._id}`;
 
   return (
-    <article className="group bg-white rounded-xl border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 flex flex-col h-full">
-      <div className="relative aspect-[4/3] overflow-hidden">
-        <Link to={`/properties/${p._id}`}>
-          <img
-            src={image}
-            alt={p.title}
-            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-            loading="lazy"
-          />
+    <article className="group relative flex h-full flex-col">
+      <div className="relative aspect-[4/3] overflow-hidden rounded-xl border border-[var(--ra-line)] bg-gray-100">
+        <Link to={href} tabIndex={-1} aria-hidden="true">
+          {photo ? (
+            <img
+              src={toAbsoluteUrl(photo)}
+              alt=""
+              className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.03]"
+              loading="lazy"
+            />
+          ) : (
+            <span className="flex h-full w-full flex-col items-center justify-center gap-2 text-sm text-gray-500">
+              <ImageOff size={22} className="text-gray-400" aria-hidden="true" />
+              Sin fotos todavía
+            </span>
+          )}
         </Link>
 
-        <div className="absolute top-3 left-3 flex flex-col gap-1">
-          {p.onlyTenantPro && (
-            <span className="bg-indigo-600/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide shadow-sm">
-              Tenant PRO
-            </span>
-          )}
-          {p.status === 'rented' && (
-            <span className="bg-gray-800/90 backdrop-blur-sm text-white text-[10px] font-bold px-2 py-1 rounded-md uppercase tracking-wide shadow-sm">
-              Alquilado
-            </span>
-          )}
-        </div>
+        {p.onlyTenantPro && (
+          <span className="absolute left-3 top-3 rounded-md bg-white px-2 py-1 text-xs font-semibold text-gray-900 shadow-sm">
+            Solo Tenant PRO
+          </span>
+        )}
 
         {onFavToggle && (
           <button
+            type="button"
             onClick={(e) => { e.preventDefault(); onFavToggle(p._id, liked); }}
-            className="absolute top-3 right-3 p-2 rounded-full bg-white/80 hover:bg-white text-gray-600 hover:text-red-500 transition-all shadow-sm backdrop-blur-sm"
+            aria-label={liked ? 'Quitar de guardados' : 'Guardar'}
+            aria-pressed={liked}
+            className="absolute right-3 top-3 rounded-full bg-white/90 p-2 text-gray-700 shadow-sm transition hover:bg-white hover:text-gray-950"
           >
-            <Heart size={18} className={liked ? "fill-red-500 text-red-500" : ""} />
+            <Heart size={18} className={liked ? 'fill-[var(--ra-blue)] text-[var(--ra-blue)]' : ''} aria-hidden="true" />
           </button>
         )}
       </div>
 
-      <div className="p-4 flex flex-col flex-1">
-        <div className="flex justify-between items-start gap-2 mb-2">
-          <h3 className="font-bold text-lg text-gray-950 leading-tight group-hover:text-indigo-600 transition-colors line-clamp-1">
+      <div className="flex flex-1 flex-col pt-3">
+        <p className="truncate text-sm text-gray-500">{p.city}</p>
+        <h3 className="mt-0.5 line-clamp-1 font-semibold text-gray-950 [overflow-wrap:anywhere]">
+          <Link to={href} className="hover:underline">
             {p.title}
-          </h3>
-          <span className="font-bold text-lg text-gray-950 whitespace-nowrap">
-            {p.price?.toLocaleString()} €<span className="text-[13px] font-medium text-gray-400">/mes</span>
-          </span>
-        </div>
-
-        <div className="flex items-center gap-1 text-gray-500 text-sm mb-4">
-          <MapPin size={14} />
-          <span className="truncate">{p.city} {p.region ? `, ${p.region}` : ''}</span>
-        </div>
-
-        <div className="flex items-center gap-4 text-sm text-gray-600 mt-auto pt-3 border-t border-gray-100">
-          <div className="flex items-center gap-1.5" title="Habitaciones">
-            <BedDouble size={16} className="text-gray-400" />
-            <span>{p.rooms}</span>
-          </div>
-          <div className="flex items-center gap-1.5" title="Baños">
-            <Bath size={16} className="text-gray-400" />
-            <span>{p.bathrooms}</span>
-          </div>
-          <div className="flex items-center gap-1.5" title="Metros cuadrados">
-            <Ruler size={16} className="text-gray-400" />
-            <span>{p.sizeM2} m²</span>
-          </div>
-        </div>
+          </Link>
+        </h3>
+        {facts.length > 0 && <p className="mt-1 text-sm text-gray-600">{facts.join(' · ')}</p>}
+        <p className="mt-2 text-gray-950">
+          <span className="font-semibold">{formatRent(p.price)}</span>
+          <span className="text-sm text-gray-500"> /mes</span>
+        </p>
       </div>
     </article>
   );
