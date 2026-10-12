@@ -40,6 +40,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Opiniones de profesionales (ronda 48)**: al cerrarse una incidencia, el propietario y el inquilino que la abrió pueden valorar al profesional (1 a 5 y comentario). La opinión sale en su ficha pública con el nombre y la inicial del apellido («Laura M.»). Tres decisiones: (1) ¿vale ese formato de nombre o debe ser anónima? (2) No hay forma de denunciar ni de retirar una opinión, ni de que el profesional responda; ¿hace falta moderación antes de abrir? (3) Pueden opinar los dos (propietario e inquilino) sobre la misma incidencia; ¿solo quien paga?
 - **Al desplegar la ronda 50**: `GET /api/properties` y `GET /api/properties/:id` dejan de devolver `owner`, `agencyId`, `refAgencyId`, `agencyAccess`, `agencyTransferredAt` e `history` a quien no gestiona el inmueble (el dueño, su agencia y el administrador los siguen viendo). Solicitar visita a un borrador o a un anuncio retirado da ya 404. Una decisión: la ficha pública enseña la calle y el número (`address`) a cualquiera, también sin sesión, y el mapa marca el punto exacto. Idealista permite ocultar el número y Airbnb da la zona hasta reservar. ¿Debe la dirección exacta verse solo tras concertar la visita?
 - **Al desplegar la ronda 53**: las fechas que los inquilinos propusieron antes desde «Solicitudes» se guardaron con la hora desplazada (2 h tarde en verano y 1 h en invierno), el mismo fallo que la ronda 23 corrigió para el casero. Conviene revisarlas con una consulta de solo lectura (`db.applications.find({proposedBy:'tenant', proposedDate:{$gt:new Date()}})`). Además, proponer una fecha pasada da 400, aceptar una propuesta cuya hora ya pasó da 409 y una solicitud `rejected` no admite cambios. Ningún flujo pasa hoy una solicitud a `rejected`: el casero no tiene forma de descartar a un candidato. ¿Debe tenerla, y avisar al inquilino?
+- **Avisos de solicitudes y visitas (ronda 54)**: una solicitud nueva avisa por correo al propietario y a la agencia gestora (`agencyAccess: 'manage'`), con el nombre del inquilino, su mensaje y si tiene la solvencia verificada. Proponer o aceptar fecha avisa a la otra parte. Si la agencia propone o acepta, el inquilino ve el nombre de la agencia; si lo hace el administrador, no se da su nombre. Dos decisiones: (1) ¿debe enterarse también el propietario cuando su agencia concierta una visita? Hoy no. (2) Sin SMTP en producción, estos correos solo quedan en el log.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -2034,4 +2035,40 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 - Pendientes anteriores: dirección exacta visible para todos, aviso de cobro a la agencia y moderación de opiniones (Jorge); `pages/Favorites.tsx` es código muerto; la página «Favoritos» necesita el pase 2026; `/landlord/services` es un marcador.
 
 **Siguiente mejora propuesta.** Avisar al casero (o a la agencia gestora) de una solicitud nueva, con un correo que use el sistema de avisos de la ronda 42 y lleve el mensaje del inquilino. Si no hay SMTP, que quede en el log. Hoy solo la ve si abre el panel.
+
+### Ronda 54 — 2026-10-12 08:18
+
+**Qué y por qué.** Es la mejora que proponía la ronda 53. El casero (o su agencia) no se enteraba de una solicitud de visita hasta abrir el panel, y el inquilino tampoco sabía que le habían propuesto fecha: el primer contacto se perdía. Toca el flujo de captación y no está reservado.
+
+1. **Avisos por correo** (nuevo `services/applicationNotice.service.ts`, `notifyApplication(kind, applicationId, actorId)`; plantilla `applicationNoticeEmail` y `visitDateLabel` en `utils/email.ts`):
+   - **solicitud nueva** (`POST /api/properties/:id/apply`): al propietario y, si la gestiona, a la agencia (`agencyAccess: 'manage'`; con `status_only` no). Lleva quién la manda, su mensaje, «Tiene la solvencia verificada en RentalApp» si es Tenant PRO y «Ver la solicitud». Repetir la solicitud no vuelve a avisar;
+   - **fecha propuesta** (`/propose`) y **visita concertada** (`/accept`), con la fecha en hora de Madrid («jueves, 14 de octubre a las 18:00»). Si actúa el inquilino, avisa al propietario y a la agencia gestora; si actúa el casero, su agencia o un administrador, avisa al inquilino. El inquilino ve el nombre de quien actúa, salvo si es el administrador;
+   - se envía después de responder, nunca lanza y, sin SMTP, queda en el log, como los demás avisos. Todo el texto pasa por `escapeHtml`.
+2. **Enlace que abre los candidatos.** El correo del casero lleva a `/landlord?solicitudes=<inmueble>` y el de la agencia a `/agency/properties?solicitudes=<inmueble>`. Al cargar, el panel abre `ApplicantsModal` de ese inmueble y quita el parámetro, para que cerrar el modal o recargar no lo vuelva a abrir. Con un inmueble ajeno, o traspasado en el caso de la agencia, no abre nada. El inquilino va a `/tenant/applications`.
+
+**Commits.**
+- `3e0cade` Solicitudes: aviso por correo de solicitud nueva, fecha propuesta y visita concertada
+- `8e615f2` Interfaz: `?solicitudes=<id>` abre los candidatos en los paneles del casero y de la agencia
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Nuevo `tests/applications/application.notice.test.ts`, 7/7:
+  - solicitud nueva al propietario con mensaje, Tenant PRO y enlace; repetirla no avisa;
+  - con agencia gestora avisa a los dos, cada uno con su enlace; con `status_only` solo al propietario;
+  - casero propone → inquilino; inquilino acepta → casero (fecha exacta);
+  - inquilino propone → propietario y agencia; la agencia acepta → inquilino con el nombre de la agencia;
+  - una propuesta rechazada (fecha pasada) no avisa;
+  - plantilla: escapa nombre y mensaje, fecha en Madrid, sin «solvencia» fuera de la solicitud nueva.
+  
+  La primera pasada dio 403 en 6 casos porque los usuarios del test no tenían `isVerified` en la base (desde la ronda 17 se lee de ahí). Corregido.
+- Jest `--runInBand` de `tests/applications`, `tests/properties`, `tests/agency` y `tests/unit/email*`: 13 suites y 74 tests OK.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 46 ficheros y 180 tests OK. Hay dos casos nuevos en `LandlordDashboard.test.tsx` (abre y limpia el parámetro; un inmueble ajeno no abre nada) y uno en `AgencyProperties.test.tsx` (gestionado sí, traspasado no).
+- No hice capturas con Playwright: la interfaz no cambia de aspecto, solo abre el modal que ya existía.
+- GitNexus: `impact` dio riesgo bajo en `apply`, `proposeVisit`, `acceptProposedVisit` y `LandlordDashboard`. `detect_changes` marca «medio» en el backend (`tensionedAreaDateQuery` y `listMyApplications`, solo por líneas desplazadas, porque el índice es de la copia canónica) y «alto» en el frontend por los flujos del panel del casero. `refresh` es justo el que cambia: ahora marca que los inmuebles han cargado.
+
+**Qué queda.**
+- El propietario no se entera cuando su agencia concierta una visita. Lo dejo anotado en «Para Jorge».
+- No hay avisos dentro de la app (campana o contador), solo correo. El panel del casero tampoco resalta las solicitudes nuevas desde la última visita.
+- Pendientes anteriores: el casero no puede descartar candidatos (Jorge); una visita concertada no se puede cambiar desde «Solicitudes»; `pages/Favorites.tsx` es código muerto; la página «Favoritos» necesita el pase 2026; `/landlord/services` es un marcador.
+
+**Siguiente mejora propuesta.** Hace una ronda que la interfaz solo cambia por dentro. Propongo la página «Favoritos» al sistema 2026 (estilos en línea y botón gris) y borrar `pages/Favorites.tsx`, que es código muerto.
 

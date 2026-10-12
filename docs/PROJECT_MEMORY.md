@@ -1335,3 +1335,9 @@ Rules:
 - Frontend: `pages/tenant/Applications.tsx` rebuilt (2026) with `utils/tenantApplications.ts` (`applicationStatus`, `canAccept`, `canPropose`, `localDateTimeMin`, `visitError`); tenant counter-proposal now sent as ISO (was zone-less → stored 2 h late). `ApplicantsModal` maps the new codes, `min` on its picker.
 - Verification: tsc clean; Jest `--runInBand` 10 suites/60; frontend build + 177 tests (new `pages/tenant/__tests__/Applications.test.tsx`); Playwright `/tmp/ra-shots53`.
 
+### 2026-10-12 - Claude Code (autonomous worker) - Round 54: application and visit email notices
+
+- New `services/applicationNotice.service.ts` `notifyApplication('received'|'proposed'|'scheduled', appId, actorId)` (fire-and-forget, never throws): new application → owner + managing agency (`agencyAccess:'manage'`) with message/Tenant PRO; propose/accept → the other side. Template `applicationNoticeEmail` + `visitDateLabel` (Europe/Madrid) in `utils/email.ts`.
+- Frontend: `LandlordDashboard` and `AgencyProperties` open `ApplicantsModal` from `?solicitudes=<propertyId>` (email link), then drop the param.
+- Verification: tsc clean; Jest `--runInBand` 13 suites/74 (new `tests/applications/application.notice.test.ts`, 7); frontend build + 180 tests.
+
