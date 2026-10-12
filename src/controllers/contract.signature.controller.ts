@@ -14,6 +14,7 @@ import { generateAuditTrailPdf } from "../services/auditTrailPdf";
 import { emitAuditTrailUpdate } from "../events/auditTrail.events";
 import { normalizeContractStatus } from "../domain/contracts/status";
 import { firmaProvider, verifyFirmaSignature } from "../signature/firma";
+import { sendRouteError } from "../utils/routeError";
 
 type KnownStatuses = "signed" | "active" | "terminated";
 
@@ -169,12 +170,9 @@ export async function signatureCallback(req: Request, res: Response) {
       await recordContractHistory(id, "SIGNED", (req as any).user?.id, { provider, eventId });
       return res.json({ ok: true, status: updated.status });
     } catch (error: any) {
-      const httpStatus = error?.status ?? 500;
-      return res.status(httpStatus).json({
-        error: error?.message || "signature_callback_failed",
-        from: error?.from,
-        to: error?.to,
-      });
+      const httpStatus = Number(error?.status);
+      if (!(httpStatus >= 400 && httpStatus < 500)) return sendRouteError(res, error, "signature_callback_failed");
+      return res.status(httpStatus).json({ error: error.message, from: error?.from, to: error?.to });
     }
   }
 
@@ -273,8 +271,7 @@ export async function initiateSignature(req: Request, res: Response) {
     const result = await initSignature(id, (req as any).user);
     res.status(201).json(result);
   } catch (error: any) {
-    const code = error?.status || 500;
-    res.status(code).json({ error: error?.message || 'init_signature_failed' });
+    sendRouteError(res, error, 'init_signature_failed');
   }
 }
 
@@ -284,8 +281,7 @@ export async function getSignature(req: Request, res: Response) {
     const status = await getSignatureStatus(id, (req as any).user);
     res.json(status);
   } catch (error: any) {
-    const code = error?.status || 500;
-    res.status(code).json({ error: error?.message || 'signature_status_failed' });
+    sendRouteError(res, error, 'signature_status_failed');
   }
 }
 
@@ -311,7 +307,8 @@ export async function getAuditTrail(req: Request, res: Response) {
 
     return res.json({ contractId: id, events });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || 'audit_trail_failed' });
+    if (res.headersSent) return;
+    return sendRouteError(res, e, 'audit_trail_failed');
   }
 }
 

@@ -16,6 +16,7 @@ import { frontendUrl } from '../utils/frontendUrl';
 import { billableRent, checkRentPeriod, isValidRentPeriod, rentPeriodOf } from '../utils/rentPeriod';
 import { initiatePaymentAction } from '../services/contract.actions';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
+import { sendRouteError } from '../utils/routeError';
 
 export const initiatePayment = async (req: Request, res: Response) => {
   try {
@@ -34,11 +35,7 @@ export const initiatePayment = async (req: Request, res: Response) => {
     });
     res.json({ message: 'Pago iniciado', clientSecret });
   } catch (error: any) {
-    console.error(error);
-    if (error.message === 'Solo el inquilino puede iniciar pagos') {
-      return res.status(403).json({ error: error.message });
-    }
-    res.status(400).json({ error: error.message });
+    sendRouteError(res, error, 'payment_init_failed');
   }
 };
 

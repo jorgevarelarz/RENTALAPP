@@ -10,6 +10,7 @@ import { Property } from '../models/property.model';
 import { sendCoTenantInviteEmail } from '../utils/email';
 import { frontendUrl } from '../utils/frontendUrl';
 import { isManagingAgency } from '../utils/propertyAccess';
+import { sendRouteError } from '../utils/routeError';
 
 const redactEmail = (email?: string) => {
   if (!email || !email.includes('@')) return '';
@@ -332,7 +333,7 @@ export const getContractParties = async (req: Request, res: Response) => {
 
     res.json({ items: payload });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message || 'parties_failed' });
+    sendRouteError(res, err, 'parties_failed');
   }
 };
 
@@ -380,7 +381,7 @@ export const getMyInvites = async (req: Request, res: Response) => {
     });
     res.json({ items: payload });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message || 'invites_failed' });
+    sendRouteError(res, err, 'invites_failed');
   }
 };
 

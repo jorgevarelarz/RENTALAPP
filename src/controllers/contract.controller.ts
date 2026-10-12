@@ -24,6 +24,8 @@ import { evaluateAndPersist } from '../modules/rentalPublic';
 import { ensureCanReadContract, isActiveCoTenant } from '../utils/contractAccess';
 import { ContractParty } from '../models/contractParty.model';
 import { RentPayment } from '../models/rentPayment.model';
+import { sendRouteError } from '../utils/routeError';
+import { logger } from '../utils/logger';
 
 const objectId = z.string().regex(/^[a-f\d]{24}$/i).transform((s: string) => s.toLowerCase());
 
@@ -311,9 +313,8 @@ export const getContractPDF = async (req: Request, res: Response) => {
 
   } catch (err: any) {
     // Los errores de acceso de ensureCanReadContract traen su estado (400/403/404).
-    if (err?.status) return res.status(err.status).json({ error: err.message });
-    console.error(err);
-    res.status(500).json({ error: 'Error generando el PDF' });
+    if (res.headersSent) return;
+    sendRouteError(res, err, 'contract_pdf_failed');
   }
 };
 
@@ -327,8 +328,7 @@ export const signContract = async (req: Request, res: Response) => {
     const contract = await signContractAction(req.params.id, userRef);
     res.json({ message: 'Contrato firmado', contract });
   } catch (err: any) {
-    console.error(err);
-    res.status(400).json({ error: err.message });
+    sendRouteError(res, err, 'contract_sign_failed');
   }
 };
 
@@ -401,9 +401,7 @@ export const requestSignature = async (req: Request, res: Response) => {
     await recordContractHistory(contract.id, 'signatureRequested', 'Firma mock solicitada');
     res.json({ message: 'Firma electrónica iniciada', signerLinks, requestId });
   } catch (error: any) {
-    console.error(error);
-    if (error?.status && error.status < 500) return res.status(error.status).json({ error: error.message });
-    res.status(500).json({ error: 'Error iniciando la firma', details: error.message });
+    sendRouteError(res, error, 'signature_request_failed');
   }
 };
 
@@ -423,9 +421,9 @@ export const createSigningSession = async (req: Request, res: Response) => {
         if (!recipientUrls?.tenantUrl) return res.status(502).json({ error: 'Firma.dev no devolvió el enlace de firma' });
         return res.json({ signingUrl: recipientUrls.tenantUrl, provider: 'firma' });
       } catch (error: any) {
-        console.error('Error Firma.dev:', error);
-        const status = error?.status || 502;
-        return res.status(status).json({ error: status === 502 ? 'Error al conectar con Firma.dev' : error.message });
+        if (error?.status) return sendRouteError(res, error, 'firma_session_failed');
+        logger.error({ contractId: id, err: error }, 'firma_session_failed');
+        return res.status(502).json({ error: 'Error al conectar con Firma.dev' });
       }
     }
     if (!process.env.SIGNATURIT_TOKEN) {
@@ -597,7 +595,7 @@ export const listContracts = async (req: Request, res: Response) => {
     });
     res.json({ items: hydrated, total, page, limit });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'contracts_list_failed');
   }
 };
 
@@ -678,6 +676,6 @@ export const getContract = async (req: Request, res: Response) => {
     };
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'contract_get_failed');
   }
 };

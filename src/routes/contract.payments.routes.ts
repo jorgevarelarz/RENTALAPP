@@ -6,6 +6,7 @@ import { calcPlatformFeeOnRent, calcSurchargeCents, calcSignFeeOnRent } from '..
 import { authenticate } from '../middleware/auth.middleware';
 import { requirePolicies } from '../middleware/requirePolicies';
 import type { PolicyType } from '../models/policy.model';
+import { sendRouteError } from '../utils/routeError';
 
 const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
@@ -147,7 +148,7 @@ r.post('/:id/pay-rent-saved', authenticate, requirePolicies(REQUIRED_POLICIES), 
         clientSecret: err.raw.payment_intent.client_secret,
       });
     }
-    return res.status(500).json({ error: err?.message || 'payment_failed' });
+    return sendRouteError(res, err, 'payment_failed');
   }
 });
 

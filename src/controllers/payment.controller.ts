@@ -9,6 +9,7 @@ import { Property } from '../models/property.model';
 import { ensureCanReadContract, isActiveCoTenant } from '../utils/contractAccess';
 import { describeReceipt, renderReceiptPdf } from '../services/rentReceiptPdf';
 import { logger } from '../utils/logger';
+import { sendRouteError } from '../utils/routeError';
 
 /**
  * GET /api/payments/:id/receipt.pdf — recibo de una renta o fianza cobrada.
@@ -186,7 +187,6 @@ export const payReceipt = async (req: Request, res: Response) => {
       currency: payment.currency,
     });
   } catch (error: any) {
-    console.error('Error iniciando pago:', error);
-    res.status(500).json({ message: 'Error al procesar el pago', error: error.message });
+    sendRouteError(res, error, 'payment_failed');
   }
 };
