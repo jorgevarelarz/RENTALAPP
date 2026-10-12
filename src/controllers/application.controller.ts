@@ -90,6 +90,12 @@ export async function proposeVisit(req: Request, res: Response) {
   const isAdmin = user?.role === 'admin';
   if (!isOwner && !isTenant && !isAdmin) return res.status(403).json({ error: 'forbidden' });
 
+  // Cambiar una visita concertada a la misma hora no es un cambio. La visita concertada (`visitDate`)
+  // sigue en pie hasta que la otra parte acepte la nueva fecha.
+  if (app.visitDate && app.visitDate.getTime() > Date.now() && Math.abs(app.visitDate.getTime() - proposed.getTime()) < 60 * 1000) {
+    return res.status(400).json({ error: 'same_visit_date' });
+  }
+
   app.proposedDate = proposed;
   app.proposedBy = isOwner || isAdmin ? 'landlord' : 'tenant';
   app.status = 'proposed';

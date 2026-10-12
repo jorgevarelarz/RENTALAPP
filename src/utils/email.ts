@@ -397,6 +397,8 @@ export type ApplicationNoticeEmail = {
   tenantVerified?: boolean;
   /** Fecha propuesta (`proposed`) o concertada (`scheduled`). */
   date?: Date;
+  /** En `proposed`: la visita ya concertada que se quiere cambiar (sigue en pie hasta que se acepte la nueva). */
+  previousDate?: Date;
 };
 
 /** Avisos de solicitudes y visitas: solicitud nueva, fecha propuesta y visita concertada. */
@@ -420,6 +422,15 @@ export function applicationNoticeEmail(notice: ApplicationNoticeEmail) {
     lead = `${otherHtml} quiere visitar${place}.`;
     cta = 'Ver la solicitud';
     subject = `Nueva solicitud de visita${title ? `: ${title}` : ''}`;
+  } else if (notice.kind === 'proposed' && notice.previousDate) {
+    const before = visitDateLabel(notice.previousDate);
+    heading = 'Cambio de fecha de visita';
+    lead =
+      `${otherHtml} propone cambiar la visita${title ? ` a <strong>${escapeHtml(title)}</strong>` : ''} del ` +
+      `<strong>${escapeHtml(before)}</strong> al <strong>${escapeHtml(when)}</strong>. ` +
+      `Hasta que se acepte la nueva fecha, sigue en pie la del ${escapeHtml(before)}.`;
+    cta = toTenant ? 'Aceptar o proponer otra fecha' : 'Ver la propuesta';
+    subject = `Cambio de visita: ${when}`;
   } else if (notice.kind === 'proposed') {
     heading = 'Te proponen una fecha de visita';
     lead = toTenant

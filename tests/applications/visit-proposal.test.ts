@@ -92,4 +92,29 @@ describe("POST /api/applications/:id/propose: fecha de la visita", () => {
     expect(res.body.status).toBe("scheduled");
     expect(new Date(res.body.visitDate).toISOString()).toBe("2027-10-13T16:30:00.000Z");
   });
+
+  it("cambiar una visita concertada: queda propuesta, la concertada sigue guardada hasta aceptar la nueva, y a la misma hora da 400", async () => {
+    await Application.updateOne({ _id: appId }, { status: "scheduled", visitDate: new Date("2027-10-12T08:00:00.000Z") });
+
+    const same = await proposeAs(TENANT_ID, "tenant", appId, { visitDate: "2027-10-12T08:00:00.000Z" }).expect(400);
+    expect(same.body.error).toBe("same_visit_date");
+    expect((await Application.findById(appId).lean())?.status).toBe("scheduled");
+
+    await proposeAs(TENANT_ID, "tenant", appId, { visitDate: "2027-10-14T17:00:00.000Z" }).expect(200);
+    let saved = await Application.findById(appId).lean();
+    expect(saved).toMatchObject({ status: "proposed", proposedBy: "tenant" });
+    expect(saved?.visitDate?.toISOString()).toBe("2027-10-12T08:00:00.000Z");
+
+    await request(app).post(`/api/applications/${appId}/accept`)
+      .set("x-user-id", LANDLORD_ID).set("x-user-role", "landlord").expect(200);
+    saved = await Application.findById(appId).lean();
+    expect(saved?.status).toBe("scheduled");
+    expect(saved?.visitDate?.toISOString()).toBe("2027-10-14T17:00:00.000Z");
+    expect(saved?.proposedDate).toBeUndefined();
+  });
+
+  it("tras una visita pasada se puede proponer otra a cualquier hora", async () => {
+    await Application.updateOne({ _id: appId }, { status: "scheduled", visitDate: new Date(Date.now() - 24 * 3600 * 1000) });
+    await proposeAs(TENANT_ID, "tenant", appId, { visitDate: "2027-10-14T17:00:00.000Z" }).expect(200);
+  });
 });

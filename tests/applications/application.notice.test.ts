@@ -130,6 +130,28 @@ describe("Avisos por correo de solicitudes y visitas", () => {
     expect(calls[2][1]).toMatchObject({ kind: "scheduled", audience: "tenant", otherName: "Fincas Sol" });
   });
 
+  it("el inquilino cambia una visita concertada → el casero recibe un cambio de fecha con la visita anterior", async () => {
+    const before = new Date("2027-10-12T08:00:00.000Z");
+    const created = await Application.create({ propertyId, tenantId: TENANT, status: "scheduled", visitDate: before });
+    await request(app).post(`/api/applications/${created._id}/propose`).set("Authorization", await auth(TENANT, "tenant"))
+      .send({ visitDate: VISIT }).expect(200);
+    const calls = await waitForEmails(1);
+    expect(calls[0][0]).toBe("marta@test.com");
+    expect(calls[0][1]).toMatchObject({ kind: "proposed", audience: "manager" });
+    expect(calls[0][1].date?.toISOString()).toBe(VISIT);
+    expect(calls[0][1].previousDate?.toISOString()).toBe(before.toISOString());
+  });
+
+  it("proponer después de una visita ya pasada no es un cambio de fecha", async () => {
+    const created = await Application.create({
+      propertyId, tenantId: TENANT, status: "scheduled", visitDate: new Date(Date.now() - 24 * 3600 * 1000),
+    });
+    await request(app).post(`/api/applications/${created._id}/propose`).set("Authorization", await auth(OWNER, "landlord"))
+      .send({ visitDate: VISIT }).expect(200);
+    const calls = await waitForEmails(1);
+    expect(calls[0][1].previousDate).toBeUndefined();
+  });
+
   it("una propuesta rechazada (fecha pasada) no avisa a nadie", async () => {
     const created = await Application.create({ propertyId, tenantId: TENANT });
     await request(app).post(`/api/applications/${created._id}/propose`).set("Authorization", await auth(OWNER, "landlord"))
@@ -163,5 +185,14 @@ describe("applicationNoticeEmail", () => {
     expect(proposed.html).toContain("El propietario te propone visitar la vivienda");
     expect(proposed.html).toContain("Aceptar o proponer otra fecha");
     expect(proposed.html).not.toContain("solvencia");
+
+    const change = applicationNoticeEmail({
+      kind: "proposed", audience: "manager", link: "https://x/landlord", otherName: "Ana", propertyTitle: "Piso",
+      date, previousDate: new Date("2027-10-12T08:00:00.000Z"),
+    });
+    expect(change.subject).toBe("Cambio de visita: jueves, 14 de octubre a las 18:00");
+    expect(change.html).toContain("propone cambiar la visita");
+    expect(change.html).toContain("del <strong>martes, 12 de octubre a las 10:00</strong> al <strong>jueves, 14 de octubre a las 18:00</strong>");
+    expect(change.html).toContain("sigue en pie la del martes, 12 de octubre a las 10:00");
   });
 });

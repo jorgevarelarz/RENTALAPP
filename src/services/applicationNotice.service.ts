@@ -11,7 +11,8 @@ type Kind = ApplicationNoticeEmail['kind'];
  * Avisa por correo a la otra parte de una solicitud de visita:
  * - `received`: solicitud nueva → propietario y agencia gestora (`agencyAccess: 'manage'`);
  * - `proposed` / `scheduled`: si actúa el inquilino, al propietario y su agencia; si actúa el
- *   propietario, su agencia o un administrador, al inquilino.
+ *   propietario, su agencia o un administrador, al inquilino. Una propuesta sobre una visita
+ *   concertada futura se avisa como cambio de fecha (`previousDate`).
  * El enlace del casero abre el panel con los candidatos de ese inmueble. Nunca lanza.
  */
 export async function notifyApplication(kind: Kind, applicationId: unknown, actorId: unknown): Promise<void> {
@@ -23,9 +24,13 @@ export async function notifyApplication(kind: Kind, applicationId: unknown, acto
     const tenantActed = String(actorId) === String(app.tenantId);
     const date = kind === 'scheduled' ? app.visitDate : app.proposedDate;
     if (kind !== 'received' && !date) return;
+    // Proponer sobre una visita concertada que aún no ha llegado es pedir un cambio de fecha
+    const previousDate =
+      kind === 'proposed' && app.visitDate && app.visitDate.getTime() > Date.now() ? app.visitDate : undefined;
     const base = {
       kind,
       date: date || undefined,
+      previousDate,
       propertyTitle: property.title,
       propertyAddress: [property.address, property.city].filter(Boolean).join(', ') || undefined,
     };
