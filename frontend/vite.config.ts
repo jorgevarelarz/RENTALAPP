@@ -27,6 +27,9 @@ export default defineConfig(({ mode }) => {
       globals: true,
       setupFiles: './src/setupTests.ts',
       css: true,
+      // Con la máquina cargada, los tests con userEvent pasan de los 5 s por defecto
+      // sin estar rotos (AppShell, rondas 67 y 68). Un fallo real sigue fallando.
+      testTimeout: 15000,
     },
     define: {
       'process.env': JSON.stringify(publicEnv),
