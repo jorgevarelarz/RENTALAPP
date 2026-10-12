@@ -323,6 +323,12 @@ app.use('/api/policies', policyRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api', demoContractRoutes);
 app.use('/api', notifyRoutes);
+// Invitaciones de agencia a propietarios: acceso público por token (el invitado aún no tiene cuenta).
+// Invitación de co-titular: vista previa pública. Las tres van antes del primer
+// app.use('/api', authenticate, …): ese middleware corre en toda petición /api que llegue hasta él.
+app.get('/api/agency-invites/:token', asyncHandler(getInviteByToken));
+app.post('/api/agency-invites/:token/accept', authLimiter, asyncHandler(acceptInvite));
+app.get('/api/invites/preview', asyncHandler(getInvitePreview));
 app.use('/api', authenticate, postsignRouter);
 app.use('/api', tenantProRoutes);
 app.use('/api', tenantProMeRoutes);
@@ -343,11 +349,6 @@ app.use('/api/assistant', authenticate, requireVerified, aiLimiter, assistantRou
 // Contract-specific payments under /api/contracts require verificación
 app.use('/api/contracts', authenticate, requireVerified, contractPaymentsRoutes);
 app.use('/api/agency', authenticate, requireVerified, agencyRoutes);
-// Invitaciones de agencia a propietarios: acceso público por token (el invitado aún no tiene cuenta).
-app.get('/api/agency-invites/:token', asyncHandler(getInviteByToken));
-app.post('/api/agency-invites/:token/accept', authLimiter, asyncHandler(acceptInvite));
-// Invitación de co-titular: vista previa pública (antes de los routers montados en /api con authenticate).
-app.get('/api/invites/preview', asyncHandler(getInvitePreview));
 app.use('/api', paymentsRoutes);
 app.use('/api', authenticate, requireVerified, connectRoutes);
 app.use('/api', authenticate, requireVerified, serviceOfferRoutes);
