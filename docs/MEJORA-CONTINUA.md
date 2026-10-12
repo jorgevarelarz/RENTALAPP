@@ -1735,3 +1735,45 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: aviso de cobro a la agencia (Jorge), `/landlord/services` es un marcador, la ficha pública del profesional no tiene opiniones, adjuntos de chat públicos y `console.*` fuera del logger.
 
 **Siguiente mejora propuesta.** Revisar los controladores de contratos y pagos (`contract.controller`, `contract.payment.controller`, `payment.controller`): separar los 4xx deliberados de los 500 y pasar estos a `sendRouteError`, con un test por controlador del 500 sin mensaje interno.
+
+### Ronda 47 — 2026-10-12 05:50
+
+**Qué y por qué.** La mejora propuesta en la ronda 46, de seguridad. Los controladores de contratos y pagos devolvían `err.message` en sus 500, y alguno en `details`. Así podían llegar al cliente el error de Mongo (un `E11000` lleva el correo), el de Stripe o el del descifrado del IBAN (`No se pudo descifrar el IBAN: …`). Además, firmar e iniciar un pago respondían 400 a todo, también a los fallos internos.
+
+1. **`services/contract.actions.ts`**: cada error deliberado de `signContractAction` e `initiatePaymentAction` lleva ya su estado:
+   - 404 si el contrato no existe o el id está mal formado (antes, un id mal formado daba el `CastError` de Mongoose con 400);
+   - 403 si no estás autorizado o tu rol no puede;
+   - 409 si ya está firmado, el estado no permite firmar o no hay IBAN;
+   - 401 sin sesión.
+   
+   Mantienen el texto en español que enseña el frontend. El descifrado del IBAN y el «inquilino no encontrado» pasan a ser 500 sin mensaje.
+2. **Controladores** que usan ya `sendRouteError` con un código fijo por acción:
+   - `contract.controller`: PDF, firma (`contract_sign_failed`), solicitud de firma (antes daba `details`), listado y ficha. La sesión de Firma.dev mantiene su 502 «Error al conectar con Firma.dev» y anota el error en el logger;
+   - `contract.payment.controller` (`initiatePayment`);
+   - `contract.notify.controller` (recordatorio y renovación, que antes daban `details`);
+   - `contract.terminate` y `contract.lifecycle`: el 409 `invalid_transition` conserva `from` y `to`, y el 500 da `termination_failed` o `activation_failed`;
+   - `contract.signature.controller`: callback, inicio y estado de la firma, y registro de auditoría;
+   - `contract.cotenant.controller` (partes e invitaciones);
+   - `contract.payments.routes` (cobro con tarjeta guardada; el 402 `authentication_required` no cambia) y `payment.controller` (pago de un recibo; el frontend no leía el mensaje).
+
+**Commits.**
+- `ca7c819` Seguridad: los controladores de contratos y pagos ya no devuelven el mensaje interno en sus 500
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` de `tests/contracts`, `tests/security`, `tests/unit/routeError.test.ts` y `src/__tests__`: 40 suites y 184 tests OK. Hay un test nuevo, `tests/security/contract.errors.test.ts`, con 6 casos:
+  - un fallo de Stripe al iniciar el pago da exactamente `{ error: 'payment_init_failed', code: 500 }`;
+  - un contrato inexistente o un id mal formado dan 404, y otro inquilino 403 con su mensaje;
+  - firmar dos veces da 409 «El arrendador ya ha firmado este contrato», y un id mal formado da 404;
+  - un fallo de Mongo al firmar da `contract_sign_failed`;
+  - el listado y el recordatorio dan su código fijo sin el correo del error;
+  - terminar dos veces da 409 con `from` y `to`, y un fallo interno da `termination_failed`.
+- e2e (`npm run test:e2e`): 10/10.
+- Frontend (sin cambios): `npm --prefix frontend run build` OK y `npm --prefix frontend test` con 39 ficheros y 145 tests OK.
+- GitNexus: `impact` de `signContractAction` e `initiatePaymentAction` dio riesgo bajo (un llamador cada una). `detect_changes` marca «crítico» porque por estos controladores pasan 47 flujos, pero el cambio está en sus `catch` y en la comprobación del id. El camino normal no cambia, y las suites de contratos lo cubren.
+
+**Qué queda.**
+- Siguen devolviendo `e.message` en un 500: `admin.controller` (12 sitios), `policy.controller`, `taxReport.controller`, `institution.controller`, `requireVerified`, `testingInbound` y `clauses.controller`. Los de subida (`upload`, `tenantPro`) son errores de multer con 400, a propósito.
+- Muchos `console.error` en controladores de contratos siguen fuera del logger (por ejemplo, `create` y el historial).
+- Pendientes anteriores: aviso de cobro a la agencia (Jorge), `/landlord/services` es un marcador, la ficha pública del profesional no tiene opiniones, adjuntos de chat públicos.
+
+**Siguiente mejora propuesta.** Hace tres rondas que no se toca la interfaz. La 48 debería dedicarse a ella: `/landlord/services` («Servicios»), que es un marcador de dos líneas, o las opiniones en la ficha pública del profesional. Los 500 de `admin`, `policy`, `taxReport` e `institution` (rutas de administración, de menor exposición) pueden ir en la siguiente ronda de seguridad.
