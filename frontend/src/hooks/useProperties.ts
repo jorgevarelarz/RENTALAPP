@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { searchProperties, type SearchParams } from '../services/properties';
 import type { PropertyListResponse } from '../types/property';
@@ -17,7 +17,6 @@ function toBool(v: string | null | undefined): boolean | undefined {
 
 export function usePropertyFilters() {
   const [sp, setSp] = useSearchParams();
-  const navigate = useNavigate();
 
   const filters: SearchParams & { onlyTenantPro?: boolean } = useMemo(() => ({
     q: sp.get('q') || undefined,
@@ -39,23 +38,19 @@ export function usePropertyFilters() {
     onlyTenantPro: toBool(sp.get('onlyTenantPro')),
   }), [sp]);
 
+  // Una sola entrada en el historial por búsqueda; un interruptor apagado (false) no filtra
   const setFilters = (next: Partial<SearchParams & { onlyTenantPro?: boolean }>) => {
     const merged = { ...filters, ...next, page: next.page ?? 1 };
     const obj: Record<string, string> = {};
     Object.entries(merged).forEach(([k, v]) => {
-      if (v === undefined || v === null || v === '') return;
+      if (v === undefined || v === null || v === '' || v === false) return;
       obj[k] = String(v);
     });
-    setSp(obj, { replace: false });
-    // ensure we stay on the same route
-    navigate({ search: '?' + new URLSearchParams(obj).toString() }, { replace: false });
+    setSp(obj);
   };
 
   // Quita todos los filtros (setFilters mezcla con los actuales, así que no sirve para borrarlos)
-  const clearFilters = () => {
-    setSp({}, { replace: false });
-    navigate({ search: '' }, { replace: false });
-  };
+  const clearFilters = () => setSp({});
 
   return { filters, setFilters, clearFilters };
 }

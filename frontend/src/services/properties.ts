@@ -21,7 +21,7 @@ export type SearchParams = {
   nearLng?: number;
   nearLat?: number;
   maxKm?: number;
-  sort?: 'price' | 'createdAt' | 'views';
+  sort?: 'price' | 'createdAt' | 'viewsCount';
   dir?: 'asc' | 'desc';
   page?: number;
   limit?: number;
