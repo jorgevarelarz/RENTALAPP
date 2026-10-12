@@ -1848,7 +1848,7 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 
 **Siguiente mejora propuesta.** Dos rondas seguidas de backend (47 y 49, con la 48 de interfaz). La 50 debería ser de interfaz. Candidatas: las pantallas de administración (`AdminCompliancePage`, `ComplianceDashboard`, que siguen con clases sueltas tipo `border-gray-300` fuera del sistema 2026), o el paso del inquilino a `/tenant/kyc` desde una invitación de co-titular.
 
-### Ronda 50 — 2026-10-12 07:40
+### Ronda 50 — 2026-10-12 07:25
 
 **Qué y por qué.** Ronda de interfaz, como proponía la 49 (dos rondas seguidas de backend). Elegí la ficha pública del anuncio (`/properties/:id`): es la pantalla que más ve un inquilino y ninguna ronda la había tocado. Además del estilo antiguo (degradado azul-índigo en el botón, iconos en círculos grises, verde y azul sueltos), tenía fallos:
 
