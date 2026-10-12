@@ -10,6 +10,7 @@ import { useAuth } from '../context/AuthContext';
 import navConfig from '../config/nav.config.json';
 import Breadcrumbs from '../components/Breadcrumbs';
 import Brand from '../components/Brand';
+import { roleHome } from '../utils/roleHome';
 import Drawer from '../components/ui/Drawer';
 import { listConversations } from '../services/chat';
 
@@ -84,12 +85,7 @@ function UnreadBadge({ count }: { count: number }) {
 
 function Header({ unread, menuOpen, onOpenMenu }: { unread: number; menuOpen: boolean; onOpenMenu: () => void }) {
   const { user, logout } = useAuth();
-  const roleHome = user?.role === 'tenant' ? '/tenant'
-    : user?.role === 'landlord' ? '/landlord'
-    : user?.role === 'pro' ? '/pro'
-    : user?.role === 'admin' ? '/admin'
-    : user?.role === 'agency' ? '/agency'
-    : '/';
+  const home = roleHome(user?.role);
   return (
     <header className="ra-app-header">
       <div className="ra-app-header-inner">
@@ -104,7 +100,7 @@ function Header({ unread, menuOpen, onOpenMenu }: { unread: number; menuOpen: bo
           <Menu size={18} />
           {unread > 0 && <span className="ra-app-menu-dot" aria-hidden="true" />}
         </button>
-        <Brand to={roleHome} />
+        <Brand to={home} />
         <nav className="hidden md:flex items-center gap-1 text-sm ml-2">
           {user && (
             <Link to="/inbox" className="ra-app-inbox">
@@ -120,7 +116,7 @@ function Header({ unread, menuOpen, onOpenMenu }: { unread: number; menuOpen: bo
           {!user ? (
             <>
               <Link to="/login" className="ra-app-login">Entrar</Link>
-              <Link to="/register" className="hidden sm:inline-flex ra-button ra-button-blue ra-button-small">Crear cuenta</Link>
+              <Link to="/register" className="ra-button ra-button-blue ra-button-small ra-app-register">Crear cuenta</Link>
             </>
           ) : (
             <>
@@ -228,6 +224,11 @@ function MobileNav({ open, onClose, unread }: { open: boolean; onClose: () => vo
         </div>
         <NavSections unread={unread} onNavigate={onClose} />
         {user?.email && <div className="ra-mobile-nav-foot">{user.email}</div>}
+        {!user && (
+          <Link to="/register" onClick={onClose} className="ra-button ra-button-blue ra-mobile-nav-register">
+            Crear cuenta
+          </Link>
+        )}
       </div>
     </Drawer>
   );
