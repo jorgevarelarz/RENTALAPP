@@ -1328,3 +1328,10 @@ Rules:
 - `property.controller`: `apply` accepts optional `message` via exported `cleanApplicationMessage` (string only, control chars stripped, ≤2 consecutive newlines, trimmed, max `APPLICATION_MESSAGE_MAX` 1000 → 400 `invalid_message`/`message_too_long` before creating). `_application.message` in `getById`; `listMyApplications` returns `message`; `listApplications` malformed id → 404.
 - Frontend: `applyToProperty(id, message?)`; `PropertyDetail` textarea in `ApplyBlock` (tenant signed in), «Tu mensaje» after sending; mobile sticky button scrolls/focuses the field instead of applying.
 - Verification: tsc clean; Jest `--runInBand` 9 suites/42 (new `tests/properties/property.apply.test.ts`); frontend build + 171 tests; Playwright `/tmp/ra-shots52`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 53: tenant applications page + visit date checks
+
+- `application.controller`: `proposeVisit` 400 `visit_date_in_past` (1 min slack), 409 `application_closed` if rejected; `acceptProposedVisit` 409 `proposed_date_passed`, `application_closed`; malformed id 404 on both.
+- Frontend: `pages/tenant/Applications.tsx` rebuilt (2026) with `utils/tenantApplications.ts` (`applicationStatus`, `canAccept`, `canPropose`, `localDateTimeMin`, `visitError`); tenant counter-proposal now sent as ISO (was zone-less → stored 2 h late). `ApplicantsModal` maps the new codes, `min` on its picker.
+- Verification: tsc clean; Jest `--runInBand` 10 suites/60; frontend build + 177 tests (new `pages/tenant/__tests__/Applications.test.tsx`); Playwright `/tmp/ra-shots53`.
+

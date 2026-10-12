@@ -39,6 +39,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 44**: `POST /api/pros` solo admite cuentas `pro` (desde la ronda 45, tampoco se pueden asignar a una incidencia perfiles de cuentas que no sean `pro`). Los perfiles profesionales que ya hubieran creado inquilinos o caseros siguen en la base y en el directorio. Conviene buscarlos con una consulta de solo lectura (los `pros` cuyo `userId` no sea de un usuario con `role: 'pro'`) y decidir si se desactivan (`active: false`). Además, los nombres y ciudades guardados antes no se han limpiado.
 - **Opiniones de profesionales (ronda 48)**: al cerrarse una incidencia, el propietario y el inquilino que la abrió pueden valorar al profesional (1 a 5 y comentario). La opinión sale en su ficha pública con el nombre y la inicial del apellido («Laura M.»). Tres decisiones: (1) ¿vale ese formato de nombre o debe ser anónima? (2) No hay forma de denunciar ni de retirar una opinión, ni de que el profesional responda; ¿hace falta moderación antes de abrir? (3) Pueden opinar los dos (propietario e inquilino) sobre la misma incidencia; ¿solo quien paga?
 - **Al desplegar la ronda 50**: `GET /api/properties` y `GET /api/properties/:id` dejan de devolver `owner`, `agencyId`, `refAgencyId`, `agencyAccess`, `agencyTransferredAt` e `history` a quien no gestiona el inmueble (el dueño, su agencia y el administrador los siguen viendo). Solicitar visita a un borrador o a un anuncio retirado da ya 404. Una decisión: la ficha pública enseña la calle y el número (`address`) a cualquiera, también sin sesión, y el mapa marca el punto exacto. Idealista permite ocultar el número y Airbnb da la zona hasta reservar. ¿Debe la dirección exacta verse solo tras concertar la visita?
+- **Al desplegar la ronda 53**: las fechas que los inquilinos propusieron antes desde «Solicitudes» se guardaron con la hora desplazada (2 h tarde en verano y 1 h en invierno), el mismo fallo que la ronda 23 corrigió para el casero. Conviene revisarlas con una consulta de solo lectura (`db.applications.find({proposedBy:'tenant', proposedDate:{$gt:new Date()}})`). Además, proponer una fecha pasada da 400, aceptar una propuesta cuya hora ya pasó da 409 y una solicitud `rejected` no admite cambios. Ningún flujo pasa hoy una solicitud a `rejected`: el casero no tiene forma de descartar a un candidato. ¿Debe tenerla, y avisar al inquilino?
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -1982,3 +1983,55 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 - Pendientes anteriores: dirección exacta visible para todos, aviso de cobro a la agencia y moderación de opiniones (Jorge); `pages/Favorites.tsx` es código muerto; la página «Favoritos» necesita el pase 2026; `/landlord/services` es un marcador.
 
 **Siguiente mejora propuesta.** «Mis solicitudes» del inquilino al sistema 2026: tarjeta con foto, estado en español, fechas es-ES, «Tu mensaje», acciones con su error (aceptar o proponer fecha sin `try/catch` dejan la promesa rechazada) y test de la página.
+
+### Ronda 53 — 2026-10-12 08:05
+
+**Qué y por qué.** Es la mejora que proponía la ronda 52: «Solicitudes» del inquilino (`/tenant/applications`). Al revisarla salió un fallo de datos más grave que la apariencia:
+
+1. **Hora desplazada en la contrapropuesta del inquilino.** La página mandaba el valor del `datetime-local` sin zona («2026-10-16T18:00») y el servidor, en UTC, lo guardaba 2 h tarde en verano. Es el mismo fallo que la ronda 23 corrigió en el modal del casero. Ahora se manda el instante en ISO.
+2. **Backend de visitas (`application.controller`).**
+   - Proponer una fecha pasada (con un minuto de margen) da 400 `visit_date_in_past`.
+   - Aceptar una propuesta cuya hora ya pasó da 409 `proposed_date_passed`. Antes quedaba una visita «concertada» en el pasado.
+   - Una solicitud `rejected` no admite propuestas ni aceptarlas (409 `application_closed`). Antes el inquilino podía reabrirla proponiendo fecha.
+   - Un id mal formado da 404 en `propose` y `accept` (antes, 500 por `CastError`).
+   - Los tests usaban fechas de octubre de 2026 que ya habían pasado. Ahora son de 2027.
+3. **Interfaz (`pages/tenant/Applications.tsx`, nuevo `utils/tenantApplications.ts`).** Antes tenía estilos en línea, «aun» sin tilde y fechas sin locale. Además:
+   - pintaba el estado de la solicitud con `ContractStatusBadge`, la pastilla de estados de contrato;
+   - tenía botones verde y azul sueltos;
+   - aceptar o proponer no capturaban el error (la promesa quedaba rechazada sin aviso);
+   - el mensaje no se mostraba.
+
+   Ahora es una lista en tarjeta, como «Contratos»:
+   - foto (o un hueco gris sin icono de relleno), título enlazado a la ficha, dirección y «1450 € /mes»;
+   - una línea de estado en español: «El propietario te propone visitarlo el jueves, 15 de octubre a las 18:00», «Has propuesto…», «Visita concertada…», «La fecha que te propusieron ya pasó. Propón otra.» o «El propietario ha seguido con otros candidatos»;
+   - «Tu mensaje»;
+   - acciones según el caso: «Aceptar visita», «Proponer otra fecha» (formulario en la tarjeta, sin fechas pasadas), «Firmar contrato» o «Ver contrato» y «Escribir al propietario». El modal «Detalle de la visita» desaparece, porque repetía lo que ya está en la tarjeta;
+   - los errores salen en la tarjeta, en español.
+4. **`ApplicantsModal` (casero)**: traduce los tres códigos nuevos y su selector tampoco admite fechas pasadas.
+
+**Commits.**
+- `a6cc885` Visitas: fecha pasada 400, propuesta caducada 409, solicitud descartada 409, id mal formado 404
+- `4c59cde` Interfaz: «Solicitudes» del inquilino al sistema 2026; la fecha va en ISO y los errores se muestran
+- `890d907` Interfaz: el modal de candidatos traduce los códigos nuevos y no admite fechas pasadas
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. `tests/applications/visit-proposal.test.ts` tiene 5 casos nuevos: fecha pasada, id mal formado, solicitud descartada, propuesta caducada y la contrapropuesta del inquilino aceptada por el casero con su hora exacta. Jest `--runInBand` de `tests/applications`, `tests/agency` y `tests/properties`: 10 suites y 60 tests OK.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 46 ficheros y 177 tests OK. El nuevo `pages/tenant/__tests__/Applications.test.tsx` tiene 6 casos:
+  - estados y mensaje;
+  - propuesta caducada sin «Aceptar»;
+  - aceptar y recargar, y el error 409;
+  - la propuesta en ISO;
+  - fecha pasada sin enviar y el error del servidor;
+  - lista vacía y fallo de carga.
+  
+  Tras el último cambio de `ApplicantsModal`, sus tests, los de `AgencyProperties` y `LandlordDashboard` (3 ficheros, 8 tests) y el build pasan.
+- Playwright (vite local, `/api/*` simulado) a 1280 y 390 px, en `/tmp/ra-shots53`: lista con los cinco estados y el formulario de proponer. No hay desbordamiento horizontal. «18:00» del 2 de abril de 2030 se envía como `2030-04-02T16:00:00.000Z` (Madrid, UTC+2).
+- GitNexus: `impact` dio riesgo bajo en `proposeVisit`, `acceptProposedVisit` y `TenantApplications`. `detect_changes` da riesgo «medio» por los dos flujos `TenantApplications → ContractStatusBadge`, que son justo los que se quitan a propósito.
+
+**Qué queda.**
+- El casero no puede descartar a un candidato (nada pasa una solicitud a `rejected`) ni recibe aviso de una solicitud nueva. Anotado en «Para Jorge» si debe existir.
+- Una visita concertada no se puede cambiar desde la página (el backend lo admite, la interfaz no lo ofrece).
+- Pendientes anteriores: dirección exacta visible para todos, aviso de cobro a la agencia y moderación de opiniones (Jorge); `pages/Favorites.tsx` es código muerto; la página «Favoritos» necesita el pase 2026; `/landlord/services` es un marcador.
+
+**Siguiente mejora propuesta.** Avisar al casero (o a la agencia gestora) de una solicitud nueva, con un correo que use el sistema de avisos de la ronda 42 y lleve el mensaje del inquilino. Si no hay SMTP, que quede en el log. Hoy solo la ve si abre el panel.
+
