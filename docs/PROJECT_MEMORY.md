@@ -1403,3 +1403,10 @@ Rules:
 - `ui/Button`: `.ra-btn*` classes in `@layer components` (no inline styles), default `type="button"`, exported `buttonClassName()` for Links. Removed dead `pages/Login.tsx`, `pages/TenantDashboard.tsx`, `components/dashboard/ActiveContractWidget.tsx`. Landlord «Borrar» toasts on failure.
 - `pages/Earnings.tsx`: removed fake «+850 €» activity, «~5.4 %» and «100 % cobrado»; real stats only, 6-month chart with empty months (`lastSixMonths`), error + retry, link to `/landlord/payments`; breadcrumb «Ingresos».
 - Verification: frontend tsc + build OK, 58 files/235 tests (new Button 3, Earnings 5); Playwright `/tmp/ra-shots65`. Backend untouched.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 67: dependency audit + accent-insensitive ticket search
+
+- Root `npm audit fix` (no --force) + `nodemailer` ^10.1.0 (Node >=20) + removed global `brace-expansion` override (was vulnerable and broke minimatch 3): `npm audit --omit=dev` → 0. Frontend: axios, react-router 7.18.4, postcss. Remaining: dev-only majors (Jest 30, vitest 5, Tailwind 4, ts-node-dev).
+- `ticket.routes.ts` title search uses `accentInsensitivePattern` (own `escapeRegExp` removed).
+- Verification: tsc clean; Jest `--runInBand` all 97 suites pass in two batches (single process OOMs at 2 GB after 69 suites); frontend build OK, 237 tests OK (AppShell timeout under load, passes alone).
+

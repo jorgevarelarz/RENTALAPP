@@ -43,6 +43,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Avisos de solicitudes y visitas (ronda 54)**: una solicitud nueva avisa por correo al propietario y a la agencia gestora (`agencyAccess: 'manage'`), con el nombre del inquilino, su mensaje y si tiene la solvencia verificada. Proponer o aceptar fecha avisa a la otra parte. Si la agencia propone o acepta, el inquilino ve el nombre de la agencia; si lo hace el administrador, no se da su nombre. Dos decisiones: (1) ¿debe enterarse también el propietario cuando su agencia concierta una visita? Hoy no. (2) Sin SMTP en producción, estos correos solo quedan en el log.
 - **Cambio de visita (ronda 56)**: cuando una parte propone otra hora para una visita ya concertada, la visita concertada sigue en pie hasta que la otra parte acepte la nueva. Si nadie responde, se mantiene la primera. ¿Es la regla que quieres, o proponer un cambio debe anular la visita? Tampoco hay forma de cancelar una visita sin proponer otra fecha.
 - **Al desplegar la ronda 63**: la purga de documentos Tenant PRO pasa a ejecutarse cada día a las 03:45. La primera noche borrará del disco y de la base todos los documentos subidos hace más de `TENANT_PRO_DOCS_TTL_DAYS` días (365 si no está puesta); de cada uno queda en `auditTrail` el tipo, el hash y el estado de la revisión. El estado verificado del inquilino no cambia. Es lo que prometen la política de privacidad y la pantalla de Tenant PRO, pero borra datos: si quieres saber antes cuántos son, consulta de solo lectura `db.users.countDocuments({'tenantPro.docs': {$elemMatch: {uploadedAt: {$lt: new Date(Date.now() - 365*864e5)}}}})`. Con varias réplicas, el job correría en cada una (igual que los demás jobs); es inocuo, pero repetido.
+- **Al desplegar la ronda 67**: cambian dependencias de ejecución (express 4.22, qs, proxy-addr, nodemailer 10.1, axios), así que hay que reinstalar con `npm ci` en el servidor, no sincronizar solo ficheros sueltos. nodemailer 10 exige Node 20 o superior: el Dockerfile ya usa `node:20`, pero conviene confirmar `node -v` en el VPS antes. Node 20 está ya sin soporte (auditoría de seguridad); pasar a Node 22/24 es decisión tuya.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -2593,3 +2594,37 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: «Ingresos» fuera del menú del casero; el corazón del listado sin sesión no se guarda solo al volver; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; `ticket.routes.ts` conserva su propio `escapeRegExp`.
 
 **Siguiente mejora propuesta.** Toca backend, tras tres rondas de interfaz: unificar `ticket.routes.ts` con `utils/searchRegex` y repasar `npm audit` de la raíz (4 avisos altos), actualizando solo lo que no rompa. Si se sigue con la interfaz: pasar `ui/Input` y `Select` a clases 2026 y quitar el CSS muerto de la plantilla.
+
+### Ronda 67 — 2026-10-12 17:00
+
+**Qué y por qué.** Tras tres rondas de interfaz, toca backend y seguridad, como proponía la ronda 66. `npm audit` de la raíz ya no daba 4 avisos sino 49 (3 críticos), varios en dependencias que se ejecutan en producción.
+
+1. **Dependencias sin vulnerabilidades en producción.**
+   - `npm audit fix` sin `--force` sube `express` 4.22.2 → `body-parser`/`qs` 6.16 (DoS), `proxy-addr` 2.0.8 (crítico: suplantación de IP con IPv6 mapeado; la app usa `trust proxy`, aunque con número de saltos y no por subred), `axios` 1.20 (vía twilio) y `shell-quote` (vía `concurrently`, solo desarrollo).
+   - `nodemailer` 9.0.3 → 10.1.0: siete avisos altos sin arreglo en la rama 9, entre ellos envío a un dominio del atacante saltándose la lista de dominios y DoS del analizador de direcciones. El changelog de la 10 solo rompe por exigir Node 20; producción y Docker usan Node 20. Se comprobó que `require('nodemailer').createTransport` sigue existiendo con la importación por defecto de `src/utils/email.ts` y que envía un correo de prueba con `jsonTransport`.
+   - **Fallo de paso:** `overrides` fijaba `brace-expansion` en 5.0.9 para todo el árbol. Esa versión es vulnerable y además imponía la API nueva a `minimatch` 3, que fallaba con `TypeError: expand is not a function` en cuanto un patrón llevaba llaves (`**/*.{ts,js}`). Se quita el override. Ahora cada `minimatch` usa la versión que pide (1.1.21 y 2.1.7, sin avisos). `archiver` (exportación ZIP de la auditoría) sigue generando ZIP con `glob`.
+   - Frontend: `axios` 1.20, `react-router`/`react-router-dom` 7.17 → 7.18.4 y `postcss` 8.5.29.
+   - Resultado: `npm audit --omit=dev` de la raíz da **0 vulnerabilidades** (antes 49 en total; ahora 36, todas de desarrollo). En el frontend, de 18 se pasa a 10: quedan Tailwind 3 (solo al compilar; el arreglo es Tailwind 4) y vitest 4 → 5.
+2. **Búsqueda de incidencias sin distinguir tildes.** `ticket.routes.ts` tenía su propio `escapeRegExp` y buscaba el título tal cual: «salon» no encontraba «Enchufe del salón», aunque la búsqueda por servicio sí ignoraba tildes. Ahora usa `accentInsensitivePattern` de `utils/searchRegex`, que también escapa el texto. No quedan más copias de `escapeRegExp` en `src`.
+
+**Commits.**
+- `52e0779` Dependencias: 0 vulnerabilidades en producción
+- `d652249` Incidencias: la búsqueda por título no distingue tildes
+- Docs: este registro
+
+**Verificación (resultados reales).**
+- **Backend.**
+  - `npx tsc --noEmit`: sin errores.
+  - Jest `--runInBand` de toda la suite (97 ficheros). En un solo proceso, tras 69 suites que pasaron, Node se quedó sin memoria (montón de 2 GB, `FATAL ERROR: Reached heap limit`), con la máquina a carga 120-146 por otros procesos. Las 28 restantes, más `ticket.list` otra vez con el test nuevo, en una segunda tanda: 29 suites y 98 tests OK. En total, las 97 suites pasan.
+  - Test nuevo en `tests/escrow/ticket.list.test.ts`: «salon» y «SALÓN» encuentran «Enchufe del salón (2)»; el test de `(2)` como texto sigue pasando.
+- **Frontend.**
+  - `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`: 236 de 237 OK. Falló `AppShell.test.tsx` por timeout de 5 s; repetido solo, pasa en 1,6 s (era la carga de la máquina, no react-router).
+- **GitNexus.** El índice es del repo canónico y no tiene `buildListFilter`, así que el impacto se revisó con grep: un solo uso, `listMine`. `detect_changes`: riesgo bajo, sin flujos afectados.
+
+**Qué queda.**
+- Avisos de desarrollo con salto mayor: Jest 29 → 30 (con `@types/jest` y `ts-jest`), vitest 4 → 5, Tailwind 3 → 4 (reescribe la configuración; no es un lote pequeño) y `ts-node-dev`, sin arreglo (se podría cambiar por `tsx watch`).
+- La suite del backend en un solo proceso agota 2 GB de memoria. Conviene `workerIdleMemoryLimit` en `jest.config` o `--logHeapUsage` para encontrar la fuga; CI la ejecuta de otra forma y no lo ha notado.
+- Pendientes anteriores: «Ingresos» fuera del menú del casero; el corazón del listado sin sesión no se guarda solo al volver; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; `ui/Input` y `Select` con estilos en línea y CSS muerto de la plantilla en `index.css`.
+
+**Siguiente mejora propuesta.** Cambiar `ts-node-dev` por `tsx watch` en `npm run dev` (quita el último aviso alto sin arreglo) y poner `workerIdleMemoryLimit` en `jest.config` para que la suite completa termine en un solo comando. Si se vuelve a la interfaz: `ui/Input` y `Select` a clases 2026 y fuera el CSS muerto de la plantilla.
