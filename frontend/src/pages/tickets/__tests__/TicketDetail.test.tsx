@@ -7,10 +7,12 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import * as ticketService from '../../../services/tickets';
 import * as proService from '../../../services/pros';
 import * as appointmentService from '../../../services/appointments';
+import * as reviewService from '../../../services/reviews';
 
 vi.mock('../../../services/tickets');
 vi.mock('../../../services/pros');
 vi.mock('../../../services/appointments');
+vi.mock('../../../services/reviews');
 vi.mock('../../../components/ChatPanel', () => ({
   default: () => <div data-testid="chat-panel">Chat Mock</div>,
 }));
@@ -189,5 +191,33 @@ describe('TicketDetail Component', () => {
     expect(screen.queryByRole('button', { name: /Cerrar incidencia/i })).not.toBeInTheDocument();
     userEvent.click(validate);
     await waitFor(() => expect(ticketService.validateTicket).toHaveBeenCalledWith('ticket123'));
+  });
+
+  test('LANDLORD: valora al profesional al cerrarse la incidencia', async () => {
+    const closed = { ...mockTicket, status: 'closed', proId: 'pro1', pro: { displayName: 'Fontanería Ruiz' } };
+    let sent = false;
+    (ticketService.getTicket as Mock).mockImplementation(async () => (sent
+      ? { ...closed, proReview: { canReview: false, mine: { score: 4, comment: 'Muy limpio' } } }
+      : { ...closed, proReview: { canReview: true, mine: null } }));
+    (reviewService.reviewTicketPro as Mock).mockImplementation(async () => { sent = true; return {}; });
+
+    renderWithContext(<TicketDetail />, 'landlord');
+
+    const send = await screen.findByRole('button', { name: 'Enviar opinión' });
+    expect(send).toBeDisabled();
+    await userEvent.click(screen.getByLabelText('4 de 5: Muy bien'));
+    await userEvent.type(screen.getByLabelText(/Comentario/), 'Muy limpio');
+    await userEvent.click(send);
+
+    await waitFor(() => expect(reviewService.reviewTicketPro).toHaveBeenCalledWith('ticket123', 'pro1', 4, 'Muy limpio'));
+    expect(await screen.findByText('Tu opinión sobre Fontanería Ruiz')).toBeInTheDocument();
+    expect(screen.getByRole('img', { name: '4 de 5' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Enviar opinión' })).not.toBeInTheDocument();
+  });
+
+  test('Una incidencia cerrada sin opción de valorar dice que está cerrada', async () => {
+    (ticketService.getTicket as Mock).mockResolvedValue({ ...mockTicket, status: 'closed', proId: 'pro1' });
+    renderWithContext(<TicketDetail />, 'pro');
+    expect(await screen.findByText('Esta incidencia está cerrada.')).toBeInTheDocument();
   });
 });

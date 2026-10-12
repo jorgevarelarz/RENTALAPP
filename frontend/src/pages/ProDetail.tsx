@@ -5,6 +5,7 @@ import { getPro } from '../services/pro';
 import Card from '../components/ui/Card';
 import { formatEuros, getServiceLabel } from '../utils/tickets';
 import { proRatingText } from '../utils/pros';
+import ProReviews from '../components/pro/ProReviews';
 
 const ProDetail: React.FC = () => {
   const { id } = useParams();
@@ -38,6 +39,7 @@ const ProDetail: React.FC = () => {
           </ul>
         )}
       </Card>
+      <ProReviews proProfileId={String(pro._id)} ratingAvg={pro.ratingAvg} reviewCount={pro.reviewCount} />
     </div>
   );
 };

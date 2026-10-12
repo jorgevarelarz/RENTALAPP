@@ -15,6 +15,7 @@ import {
 import { proposeAppointment as proposeAppt, acceptAppointment, rejectAppointment } from "../../services/appointments";
 import ChatPanel from "../../components/ChatPanel";
 import ProPicker from "../../components/pro/ProPicker";
+import ProReviewForm from "../../components/pro/ProReviewForm";
 import { useAuth } from "../../context/AuthContext";
 import { useNotify } from "../../utils/notify";
 import Card from "../../components/ui/Card";
@@ -239,6 +240,24 @@ export default function TicketDetail() {
       <Button key="resolve" disabled={busy} onClick={() => handleAction(() => resolveTicket(ticket._id), "Incidencia cerrada")} className="w-full">
         Confirmar que está arreglado
       </Button>
+    );
+  }
+
+  // Propietario o inquilino: valorar al profesional cuando la incidencia se cierra
+  if (status === "closed" && ticket.proId && ticket.proReview && (ticket.proReview.canReview || ticket.proReview.mine)) {
+    actions.push(
+      <ProReviewForm
+        key="review"
+        ticketId={ticket._id}
+        proUserId={ticket.proId}
+        proName={proName}
+        canReview={ticket.proReview.canReview}
+        mine={ticket.proReview.mine}
+        onSaved={async () => {
+          push("success", "Gracias por tu opinión");
+          await reload();
+        }}
+      />
     );
   }
 
