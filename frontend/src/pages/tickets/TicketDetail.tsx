@@ -169,8 +169,8 @@ export default function TicketDetail() {
       <div key="quote" className="space-y-3">
         <p className={sectionTitle}>{ticket.quote ? "Actualizar presupuesto" : "Enviar presupuesto"}</p>
         <div className="flex gap-2">
-          <Input type="number" min={1} placeholder="€" aria-label="Importe en euros" value={amount || ''} onChange={e => setAmount(Number(e.target.value))} className="w-24" />
-          <Input placeholder="Nota (opcional)" value={note} onChange={e => setNote(e.target.value)} className="flex-1" />
+          <Input type="number" min={1} placeholder="€" aria-label="Importe en euros" value={amount || ''} onChange={e => setAmount(Number(e.target.value))} containerClassName="w-28 shrink-0" />
+          <Input placeholder="Nota (opcional)" value={note} onChange={e => setNote(e.target.value)} containerClassName="flex-1" />
         </div>
         <Button onClick={() => handleAction(() => sendQuote(ticket._id, amount, note), "Presupuesto enviado")} disabled={!amount || busy} className="w-full">
           Enviar presupuesto
@@ -185,10 +185,9 @@ export default function TicketDetail() {
         <p className={`${sectionTitle} flex items-center gap-2`}>
           <Calendar size={16} aria-hidden="true" /> {appointment ? "Proponer otra fecha" : "Proponer cita"}
         </p>
-        <input
+        <Input
           type="datetime-local"
           aria-label="Fecha y hora de la cita"
-          className="w-full rounded-lg border border-[var(--border)] p-2 text-sm"
           value={when}
           onChange={(e) => setWhen(e.target.value)}
         />

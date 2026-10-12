@@ -6,6 +6,7 @@ import { createContract } from '../../services/contracts';
 import { getProperty } from '../../services/properties';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
 import Card from '../../components/ui/Card';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import {
@@ -50,7 +51,6 @@ const tomorrow = () => {
 };
 
 const STEPS = ['Condiciones', 'Cláusulas', 'Revisar'];
-const SELECT = 'auth-input';
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -245,20 +245,17 @@ export default function ContractWizard() {
                 value={draft.startDate}
                 onChange={(e) => set('startDate', e.target.value)}
               />
-              <label style={{ display: 'grid', gap: 6 }}>
-                <span style={{ fontSize: 12, color: 'var(--muted)' }}>Duración</span>
-                <select
-                  className={SELECT}
-                  value={draft.durationYears}
-                  onChange={(e) => set('durationYears', Number(e.target.value))}
-                >
-                  {[1, 2, 3, 4, 5].map((y) => (
-                    <option key={y} value={y}>
-                      {y} {y > 1 ? 'años' : 'año'}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <Select
+                label="Duración"
+                value={draft.durationYears}
+                onChange={(e) => set('durationYears', Number(e.target.value))}
+              >
+                {[1, 2, 3, 4, 5].map((y) => (
+                  <option key={y} value={y}>
+                    {y} {y > 1 ? 'años' : 'año'}
+                  </option>
+                ))}
+              </Select>
             </div>
             <p className="text-sm text-gray-500">Termina el {formatDate(endDate)}. Después se prorroga por años.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
@@ -295,8 +292,7 @@ export default function ContractWizard() {
                 <label className="mt-3 ml-7 flex items-center gap-3 text-sm text-gray-700">
                   Hasta
                   <select
-                    className={SELECT}
-                    style={{ width: 'auto' }}
+                    className="ra-input w-auto"
                     value={draft.petsLimit}
                     onChange={(e) => set('petsLimit', Number(e.target.value))}
                     aria-label="Número máximo de mascotas"
@@ -327,8 +323,7 @@ export default function ContractWizard() {
               <label className="flex flex-wrap items-center gap-3 text-sm text-gray-700">
                 <span className="font-medium text-gray-900">Días de margen para pagar la renta</span>
                 <select
-                  className={SELECT}
-                  style={{ width: 'auto' }}
+                  className="ra-input w-auto"
                   value={draft.graceDays}
                   onChange={(e) => set('graceDays', Number(e.target.value))}
                 >

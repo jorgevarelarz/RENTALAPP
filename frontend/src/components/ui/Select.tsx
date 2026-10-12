@@ -1,25 +1,18 @@
 import React from 'react';
 
-type Props = React.SelectHTMLAttributes<HTMLSelectElement> & { label?: string };
+type Props = React.SelectHTMLAttributes<HTMLSelectElement> & {
+  label?: string;
+  /** Clases del contenedor; className va al propio desplegable */
+  containerClassName?: string;
+};
 
-const Select: React.FC<Props> = ({ label, children, style, ...rest }) => (
-  <label style={{ display: 'grid', gap: 6 }}>
-    {label && <span style={{ fontSize: 12, color: 'var(--muted)' }}>{label}</span>}
-    <select
-      {...rest}
-      style={{
-        border: '1px solid var(--border)',
-        background: 'var(--card)',
-        color: 'var(--fg)',
-        borderRadius: 8,
-        padding: '10px 12px',
-        ...style,
-      }}
-    >
+const Select: React.FC<Props> = ({ label, children, className, containerClassName, ...rest }) => (
+  <label className={['ra-field', containerClassName].filter(Boolean).join(' ')}>
+    {label && <span className="ra-field-label">{label}</span>}
+    <select {...rest} className={['ra-input', className].filter(Boolean).join(' ')}>
       {children}
     </select>
   </label>
 );
 
 export default Select;
-

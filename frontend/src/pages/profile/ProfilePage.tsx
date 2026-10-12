@@ -4,6 +4,7 @@ import ProBadge from '../../components/ProBadge';
 import Card from '../../components/ui/Card';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import Select from '../../components/ui/Select';
 import Spinner from '../../components/ui/Spinner';
 import ChangePasswordCard from './ChangePasswordCard';
 import { useToast } from '../../context/ToastContext';
@@ -261,7 +262,6 @@ export default function ProfilePage() {
                   name="name"
                   value={formData.name}
                   disabled
-                  className="bg-gray-50 text-gray-500 cursor-not-allowed"
                 />
                 <Input
                   label="Teléfono"
@@ -276,7 +276,6 @@ export default function ProfilePage() {
                 type="email"
                 value={profile.email}
                 disabled
-                className="bg-gray-50 text-gray-500 cursor-not-allowed"
               />
               <span className="text-xs text-gray-400">El correo no se puede cambiar.</span>
 
@@ -317,42 +316,39 @@ export default function ProfilePage() {
                       onChange={handleChange}
                       placeholder="Ej.: Reformas García"
                     />
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Especialidad principal</label>
-                      <select
-                        name="serviceCategory"
-                        value={formData.serviceCategory}
-                        onChange={handleChange}
-                        className="w-full p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 bg-white"
-                      >
-                        <option value="general">Mantenimiento general</option>
-                        <option value="fontaneria">Fontanería</option>
-                        <option value="electricidad">Electricidad</option>
-                        <option value="albanileria">Albañilería / Pladur</option>
-                        <option value="carpinteria">Carpintería</option>
-                        <option value="pintura">Pintura</option>
-                        <option value="limpieza">Limpieza</option>
-                        <option value="jardineria">Jardinería</option>
-                        <option value="inmobiliaria">Agente inmobiliario</option>
-                        <option value="cerrajeria">Cerrajería</option>
-                        <option value="otros">Otros</option>
-                      </select>
-                    </div>
+                    <Select
+                      label="Especialidad principal"
+                      name="serviceCategory"
+                      value={formData.serviceCategory}
+                      onChange={handleChange}
+                    >
+                      <option value="general">Mantenimiento general</option>
+                      <option value="fontaneria">Fontanería</option>
+                      <option value="electricidad">Electricidad</option>
+                      <option value="albanileria">Albañilería / Pladur</option>
+                      <option value="carpinteria">Carpintería</option>
+                      <option value="pintura">Pintura</option>
+                      <option value="limpieza">Limpieza</option>
+                      <option value="jardineria">Jardinería</option>
+                      <option value="inmobiliaria">Agente inmobiliario</option>
+                      <option value="cerrajeria">Cerrajería</option>
+                      <option value="otros">Otros</option>
+                    </Select>
                   </div>
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="ra-field">
+                <span className="ra-field-label">
                   {profile.role === 'pro' ? 'Sobre ti y tus servicios' : 'Sobre ti'}
-                </label>
+                </span>
                 <textarea
                   name="bio"
                   value={formData.bio}
                   onChange={handleChange}
                   rows={4}
                   maxLength={500}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500"
+                  className="ra-input"
                   placeholder={
                     profile.role === 'tenant'
                       ? 'Trabajo con contrato indefinido y busco piso a largo plazo…'
@@ -361,8 +357,8 @@ export default function ProfilePage() {
                         : 'Cuéntanos algo sobre ti…'
                   }
                 />
-                <p className="text-xs text-gray-500 mt-1">Máximo 500 caracteres.</p>
-              </div>
+                <span className="text-xs text-gray-500">Máximo 500 caracteres.</span>
+              </label>
 
               <div className="flex justify-end pt-4">
                 <Button type="submit" variant="primary" disabled={saving} className="px-8">

@@ -766,6 +766,18 @@ body {
 .ra-guest-account a { justify-content: center; text-align: center; }
 @layer components {
   /* Botón de la app (ui/Button y buttonClassName). En la capa de componentes para que w-full, px-8, etc. de quien llama manden */
+  /* Campos de formulario (ui/Input, ui/Select). .ra-field es la etiqueta que envuelve; containerClassName del componente va ahí */
+  .ra-field { display: grid; gap: 6px; min-width: 0; width: 100%; }
+  .ra-field-label { color: var(--ra-ink); font-size: 13px; font-weight: 600; line-height: 1.3; }
+  .ra-input { background: #fff; border: 1px solid rgba(11, 16, 37, .18); border-radius: 12px; box-sizing: border-box; color: var(--ra-ink); font-family: inherit; font-size: 15px; line-height: 1.4; min-height: 44px; min-width: 0; padding: 10px 14px; transition: border-color 150ms ease, box-shadow 150ms ease; width: 100%; }
+  .ra-input::placeholder { color: #8a92a8; }
+  .ra-input:hover:not(:disabled):not(:focus) { border-color: rgba(11, 16, 37, .3); }
+  .ra-input:focus { border-color: var(--ra-blue); box-shadow: 0 0 0 3px rgba(67, 104, 255, .14); outline: none; }
+  .ra-input:disabled { background: var(--ra-paper); color: var(--ra-muted); cursor: not-allowed; }
+  .ra-input[aria-invalid="true"] { border-color: #b42318; }
+  select.ra-input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2366708b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-position: right 14px center; background-repeat: no-repeat; cursor: pointer; padding-right: 38px; }
+  /* En móvil, 16 px para que iOS no amplíe la página al enfocar */
+  @media (max-width: 640px) { .ra-input { font-size: 16px; } }
   .ra-card { background: #fff; border: 1px solid var(--ra-line); border-radius: 16px; color: var(--ra-ink); }
   .ra-btn { align-items: center; border: 1px solid transparent; border-radius: 999px; cursor: pointer; display: inline-flex; font-family: inherit; font-size: 14px; font-weight: 600; gap: 8px; justify-content: center; line-height: 1.2; min-height: 40px; padding: 9px 18px; text-decoration: none; transition: background 160ms ease, border-color 160ms ease, color 160ms ease; }
   .ra-btn:hover { opacity: 1; }
