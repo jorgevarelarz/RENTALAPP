@@ -14,7 +14,7 @@ const computeRemindAt = ({ minutes = 0, hours = 0, days = 3 } = {}) => {
 };
 
 // GET estado + servicios
-router.get('/postsign/upsell/:contractId', async (req: any, res) => {
+router.get('/upsell/:contractId', async (req: any, res) => {
   const { id: userId } = req.user || {};
   const { contractId } = req.params;
   if (!userId) return res.status(401).json({ error: 'unauthorized' });
@@ -26,7 +26,7 @@ router.get('/postsign/upsell/:contractId', async (req: any, res) => {
 });
 
 // CLICK contratar (tracking)
-router.post('/postsign/upsell/:contractId/click', async (req: any, res) => {
+router.post('/upsell/:contractId/click', async (req: any, res) => {
   const { id: userId } = req.user || {};
   const { contractId } = req.params;
   const { serviceId } = req.body || {};
@@ -39,7 +39,7 @@ router.post('/postsign/upsell/:contractId/click', async (req: any, res) => {
 });
 
 // MÁS TARDE
-router.post('/postsign/upsell/:contractId/remind-later', async (req: any, res) => {
+router.post('/upsell/:contractId/remind-later', async (req: any, res) => {
   const { id: userId } = req.user || {};
   const { contractId } = req.params;
   if (!userId) return res.status(401).json({ error: 'unauthorized' });
@@ -53,7 +53,7 @@ router.post('/postsign/upsell/:contractId/remind-later', async (req: any, res) =
 });
 
 // AHORA NO
-router.post('/postsign/upsell/:contractId/dismiss', async (req: any, res) => {
+router.post('/upsell/:contractId/dismiss', async (req: any, res) => {
   const { id: userId } = req.user || {};
   const { contractId } = req.params;
   if (!userId) return res.status(401).json({ error: 'unauthorized' });

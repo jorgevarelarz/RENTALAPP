@@ -24,7 +24,7 @@ async function ensureAppointmentConversation(ticketId: string, proId: string, te
 }
 
 // Proponer fecha/hora (pro → tenant)
-r.post('/appointments/:ticketId/propose', async (req, res) => {
+r.post('/:ticketId/propose', async (req, res) => {
   try {
     const userId = getUserId(req); // pro
     const { ticketId } = req.params;
@@ -64,7 +64,7 @@ r.post('/appointments/:ticketId/propose', async (req, res) => {
 });
 
 // Aceptar propuesta (tenant)
-r.post('/appointments/:ticketId/accept', async (req, res) => {
+r.post('/:ticketId/accept', async (req, res) => {
   try {
     const userId = getUserId(req); // tenant
     const { ticketId } = req.params;
@@ -85,7 +85,7 @@ r.post('/appointments/:ticketId/accept', async (req, res) => {
 });
 
 // Rechazar propuesta (tenant) con motivo
-r.post('/appointments/:ticketId/reject', async (req, res) => {
+r.post('/:ticketId/reject', async (req, res) => {
   try {
     const userId = getUserId(req); // tenant
     const { ticketId } = req.params;

@@ -5,7 +5,7 @@ import { User } from '../models/user.model';
 const r = Router();
 
 // Create or retrieve Express account and return onboarding link
-r.post('/connect/owner/link', async (req, res) => {
+r.post('/owner/link', async (req, res) => {
   try {
     const ownerId = (req as any).user?.id;
     if (!ownerId) return res.status(401).json({ error: 'unauthorized' });
@@ -45,7 +45,7 @@ r.post('/connect/owner/link', async (req, res) => {
 });
 
 // Retrieve account status
-r.get('/connect/owner/status', async (req, res) => {
+r.get('/owner/status', async (req, res) => {
   try {
     const ownerId = (req as any).user?.id;
     if (!ownerId) return res.status(401).json({ error: 'unauthorized' });

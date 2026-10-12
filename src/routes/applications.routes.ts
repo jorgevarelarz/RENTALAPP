@@ -7,10 +7,10 @@ import { listMyApplications, proposeVisit, acceptProposedVisit } from '../contro
 const r = Router();
 
 // Tenant: list my applications
-r.get('/applications/my', authenticate, authorizeRoles('tenant'), asyncHandler(listMyApplications));
+r.get('/my', authenticate, authorizeRoles('tenant'), asyncHandler(listMyApplications));
 
 // Propietario, agencia gestora o admin proponen la visita; el inquilino puede contraproponer
-r.post('/applications/:id/propose', authenticate, authorizeRoles('tenant', 'landlord', 'agency', 'admin'), asyncHandler(proposeVisit));
-r.post('/applications/:id/accept', authenticate, authorizeRoles('tenant', 'landlord', 'agency', 'admin'), asyncHandler(acceptProposedVisit));
+r.post('/:id/propose', authenticate, authorizeRoles('tenant', 'landlord', 'agency', 'admin'), asyncHandler(proposeVisit));
+r.post('/:id/accept', authenticate, authorizeRoles('tenant', 'landlord', 'agency', 'admin'), asyncHandler(acceptProposedVisit));
 
 export default r;

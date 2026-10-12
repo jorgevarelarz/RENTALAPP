@@ -16,7 +16,7 @@ const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
  * Crea (si no existe) o devuelve el Stripe Customer del usuario autenticado.
  */
 r.post(
-  '/payments/customer',
+  '/customer',
   authenticate,
   requirePolicies(REQUIRED_POLICIES),
   asyncHandler(async (req: any, res) => {
@@ -40,20 +40,20 @@ r.post(
 );
 
 r.get(
-  '/payments',
+  '/',
   authenticate,
   requirePolicies(REQUIRED_POLICIES),
   asyncHandler(getMyPayments),
 );
 
 r.get(
-  '/payments/:id/receipt.pdf',
+  '/:id/receipt.pdf',
   authenticate,
   asyncHandler(downloadReceipt),
 );
 
 r.post(
-  '/payments/:id/pay',
+  '/:id/pay',
   authenticate,
   requirePolicies(REQUIRED_POLICIES),
   asyncHandler(payReceipt),
@@ -69,7 +69,7 @@ const maybeAuth: any = (req: any, res: any, next: any) =>
   process.env.NODE_ENV === 'test' ? next() : authenticate(req, res, next);
 
 r.post(
-  '/payments/intent',
+  '/intent',
   maybeAuth,
   requirePolicies(REQUIRED_POLICIES),
   asyncHandler(async (req, res) => {
@@ -95,7 +95,7 @@ r.post(
 
 // Crea un PaymentIntent flexible (amount + currency) para frontend Stripe Elements
 r.post(
-  '/payments/create-intent',
+  '/create-intent',
   maybeAuth,
   requirePolicies(REQUIRED_POLICIES),
   asyncHandler(async (req, res) => {
@@ -121,7 +121,7 @@ r.post(
 
 // SetupIntent para guardar métodos de pago (tarjeta/SEPA) sin cobrar
 r.post(
-  '/payments/setup-intent',
+  '/setup-intent',
   maybeAuth,
   requirePolicies(REQUIRED_POLICIES),
   asyncHandler(async (_req, res) => {

@@ -8,7 +8,7 @@ import { deleteTP } from '../services/tenantProStorage';
 const router = Router();
 
 router.get(
-  '/me/tenant-pro',
+  '/',
   authenticate,
   authorizeRoles('tenant'),
   asyncHandler(async (req, res) => {
@@ -21,7 +21,7 @@ router.get(
 );
 
 router.post(
-  '/me/tenant-pro/delete',
+  '/delete',
   authenticate,
   authorizeRoles('tenant'),
   asyncHandler(async (req, res) => {

@@ -26,7 +26,7 @@ ensureTenantProDir();
 const ConsentSchema = z.object({ consent: z.literal(true), version: z.string().min(1) });
 
 router.post(
-  '/tenant-pro/consent',
+  '/consent',
   authenticate,
   authorizeRoles('tenant'),
   asyncHandler(async (req, res) => {
@@ -44,7 +44,7 @@ router.post(
 );
 
 router.post(
-  '/tenant-pro/docs',
+  '/docs',
   authenticate,
   authorizeRoles('tenant'),
   // Wrap multer to normalize errors
@@ -89,7 +89,7 @@ router.post(
 );
 
 router.get(
-  '/tenant-pro/me',
+  '/me',
   authenticate,
   authorizeRoles('tenant'),
   asyncHandler(async (req, res) => {

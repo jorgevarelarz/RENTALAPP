@@ -28,7 +28,7 @@ import contractPaymentsRoutes from './routes/contract.payments.routes';
 import stripeWebhookRoutes from './routes/stripe.webhook';
 import identityRoutes from './routes/identity.routes';
 import chatRoutes from './routes/chat.routes';
-import serviceOfferRoutes from './routes/serviceOffers.routes';
+import serviceOfferRoutes, { serviceOfferAppointmentRoutes } from './routes/serviceOffers.routes';
 import demoContractRoutes from './routes/demoContract.routes';
 import { errorHandler } from './middleware/errorHandler';
 import appointmentsFlowRoutes from './routes/appointments.routes';
@@ -324,18 +324,19 @@ app.use('/api', uploadRoutes);
 app.use('/api', demoContractRoutes);
 app.use('/api', notifyRoutes);
 // Invitaciones de agencia a propietarios: acceso público por token (el invitado aún no tiene cuenta).
-// Invitación de co-titular: vista previa pública. Las tres van antes del primer
-// app.use('/api', authenticate, …): ese middleware corre en toda petición /api que llegue hasta él.
+// Invitación de co-titular: vista previa pública.
 app.get('/api/agency-invites/:token', asyncHandler(getInviteByToken));
 app.post('/api/agency-invites/:token/accept', authLimiter, asyncHandler(acceptInvite));
 app.get('/api/invites/preview', asyncHandler(getInvitePreview));
-app.use('/api', authenticate, postsignRouter);
-app.use('/api', tenantProRoutes);
-app.use('/api', tenantProMeRoutes);
-app.use('/api', requireVerified, appointmentsFlowRoutes);
-app.use('/api', applicationsRoutes);
 
-// Protected routes (verified users)
+// Protected routes. Cada router privado va con su prefijo: nunca app.use('/api', authenticate, …),
+// porque ese middleware corre en toda petición /api que llegue hasta él y deja detrás de la sesión
+// cualquier ruta pública montada después (ronda 75). tests/security/route-auth-map.test.ts lo vigila.
+app.use('/api/postsign', authenticate, postsignRouter);
+app.use('/api/tenant-pro', authenticate, tenantProRoutes);
+app.use('/api/me/tenant-pro', authenticate, tenantProMeRoutes);
+app.use('/api/appointments', authenticate, requireVerified, appointmentsFlowRoutes, serviceOfferAppointmentRoutes);
+app.use('/api/applications', authenticate, requireVerified, applicationsRoutes);
 app.use('/api/contracts', authenticate, requireVerified, contractRoutes);
 app.use('/api/users', authenticate, requireVerified, userRoutes);
 app.use('/api/pros', authenticate, requireVerified, proRoutes);
@@ -349,17 +350,20 @@ app.use('/api/assistant', authenticate, requireVerified, aiLimiter, assistantRou
 // Contract-specific payments under /api/contracts require verificación
 app.use('/api/contracts', authenticate, requireVerified, contractPaymentsRoutes);
 app.use('/api/agency', authenticate, requireVerified, agencyRoutes);
-app.use('/api', paymentsRoutes);
-app.use('/api', authenticate, requireVerified, connectRoutes);
-app.use('/api', authenticate, requireVerified, serviceOfferRoutes);
-app.use('/api/invites', authenticate, invitesRoutes);
+app.use('/api/payments', authenticate, requireVerified, paymentsRoutes);
+app.use('/api/connect', authenticate, requireVerified, connectRoutes);
+app.use('/api/service-offers', authenticate, requireVerified, serviceOfferRoutes);
+// requireVerified en invitaciones e institución: ya se les aplicaba a través del antiguo
+// app.use('/api', requireVerified, appointmentsFlowRoutes); se mantiene tal cual.
+app.use('/api/invites', authenticate, requireVerified, invitesRoutes);
 app.use('/api/me', authenticate, requireVerified, meRoutes);
-app.use('/api', authenticate, requireVerified, taxReportRoutes);
+app.use('/api/tax', authenticate, requireVerified, taxReportRoutes);
 
 // Institution portal (read-only)
 app.use(
   '/api/institution',
   authenticate,
+  requireVerified,
   authorizeRoles('institution_viewer'),
   loadInstitutionScope,
   institutionRoutes,

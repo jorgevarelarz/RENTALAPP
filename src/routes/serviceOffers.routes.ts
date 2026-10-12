@@ -13,6 +13,8 @@ import { User } from '../models/user.model';
 import { sendRouteError } from '../utils/routeError';
 
 const r = Router();
+// Reprogramar y cancelar citas de un servicio: app.ts lo monta en /api/appointments.
+export const serviceOfferAppointmentRoutes = Router();
 
 async function publishSystem(conversationId: string, senderId: string, systemCode: string, payload?: any) {
   await Message.create({ conversationId, senderId, type: 'system', systemCode, payload, readBy: [] });
@@ -34,7 +36,7 @@ async function ensureContractConversation(contractId: string): Promise<string> {
   return conv.id;
 }
 
-r.post('/service-offers', async (req, res) => {
+r.post('/', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { conversationId, serviceKey, title, description, amount, currency = 'EUR', ticketId } = req.body || {};
@@ -54,7 +56,7 @@ r.post('/service-offers', async (req, res) => {
   }
 });
 
-r.post('/service-offers/:offerId/decision', async (req, res) => {
+r.post('/:offerId/decision', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { offerId } = req.params;
@@ -77,7 +79,7 @@ r.post('/service-offers/:offerId/decision', async (req, res) => {
   }
 });
 
-r.post('/service-offers/:offerId/schedule', async (req, res) => {
+r.post('/:offerId/schedule', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { offerId } = req.params;
@@ -116,7 +118,7 @@ const STALE_CLAIM_MS = 5 * 60 * 1000;
 // El propietario acepta la cita y paga. Aquí solo se crea el cobro: la oferta queda en
 // `payment_pending` y es el webhook `payment_intent.succeeded` quien la confirma y
 // registra la ganancia, una sola vez.
-r.post('/service-offers/:offerId/accept-slot', async (req, res) => {
+r.post('/:offerId/accept-slot', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { offerId } = req.params;
@@ -184,7 +186,7 @@ r.post('/service-offers/:offerId/accept-slot', async (req, res) => {
   }
 });
 
-r.post('/appointments/:id/reschedule', async (req, res) => {
+serviceOfferAppointmentRoutes.post('/:id/reschedule', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
@@ -214,7 +216,7 @@ r.post('/appointments/:id/reschedule', async (req, res) => {
   }
 });
 
-r.post('/appointments/:id/cancel', async (req, res) => {
+serviceOfferAppointmentRoutes.post('/:id/cancel', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
@@ -240,7 +242,7 @@ r.post('/appointments/:id/cancel', async (req, res) => {
   }
 });
 
-r.post('/service-offers/:offerId/complete', async (req, res) => {
+r.post('/:offerId/complete', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { offerId } = req.params;
