@@ -2393,7 +2393,7 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 
 **Siguiente mejora propuesta.** Completar la intención tras entrar: si el inquilino pulsó «Guardar» sin sesión, guardar el piso al volver a la ficha (y avisar con un toast). Si pulsó «Solicitar visita», llevarle al campo del mensaje. Después, pasar `Modal` a los tokens 2026 (lo usan todos los diálogos).
 
-### Ronda 62 — 2026-10-12 12:20
+### Ronda 62 — 2026-10-12 12:26
 
 **Qué y por qué.** Ronda de interfaz. Retoma lo que proponía la ronda 61:
 
