@@ -4,9 +4,9 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TenantHome from '../TenantHome';
 
-const { listContractsMock, getFavoritesMock } = vi.hoisted(() => ({
+const { listContractsMock, listMyFavoritesMock } = vi.hoisted(() => ({
   listContractsMock: vi.fn(),
-  getFavoritesMock: vi.fn(),
+  listMyFavoritesMock: vi.fn(),
 }));
 
 vi.mock('../../../context/AuthContext', () => ({
@@ -26,13 +26,13 @@ vi.mock('../../../services/contracts', () => ({
   listContracts: listContractsMock,
 }));
 
-vi.mock('../../../utils/favorites', () => ({
-  getFavorites: getFavoritesMock,
+vi.mock('../../../services/properties', () => ({
+  listMyFavorites: listMyFavoritesMock,
 }));
 
 describe('TenantHome', () => {
   beforeEach(() => {
-    getFavoritesMock.mockReturnValue(['p1', 'p2']);
+    listMyFavoritesMock.mockResolvedValue({ items: [{ _id: 'p1' }, { _id: 'p2' }] });
     listContractsMock.mockResolvedValue({
       items: [
         {
@@ -124,5 +124,29 @@ describe('TenantHome', () => {
     expect(screen.getByText('800,00 € pendiente')).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: 'Pagar fianza' })).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ver contrato' })).toHaveAttribute('href', '/contracts/contract-9');
+  });
+
+  it('counts the favorites saved on the server', async () => {
+    render(
+      <MemoryRouter>
+        <TenantHome />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Piso Centro')).toBeInTheDocument();
+    expect(screen.getByText('Favoritos', { selector: 'p' }).parentElement).toHaveTextContent('2');
+  });
+
+  it('keeps the contracts when the favorites cannot be loaded and shows no made-up count', async () => {
+    listMyFavoritesMock.mockRejectedValue(new Error('network'));
+    render(
+      <MemoryRouter>
+        <TenantHome />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Piso Centro')).toBeInTheDocument();
+    expect(screen.getByText('Favoritos', { selector: 'p' }).parentElement).toHaveTextContent('–');
+    expect(screen.queryByText(/No se pudo cargar/)).not.toBeInTheDocument();
   });
 });

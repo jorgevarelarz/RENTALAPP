@@ -5,14 +5,15 @@ import Card from '../../components/ui/Card';
 import { AlertCircle, ChevronRight, Clock3, Heart, ShieldCheck } from 'lucide-react';
 import OnboardingChecklist from '../../components/OnboardingChecklist';
 import { listContracts } from '../../services/contracts';
-import { getFavorites } from '../../utils/favorites';
+import { listMyFavorites } from '../../services/properties';
 import { formatApiError } from '../../api/client';
 import { getContractActionSummary, getContractStatusLabel } from '../../utils/contractWorkflow';
 import type { Contract } from '../../types/contract';
 
 type TenantSummary = {
   contracts: Contract[];
-  favorites: number;
+  /** null si no se pudo contar (no se inventa un 0) */
+  favorites: number | null;
   loading: boolean;
   error: string;
 };
@@ -98,15 +99,18 @@ export default function TenantHome() {
 
     async function load() {
       try {
-        const favorites = getFavorites().length;
-        const contracts = token ? (await listContracts(token, { include: 'cotenant' })).items || [] : [];
+        // Los favoritos viven en el servidor; que fallen no debe tapar los contratos
+        const [contractsRes, favoritesRes] = await Promise.all([
+          token ? listContracts(token, { include: 'cotenant' }) : Promise.resolve({ items: [] as Contract[] }),
+          listMyFavorites().then((res) => (res.items || []).length).catch(() => null),
+        ]);
         if (!active) return;
-        setSummary({ contracts, favorites, loading: false, error: '' });
+        setSummary({ contracts: contractsRes.items || [], favorites: favoritesRes, loading: false, error: '' });
       } catch (err) {
         if (!active) return;
         setSummary({
           contracts: [],
-          favorites: getFavorites().length,
+          favorites: null,
           loading: false,
           error: formatApiError(err, 'No se pudo cargar tu resumen'),
         });
@@ -238,7 +242,7 @@ export default function TenantHome() {
           to="/me/favorites"
           icon={<Heart size={20} />}
           label="Favoritos"
-          value={summary.loading ? loadingValue : summary.favorites}
+          value={summary.loading || summary.favorites === null ? loadingValue : summary.favorites}
           hint="Viviendas guardadas"
         />
         <StatCard
