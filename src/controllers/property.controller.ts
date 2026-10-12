@@ -13,6 +13,7 @@ import { recordFunnelEvent } from '../services/funnelEvents.service';
 import { suggestRent } from '../services/rentSuggestion.service';
 import { isManagingAgency } from '../utils/propertyAccess';
 import { notifyApplication } from '../services/applicationNotice.service';
+import { accentInsensitivePattern } from '../utils/searchRegex';
 
 const tensionedAreaDateQuery = (changeDate: Date) => ({
   active: true,
@@ -271,7 +272,6 @@ export async function handoffToOwner(req: Request, res: Response) {
   res.json({ ok: true, propertyId: String(p._id), agencyAccess: p.agencyAccess, transferredAt: p.agencyTransferredAt });
 }
 
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const SORTABLE_FIELDS = new Set(['createdAt', 'price', 'sizeM2', 'rooms', 'availableFrom', 'viewsCount']);
 
 /** Quién ve qué: admin todo; con sesión, los activos y los propios; anónimo, solo los activos. */
@@ -362,8 +362,8 @@ export async function search(req: Request, res: Response) {
 
   if (region) q.region = String(region).toLowerCase();
   // Valores de query forzados a string: ?city[$regex]=. no debe llegar como operador.
-  // La ciudad entera, sin distinguir mayúsculas: «madrid» encuentra «Madrid»
-  const cityText = city ? escapeRegExp(String(city).trim().slice(0, 100)) : '';
+  // La ciudad entera, sin distinguir mayúsculas ni tildes: «a coruna» encuentra «A Coruña»
+  const cityText = city ? accentInsensitivePattern(String(city).trim().slice(0, 100)) : '';
   if (cityText) q.city = { $regex: `^${cityText}$`, $options: 'i' };
   if (priceMin || priceMax) q.price = { ...(priceMin ? { $gte: +priceMin } : {}), ...(priceMax ? { $lte: +priceMax } : {}) };
   if (roomsMin || roomsMax) q.rooms = { ...(roomsMin ? { $gte: +roomsMin } : {}), ...(roomsMax ? { $lte: +roomsMax } : {}) };
@@ -381,8 +381,8 @@ export async function search(req: Request, res: Response) {
   const visibility = visibilityFilter(req);
   if (visibility) and.push(visibility);
   if (text) {
-    // Texto escapado y acotado: sin esto, ?q=(a+)+$ es una regex arbitraria contra toda la colección
-    const safe = escapeRegExp(String(text).trim().slice(0, 100));
+    // Texto escapado, acotado y sin distinguir tildes: sin escapar, ?q=(a+)+$ es una regex arbitraria contra toda la colección
+    const safe = accentInsensitivePattern(String(text).trim().slice(0, 100));
     if (safe) {
       and.push({
         $or: [

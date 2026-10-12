@@ -130,6 +130,29 @@ describe("Properties (minimal)", () => {
     expect(await ids("city=" + encodeURIComponent(".*"))).toHaveLength(0);
   });
 
+  it("search by city and text ignores accents", async () => {
+    const ids = async (qs: string) =>
+      (await request(app).get("/api/properties?" + qs).expect(200)).body.items.map((p: any) => String(p._id));
+    const base = {
+      owner: ownerId, address: "C/ Mayor 1", location: { type: "Point", coordinates: [-4.7, 40.65] },
+      price: 600, deposit: 600, sizeM2: 50, rooms: 1, bathrooms: 1,
+      availableFrom: new Date("2025-10-01"), status: "active",
+    };
+    const avila = await Property.create({ ...base, title: "Piso en Ávila", region: "castilla-y-leon", city: "Ávila" });
+    const hosp = await Property.create({ ...base, title: "Piso", region: "cataluna", city: "L’Hospitalet de Llobregat" });
+
+    expect(await ids("city=" + encodeURIComponent("a coruna"))).toContain(pid);
+    expect(await ids("city=" + encodeURIComponent("A CORUNA"))).toContain(pid);
+    expect(await ids("city=avila")).toEqual([String(avila._id)]);
+    expect(await ids("city=" + encodeURIComponent("ÁVILA"))).toContain(String(avila._id));
+    expect(await ids("city=" + encodeURIComponent("àvila"))).toContain(String(avila._id));
+    expect(await ids("city=" + encodeURIComponent("l'hospitalet de llobregat"))).toEqual([String(hosp._id)]);
+    expect(await ids("q=coruna")).toContain(pid);
+    expect(await ids("q=" + encodeURIComponent("piso en avila"))).toEqual([String(avila._id)]);
+    // Sin tildes no significa parecido: otra vocal no vale
+    expect(await ids("city=evila")).toHaveLength(0);
+  });
+
   it("sorts by views for «Populares»", async () => {
     const other = await Property.create({
       owner: ownerId, title: "Piso visitado", address: "C/ Real 9", region: "galicia", city: "Lugo",

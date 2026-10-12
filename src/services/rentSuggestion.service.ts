@@ -1,3 +1,4 @@
+import { accentInsensitivePattern } from '../utils/searchRegex';
 import { Property } from '../models/property.model';
 import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
 import {
@@ -157,7 +158,8 @@ async function findOwnComparables(input: SuggestionInput) {
 
   const docs = await Property.find({
     ...baseQuery,
-    city: new RegExp(`^${escapeRegExp(input.city)}$`, 'i'),
+    // Sin distinguir tildes: «A Coruna» y «A Coruña» son la misma ciudad para los comparables
+    city: new RegExp(`^${accentInsensitivePattern(String(input.city || '').trim())}$`, 'i'),
   })
     .select('price sizeM2')
     .lean();
