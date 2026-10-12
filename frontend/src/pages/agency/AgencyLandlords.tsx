@@ -8,6 +8,8 @@ import {
   type LandlordInviteResult,
 } from '../../services/agency';
 import { formatApiError } from '../../api/client';
+import Badge from '../../components/ui/Badge';
+import type { StatusTone } from '../../utils/statusBadges';
 
 const STEP_LABELS: Array<{ key: keyof LandlordInviteItem['steps']; label: string }> = [
   { key: 'accountCreated', label: 'Cuenta creada' },
@@ -35,13 +37,13 @@ const NOTICE_CLS: Record<Notice['tone'], string> = {
 };
 
 function StatusBadge({ status }: { status: LandlordInviteItem['status'] }) {
-  const map = {
-    invited: ['Invitado', 'bg-amber-50 text-amber-700 border-amber-200'],
-    accepted: ['Activo', 'bg-emerald-50 text-emerald-700 border-emerald-200'],
-    expired: ['Caducada', 'bg-gray-100 text-gray-500 border-gray-200'],
-  } as const;
-  const [label, cls] = map[status] || map.invited;
-  return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${cls}`}>{label}</span>;
+  const map: Record<LandlordInviteItem['status'], [string, StatusTone]> = {
+    invited: ['Invitado', 'warning'],
+    accepted: ['Activo', 'success'],
+    expired: ['Caducada', 'neutral'],
+  };
+  const [label, tone] = map[status] || map.invited;
+  return <Badge tone={tone}>{label}</Badge>;
 }
 
 export default function AgencyLandlords() {

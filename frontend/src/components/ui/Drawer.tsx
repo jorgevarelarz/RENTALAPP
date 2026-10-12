@@ -43,28 +43,14 @@ const Drawer: React.FC<Props> = ({ open, onClose, side='left', children, width=3
       return () => { document.body.style.overflow = prev; };
     }
   }, [open]);
-  const borderStyle = side === 'right' ? { borderLeft: '1px solid var(--border)', borderRight: 'none' } : { borderRight: '1px solid var(--border)', borderLeft: 'none' };
-  const shadowStyle = side === 'right' ? { boxShadow: '-12px 0 24px rgba(0,0,0,.08)' } : { boxShadow: '12px 0 24px rgba(0,0,0,.08)' };
   return (
     <>
       {open && <div className="drawer-backdrop" onClick={onClose} />}
       <div
         ref={panelRef}
-        className="drawer-panel"
+        className={`drawer-panel drawer-panel-${side}${open ? ' is-open' : ''}`}
         tabIndex={-1}
-        style={{
-          width: `min(${width}px, 92vw)`,
-          transform: open ? 'translateX(0)' : side==='left' ? 'translateX(-100%)' : 'translateX(100%)',
-          left: side==='left' ? 0 : undefined,
-          right: side==='right' ? 0 : undefined,
-          // Cerrado queda fuera de la pantalla: sin visibility sus enlaces seguirían recibiendo el foco con Tab
-          // Al cerrar, se oculta cuando acaba el deslizamiento; al abrir, al instante para poder darle el foco
-          visibility: open ? 'visible' : 'hidden',
-          transition: open ? 'transform .25s ease' : 'transform .25s ease, visibility 0s linear .25s',
-          zIndex: 100,
-          ...borderStyle,
-          ...shadowStyle,
-        }}
+        style={{ width: `min(${width}px, 92vw)` }}
         role="dialog"
         aria-modal="true"
         aria-label={label}

@@ -2,13 +2,6 @@ import { getContractStatusLabel } from './contractWorkflow';
 
 export type StatusTone = 'neutral' | 'info' | 'warning' | 'success' | 'danger';
 
-export const STATUS_TONE_STYLES: Record<StatusTone, { background: string; borderColor: string; color: string }> = {
-  neutral: { background: '#f3f4f6', borderColor: '#e5e7eb', color: '#374151' },
-  info: { background: '#dbeafe', borderColor: '#bfdbfe', color: '#1d4ed8' },
-  warning: { background: '#fef3c7', borderColor: '#fde68a', color: '#92400e' },
-  success: { background: '#dcfce7', borderColor: '#bbf7d0', color: '#166534' },
-  danger: { background: '#fee2e2', borderColor: '#fecaca', color: '#991b1b' },
-};
 
 export function getStatusTone(status?: string): StatusTone {
   switch (status) {

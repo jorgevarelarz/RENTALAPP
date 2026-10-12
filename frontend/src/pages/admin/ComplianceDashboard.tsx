@@ -137,7 +137,7 @@ export default function ComplianceDashboard() {
       <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <h2 style={{ margin: 0 }}>Compliance (Rental Public)</h2>
-          {isDemoMode && <Badge tone="highlight">Demo mode</Badge>}
+          {isDemoMode && <Badge tone="info">Demo mode</Badge>}
         </div>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <Link to="/admin/compliance/tensioned-areas" className="px-3 py-1.5 rounded border border-gray-300">

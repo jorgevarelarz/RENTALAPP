@@ -1,29 +1,13 @@
 import React from 'react';
+import type { StatusTone } from '../../utils/statusBadges';
 
+// Pastilla de estado. Los colores salen de .ra-badge-<tono> (index.css), no de estilos en línea.
 const Badge: React.FC<{
   children: React.ReactNode;
-  tone?: 'default'|'new'|'highlight';
+  tone?: StatusTone;
   className?: string;
-  style?: React.CSSProperties;
-}> = ({ children, tone='default', className, style }) => {
-  const base: React.CSSProperties = {
-    display: 'inline-flex',
-    alignItems: 'center',
-    padding: '2px 8px',
-    borderRadius: 999,
-    fontSize: 12,
-    fontWeight: 500,
-    lineHeight: 1.5,
-    whiteSpace: 'nowrap',
-    border: '1px solid var(--border)',
-    background: 'var(--card)'
-  };
-  const tones: Record<string, React.CSSProperties> = {
-    default: {},
-    new: { background: '#ecfeff', borderColor: '#a5f3fc' },
-    highlight: { background: '#eef2ff', borderColor: '#c7d2fe' },
-  };
-  return <span className={className} style={{ ...base, ...tones[tone], ...style }}>{children}</span>;
-};
+}> = ({ children, tone = 'neutral', className }) => (
+  <span className={['ra-badge', `ra-badge-${tone}`, className].filter(Boolean).join(' ')}>{children}</span>
+);
 
 export default Badge;
