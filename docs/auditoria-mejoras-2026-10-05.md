@@ -89,7 +89,7 @@
   - Unificar los dos sistemas de toast sigue pendiente.
 - **`PolicyModal`:** enlaces a `/legal/privacidad` y `/legal/terminos`. La política de datos enlaza a privacidad porque no tiene página propia.
 - **`usePolicyAcceptance`:** el token por defecto sale de `localStorage.user.token`, como en el cliente API. Los tests se han actualizado a esa clave.
-- **`TicketCreatePage`:** ya no llama a `/api/notify/email`, que es solo para admin. **Pendiente:** el backend no avisa al propietario cuando se crea un ticket; debería hacerlo `POST /api/tickets`.
+- **`TicketCreatePage`:** ya no llama a `/api/notify/email`, que es solo para admin. ~~**Pendiente:** el backend no avisa al propietario cuando se crea un ticket.~~ Hecho: `POST /api/tickets` le manda un correo (ronda 36 de `docs/MEJORA-CONTINUA.md`, `2f1ff22`).
 - **Índices de Mongo** (se crean al arrancar, porque autoIndex está activo):
   - Payment: `{payer,createdAt}`, `{payee,createdAt}`, `{contract,status,createdAt}`;
   - Ticket: `{openedBy,createdAt}`, `{ownerId,createdAt}`, `{proId,createdAt}`, `{contractId}`;

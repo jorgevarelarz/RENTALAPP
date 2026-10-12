@@ -2556,3 +2556,40 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: `CopyLinkButton` con borde gris; el corazón del listado sin sesión no se guarda solo al volver; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; `ticket.routes.ts` conserva su propio `escapeRegExp`.
 
 **Siguiente mejora propuesta.** Pasar `ui/Card` a clases 2026 (como `Button`: `@layer components`, sin estilos en línea) y quitar `AppLayout.tsx` si se confirma muerto. Si toca backend: unificar `ticket.routes.ts` con `utils/searchRegex`.
+
+### Ronda 66 — 2026-10-12 16:05
+
+**Qué y por qué.** Ronda de interfaz, siguiendo la propuesta de la ronda 65 (`ui/Card` y `AppLayout`). Al revisarlo apareció algo con más alcance: los tokens de la plantilla antigua.
+
+1. **Tokens antiguos con los valores 2026.** Quince pantallas (Inicio y Pagos del inquilino, Incidencias, alta de avería, panel y perfil del profesional, asistente de contrato…) construyen sus botones con `bg-[var(--primary)]`. Ese token seguía siendo el índigo `#4f46e5` de la plantilla, así que la acción principal salía en un azul distinto del de la marca. En lugar de tocar quince ficheros, `:root` asigna a `--primary`, `--primary-hover`, `--border`, `--muted`, `--fg` y `--bg` los valores de `--ra-*`: azul `#4368ff`, línea fina y tinta 2026.
+   - El anillo de foco global (`button:focus, a:focus`) era índigo y salía en cada clic de ratón. Ahora es `:focus-visible`, en azul de marca.
+   - Se quita el bloque `html[data-theme='dark']`: nada fija ya `data-theme` (ver punto 3).
+2. **`ui/Card` al sistema 2026.** Lo usan 22 ficheros. Tenía estilos en línea (`var(--card)`, radio 12) que no dejaban mandar a las clases de quien llama. Ahora es `.ra-card` en `@layer components`: blanco, borde `--ra-line` y radio 16. `style` se sigue pasando si alguien lo da. El `border border-gray-200` duplicado de `OnboardingChecklist` desaparece.
+3. **Código muerto.** Se quitan `ThemeContext`, `NavBar` (con su botón 🌙 de tema), `Layout`, `AppLayout`, `Footer` y `pages/common/Placeholder` y `AutoPlaceholder`. Solo se nombraban entre sí o, en el caso de `ThemeProvider`, en `App.test.tsx`. La política de cookies decía que guardamos `theme` en `localStorage` («tema claro u oscuro») y la sesión en `token, user`. Nada escribe `theme`, y la sesión va solo en `user`, así que se corrige el texto (es un dato técnico, no un cambio legal).
+4. **Documentación.** En `auditoria-mejoras-2026-10-05.md` seguía como pendiente «el backend no avisa al propietario cuando se crea un ticket», pero ya se hizo en la ronda 36 (`2f1ff22`). Queda marcado como hecho.
+
+**Commits.**
+- `7ed6463` Interfaz: ui/Card y tokens antiguos al sistema 2026 (incluye quitar el bloque del tema oscuro de `index.css`)
+- `7e0d904` Limpieza: fuera el tema oscuro y los layouts antiguos que nadie usaba
+- Docs: este registro y la nota de la auditoría
+
+**Verificación (resultados reales).**
+- **Backend:** sin cambios.
+- **Frontend.**
+  - `tsc --noEmit`: sin errores. `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`: 235 tests OK con todos los cambios salvo el test nuevo. Después se pasaron el test nuevo y `App.test.tsx`: 2 ficheros y 3 tests OK.
+  - Test nuevo: `components/ui/Card.test.tsx` (2 casos: `ra-card` más el `className` de quien llama, sin `style`; sin `className`, solo `ra-card`).
+- **Playwright** (vite local con `--force`, `/api/*` simulado), capturas en `/tmp/ra-shots66`, a 390 y 1280 px, de `/tenant`, `/tickets` y `/landlord`:
+  - las tarjetas miden 16 px de radio con borde `rgba(11,16,37,.12)`;
+  - el único color de fondo de acción es `rgb(67,104,255)`, sin rastro del índigo `79,70,229`;
+  - sin desbordamiento horizontal.
+  - `/pro` no pintó tarjetas con la sesión simulada (no se investigó).
+- **GitNexus.** `impact` de `Card` y `ThemeProvider`: LOW, aunque GitNexus no sigue el JSX; los usos se revisaron con grep. `detect_changes`: riesgo bajo y ningún flujo afectado.
+
+**Qué queda.**
+- Las pantallas siguen con botones `rounded-lg` propios en constantes locales (`primaryButton`, `secondaryButton` en TenantHome, Payments, TicketsList…). Ya tienen el color de marca, pero no la píldora de `ui/Button`. Pasarlas a `buttonClassName()` sería coherente, de pantalla en pantalla.
+- `ui/Input`, `Select`, `Badge`, `Alert`, `Pagination` y `Drawer` siguen con estilos en línea (radio 8). Sus colores ya salen de los tokens corregidos.
+- En `index.css` quedan clases de la plantilla que quizá nadie usa (`.navbar`, `.login-wrapper`, `.btn-form`, `.social-icons`…). Conviene comprobarlo con grep antes de borrarlas.
+- Pendientes anteriores: «Ingresos» fuera del menú del casero; el corazón del listado sin sesión no se guarda solo al volver; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; `ticket.routes.ts` conserva su propio `escapeRegExp`.
+
+**Siguiente mejora propuesta.** Toca backend, tras tres rondas de interfaz: unificar `ticket.routes.ts` con `utils/searchRegex` y repasar `npm audit` de la raíz (4 avisos altos), actualizando solo lo que no rompa. Si se sigue con la interfaz: pasar `ui/Input` y `Select` a clases 2026 y quitar el CSS muerto de la plantilla.
