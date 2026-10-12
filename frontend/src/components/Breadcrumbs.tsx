@@ -1,6 +1,10 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import nav from '../config/nav.config.json';
+import { useAuth } from '../context/AuthContext';
+
+/** Lista de incidencias de cada rol: la ficha /tickets/:id cuelga de la suya, no de «Mis incidencias». */
+const TICKET_LISTS: Record<string, string> = { landlord: '/landlord/issues', pro: '/pro/tickets' };
 
 function labelFor(path: string): string {
   const cfg: any = nav;
@@ -21,11 +25,14 @@ function labelFor(path: string): string {
 
 const Breadcrumbs: React.FC = () => {
   const { pathname } = useLocation();
+  const role = useAuth()?.user?.role;
   const parts = pathname.split('/').filter(Boolean);
   const crumbs: string[] = [];
   for (let i = 0; i < parts.length; i++) {
     crumbs.push('/' + parts.slice(0, i + 1).join('/'));
   }
+  const ticketList = role ? TICKET_LISTS[role] : undefined;
+  if (ticketList && crumbs[0] === '/tickets' && crumbs.length > 1) crumbs[0] = ticketList;
   if (crumbs.length === 0) return null;
   return (
     <nav aria-label="breadcrumb" style={{ fontSize: 12, marginBottom: 12, color: 'var(--muted)' }}>
