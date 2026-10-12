@@ -1302,3 +1302,10 @@ Rules:
 - `review.routes` `refreshRating` recomputes ratingAvg/reviewCount from the Review collection (old read-modify-write lost concurrent reviews); non-string `comment` 400, trimmed. New `GET /api/pros/:id/reviews` (paginated, author «Laura M.» via exported `reviewerLabel`, no ids/emails). `GET /api/tickets/:id` adds `proReview: { canReview, mine }` for owner/opener of a closed ticket with pro.
 - Frontend: `services/reviews.ts`, `components/pro/{Stars,ProReviewForm,ProReviews}.tsx`; review form in closed `TicketDetail`, «Opiniones» in `ProDetail`.
 - Verification: tsc clean; Jest `--runInBand` reviews 11 + escrow/security/chat 75; frontend build + 149 tests; Playwright `/tmp/ra-shots48`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 49: last internal messages out of 500s + review privacy
+
+- `sendRouteError` now in `admin.controller` (12 catches; stats no longer return `details`), `policy.controller` (duplicate version 409 `policy_version_exists`, ValidationError 400 `invalid_policy`), `taxReport.controller`, `institution.controller`, `requireVerified` (`verification_check_failed`).
+- `exportAuditTrails`: non-ObjectId `contractIds` → 400 `invalid_contract_id` (ids were joined into a file path: traversal); catch ends the response if the zip already started.
+- `GET /api/reviews/user/:userId` returns `{id, roleContext, score, comment, createdAt, author}` (author via `reviewerLabel` from `pro.routes`), no `fromUserId`/`relatedId`.
+- Verification: tsc clean; new `tests/security/admin.errors.test.ts` (7); Jest `--runInBand` 56 suites/252; frontend build + 149 tests.

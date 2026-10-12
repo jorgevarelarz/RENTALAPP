@@ -1808,3 +1808,41 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: los 500 de `admin`, `policy`, `taxReport` e `institution` con `e.message`; `/landlord/services` es un marcador (depende de producto); aviso de cobro a la agencia (Jorge).
 
 **Siguiente mejora propuesta.** Seguridad: pasar los 500 de `admin.controller`, `policy`, `taxReport` e `institution` a `sendRouteError` y, de paso, cerrar `GET /api/reviews/user/:userId` (quitar `fromUserId`/`relatedId` o reutilizar `reviewerLabel`).
+
+### Ronda 49 — 2026-10-12 06:53
+
+**Qué y por qué.** La mejora de seguridad propuesta en la ronda 48. Era la última tanda de rutas que devolvían el mensaje interno en sus 500. Además, una reseña dejaba ver quién la escribió y sobre qué contrato. Revisando el export de auditoría encontré un path traversal.
+
+1. **Mensajes internos fuera de los 500** (pasan por `sendRouteError`, que lo anota en el log y responde un código fijo):
+   - `admin.controller` (12 sitios): estadísticas (antes `details: error.message`), aceptaciones de políticas, registros de auditoría, solicitudes, zonas tensionadas, panel de cumplimiento, eventos del sistema, estadísticas semanales y decisión de una solicitud;
+   - `policy.controller`: listar y aceptar dan `policy_list_failed`, `policy_acceptances_failed` y `policy_accept_failed`. Publicar una versión repetida da 409 `policy_version_exists` y una mal formada 400 `invalid_policy` (antes, el texto de Mongo y 400 para todo). «Ya aceptada» y «versión no activa» conservan su mensaje;
+   - `taxReport.controller` (informe y exportaciones CSV/PDF; los 400 como `invalid_year` no cambian);
+   - `institution.controller` (panel y CSV; `area_not_in_scope` e `invalid_date_range` no cambian);
+   - `requireVerified`: el fallo de la consulta de verificación da `verification_check_failed`. Es middleware de casi toda `/api`, así que solo cambié sus `catch`.
+2. **Path traversal en `GET /api/admin/compliance/audit-trails/export`** (solo admin, riesgo bajo). Los `contractIds` de la query se pegaban en una ruta de fichero (`storage/contracts-audit/contract_<id>.pdf`). Con `../` se podía meter en el zip cualquier `.pdf` legible del servidor. Ahora un id que no es ObjectId da 400 `invalid_contract_id`. Además, si el zip ya había empezado a salir, el `catch` corta la respuesta en vez de intentar mandar JSON.
+3. **`GET /api/reviews/user/:userId`** devolvía las reseñas completas a cualquier usuario verificado, con `fromUserId` y `relatedId` (quién opinó y sobre qué contrato). Ahora devuelve nota, comentario, fecha, rol y el autor como «Laura M.» (`reviewerLabel`, igual que la ficha del profesional). El frontend no la usa.
+
+**Commits.**
+- `fdb7321` Opiniones: `GET /api/reviews/user/:userId` sin `fromUserId` ni `relatedId`
+- `85a80c6` Seguridad: administración, políticas, informe fiscal, institución y `requireVerified` sin mensaje interno en sus 500; ids de contrato validados en el export de auditoría
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Test nuevo, `tests/security/admin.errors.test.ts`, con 7 casos:
+  - estadísticas, aceptaciones y panel de admin dan su código fijo sin el correo del error;
+  - `contractIds=../../../package` da 400;
+  - políticas: un 500 con código fijo, una versión mal formada da 400 y una repetida 409. Espera a `PolicyVersion.init()`: en la primera ejecución conjunta el índice único aún no existía y salió 201;
+  - informe fiscal y CSV dan código fijo, y `year=1900` sigue dando 400;
+  - el panel de institución da código fijo;
+  - `requireVerified` da `verification_check_failed`;
+  - las reseñas de un usuario no llevan ids ni correo.
+- Jest `--runInBand` de `tests/admin`, `policies`, `institution`, `reviews`, `security`, `contracts`, `escrow`, `rentalPublic` y `src/__tests__`: 56 suites y 252 tests OK.
+- Frontend (sin cambios): `npm --prefix frontend run build` OK y `npm --prefix frontend test` con 40 ficheros y 149 tests OK. Una primera ejecución a la vez que el Jest del backend dio 6 fallos por timeout. Repetida sola, todo pasa.
+- GitNexus: `impact` dio riesgo bajo para `PolicyController` y `requireVerified`, aunque el grafo no ve el uso de este como middleware. `detect_changes` marca riesgo «alto» por los 13 flujos de admin, el informe fiscal y la institución que tocan estos controladores. En todos, el cambio está en el `catch` (y en la validación de ids del export).
+
+**Qué queda.**
+- Quedan `e.message` en `clauses.controller` (400 con el texto del catálogo), `testingInbound` (desactivado en producción) y `validation.middleware` (400 deliberado). Los de subida son errores de multer, a propósito.
+- Muchos `console.error` siguen fuera del logger (contratos, admin).
+- `GET /api/reviews/user/:userId/avg` sigue abierto a cualquier verificado. Solo da media y número, igual que el perfil.
+- Pendientes anteriores: `/landlord/services` es un marcador (depende de producto); aviso de cobro a la agencia (Jorge); moderación de opiniones (Jorge).
+
+**Siguiente mejora propuesta.** Dos rondas seguidas de backend (47 y 49, con la 48 de interfaz). La 50 debería ser de interfaz. Candidatas: las pantallas de administración (`AdminCompliancePage`, `ComplianceDashboard`, que siguen con clases sueltas tipo `border-gray-300` fuera del sistema 2026), o el paso del inquilino a `/tenant/kyc` desde una invitación de co-titular.
