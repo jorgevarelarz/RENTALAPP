@@ -20,6 +20,9 @@ import { buildSystemEventsCsv, listSystemEvents, listSystemEventsAll } from '../
 import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
 import { getJwtSecret } from '../utils/getJwtSecret';
 import { csvRow, csvRows } from '../utils/csv';
+import { sendRouteError } from '../utils/routeError';
+import { logger } from '../utils/logger';
+import { isValidObjectId } from 'mongoose';
 
 const ADMIN_JWT_SECRET = getJwtSecret();
 
@@ -53,8 +56,7 @@ export const getStats = async (_req: Request, res: Response) => {
       },
     });
   } catch (error: any) {
-    console.error(error);
-    res.status(500).json({ error: 'Error obteniendo estadísticas', details: error.message });
+    sendRouteError(res, error, 'admin_stats_failed');
   }
 };
 
@@ -100,7 +102,7 @@ export const listPolicyAcceptances = async (req: Request, res: Response) => {
 
     res.json({ data });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || 'compliance_list_failed' });
+    sendRouteError(res, error, 'compliance_list_failed');
   }
 };
 
@@ -141,7 +143,7 @@ export const listAuditTrails = async (req: Request, res: Response) => {
     ]);
     res.json({ data: items, meta: { total, page: p, pageSize: ps }, stats });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || 'audit_trails_failed' });
+    sendRouteError(res, error, 'audit_trails_failed');
   }
 };
 
@@ -187,6 +189,8 @@ export const exportAuditTrails = async (req: Request, res: Response) => {
           .filter(Boolean);
 
     if (ids.length === 0) return res.status(400).json({ error: 'contractIds_required' });
+    // El id acaba en una ruta de fichero (contract_<id>.pdf): solo ObjectId, nada de «../».
+    if (ids.some(id => !isValidObjectId(id))) return res.status(400).json({ error: 'invalid_contract_id' });
 
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename="audit-trails.zip"');
@@ -218,7 +222,12 @@ export const exportAuditTrails = async (req: Request, res: Response) => {
 
     await archive.finalize();
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || 'zip_export_failed' });
+    // Si el zip ya había empezado a salir, solo queda cortar la respuesta.
+    if (res.headersSent) {
+      logger.error({ err: e }, 'zip_export_failed');
+      return res.end();
+    }
+    sendRouteError(res, e, 'zip_export_failed');
   }
 };
 
@@ -231,7 +240,7 @@ export const listAdminRequests = async (req: Request, res: Response) => {
     const items = await AdminRequest.find(q).sort({ createdAt: -1 }).lean();
     res.json({ items });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || 'admin_requests_failed' });
+    sendRouteError(res, error, 'admin_requests_failed');
   }
 };
 
@@ -290,7 +299,7 @@ export const upsertAdminTensionedArea = async (req: Request, res: Response) => {
     if (error?.issues) {
       return res.status(400).json({ error: 'invalid_payload', details: error.issues });
     }
-    res.status(500).json({ error: error?.message || 'tensioned_area_upsert_failed' });
+    sendRouteError(res, error, 'tensioned_area_upsert_failed');
   }
 };
 
@@ -306,7 +315,7 @@ export const listTensionedAreas = async (req: Request, res: Response) => {
     const items = await TensionedArea.find(query).sort({ effectiveFrom: -1 }).lean();
     res.json({ data: items });
   } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'tensioned_area_list_failed' });
+    sendRouteError(res, error, 'tensioned_area_list_failed');
   }
 };
 
@@ -337,7 +346,7 @@ export const getComplianceDashboard = async (req: Request, res: Response) => {
     if (error?.message === 'invalid_date_range') {
       return res.status(400).json({ error: 'invalid_date_range' });
     }
-    res.status(500).json({ error: error?.message || 'compliance_dashboard_failed' });
+    sendRouteError(res, error, 'compliance_dashboard_failed');
   }
 };
 
@@ -374,7 +383,7 @@ export const exportComplianceDashboardCsv = async (req: Request, res: Response) 
     if (error?.message === 'invalid_date_range') {
       return res.status(400).json({ error: 'invalid_date_range' });
     }
-    res.status(500).json({ error: error?.message || 'compliance_dashboard_export_failed' });
+    sendRouteError(res, error, 'compliance_dashboard_export_failed');
   }
 };
 
@@ -391,7 +400,7 @@ export const listSystemEventsAdmin = async (req: Request, res: Response) => {
     const data = await listSystemEvents({ type, resourceType, dateFrom, dateTo, page, pageSize });
     res.json({ data });
   } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'system_events_list_failed' });
+    sendRouteError(res, error, 'system_events_list_failed');
   }
 };
 
@@ -409,7 +418,7 @@ export const exportSystemEventsCsv = async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', 'attachment; filename="system-events.csv"');
     return res.send(csv);
   } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'system_events_export_failed' });
+    sendRouteError(res, error, 'system_events_export_failed');
   }
 };
 
@@ -446,7 +455,7 @@ export const decideAdminRequest = async (req: Request, res: Response) => {
     }
     return res.status(400).json({ error: 'invalid_decision' });
   } catch (error: any) {
-    res.status(500).json({ error: error.message || 'admin_decision_failed' });
+    sendRouteError(res, error, 'admin_decision_failed');
   }
 };
 
@@ -456,6 +465,6 @@ export const listWeeklyStats = async (req: Request, res: Response) => {
     const data = await getWeeklyStats(Number.isNaN(weeks) ? 12 : weeks);
     res.json({ data });
   } catch (e: any) {
-    res.status(500).json({ error: e?.message || 'weekly_stats_failed' });
+    sendRouteError(res, e, 'weekly_stats_failed');
   }
 };

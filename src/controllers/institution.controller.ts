@@ -5,6 +5,7 @@ import { ComplianceStatus } from '../modules/rentalPublic/models/complianceStatu
 import { parseDateRange } from '../utils/dateRange';
 import { getInstitutionCaseIdSalt } from '../utils/getInstitutionCaseIdSalt';
 import { csvRows } from '../utils/csv';
+import { sendRouteError } from '../utils/routeError';
 
 const CASEID_SALT = getInstitutionCaseIdSalt();
 
@@ -186,7 +187,7 @@ export const getInstitutionComplianceDashboard = async (req: Request, res: Respo
     if (error?.message === 'invalid_date_range') {
       return res.status(400).json({ error: 'invalid_date_range' });
     }
-    res.status(500).json({ error: error?.message || 'institution_dashboard_failed' });
+    sendRouteError(res, error, 'institution_dashboard_failed');
   }
 };
 
@@ -215,6 +216,6 @@ export const exportInstitutionComplianceDashboardCsv = async (req: Request, res:
     if (error?.message === 'invalid_date_range') {
       return res.status(400).json({ error: 'invalid_date_range' });
     }
-    res.status(500).json({ error: error?.message || 'institution_dashboard_export_failed' });
+    sendRouteError(res, error, 'institution_dashboard_export_failed');
   }
 };
