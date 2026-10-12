@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Heart, MapPin, Share2, ShieldCheck } from 'lucide-react';
 import { applyToProperty, favoriteProperty, getProperty, incrementView, unfavoriteProperty } from '../../services/properties';
 import TenantProPanel from '../../components/TenantProPanel';
-import LoginPrompt from '../../components/LoginPrompt';
+import LoginPrompt, { type LoginPromptReason } from '../../components/LoginPrompt';
 import PropertyGallery from '../../components/property/PropertyGallery';
 import SkeletonDetail from '../../components/ui/SkeletonDetail';
 import { useAuth } from '../../context/AuthContext';
@@ -45,7 +45,7 @@ export default function PropertyDetail() {
   const { user } = useAuth();
   const toast = useToast();
   const qc = useQueryClient();
-  const [promptLogin, setPromptLogin] = useState(false);
+  const [promptLogin, setPromptLogin] = useState<LoginPromptReason | null>(null);
   const [applying, setApplying] = useState(false);
   const [message, setMessage] = useState('');
   const messageRef = useRef<HTMLTextAreaElement>(null);
@@ -87,7 +87,7 @@ export default function PropertyDetail() {
     qc.setQueryData<Property>(['property', id, user?._id || 'anon'], (prev) => (prev ? { ...prev, ...patch } : prev));
 
   const toggleFavorite = async () => {
-    if (!user) return setPromptLogin(true);
+    if (!user) return setPromptLogin('save');
     const liked = !!property._liked;
     setCached({ _liked: !liked });
     try {
@@ -114,7 +114,7 @@ export default function PropertyDetail() {
   };
 
   const apply = async () => {
-    if (!user) return setPromptLogin(true);
+    if (!user) return setPromptLogin('apply');
     setApplying(true);
     try {
       const text = message.trim();
@@ -140,7 +140,7 @@ export default function PropertyDetail() {
 
   // En móvil, la barra fija lleva al formulario (con el mensaje) en vez de enviar la solicitud vacía
   const goToApply = () => {
-    if (!user) return setPromptLogin(true);
+    if (!user) return setPromptLogin('apply');
     const field = messageRef.current;
     if (!field) return apply();
     field.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -315,7 +315,7 @@ export default function PropertyDetail() {
         )}
       </div>
 
-      <LoginPrompt open={promptLogin} onClose={() => setPromptLogin(false)} />
+      <LoginPrompt open={!!promptLogin} reason={promptLogin || undefined} onClose={() => setPromptLogin(null)} />
     </div>
   );
 }

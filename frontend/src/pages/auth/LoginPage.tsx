@@ -112,7 +112,7 @@ export default function LoginPage() {
         </button>
       </form>
       <div className="auth-footer">
-        ¿No tienes cuenta? <Link to={sp.get('redirect') ? `/register?redirect=${encodeURIComponent(next)}` : "/register"} className="auth-link">Crea una gratis</Link>
+        ¿No tienes cuenta? <Link to={next !== "/" ? `/register?redirect=${encodeURIComponent(next)}` : "/register"} className="auth-link">Crea una gratis</Link>
       </div>
     </>
   );

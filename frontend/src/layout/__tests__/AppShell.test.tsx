@@ -68,17 +68,18 @@ describe('AppShell, menú del móvil', () => {
     await waitFor(() => expect(listConversationsMock).toHaveBeenCalledTimes(1));
   });
 
-  it('sin sesión no ofrece Mensajes ni Asistente, sino crear cuenta o entrar', async () => {
+  it('sin sesión no ofrece Mensajes ni Asistente, sino crear cuenta o entrar y volver a la búsqueda', async () => {
     auth.current = {};
-    renderShell('/properties');
+    renderShell('/properties?city=Madrid');
     fireEvent.click(screen.getByRole('button', { name: 'Abrir menú' }));
     const dialog = screen.getByRole('dialog', { name: 'Menú' });
     expect(within(dialog).queryByRole('link', { name: /Mensajes/ })).toBeNull();
     expect(within(dialog).queryByRole('link', { name: /Asistente/ })).toBeNull();
     expect(within(dialog).getByRole('link', { name: 'Buscar pisos' })).toHaveAttribute('href', '/properties');
     expect(within(dialog).getByText(/guardas pisos, pides visitas/)).toBeInTheDocument();
-    expect(within(dialog).getByRole('link', { name: 'Crear cuenta' })).toHaveAttribute('href', '/register');
-    expect(within(dialog).getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', '/login');
+    const back = encodeURIComponent('/properties?city=Madrid');
+    expect(within(dialog).getByRole('link', { name: 'Crear cuenta' })).toHaveAttribute('href', `/register?redirect=${back}`);
+    expect(within(dialog).getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', `/login?redirect=${back}`);
     expect(listConversationsMock).not.toHaveBeenCalled();
   });
 });

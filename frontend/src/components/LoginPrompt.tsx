@@ -1,26 +1,46 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import Modal from './ui/Modal';
+import { authHref } from '../utils/authLinks';
 
-export default function LoginPrompt({ open, onClose }: { open: boolean; onClose: () => void }) {
+export type LoginPromptReason = 'save' | 'apply';
+
+const COPY: Record<LoginPromptReason, { title: string; text: string }> = {
+  save: {
+    title: 'Guarda este piso',
+    text: 'Con una cuenta gratuita guardas los pisos que te interesan y los tienes a mano en «Favoritos».',
+  },
+  apply: {
+    title: 'Pide una visita',
+    text: 'Para pedir visita y hablar con el propietario necesitas una cuenta gratuita. Al terminar vuelves a este anuncio.',
+  },
+};
+
+export default function LoginPrompt({
+  open,
+  onClose,
+  reason = 'save',
+}: {
+  open: boolean;
+  onClose: () => void;
+  reason?: LoginPromptReason;
+}) {
   const loc = useLocation();
-  const redirect = encodeURIComponent(loc.pathname + loc.search);
+  const copy = COPY[reason];
   return (
-    <Modal open={open} onClose={onClose} title="Inicia sesión">
-      <div style={{ display: 'grid', gap: 10 }}>
-        <p>Para usar esta función debes iniciar sesión.</p>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <Link
-            to={`/login?redirect=${redirect}`}
-            onClick={onClose}
-            style={{ border: '1px solid #d4d4d8', padding: '8px 12px', borderRadius: 8 }}
-          >
-            Ir a iniciar sesión
-          </Link>
-          <button onClick={onClose} style={{ padding: '8px 12px', borderRadius: 8, border: '1px solid #d4d4d8' }}>Cancelar</button>
-        </div>
+    <Modal open={open} onClose={onClose} title={copy.title} className="ra-login-prompt">
+      <p className="ra-login-prompt-text">{copy.text}</p>
+      <div className="ra-login-prompt-actions">
+        <Link to={authHref('/register', loc)} onClick={onClose} className="ra-button ra-button-blue ra-button-small">
+          Crear cuenta
+        </Link>
+        <Link to={authHref('/login', loc)} onClick={onClose} className="ra-app-login">
+          Ya tengo cuenta
+        </Link>
+        <button type="button" onClick={onClose} className="ra-login-prompt-dismiss">
+          Ahora no
+        </button>
       </div>
     </Modal>
   );
 }
-

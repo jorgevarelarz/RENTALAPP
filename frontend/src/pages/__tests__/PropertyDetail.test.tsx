@@ -84,7 +84,8 @@ describe('Ficha del anuncio', () => {
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Solicitar visita' })[0]);
     expect(mocks.applyToProperty).not.toHaveBeenCalled();
-    expect(await screen.findByRole('dialog', { name: 'Inicia sesión' })).toBeInTheDocument();
+    const prompt = await screen.findByRole('dialog', { name: 'Pide una visita' });
+    expect(within(prompt).getByRole('link', { name: 'Ya tengo cuenta' }).getAttribute('href')).toMatch(/^\/login\?redirect=%2Fproperties%2Fp1/);
   });
 
   it('la galería no repite fotos y el visor pasa de una a otra', async () => {

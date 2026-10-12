@@ -774,6 +774,14 @@ body {
 .ra-guest-account { border-top: 1px solid var(--ra-line); display: grid; gap: 8px; margin-top: 18px; padding: 16px 4px 0; }
 .ra-guest-account p { color: var(--ra-muted); font-size: 13px; line-height: 1.45; margin: 0 0 4px; }
 .ra-guest-account a { justify-content: center; text-align: center; }
+.ra-login-prompt-text { color: var(--ra-muted); font-size: 14.5px; line-height: 1.5; margin: 0 0 18px; }
+.ra-login-prompt-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; }
+.ra-login-prompt-dismiss { background: none; border: 0; color: var(--ra-muted); cursor: pointer; font-size: 13px; font-weight: 600; margin-left: auto; padding: 8px 4px; }
+.ra-login-prompt-dismiss:hover { color: var(--ra-ink); }
+@media (max-width: 420px) {
+  .ra-login-prompt-actions > a { flex: 1 1 100%; justify-content: center; text-align: center; }
+  .ra-login-prompt-dismiss { margin: 0 auto; }
+}
 @media (max-width: 640px) { .ra-app-register { display: none; } }
 .ra-app-frame { max-width: 1320px; }
 .ra-side-nav > div { background: rgba(255, 255, 255, .72); border: 1px solid rgba(11, 16, 37, .08); border-radius: 22px; padding: 18px 10px; }

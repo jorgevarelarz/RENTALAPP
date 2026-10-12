@@ -179,7 +179,7 @@ export default function PropertiesList() {
           />
         </div>
       </Drawer>
-      <LoginPrompt open={promptLogin} onClose={() => setPromptLogin(false)} />
+      <LoginPrompt open={promptLogin} reason="save" onClose={() => setPromptLogin(false)} />
     </div>
   );
 }

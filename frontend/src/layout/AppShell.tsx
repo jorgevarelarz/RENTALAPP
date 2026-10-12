@@ -11,6 +11,7 @@ import navConfig from '../config/nav.config.json';
 import Breadcrumbs from '../components/Breadcrumbs';
 import Brand from '../components/Brand';
 import { roleHome } from '../utils/roleHome';
+import { authHref } from '../utils/authLinks';
 import Drawer from '../components/ui/Drawer';
 import { listConversations } from '../services/chat';
 
@@ -85,6 +86,7 @@ function UnreadBadge({ count }: { count: number }) {
 
 function Header({ unread, menuOpen, onOpenMenu }: { unread: number; menuOpen: boolean; onOpenMenu: () => void }) {
   const { user, logout } = useAuth();
+  const location = useLocation();
   const home = roleHome(user?.role);
   return (
     <header className="ra-app-header">
@@ -115,8 +117,8 @@ function Header({ unread, menuOpen, onOpenMenu }: { unread: number; menuOpen: bo
         <div className="ml-auto flex items-center gap-2.5 text-sm">
           {!user ? (
             <>
-              <Link to="/login" className="ra-app-login">Entrar</Link>
-              <Link to="/register" className="ra-button ra-button-blue ra-button-small ra-app-register">Crear cuenta</Link>
+              <Link to={authHref('/login', location)} className="ra-app-login">Entrar</Link>
+              <Link to={authHref('/register', location)} className="ra-button ra-button-blue ra-button-small ra-app-register">Crear cuenta</Link>
             </>
           ) : (
             <>
@@ -168,11 +170,12 @@ const sectionTitle = 'text-[11px] font-semibold uppercase tracking-wider text-gr
 
 // Sin sesión, Mensajes y Asistente solo llevarían al login: en su lugar, qué da la cuenta y cómo entrar
 function GuestAccount({ onNavigate }: { onNavigate?: () => void }) {
+  const location = useLocation();
   return (
     <div className="ra-guest-account">
       <p>Con una cuenta guardas pisos, pides visitas y hablas con el propietario.</p>
-      <Link to="/register" onClick={onNavigate} className="ra-button ra-button-blue ra-button-small">Crear cuenta</Link>
-      <Link to="/login" onClick={onNavigate} className="ra-app-login">Entrar</Link>
+      <Link to={authHref('/register', location)} onClick={onNavigate} className="ra-button ra-button-blue ra-button-small">Crear cuenta</Link>
+      <Link to={authHref('/login', location)} onClick={onNavigate} className="ra-app-login">Entrar</Link>
     </div>
   );
 }
