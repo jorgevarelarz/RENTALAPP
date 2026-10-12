@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle } from 'lucide-react';
 import PropertyCard from '../../components/PropertyCard';
-import Card from '../../components/ui/Card';
+import EmptyState from '../../components/ui/EmptyState';
 import PageHeader from '../../components/ui/PageHeader';
 import SkeletonGrid from '../../components/ui/SkeletonGrid';
 import { favoriteProperty, listMyFavorites, unfavoriteProperty } from '../../services/properties';
@@ -114,15 +114,11 @@ export default function FavoritesPage() {
       {loading ? (
         <SkeletonGrid count={3} />
       ) : empty ? (
-        <Card className="flex flex-col gap-4 px-5 py-6 md:flex-row md:items-center md:justify-between">
-          <div>
-            <p className="font-medium text-gray-900">Aún no has guardado ningún piso</p>
-            <p className="mt-1 text-sm text-gray-500">
-              Pulsa el corazón de un anuncio para guardarlo aquí. Si su propietario lo retira, dejará de aparecer.
-            </p>
-          </div>
-          {explore}
-        </Card>
+        <EmptyState
+          title="Aún no has guardado ningún piso"
+          detail="Pulsa el corazón de un anuncio para guardarlo aquí. Si su propietario lo retira, dejará de aparecer."
+          cta={explore}
+        />
       ) : (
         !loadError && (
           <div className="grid grid-cols-1 gap-x-4 gap-y-8 sm:grid-cols-2 lg:grid-cols-3">

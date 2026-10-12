@@ -139,8 +139,8 @@ export default function Inbox() {
       {err && <div className="text-sm text-red-600">{err}</div>}
       {!loading && items.length === 0 ? (
         <EmptyState
-          title="Aun no tienes conversaciones"
-          detail="Cuando envies solicitudes o tengas un contrato, podras chatear aqui."
+          title="Aún no tienes conversaciones"
+          detail="Cuando haya una solicitud de visita o un contrato, podrás hablar aquí con la otra parte."
           cta={(
             <button
               type="button"
