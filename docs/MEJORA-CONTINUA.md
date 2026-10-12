@@ -2517,3 +2517,42 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; `ticket.routes.ts` conserva su propio `escapeRegExp`.
 
 **Siguiente mejora propuesta.** Pasar `ui/Button` a las clases 2026 (`.ra-button` y variantes), revisando una a una las pantallas que lo usan con capturas. Si toca backend: unificar `ticket.routes.ts` con `utils/searchRegex`.
+
+### Ronda 65 — 2026-10-12 15:55
+
+**Qué y por qué.** Ronda de interfaz: lo que proponía la ronda 64 (`ui/Button`). Al revisar con capturas las pantallas que lo usan salió algo más grave, la página «Ingresos» con datos inventados, y entró en el lote.
+
+1. **`ui/Button` al sistema 2026.** Lo usan 14 pantallas (panel del casero, alta de inmueble, asistente de contrato, candidatos, incidencias, perfil…). Tenía estilos en línea con `var(--primary)` (índigo de la plantilla antigua), radio de 8 px y borde gris, y no seguía la marca. Además, como los estilos iban en línea, las clases de quien llama no mandaban. Ahora:
+   - clases `.ra-btn*` en `@layer components` (píldora, DM Sans 600): primario `--ra-blue`, secundario blanco con borde `--ra-line`, fantasma y peligro; `outline` es alias de secundario. Foco visible con anillo azul y desactivado al 50 % sin cambio al pasar el ratón. Sin la elevación ni la sombra de los botones de la landing, que en una app se ven de más;
+   - `type="button"` por defecto: dentro de un `<form>` ya no lo envía sin querer (los que envían ya decían `type="submit"`);
+   - `buttonClassName()` para dar aspecto de botón a un `<Link>` sin anidar un `<button>` en un enlace;
+   - **fallos de paso:** «Crear propiedad» llevaba `bg-green-600` que nunca se veía (lo tapaba el estilo en línea) y con el cambio se habría vuelto verde: quitado. Los iconos de «Atrás/Siguiente» tenían `mr-2`/`ml-2` además del `gap`. «Borrar» del panel del casero llevaba el color en línea y, si el `DELETE` fallaba, la promesa se rechazaba sin aviso; ahora sale un aviso de error;
+   - **código muerto quitado:** `pages/Login.tsx` (el login real es `pages/auth/LoginPage`), `pages/TenantDashboard.tsx` y `components/dashboard/ActiveContractWidget.tsx`. Nadie los importaba; los dos últimos solo se referían entre sí y anidaban `<button>` dentro de `<Link>`.
+2. **«Ingresos» (`/earnings`) sin datos inventados.** La ruta está viva para el casero (solo se llega por URL; el `AppLayout` que la enlazaba tampoco se usa). Enseñaba:
+   - «Actividad reciente» con tres «Cobro de Alquiler +850 €, hace 2/3/4 días» fijos, iguales para cualquier casero;
+   - «Rentabilidad media ~5.4 %», escrita a mano;
+   - «100 % cobrado» en verde aunque el mes fuera 0 €, y un «Ver todo el historial» que no hacía nada;
+   - si la llamada fallaba, 0 € como si no hubiera cobros; la gráfica omitía los meses sin cobros, y las etiquetas eran «10/2026».
+
+   Ahora solo muestra lo que da el backend: «Total cobrado», «Este mes» y «Cobros» (formato `es-ES`), la gráfica de los seis últimos meses con los meses vacíos a cero («sept 2026») y el importe accesible por mes, y «Ver cobros y recibos» → `/landlord/payments`. Si la carga falla: alerta y «Reintentar»; si falla el CSV, aviso. Sin degradado ni sombra azul. La miga de pan dice «Ingresos» en vez de «earnings».
+
+**Commits.**
+- `9b36427` Interfaz: ui/Button al sistema 2026
+- `92872fa` Interfaz: «Ingresos» (/earnings) sin datos inventados
+
+**Verificación (resultados reales).**
+- **Backend:** sin cambios.
+- **Frontend.**
+  - `tsc --noEmit`: sin errores. `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`: 58 ficheros y 235 tests OK (antes 57/230 con el botón; después del cambio de «Ingresos», suite completa otra vez).
+  - Tests nuevos: `components/ui/Button.test.tsx` (3: `type="button"` por defecto no envía el formulario y `submit` sí; clases sin `style` y conserva el `className`; `buttonClassName`); `pages/__tests__/Earnings.test.tsx` (5: solo datos del backend, sin «850», «5.4» ni «100 % cobrado», seis meses y enlace a cobros; vacío explicado; error con «Reintentar» que recarga; `lastSixMonths` rellena con 0 al cruzar de año; `monthLabel`).
+- **Playwright** (vite local, `/api/*` simulado), capturas en `/tmp/ra-shots65`, a 390 y 1280 px: panel del casero con un borrador y un publicado (píldoras «Publicar» azul desactivado, «Editar» y «Solicitudes» blancos, «Borrar» en rojo, anillo de foco en «Editar»); «Ingresos» con 5 meses de cobros y septiembre vacío. Sin desbordamiento horizontal. Vite no recogía los cambios hasta reiniciarlo con `--force` (como en las rondas 62 y 64).
+- **GitNexus.** `impact` de `Button`: LOW (no sigue el JSX; los 17 ficheros que lo importan se revisaron a mano). `detect_changes`: riesgo medio, solo por los flujos de `LandlordDashboard`, donde está «Borrar».
+
+**Qué queda.**
+- «Ingresos» no está en el menú del casero; ¿debe estar, junto a «Pagos»? La ruta admite `admin`, pero el backend solo `landlord`: el administrador ve el error. Ahora al menos lo dice.
+- `components/AppLayout.tsx` parece también código muerto (solo se nombra a sí mismo); no lo he quitado en esta ronda.
+- `ui/Card` sigue con estilos en línea (`var(--card)`, radio 12) y lo usan muchas pantallas; es el siguiente candidato natural.
+- Pendientes anteriores: `CopyLinkButton` con borde gris; el corazón del listado sin sesión no se guarda solo al volver; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; `ticket.routes.ts` conserva su propio `escapeRegExp`.
+
+**Siguiente mejora propuesta.** Pasar `ui/Card` a clases 2026 (como `Button`: `@layer components`, sin estilos en línea) y quitar `AppLayout.tsx` si se confirma muerto. Si toca backend: unificar `ticket.routes.ts` con `utils/searchRegex`.

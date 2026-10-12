@@ -1397,3 +1397,9 @@ Rules:
 - `react-hot-toast` removed (dependency + `<Toaster/>`): `TenantProPanel`, `CopyLinkButton`, `AdminAuditDashboard` use `useToast`; ZIP export progress shown in its button.
 - `PaymentModal`/`CheckoutForm`: `.ra-pay-*` classes, concept + es-ES amount, Stripe Elements `locale: 'es'`, card style with DM Sans/tokens, `.ra-button-blue` submit, alert errors; no-key state user-friendly (env var only in DEV). Tenant `Payments` modal title «Pagar recibo» + `paymentTitle` concept (was «Pagar renta» for deposits too).
 - Verification: frontend tsc + build OK, 56 files/227 tests (new PaymentModal 3, CopyLinkButton 2); Playwright `/tmp/ra-shots64`. Backend untouched.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 65: Button 2026 + honest Earnings page
+
+- `ui/Button`: `.ra-btn*` classes in `@layer components` (no inline styles), default `type="button"`, exported `buttonClassName()` for Links. Removed dead `pages/Login.tsx`, `pages/TenantDashboard.tsx`, `components/dashboard/ActiveContractWidget.tsx`. Landlord «Borrar» toasts on failure.
+- `pages/Earnings.tsx`: removed fake «+850 €» activity, «~5.4 %» and «100 % cobrado»; real stats only, 6-month chart with empty months (`lastSixMonths`), error + retry, link to `/landlord/payments`; breadcrumb «Ingresos».
+- Verification: frontend tsc + build OK, 58 files/235 tests (new Button 3, Earnings 5); Playwright `/tmp/ra-shots65`. Backend untouched.
