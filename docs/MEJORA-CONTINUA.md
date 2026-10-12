@@ -2307,3 +2307,38 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 - Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador.
 
 **Siguiente mejora propuesta.** Menú lateral sin sesión: cambiar «Mensajes» y «Asistente», que piden cuenta, por «Entrar» y una línea que explique qué se gana con la cuenta. Después, buscar ciudades sin distinguir tildes («A Coruna» → «A Coruña»), con un campo normalizado en el modelo y su índice.
+
+### Ronda 60 — 2026-10-12 11:50
+
+**Qué y por qué.** Las dos mejoras que proponía la ronda 59:
+
+1. **Buscar sin distinguir tildes.** «A Coruna» no encontraba «A Coruña», ni «avila» encontraba «Ávila». Con el teclado del móvil o con prisa es muy habitual escribir sin tildes, y el resultado era «No hay viviendas con esos filtros» aunque las hubiera. Ahora:
+   - el nuevo `src/utils/searchRegex.ts` (`accentInsensitivePattern`) convierte cada vocal, la «n» y la «c» en su clase con variantes (`[aáàâäã…]`, `[nñ]`, `[cç]`) y el apóstrofo recto vale también por el tipográfico (`L’Hospitalet`). El resto del texto se escapa igual que antes, así que sigue sin admitir operadores de regex;
+   - lo usan el filtro de ciudad (sigue siendo la ciudad entera), el texto libre `q` (título, ciudad y dirección) y los comparables por ciudad del precio sugerido (`rentSuggestion.service`);
+   - no necesita migración ni campo nuevo: funciona con los datos que ya hay. Descarté guardar la ciudad normalizada con su índice porque la regex con `i` ya no usaba el índice `{city:1, price:1}`; con el volumen actual no hace falta.
+2. **Menú lateral sin sesión.** En escritorio y en el móvil salían «Mensajes» y «Asistente», que solo llevaban al login. Ahora, sin sesión, el menú tiene «Buscar pisos» y debajo una línea que explica qué da la cuenta («Con una cuenta guardas pisos, pides visitas y hablas con el propietario.») con «Crear cuenta» y «Entrar». El botón suelto «Crear cuenta» del menú móvil (ronda 59) pasa a ese bloque.
+
+**Commits.**
+- `ff20106` Búsqueda: ciudad y texto sin distinguir tildes; también los comparables del precio sugerido
+- `67ec861` Interfaz: menú lateral sin sesión con «Crear cuenta» y «Entrar» en vez de Mensajes y Asistente
+
+**Verificación (resultados reales).**
+- **Backend.**
+  - `npx tsc --noEmit`: sin errores.
+  - `npx jest tests/properties/property.routes.test.ts tests/security/mongoOperators.test.ts --runInBand`: 2 suites y 17 tests OK. Caso nuevo: «a coruna», «A CORUNA», «avila», «ÁVILA», «àvila», «l'hospitalet de llobregat» y `q=coruna` encuentran su piso; «evila» no.
+  - `npx jest tests/unit/searchRegex.test.ts tests/unit/rentSuggestion.test.ts tests/properties/property.referenceImport.test.ts --runInBand`: 3 suites y 15 tests OK (el de `searchRegex` es nuevo: tildes, ç, apóstrofo, `.*`, `(a+)+` y `[`).
+- **Frontend.**
+  - `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`: 49 ficheros y 207 tests OK. `AppShell.test.tsx` pasa de 2 a 3: sin sesión no hay «Mensajes» ni «Asistente», «Crear cuenta» va a `/register`, «Entrar» a `/login` y no se consultan conversaciones.
+- **Playwright** (vite local, `/api/*` simulado), capturas en `/tmp/ra-shots60`, a 390 y 1280 px: ningún enlace a Mensajes o Asistente, sin desbordamiento horizontal, «Entrar» del menú lleva a `/login`.
+- **GitNexus.**
+  - `impact`: `search`, LOW. `NavSections` no está en el índice (es local de `AppShell`; solo lo usan `SideNav` y `MobileNav`).
+  - `detect_changes`: riesgo medio, solo por los flujos de `AppShell`, que es lo que cambia.
+
+**Qué queda.**
+- En escritorio sin sesión, «Entrar» y «Crear cuenta» salen dos veces (cabecera y lateral). Se podría dejar el lateral solo con la explicación, pero en el móvil sí hace falta el bloque completo.
+- La búsqueda no reconoce otras grafías (`l·l` catalana, guiones frente a espacios: «Sant Cugat del Vallès» vs. «Sant-Cugat»).
+- `ticket.routes.ts` conserva su propio `escapeRegExp`; podría usar `utils/searchRegex`.
+- Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador.
+
+**Siguiente mejora propuesta.** Repasar el flujo del inquilino sin sesión desde la ficha: qué ve al pulsar «Solicitar visita» o el corazón (¿le lleva al login y vuelve a la ficha después?). Si el retorno se pierde, guardar la ruta de origen y volver a ella tras entrar o registrarse.

@@ -1372,3 +1372,9 @@ Rules:
 - `AppShell` guest «Crear cuenta» never hid on mobile (`.ra-button` display beat Tailwind `hidden`) → wrapped to 2 lines; now `ra-app-register` hidden <640 px and a «Crear cuenta» button closes the mobile drawer for guests.
 - `PublicLayout`: mobile had no «Entrar»/«Viviendas»; now «Entrar» always, menu button <980 px (Viviendas, Producto, Para quién, + «Crear cuenta» <680 px), closes on navigation/Escape. «Mi cuenta» → `roleHome(role)` (was always `/tenant`); new `utils/roleHome.ts` used by RoleGuard, RedirectHome, AppShell. `PropertiesList` no longer re-filters `onlyTenantPro` client-side.
 - Verification: frontend tsc + build OK, vitest 49 files/206 (new `layout/__tests__/PublicLayout.test.tsx`); Playwright `/tmp/ra-shots59`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 60: accent-insensitive search + guest menu
+
+- New `src/utils/searchRegex.ts` (`escapeRegExp`, `accentInsensitivePattern`): property `search` city filter and `q`, plus `rentSuggestion` city comparables, ignore accents/ñ/ç and ’ vs '. No migration.
+- `AppShell` guest menu: no Mensajes/Asistente; `GuestAccount` block (explanation + «Crear cuenta» + «Entrar»), CSS `.ra-guest-account` replaces `.ra-mobile-nav-register`.
+- Verification: tsc clean; Jest `--runInBand` property.routes + mongoOperators 17, searchRegex + rentSuggestion + referenceImport 15; frontend build + 207 tests; Playwright `/tmp/ra-shots60`.
