@@ -73,13 +73,12 @@ export default function PropertiesList() {
   };
 
   const items = useMemo(() => {
-    const raw = data?.items || [];
-    const filtered = raw.filter((it) => (filters as { onlyTenantPro?: boolean }).onlyTenantPro ? !!it.onlyTenantPro : true);
-    return filtered.map((it): Property => ({
+    // El servidor ya filtra (también onlyTenantPro); filtrar aquí descuadraba el recuento y la paginación.
+    return (data?.items || []).map((it): Property => ({
       ...it,
       _liked: likedIds.has(String(it._id)),
     }));
-  }, [data, filters, likedIds]);
+  }, [data, likedIds]);
   const page = data?.page || 1;
   const limit = data?.limit || filters.limit || 12;
   const total = data?.total || 0;
