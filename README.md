@@ -169,7 +169,7 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 docker compose -f docker-compose.yml -f docker-compose.dev.yml logs -f api
 ```
 
-> 💡 Si prefieres hot reload con `ts-node-dev`, cambia el `command` del servicio `api` en `docker-compose.dev.yml` por `["npm","run","dev"]`.
+> 💡 Si prefieres recarga en caliente (`tsx watch`), cambia el `command` del servicio `api` en `docker-compose.dev.yml` por `["npm","run","dev"]`.
 
 Pruebas rápidas:
 
