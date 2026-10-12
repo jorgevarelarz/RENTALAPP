@@ -60,7 +60,7 @@ Estados: **confirmado** = problema observado en código o herramientas; **valida
 
 | ID | Estado | Acción | Evidencia y criterio de cierre |
 | --- | --- | --- | --- |
-| 37 | confirmado | Sustituir el lint ficticio por una comprobación real. | `frontend/package.json` imprime `Lint pendiente`. Reusar tooling disponible o retirar la falsa señal verde hasta configurarlo. |
+| 37 | local | Sustituir el lint ficticio por una comprobación real. | `frontend/package.json` imprimía `Lint pendiente`. Desde la ronda 68 de `docs/MEJORA-CONTINUA.md`, `npm --prefix frontend run lint` comprueba los tipos de todo `src`, tests incluidos (`tsconfig.test.json`), y CI lo ejecuta. Sin ESLint todavía. |
 | 38 | confirmado | Añadir typecheck al portal institucional. | Su build sólo ejecuta Vite. Cierre: CI falla ante un error TypeScript deliberado y el build válido pasa. |
 | 39 | validar | Revisar accesibilidad de formularios, modales y pagos. | Prueba de teclado, foco, etiquetas, mensajes de error y contraste; no se ha realizado una auditoría visual en esta sesión. |
 | 40 | validar | Revisar carga, error, vacío y doble envío de acciones críticas. | Cierre: usuario entiende qué ocurrió y un doble clic no duplica solicitudes, firmas o pagos. |

@@ -1410,3 +1410,9 @@ Rules:
 - `ticket.routes.ts` title search uses `accentInsensitivePattern` (own `escapeRegExp` removed).
 - Verification: tsc clean; Jest `--runInBand` all 97 suites pass in two batches (single process OOMs at 2 GB after 69 suites); frontend build OK, 237 tests OK (AppShell timeout under load, passes alone).
 
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 68: real frontend lint, tsx dev, serial backend suite
+
+- `frontend` `lint` = `tsc --noEmit -p tsconfig.test.json` (whole src incl. tests), added to CI; fixed 18 hidden test type errors + `usePolicyAcceptance.pendingPolicy` now typed nullable. vitest `testTimeout: 15000`.
+- Root `dev` = `tsx watch src/app.ts` (ts-node-dev removed). `jest.config.js` `workerIdleMemoryLimit: '1GB'` + `npm run test:backend:serial` (`--maxWorkers=1`): full suite in one command (97 suites, 458/459; `signature.security` flaked once with 401, passes alone).
+- Verification: tsc clean; frontend lint/build OK, 236/237 (AppShell timeout under load, passes alone). Details in `docs/MEJORA-CONTINUA.md` round 68.

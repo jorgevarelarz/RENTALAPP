@@ -2628,3 +2628,43 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: «Ingresos» fuera del menú del casero; el corazón del listado sin sesión no se guarda solo al volver; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; `ui/Input` y `Select` con estilos en línea y CSS muerto de la plantilla en `index.css`.
 
 **Siguiente mejora propuesta.** Cambiar `ts-node-dev` por `tsx watch` en `npm run dev` (quita el último aviso alto sin arreglo) y poner `workerIdleMemoryLimit` en `jest.config` para que la suite completa termine en un solo comando. Si se vuelve a la interfaz: `ui/Input` y `Select` a clases 2026 y fuera el CSS muerto de la plantilla.
+
+### Ronda 68 — 2026-10-12 17:30
+
+**Qué y por qué.** Ronda de herramientas, la que proponía la ronda 67. Son señales que mentían o fallaban sin motivo: un lint que siempre salía en verde, un servidor de desarrollo con avisos altos sin arreglo, una suite del backend que no terminaba en un solo comando y un test del frontend con timeouts falsos.
+
+1. **Lint real en el frontend** (production-readiness 37). `npm --prefix frontend run lint` era `echo 'Lint pendiente'`. Ahora es `tsc --noEmit -p tsconfig.test.json`, que comprueba los tipos de todo `src`, tests incluidos. El `build` solo comprobaba el código de la app. CI lo ejecuta antes de los tests. Escondía 18 errores:
+   - `{ virtual: true }` de Jest en `vi.mock`, en 4 ficheros (vitest no tiene ese argumento);
+   - `vi.mocked(api, { partial: false })` → `vi.mocked(api, true)`;
+   - `applyAccept` iba en el argumento de `eventInit` de `userEvent.upload` (v13). Ahora va en el de opciones;
+   - **un fallo de tipos real:** `usePolicyAcceptance` declaraba `pendingPolicy` y `activeVersion` como no nulos, aunque sin políticas pendientes valen `null`. Los tres usos (pagos de casero y admin, `PolicyModal`) ya usaban `?.`, así que no cambia nada en pantalla.
+2. **`npm run dev` con `tsx watch`** en lugar de `ts-node-dev`. Este no tiene arreglo para sus avisos altos (chokidar 2/braces) y no se mantiene. El proyecto no usa decoradores, que es lo único que tsx no admite. `tsx` no comprueba tipos: para eso está `npx tsc --noEmit`, que también corre en CI. Avisos de desarrollo: de 36 a 34. En producción siguen en 0.
+3. **Suite del backend en un solo comando.** Con `--runInBand`, Node agotaba 2 GB hacia la suite 70. `jest.config.js` lleva ahora `workerIdleMemoryLimit: '1GB'`, y el nuevo `npm run test:backend:serial` (`--maxWorkers=1 --forceExit`) ejecuta las suites de una en una en un worker que se reinicia al pasar de 1 GB. Con `--runInBand` el límite no se aplica (Jest corre en el propio proceso). CI sigue igual.
+4. **Timeout de vitest a 15 s** (antes 5 s). `AppShell` falló por tiempo en la suite completa en las rondas 67 y 68; solo pasa en 4 s.
+
+**Commits.**
+- `8d82700` Frontend: «npm run lint» deja de ser un echo
+- `0ae7209` Backend: «npm run dev» usa tsx watch
+- `380a27f` Frontend: tiempo máximo por test de 15 s en vitest
+- `8a4fde5` Tests del backend: «npm run test:backend:serial»
+- Docs: este registro y la fila 37 de `production-readiness-2026-10-01.md` (pasa a «local»)
+
+**Verificación (resultados reales).**
+- **Backend.**
+  - `npx tsc --noEmit`: sin errores.
+  - `npx tsx watch src/app.ts` arranca: carga todos los módulos y programa los jobs, y se queda esperando a Mongo (aquí no hay ninguno).
+  - Suite completa con `--maxWorkers=1 --workerIdleMemoryLimit=1GB`: **97 suites en un solo comando, sin quedarse sin memoria**. Tardó 17 min 56 s, con la máquina a carga 110-150. Resultado: 458 de 459 tests OK.
+  - El que falló es `signature.security` («rejects untrusted requests… (aaaa…)»): 401 donde esperaba 400. Solo, pasa (8/8), y también dos veces junto a las suites que le precedían. No lo pude reproducir, y la ronda no toca código del backend. Las rutas `/signature/webhook` y `/:id/signature/callback` pasan por `authenticate`, y el test depende del atajo `ALLOW_TEST_AUTH`; un 401 indica que ese atajo no estaba activo en ese momento.
+  - `npx jest --showConfig` confirma `workerIdleMemoryLimit: 1000000000`.
+- **Frontend.**
+  - `npm --prefix frontend run lint`: sin errores. `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`: 236 de 237 OK. El fallo fue `AppShell` por timeout de 5 s, con la suite del backend corriendo a la vez. Solo, pasa; con el límite nuevo, `src/layout` da 7/7. Los 7 ficheros de test tocados dan 27/27.
+- **GitNexus.** `detect_changes` contra `10f8e8f`: riesgo medio, solo por `usePolicyAcceptance` (flujos `AdminPayments`, `LandlordPayments` y `PolicyModal` → `CheckPolicy`). Es un cambio solo de tipos.
+
+**Qué queda.**
+- `signature.security` intermitente en la suite completa: conviene que `afterEach` no sustituya `process.env` entero (restaurar solo las variables que toca) y ver si otra suite deja `ALLOW_TEST_AUTH` o `NODE_ENV` cambiados.
+- El frontend sigue sin ESLint (sin reglas de hooks ni imports sin usar). `tsc` es la comprobación mínima honesta.
+- Avisos de desarrollo con salto mayor: Jest 30, vitest 5 y Tailwind 4.
+- Pendientes anteriores: «Ingresos» fuera del menú del casero; el corazón del listado sin sesión no se guarda solo al volver; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; `ui/Input` y `Select` con estilos en línea; CSS muerto de la plantilla en `index.css`.
+
+**Siguiente mejora propuesta.** Volver a la interfaz: `ui/Input` y `Select` a clases 2026 (`@layer components`, sin estilos en línea), revisados con capturas, y quitar el CSS muerto de la plantilla en `index.css`. Si toca backend: hacer determinista `signature.security` (restaurar solo las variables de entorno que toca).
