@@ -48,7 +48,7 @@ describe("Agencia gestora: inmuebles, candidatos y visitas", () => {
     expect(res.body.items[0].openApplications).toBeUndefined();
     await as(request(app).get(`/api/properties/${PROPERTY_ID}/applications`), AGENCY_ID, "agency").expect(403);
     await as(request(app).post(`/api/applications/${appId}/propose`), AGENCY_ID, "agency")
-      .send({ visitDate: "2026-10-20T08:00:00.000Z" })
+      .send({ visitDate: "2027-10-20T08:00:00.000Z" })
       .expect(403);
   });
 
@@ -61,24 +61,24 @@ describe("Agencia gestora: inmuebles, candidatos y visitas", () => {
   it("otra agencia no ve los candidatos ni propone visitas", async () => {
     await as(request(app).get(`/api/properties/${PROPERTY_ID}/applications`), OTHER_AGENCY_ID, "agency").expect(403);
     await as(request(app).post(`/api/applications/${appId}/propose`), OTHER_AGENCY_ID, "agency")
-      .send({ visitDate: "2026-10-20T08:00:00.000Z" })
+      .send({ visitDate: "2027-10-20T08:00:00.000Z" })
       .expect(403);
   });
 
   it("la agencia gestora propone la visita en nombre del propietario y acepta la del candidato", async () => {
     const res = await as(request(app).post(`/api/applications/${appId}/propose`), AGENCY_ID, "agency")
-      .send({ visitDate: "2026-10-20T08:00:00.000Z" })
+      .send({ visitDate: "2027-10-20T08:00:00.000Z" })
       .expect(200);
     expect(res.body).toMatchObject({ status: "proposed", proposedBy: "landlord" });
     // La agencia no puede aceptar su propia propuesta: le toca al candidato
     await as(request(app).post(`/api/applications/${appId}/accept`), AGENCY_ID, "agency").expect(403);
 
     await as(request(app).post(`/api/applications/${appId}/propose`), TENANT_ID, "tenant")
-      .send({ visitDate: "2026-10-21T15:00:00.000Z" })
+      .send({ visitDate: "2027-10-21T15:00:00.000Z" })
       .expect(200);
     const ok = await as(request(app).post(`/api/applications/${appId}/accept`), AGENCY_ID, "agency").expect(200);
     expect(ok.body.status).toBe("scheduled");
-    expect(new Date(ok.body.visitDate).toISOString()).toBe("2026-10-21T15:00:00.000Z");
+    expect(new Date(ok.body.visitDate).toISOString()).toBe("2027-10-21T15:00:00.000Z");
   });
   describe("contratos de los inmuebles gestionados", () => {
     let contractId: string;

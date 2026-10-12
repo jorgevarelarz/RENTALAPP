@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { Application } from '../models/application.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
@@ -71,9 +72,13 @@ export async function proposeVisit(req: Request, res: Response) {
   if (!visitDate) return res.status(400).json({ error: 'visitDate_required' });
   const proposed = new Date(visitDate);
   if (Number.isNaN(proposed.getTime())) return res.status(400).json({ error: 'invalid_visit_date' });
+  // Margen de un minuto para el reloj del navegador; una visita en el pasado no se puede concertar
+  if (proposed.getTime() < Date.now() - 60 * 1000) return res.status(400).json({ error: 'visit_date_in_past' });
 
+  if (!Types.ObjectId.isValid(String(id))) return res.status(404).json({ error: 'application_not_found' });
   const app = await Application.findById(id);
   if (!app) return res.status(404).json({ error: 'application_not_found' });
+  if (app.status === 'rejected') return res.status(409).json({ error: 'application_closed' });
 
   const property = await Property.findById(app.propertyId);
   if (!property) return res.status(404).json({ error: 'property_not_found' });
@@ -104,12 +109,16 @@ export async function acceptProposedVisit(req: Request, res: Response) {
   if (!userId) return res.status(401).json({ error: 'unauthorized' });
 
   const { id } = req.params;
+  if (!Types.ObjectId.isValid(String(id))) return res.status(404).json({ error: 'application_not_found' });
   const app = await Application.findById(id);
   if (!app) return res.status(404).json({ error: 'application_not_found' });
+  if (app.status === 'rejected') return res.status(409).json({ error: 'application_closed' });
 
   if (!app.proposedDate || !app.proposedBy) {
     return res.status(409).json({ error: 'no_proposed_date' });
   }
+  // Una propuesta cuya hora ya pasó no se acepta: hay que proponer otra
+  if (app.proposedDate.getTime() < Date.now()) return res.status(409).json({ error: 'proposed_date_passed' });
 
   const property = await Property.findById(app.propertyId);
   if (!property) return res.status(404).json({ error: 'property_not_found' });
