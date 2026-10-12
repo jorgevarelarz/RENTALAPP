@@ -314,7 +314,7 @@ export async function getById(req: Request, res: Response) {
     const [fav, application] = await Promise.all([
       UserFavorite.exists({ userId, propertyId: p._id }),
       (req as any).user?.role === 'tenant'
-        ? Application.findOne({ propertyId: p._id, tenantId: userId }).select('status visitDate proposedDate proposedBy createdAt').lean()
+        ? Application.findOne({ propertyId: p._id, tenantId: userId }).select('status visitDate proposedDate proposedBy message createdAt').lean()
         : null,
     ]);
     view._liked = !!fav;
@@ -326,6 +326,7 @@ export async function getById(req: Request, res: Response) {
         visitDate: a.visitDate,
         proposedDate: a.proposedDate,
         proposedBy: a.proposedBy,
+        message: a.message,
       };
     }
   }
@@ -504,8 +505,26 @@ export async function countView(req: Request, res: Response) {
   res.json({ ok: true });
 }
 
+export const APPLICATION_MESSAGE_MAX = 1000;
+
+// Mensaje opcional del inquilino al solicitar visita: texto plano, sin caracteres de control
+// (salvo saltos de línea), sin más de una línea en blanco seguida y recortado
+export function cleanApplicationMessage(raw: unknown): { message?: string; error?: string } {
+  if (raw === undefined || raw === null) return {};
+  if (typeof raw !== 'string') return { error: 'invalid_message' };
+  const message = raw
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (message.length > APPLICATION_MESSAGE_MAX) return { error: 'message_too_long' };
+  return message ? { message } : {};
+}
+
 export async function apply(req: Request, res: Response) {
   if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(404).json({ error: 'not_found' });
+  const { message, error: messageError } = cleanApplicationMessage(req.body?.message);
+  if (messageError) return res.status(400).json({ error: messageError, max: APPLICATION_MESSAGE_MAX });
   const property = await Property.findById(req.params.id);
   // Un borrador o un anuncio retirado no admite solicitudes (y para quien no lo gestiona, no existe)
   if (!property || property.status !== 'active') return res.status(404).json({ error: 'not_found' });
@@ -540,6 +559,7 @@ export async function apply(req: Request, res: Response) {
     propertyId: property._id,
     tenantId: userId,
     status: 'pending',
+    ...(message ? { message } : {}),
   });
 
   await recordFunnelEvent(req, 'application', {
@@ -553,6 +573,7 @@ export async function apply(req: Request, res: Response) {
 
 export async function listApplications(req: Request, res: Response) {
   const { id } = req.params;
+  if (!Types.ObjectId.isValid(String(id))) return res.status(404).json({ error: 'not_found' });
   const property = await Property.findById(id);
   if (!property) return res.status(404).json({ error: 'not_found' });
 

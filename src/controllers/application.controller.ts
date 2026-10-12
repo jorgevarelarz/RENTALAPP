@@ -40,6 +40,7 @@ export async function listMyApplications(req: Request, res: Response) {
     proposedDate: a.proposedDate,
     proposedBy: a.proposedBy,
     visitDate: a.visitDate,
+    message: a.message,
     contractId: contractMap.get(String(a.propertyId?._id))?._id,
     contractStatus: contractMap.get(String(a.propertyId?._id))?.status,
     property: a.propertyId ? {
