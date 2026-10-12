@@ -39,9 +39,9 @@ const quickLinks = [
   { to: '/admin/tenant-pro', label: 'KYC / Tenant PRO', icon: ShieldCheck, detail: 'Validaciones y documentos' },
   { to: '/admin/users', label: 'Usuarios', icon: Users, detail: 'Roles, altas y actividad' },
   { to: '/admin/properties', label: 'Propiedades', icon: Building2, detail: 'Inventario y publicaciones' },
-  { to: '/admin/compliance', label: 'Compliance', icon: FileCheck2, detail: 'Auditoría legal' },
+  { to: '/admin/compliance', label: 'Cumplimiento', icon: FileCheck2, detail: 'Subidas de renta y zonas tensionadas' },
   { to: '/admin/compliance/tensioned-areas', label: 'Zonas tensionadas', icon: ClipboardList, detail: 'Reglas por zona' },
-  { to: '/admin/system-events', label: 'System events', icon: Activity, detail: 'Errores y eventos técnicos' },
+  { to: '/admin/system-events', label: 'Eventos del sistema', icon: Activity, detail: 'Errores y eventos técnicos' },
 ];
 
 function formatNumber(value: unknown) {

@@ -129,7 +129,7 @@ export default function AdminReports() {
           <h2 className="font-semibold text-gray-950">Reportes especializados</h2>
           <div className="mt-4 grid gap-2">
             <ReportLink to="/admin/payments" title="Finanzas y comisiones" detail="Movimientos, earnings y CSV completo." />
-            <ReportLink to="/admin/compliance" title="Compliance" detail="Riesgos, zonas tensionadas y export legal." />
+            <ReportLink to="/admin/compliance" title="Cumplimiento" detail="Riesgos, zonas tensionadas y export legal." />
             <ReportLink to="/admin/compliance/audit-trails" title="Auditoría de contratos" detail="Evidencias, PDFs y trazabilidad." />
             <ReportLink to="/admin/system-events" title="System events" detail="Errores técnicos y requestId." />
           </div>
