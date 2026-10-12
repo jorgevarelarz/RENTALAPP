@@ -203,4 +203,55 @@ describe("Properties (minimal)", () => {
     await request(app).post(`/api/properties/${pid}/favorite`).send().expect(200);
     await request(app).delete(`/api/properties/${pid}/favorite`).send().expect(200);
   });
+
+  describe("fotos del anuncio", () => {
+    const base = {
+      owner: ownerId,
+      title: "Piso con fotos propias",
+      address: "C/ Real 5",
+      region: "galicia",
+      city: "A Coruña",
+      location: { lng: -8.409, lat: 43.362 },
+      price: 700,
+      deposit: 700,
+      sizeM2: 60,
+      rooms: 2,
+      bathrooms: 1,
+      furnished: false,
+      petsAllowed: false,
+      availableFrom: "2025-10-01",
+    };
+    const post = (images: string[]) =>
+      request(app)
+        .post("/api/properties")
+        .set("x-user-id", ownerId)
+        .set("x-user-role", "landlord")
+        .set("x-user-verified", "true")
+        .send({ ...base, images });
+
+    it("acepta las rutas /uploads/… que devuelve la subida sin APP_URL", async () => {
+      const images = ["/uploads/a1b2c3.jpg", "/uploads/d4e5f6.webp", "/uploads/0a9b8c.png"];
+      const res = await post(images).expect(201);
+      expect(res.body.images).toEqual(images);
+    });
+
+    it.each([
+      ["javascript:alert(1)"],
+      ["data:image/png;base64,AAAA"],
+      ["/uploads/../app.ts"],
+      ["/otra/ruta.jpg"],
+    ])("rechaza %s", async (bad) => {
+      await post(["https://cdn/x1.jpg", "https://cdn/x2.jpg", bad]).expect(400);
+    });
+
+    it("al editar, tampoco admite javascript:", async () => {
+      await request(app)
+        .put(`/api/properties/${pid}`)
+        .set("x-user-id", ownerId)
+        .set("x-user-role", "landlord")
+        .set("x-user-verified", "true")
+        .send({ images: ["javascript:alert(1)"] })
+        .expect(400);
+    });
+  });
 });

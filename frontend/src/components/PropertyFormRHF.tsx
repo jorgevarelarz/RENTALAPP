@@ -15,6 +15,10 @@ import { generateDescription } from '../services/ai';
 import { useToast } from '../context/ToastContext';
 
 // Un campo numérico vacío llega como NaN (valueAsNumber); sin mensaje propio, zod diría «Expected number, received nan»
+// Lo que acepta el backend: URL http(s) o una subida propia («/uploads/<nombre>»,
+// lo que devuelve /api/uploads/images si el servidor no tiene APP_URL)
+const PHOTO_URL = /^(https?:\/\/\S+|\/uploads\/[A-Za-z0-9][A-Za-z0-9_-]*(\.[A-Za-z0-9]+)?)$/i;
+
 const num = (message: string) => z.coerce.number({ invalid_type_error: message, required_error: message });
 
 const schema = z.object({
@@ -39,7 +43,7 @@ const schema = z.object({
     .min(1800, 'Revisa el año')
     .max(new Date().getFullYear() + 2, 'Revisa el año')
     .optional(),
-  images: z.array(z.string().url('Una de las fotos no se subió bien. Quítala y vuelve a subirla')).min(3, 'Sube al menos 3 fotos para publicar').max(20, 'Caben 20 fotos como máximo'),
+  images: z.array(z.string().regex(PHOTO_URL, 'Una de las fotos no se subió bien. Quítala y vuelve a subirla')).min(3, 'Sube al menos 3 fotos para publicar').max(20, 'Caben 20 fotos como máximo'),
   price: num('Escribe la renta mensual').min(100, 'La renta mínima es 100 €'),
   deposit: num('Escribe la fianza (0 si no hay)').min(0, 'Revisa la fianza'),
   availableFrom: z.string().min(2, 'Elige la fecha'),

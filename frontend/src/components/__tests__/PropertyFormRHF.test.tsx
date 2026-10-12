@@ -71,8 +71,19 @@ describe('PropertyFormRHF', () => {
     expect(screen.getByText('Faltan 2 fotos para publicar')).toBeInTheDocument();
   });
 
+  it('las fotos subidas sin APP_URL (/uploads/…) dejan pasar de «Galería»', async () => {
+    renderForm({ ...filled, images: ['/uploads/a1.jpg', '/uploads/b2.webp', '/uploads/c3.png'] });
+    userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
+    await screen.findByLabelText('Habitaciones');
+    userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
+    await screen.findByRole('button', { name: 'Quitar la foto 1' });
+    userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
+    await waitFor(() => expect(screen.getByRole('listitem', { current: 'step' })).toHaveTextContent('Condiciones'));
+    expect(screen.queryByText('Una de las fotos no se subió bien. Quítala y vuelve a subirla')).toBeNull();
+  });
+
   it('una foto con dirección no válida se explica en «Galería» en vez de no avanzar', async () => {
-    renderForm({ ...filled, images: ['/uploads/a.jpg', '/uploads/b.jpg', '/uploads/c.jpg'] });
+    renderForm({ ...filled, images: ['/uploads/a.jpg', 'blob:http://localhost/9f2c', '/uploads/c.jpg'] });
     userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
     await screen.findByLabelText('Habitaciones');
     userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
