@@ -48,7 +48,7 @@ export default function Payments() {
   const [failed, setFailed] = useState(false);
   const [payments, setPayments] = useState<PaymentItem[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [payData, setPayData] = useState<{ clientSecret: string; amount: number } | null>(null);
+  const [payData, setPayData] = useState<{ clientSecret: string; amount: number; concept: string } | null>(null);
 
   const loadPayments = useCallback(async () => {
     if (!token) return;
@@ -67,13 +67,14 @@ export default function Payments() {
     loadPayments();
   }, [loadPayments]);
 
-  const handlePayNow = async (paymentId: string) => {
+  const handlePayNow = async (payment: PaymentItem) => {
+    const paymentId = payment._id;
     if (!token) return;
     setBusyId(paymentId);
     try {
       const resp = await payReceipt(token, paymentId);
       if (!resp.clientSecret) throw new Error('missing_client_secret');
-      setPayData({ clientSecret: resp.clientSecret, amount: resp.amount || 0 });
+      setPayData({ clientSecret: resp.clientSecret, amount: resp.amount || 0, concept: paymentTitle(payment) });
     } catch {
       push({ title: 'No se pudo iniciar el pago. Vuelve a intentarlo en un momento.', tone: 'error' });
     } finally {
@@ -148,7 +149,7 @@ export default function Payments() {
                         type="button"
                         className={primaryButton}
                         disabled={busyId === payment._id}
-                        onClick={() => handlePayNow(payment._id)}
+                        onClick={() => handlePayNow(payment)}
                       >
                         Pagar ahora
                       </button>
@@ -177,7 +178,8 @@ export default function Payments() {
           open
           onClose={() => setPayData(null)}
           amountEUR={payData.amount}
-          title="Pagar renta"
+          title="Pagar recibo"
+          description={payData.concept}
           onSuccess={handlePaymentSuccess}
           clientSecret={payData.clientSecret}
         />

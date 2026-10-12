@@ -877,3 +877,18 @@ body {
   .ra-app-frame { height: calc(100vh - 62px); padding: 12px; }
   .ra-app-content { border-radius: 18px; padding: 16px; }
 }
+/* Pago con tarjeta (PaymentModal + CheckoutForm) */
+.ra-pay-summary { border-bottom: 1px solid var(--ra-line); margin: 0 0 18px; padding: 0 0 16px; }
+.ra-pay-concept { color: var(--ra-muted); font-size: 14.5px; line-height: 1.5; margin: 0 0 10px; }
+.ra-pay-amount { align-items: baseline; display: flex; justify-content: space-between; margin: 0; }
+.ra-pay-amount span { color: var(--ra-muted); font-size: 14px; }
+.ra-pay-amount strong { color: var(--ra-ink); font-family: Manrope, "DM Sans", sans-serif; font-size: 24px; font-variant-numeric: tabular-nums; font-weight: 800; }
+.ra-pay-form { display: grid; gap: 10px; }
+.ra-pay-label { color: var(--ra-ink); font-size: 13px; font-weight: 700; }
+.ra-pay-card { background: #fff; border: 1px solid var(--ra-line); border-radius: 12px; padding: 14px; transition: border-color 160ms ease, box-shadow 160ms ease; }
+.ra-pay-card:focus-within { border-color: var(--ra-blue); box-shadow: 0 0 0 3px rgba(67, 104, 255, .16); }
+.ra-pay-error { background: #fef3f2; border: 1px solid #fecdca; border-radius: 10px; color: #b42318; font-size: 14px; line-height: 1.45; margin: 0; padding: 10px 12px; }
+.ra-pay-submit { margin-top: 8px; width: 100%; }
+.ra-pay-submit:disabled { cursor: default; opacity: .6; transform: none; }
+.ra-pay-note { align-items: center; color: var(--ra-muted); display: flex; font-size: 12.5px; gap: 6px; justify-content: center; line-height: 1.4; margin: 4px 0 0; text-align: center; }
+.ra-pay-unavailable { color: var(--ra-ink); font-size: 15px; line-height: 1.5; margin: 0; }
