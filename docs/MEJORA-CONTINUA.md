@@ -31,7 +31,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 27**: la agencia que gestiona un inmueble (`agencyAccess: 'manage'`) ve ya sus candidatos (nombre, correo, mensaje y si tienen la solvencia verificada), propone y acepta visitas en nombre del propietario y prepara el contrato. Antes solo podía el propietario. Al traspasar el inmueble (`status_only`) pierde todo eso. Si el propietario debe dar su visto bueno antes de que la agencia vea a los candidatos, hay que decidirlo.
 - **Al desplegar la ronda 28**: `POST /api/auth/request-reset` responde `{ ok: true }` antes de buscar la cuenta, y el correo sale después. Si el SMTP falla, solo queda en el log (la respuesta ya era la misma con o sin cuenta). Además, la agencia gestora ve ya «Contratos» en su menú, abre el detalle y descarga el borrador de los contratos de inmuebles que gestiona, y ve los co-titulares sin poder tocarlos. El administrador, que antes veía «Contratos» vacío, ve ahora todos.
 - **Al desplegar la ronda 30**: en el panel de Stripe, el webhook (`/api/stripe/webhook`) tiene que tener suscritos `charge.dispute.created`, `charge.dispute.updated` y `charge.dispute.closed`. Si no, las disputas no llegan. Tres decisiones abiertas: (1) una disputa no tiene más aviso que el historial del contrato y un `console.error` en el log, porque no hay canal de alertas para el administrador; ¿correo a soporte, al casero, o un panel? (2) Si se pierde una disputa de renta, el recibo sigue `PAID`: ¿el mes vuelve a deberse? (3) Una fianza devuelta en Stripe deja `depositPaid: true` y anota `depositRefundedAt`: ¿la devolución al terminar el contrato es así, o debe cambiar algo más (estado del contrato, aviso)?
-- **Al desplegar la ronda 34**: los mensajes de chat solo admiten adjuntos subidos a nuestro `/uploads` (relativos o bajo `APP_URL`, `FRONTEND_URL` o `UPLOADS_BASE_URL`). Si en producción `APP_URL` no es el dominio que devuelve la subida, los adjuntos darán 400 `attachment_domain_not_allowed`; conviene comprobar que `APP_URL` está puesto. Sin `APP_URL`, `/api/uploads/images` devuelve además rutas relativas (`/uploads/…`) y el alta de inmueble no deja pasar de «Galería» (el esquema de fotos, en el frontend y en el backend, exige URL absoluta); desde la ronda 72 al menos lo dice en pantalla. Los mensajes antiguos con enlaces externos no se tocan. Además, ¿deben los adjuntos del chat ser privados (URL firmada que caduca)? Hoy son públicos para quien tenga el enlace, aunque el nombre ya no se puede adivinar.
+- **Al desplegar la ronda 34**: los mensajes de chat solo admiten adjuntos subidos a nuestro `/uploads` (relativos o bajo `APP_URL`, `FRONTEND_URL` o `UPLOADS_BASE_URL`). Si en producción `APP_URL` no es el dominio que devuelve la subida, los adjuntos darán 400 `attachment_domain_not_allowed`; conviene comprobar que `APP_URL` está puesto. Sin `APP_URL`, `/api/uploads/images` devuelve además rutas relativas (`/uploads/…`); desde la ronda 73 el alta de inmueble las acepta (antes no dejaba pasar de «Galería»), pero solo se ven bien si el frontend y la API comparten dominio, como en app.rentalapp.es. Los mensajes antiguos con enlaces externos no se tocan. Además, ¿deben los adjuntos del chat ser privados (URL firmada que caduca)? Hoy son públicos para quien tenga el enlace, aunque el nombre ya no se puede adivinar.
 - **Incidencias (ronda 35), dos decisiones:** (1) el coste extra que aprueba el propietario se suma a lo que se libera al profesional (`releaseTicketEscrow`), pero el hold de Stripe solo retuvo el presupuesto, así que la captura pediría más de lo retenido. Va con el rediseño del escrow (P5); no se ha tocado. (2) Tanto el propietario («Validar») como el inquilino («Confirmar que está arreglado») liberan el pago del propietario al profesional. Desde la ronda 35, los dos solo después de que el profesional marque el trabajo terminado. ¿Debe poder liberarlo el inquilino, que no es quien paga?
 - **Recibos de renta (ronda 38)**: el PDF dice «Justificante del pago emitido por RentalApp en nombre del arrendador (art. 17.4 LAU)» y lleva nombres de arrendador y arrendatario, vivienda, periodo, fecha, importe y referencia de Stripe, sin DNI/NIF (no se guardan, ver ronda 21) ni los datos legales de RentalApp. Conviene que alguien con criterio legal revise ese texto y decida si el recibo debe llevar NIF de las partes y la razón social de RentalApp.
 - **Al desplegar la ronda 40**: las fianzas cobradas antes no tienen pago guardado, así que no tienen recibo ni salen en «Cobros y recibos». `npx ts-node scripts/backfill_deposit_payments.ts` cuenta las que faltan sin escribir nada; con `--apply` las crea (una vez por PaymentIntent, con la devolución si la hubo). Las que no tengan `depositPaymentIntentId` las lista aparte para revisarlas en Stripe. Ejecutarlo en producción es decisión tuya.
@@ -2816,3 +2816,39 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: Nominatim como autocompletado (Jorge); `ui/Badge`, `Alert`, `Pagination` y `Drawer` con estilos en línea; `pro/Profile`; `.auth-input` frente a `.ra-input`; «Ingresos» fuera del menú del casero; el frontend sin ESLint.
 
 **Siguiente mejora propuesta.** Cambiar de terreno tras cuatro rondas de interfaz: un test del backend que recorra `app.ts` y fije qué rutas de `/api/contracts` son públicas (para que ningún webhook quede detrás de `authenticate` sin querer, ni al revés), y revisar si `upload.routes.ts` debe dar URLs absolutas sin `APP_URL`. Si se vuelve a la interfaz: `ui/Badge`, `Alert`, `Pagination` y `Drawer` sin estilos en línea.
+
+### Ronda 73 — 2026-10-12 21:35
+
+**Qué y por qué.** Tras cuatro rondas de interfaz, lo que proponía la ronda 72: cerrar el fallo de las fotos sin `APP_URL` y fijar con un test qué rutas de contratos son públicas.
+
+1. **Fallo: alta de inmueble bloqueada sin `APP_URL`, y fotos con `javascript:`.**
+   - Sin `APP_URL`, la subida devuelve `/uploads/<nombre>`. El esquema del frontend la rechazaba (desde la ronda 72 al menos lo decía) y el del backend también (`z.string().url()`), así que el casero no podía publicar.
+   - Se elige aceptar la ruta relativa en vez de construir la URL con el `Host` de la petición: los adjuntos del chat y las fotos de avería ya guardan `/uploads/…` y se validan con `isOwnUploadUrl`, y cambiar la subida habría roto el chat sin `APP_URL`.
+   - Backend (`property.schema.ts`): cada foto es una URL `http(s)` o una subida propia (`isOwnUploadUrl`), con 500 caracteres como máximo. De paso, `z.string().url()` admitía `javascript:alert(1)` y `data:`; ya no.
+   - Frontend (`PropertyFormRHF`): la misma regla con una expresión `PHOTO_URL`.
+2. **Test de rutas públicas de `/api/contracts`** (`tests/security/contract-public-routes.test.ts`). Sin sesión y sin el atajo `ALLOW_TEST_AUTH`:
+   - los webhooks de Firma.dev, el callback de firma y el de Stripe llegan a su controlador y rechazan por su propia firma, no por «Token requerido»;
+   - 23 rutas privadas (listado, detalle, PDFs, historial, cobros, fianza, firma, co-titulares, ingresos) dan 401;
+   - `/signature/webhook` y `/:id/signature/callback` quedan fijadas como 401 (punto #9 de `review-firma`, pendiente de Jorge). Si se decide hacerlas públicas, el test lo recuerda.
+
+**Commits.**
+- `f3aad54` Alta de inmueble: las fotos subidas sin APP_URL ya se aceptan y se rechazan javascript: y data:
+- `25bb568` Tests: qué rutas de /api/contracts responden sin sesión
+- Docs: este registro, la nota de `APP_URL` en «Para Jorge» actualizada y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - `tests/properties` y `tests/uploads`: 9 suites, 43 tests OK. Seis casos nuevos en `property.routes.test.ts`: acepta `/uploads/…`, y rechaza `javascript:`, `data:`, `/uploads/../app.ts`, `/otra/ruta.jpg` y `javascript:` al editar.
+  - `tests/security/contract-public-routes.test.ts`: 26 OK. La primera versión mandaba al callback de firma un ID de sobre y se quedaba esperando a Mongo; eso ya probaba que la ruta es pública. Ahora va sin ID y responde 400 antes de consultar la base.
+- Frontend: `lint` sin errores, `build` OK, `npm --prefix frontend test` **61 ficheros y 255 tests OK** (254 antes). En `PropertyFormRHF.test.tsx`, un caso nuevo (`/uploads/…` pasa a «Condiciones») y el de error usa ahora una URL `blob:`.
+- **GitNexus.** `impact` de `propertyCreateSchema`: LOW. `detect_changes`: riesgo bajo, sin flujos afectados.
+- Sin capturas: el cambio visible es que «Galería» deja avanzar, y eso lo cubre el test.
+
+**Qué queda.**
+- Las fotos `/uploads/…` del anuncio se ven solo si el frontend se sirve desde el mismo dominio que la API, como el chat y las averías. En desarrollo con `REACT_APP_API_URL` en otro origen no se verían; `.env.example` trae `APP_URL`, así que no afecta a quien lo copie.
+- Los anuncios ya guardados con fotos de otros dominios (`https://…`) se siguen aceptando. Restringir las fotos a subidas propias, como en el chat, cerraría los píxeles de rastreo en la ficha pública, pero hay datos y tests con URLs externas. Queda propuesto.
+- Pendientes anteriores: `ui/Badge`, `Alert`, `Pagination` y `Drawer` con estilos en línea; `pro/Profile`; `.auth-input` frente a `.ra-input`; «Ingresos» fuera del menú del casero.
+
+**Siguiente mejora propuesta.** Volver a la interfaz: `ui/Badge`, `Alert`, `Pagination` y `Drawer` sin estilos en línea y con tokens `--ra-*`, con capturas. Si se prefiere seguridad: el mismo test de rutas públicas para `/api/users`, `/api/tickets` y `/api/chat`.
+

@@ -1444,3 +1444,9 @@ Rules:
 - Gotcha: without `APP_URL`, `/api/uploads/images` returns relative `/uploads/…` URLs that both frontend and backend property schemas reject.
 - Verification: frontend lint/build OK, 61 files / 254 tests; Playwright `/tmp/ra-shots72`. Details in `docs/MEJORA-CONTINUA.md` round 72.
 
+### 2026-10-12 - Claude Code (autonomous worker) - Round 73: property photo URLs + public-route test for contracts
+
+- Property image schemas (backend `property.schema.ts`, frontend `PropertyFormRHF`) accept `http(s)` URLs or own `/uploads/<name>` paths (`isOwnUploadUrl`); relative uploads (no `APP_URL`) no longer block publishing, and `javascript:`/`data:` image URLs are rejected.
+- New `tests/security/contract-public-routes.test.ts`: Firma.dev, signature callback and Stripe webhooks reach their controllers without JWT; 23 private `/api/contracts` routes return 401 (incl. `/signature/webhook` and `/:id/signature/callback`, open item #9).
+- Verification: tsc clean; Jest properties+uploads 43/43, new test 26/26; frontend lint/build OK, 61 files / 255 tests. Details in `docs/MEJORA-CONTINUA.md` round 73.
+
