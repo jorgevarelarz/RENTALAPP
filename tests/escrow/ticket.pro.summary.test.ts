@@ -40,6 +40,7 @@ describe('Profesional: resumen, facturación y filtro de varios estados', () => 
     expect(res.body).toEqual({
       quotes: { toQuote: 1, awaitingApproval: 1, approved: 3, quotedTotal: 1000 },
       billing: { pendingCount: 2, pendingTotal: 550, releasedCount: 1, releasedTotal: 425.5 },
+      work: { toSchedule: 0, inProgress: 1, awaitingValidation: 1 },
     });
   });
 

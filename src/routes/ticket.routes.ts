@@ -517,6 +517,12 @@ r.get('/my/pro/summary', ...assertRole('pro'), async (req, res) => {
         approved: sum(PRO_BILLABLE_STATUSES, 'count'),
         quotedTotal: rows.reduce((acc, row) => acc + Number(row.quoted || 0), 0),
       },
+      // Lo que le toca mover al profesional, para su inicio.
+      work: {
+        toSchedule: sum(['awaiting_schedule'], 'count'),
+        inProgress: sum(['scheduled', 'in_progress'], 'count'),
+        awaitingValidation: sum(['awaiting_validation'], 'count'),
+      },
       billing: {
         pendingCount: sum(pendingStatuses, 'count'),
         pendingTotal: sum(pendingStatuses, 'billable'),
