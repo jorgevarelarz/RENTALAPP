@@ -67,17 +67,17 @@ export default function RentSuggestionCard({ input, onApply }: Props) {
   if (!ready) return null;
 
   return (
-    <div className="rounded-xl border border-indigo-100 bg-indigo-50/60 p-4">
+    <div className="rounded-xl border border-[var(--ra-line)] bg-white p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-2 text-indigo-900">
-          <TrendingUp size={18} />
+        <div className="flex items-center gap-2 text-[var(--ra-ink)]">
+          <TrendingUp size={18} className="text-[var(--ra-blue)]" aria-hidden="true" />
           <span className="font-semibold text-sm">Precio sugerido para tu zona</span>
         </div>
         <button
           type="button"
           onClick={load}
           disabled={loading}
-          className="text-indigo-700 hover:text-indigo-900 disabled:opacity-50"
+          className="-m-1.5 rounded-lg p-1.5 text-[var(--ra-muted)] hover:bg-[var(--ra-paper)] hover:text-[var(--ra-ink)] disabled:opacity-50"
           aria-label="Recalcular sugerencia"
         >
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -85,11 +85,11 @@ export default function RentSuggestionCard({ input, onApply }: Props) {
       </div>
 
       {loading && !suggestion && (
-        <p className="mt-3 text-sm text-indigo-800/70">Calculando…</p>
+        <p className="mt-3 text-sm text-[var(--ra-muted)]">Calculando…</p>
       )}
 
       {!loading && !suggestion && message && (
-        <p className="mt-3 flex items-start gap-2 text-sm text-indigo-900/80">
+        <p className="mt-3 flex items-start gap-2 text-sm text-[var(--ra-muted)]">
           <Info size={15} className="mt-0.5 shrink-0" />
           <span>{message}</span>
         </p>
@@ -98,16 +98,16 @@ export default function RentSuggestionCard({ input, onApply }: Props) {
       {suggestion && (
         <>
           <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <span className="text-2xl font-bold text-indigo-950">
+            <span className="text-2xl font-bold tabular-nums text-[var(--ra-ink)]">
               {suggestion.suggested.toLocaleString('es-ES')} €
             </span>
-            <span className="text-sm text-indigo-900/70">
+            <span className="text-sm text-[var(--ra-muted)]">
               rango {suggestion.range.min.toLocaleString('es-ES')}–
               {suggestion.range.max.toLocaleString('es-ES')} €
             </span>
           </div>
 
-          <p className="mt-1 text-xs text-indigo-900/70">
+          <p className="mt-1 text-xs text-[var(--ra-muted)]">
             {basisLabel(suggestion)} · {suggestion.pricePerM2.toLocaleString('es-ES')} €/m²
           </p>
 
@@ -116,7 +116,7 @@ export default function RentSuggestionCard({ input, onApply }: Props) {
               {suggestion.adjustments.map(adjustment => (
                 <span
                   key={adjustment.key}
-                  className="rounded-full bg-white px-2 py-0.5 text-[11px] font-medium text-indigo-800 border border-indigo-100"
+                  className="rounded-full border border-[var(--ra-line)] bg-[var(--ra-paper)] px-2 py-0.5 text-[11px] font-medium text-[var(--ra-ink)]"
                 >
                   {adjustment.label} {adjustment.factor >= 1 ? '+' : '−'}
                   {Math.abs(Math.round((adjustment.factor - 1) * 100))}%
@@ -140,7 +140,7 @@ export default function RentSuggestionCard({ input, onApply }: Props) {
             <Button type="button" size="sm" onClick={() => onApply(suggestion.suggested)}>
               Usar este precio
             </Button>
-            <span className="text-[11px] text-indigo-900/60">
+            <span className="text-xs text-[var(--ra-muted)]">
               Es una orientación, no una tasación.
             </span>
           </div>
