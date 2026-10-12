@@ -1416,3 +1416,10 @@ Rules:
 - `frontend` `lint` = `tsc --noEmit -p tsconfig.test.json` (whole src incl. tests), added to CI; fixed 18 hidden test type errors + `usePolicyAcceptance.pendingPolicy` now typed nullable. vitest `testTimeout: 15000`.
 - Root `dev` = `tsx watch src/app.ts` (ts-node-dev removed). `jest.config.js` `workerIdleMemoryLimit: '1GB'` + `npm run test:backend:serial` (`--maxWorkers=1`): full suite in one command (97 suites, 458/459; `signature.security` flaked once with 401, passes alone).
 - Verification: tsc clean; frontend lint/build OK, 236/237 (AppShell timeout under load, passes alone). Details in `docs/MEJORA-CONTINUA.md` round 68.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 69: 2026 form fields, dead CSS, deterministic signature test
+
+- `ui/Input` and `ui/Select` use `.ra-field`/`.ra-input` (`@layer components`, no inline styles), with a new `containerClassName` prop for the wrapping label. `Select` is now used in `ContractWizard` (duration) and `ProfilePage` (specialty, previously an unassociated label). TicketDetail quote row width fixed.
+- Removed 182 lines of unused template CSS from `index.css` plus the unimported `src/style.css`.
+- `tests/contracts/signature.security.test.ts` pins `NODE_ENV`/`ALLOW_TEST_AUTH` and restores only its keys. Note: `/api/contracts/signature/webhook` and `/:id/signature/callback` sit behind `authenticate`, so they return 401 in production (open item #9 in review-firma).
+- Verification: frontend lint/build OK, 240/240 tests; signature.security 8/8. Details in `docs/MEJORA-CONTINUA.md` round 69.
