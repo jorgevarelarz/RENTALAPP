@@ -8,6 +8,7 @@ import ServiceOffer from '../models/serviceOffer.model';
 import Ticket from '../models/ticket.model';
 import { getUserId } from '../utils/getUserId';
 import { sendRouteError } from '../utils/routeError';
+import { reviewerLabel } from './pro.routes';
 
 const r = Router();
 
@@ -142,10 +143,32 @@ r.get('/user/:userId', async (req, res) => {
     const q: any = { toUserId: req.params.userId };
     if (typeof req.query.roleContext === 'string') q.roleContext = req.query.roleContext;
     const [items, total] = await Promise.all([
-      Review.find(q).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit),
+      Review.find(q)
+        .sort({ createdAt: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .select('fromUserId roleContext score comment createdAt')
+        .lean(),
       Review.countDocuments(q)
     ]);
-    res.json({ items, total, page, limit });
+    // Como en la ficha del profesional: el autor como «Laura M.», sin su id ni el de la relación
+    // (antes salían fromUserId y relatedId, es decir, quién opinó y sobre qué contrato).
+    const authorIds = items.map(rv => rv.fromUserId).filter(id => isValidObjectId(id));
+    const authors = await User.find({ _id: { $in: authorIds } }).select('name').lean();
+    const names = new Map(authors.map(u => [String(u._id), (u as any).name]));
+    res.json({
+      items: items.map(rv => ({
+        id: String(rv._id),
+        roleContext: rv.roleContext,
+        score: rv.score,
+        comment: rv.comment || undefined,
+        createdAt: rv.createdAt,
+        author: reviewerLabel(names.get(rv.fromUserId)),
+      })),
+      total,
+      page,
+      limit,
+    });
   } catch (err: any) {
     sendRouteError(res, err, 'review_request_failed');
   }
