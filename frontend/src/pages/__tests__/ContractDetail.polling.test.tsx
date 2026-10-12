@@ -7,7 +7,7 @@ vi.mock('react-router-dom', () => ({
   Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
   useParams: () => ({ id: (global as any).__mockId || 'c1' }),
   useSearchParams: () => [new URLSearchParams((global as any).__mockSearch || ''), (global as any).__mockSetSearch || (() => {})],
-}), { virtual: true });
+}));
 
 // Mock AuthContext with configurable user
 vi.mock('../../context/AuthContext', () => ({
@@ -24,7 +24,7 @@ vi.mock('axios', () => {
   const axiosMock: any = { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() };
   axiosMock.create = vi.fn(() => axiosMock);
   return { __esModule: true, default: axiosMock };
-}, { virtual: true });
+});
 
 // Stub ChatPanel to avoid deep imports
 vi.mock('../../components/ChatPanel', () => ({

@@ -93,7 +93,7 @@ describe('TicketCreatePage', () => {
     renderPage();
 
     const input = (await screen.findByText('Añadir fotos')).querySelector('input') as HTMLInputElement;
-    await userEvent.upload(input, new File(['x'], 'casa.heic', { type: 'image/heic' }), { applyAccept: false });
+    await userEvent.upload(input, new File(['x'], 'casa.heic', { type: 'image/heic' }), undefined, { applyAccept: false });
     expect(screen.getByRole('alert')).toHaveTextContent('Solo se admiten fotos JPG, PNG o WebP.');
     expect(ticketService.uploadTicketPhotos).not.toHaveBeenCalled();
 

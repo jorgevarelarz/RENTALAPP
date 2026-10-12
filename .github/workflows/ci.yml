@@ -49,6 +49,7 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm --prefix frontend ci
+      - run: npm --prefix frontend run lint
       - run: npm --prefix frontend test
       - run: npm --prefix frontend run build
         env:

@@ -38,7 +38,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "lint": "echo 'Lint pendiente'",
+    "lint": "tsc --noEmit -p tsconfig.test.json",
     "typecheck": "tsc --noEmit"
   },
   "overrides": {

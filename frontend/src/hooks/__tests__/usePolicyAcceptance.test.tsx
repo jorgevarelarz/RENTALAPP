@@ -9,7 +9,7 @@ vi.mock('../../api/client', () => ({
     post: vi.fn(),
   },
 }));
-const mockedApi = vi.mocked(api, { partial: false });
+const mockedApi = vi.mocked(api, true);
 
 describe('usePolicyAcceptance', () => {
   beforeEach(() => {

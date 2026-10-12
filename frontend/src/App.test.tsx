@@ -15,7 +15,7 @@ vi.mock('react-router-dom', () => ({
   Link: ({ children, to }: any) => <a href={to}>{children}</a>,
   NavLink: ({ children, to }: any) => <a href={to}>{children}</a>,
   useLocation: () => ({ pathname: '/' }),
-}), { virtual: true });
+}));
 
 // Mock other external dependencies
 vi.mock('axios', () => {
@@ -26,8 +26,8 @@ vi.mock('axios', () => {
   } as any;
   axiosMock.create = vi.fn(() => axiosMock);
   return { __esModule: true, default: axiosMock };
-}, { virtual: true });
-vi.mock('@stripe/stripe-js', () => ({ loadStripe: vi.fn(async () => null) }), { virtual: true });
+});
+vi.mock('@stripe/stripe-js', () => ({ loadStripe: vi.fn(async () => null) }));
 
 test('la app renderiza sin crashear', () => {
   render(

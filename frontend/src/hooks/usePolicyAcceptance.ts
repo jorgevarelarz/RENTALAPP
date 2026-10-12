@@ -101,7 +101,9 @@ export const usePolicyAcceptance = (
   };
 
   const hasAccepted = !needsAcceptance;
-  const pendingPolicy = pending[0] || null;
+  // Sin políticas pendientes, pending[0] es undefined aunque el tipo del array no lo diga.
+  const pendingPolicy =
+    (pending[0] as { policyType: PolicyType; version: string } | undefined) ?? null;
 
   return {
     loading,
