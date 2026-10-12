@@ -38,6 +38,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Avisos de cobro (ronda 42)**: al cobrarse una renta o una fianza, el correo va al inquilino que paga y al propietario. ¿Debe recibirlo también la agencia gestora (`agencyAccess: 'manage'`), o en lugar del propietario? Sin SMTP en producción, estos correos solo quedan en el log.
 - **Al desplegar la ronda 44**: `POST /api/pros` solo admite cuentas `pro` (desde la ronda 45, tampoco se pueden asignar a una incidencia perfiles de cuentas que no sean `pro`). Los perfiles profesionales que ya hubieran creado inquilinos o caseros siguen en la base y en el directorio. Conviene buscarlos con una consulta de solo lectura (los `pros` cuyo `userId` no sea de un usuario con `role: 'pro'`) y decidir si se desactivan (`active: false`). Además, los nombres y ciudades guardados antes no se han limpiado.
 - **Opiniones de profesionales (ronda 48)**: al cerrarse una incidencia, el propietario y el inquilino que la abrió pueden valorar al profesional (1 a 5 y comentario). La opinión sale en su ficha pública con el nombre y la inicial del apellido («Laura M.»). Tres decisiones: (1) ¿vale ese formato de nombre o debe ser anónima? (2) No hay forma de denunciar ni de retirar una opinión, ni de que el profesional responda; ¿hace falta moderación antes de abrir? (3) Pueden opinar los dos (propietario e inquilino) sobre la misma incidencia; ¿solo quien paga?
+- **Al desplegar la ronda 50**: `GET /api/properties` y `GET /api/properties/:id` dejan de devolver `owner`, `agencyId`, `refAgencyId`, `agencyAccess`, `agencyTransferredAt` e `history` a quien no gestiona el inmueble (el dueño, su agencia y el administrador los siguen viendo). Solicitar visita a un borrador o a un anuncio retirado da ya 404. Una decisión: la ficha pública enseña la calle y el número (`address`) a cualquiera, también sin sesión, y el mapa marca el punto exacto. Idealista permite ocultar el número y Airbnb da la zona hasta reservar. ¿Debe la dirección exacta verse solo tras concertar la visita?
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -1846,3 +1847,58 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: `/landlord/services` es un marcador (depende de producto); aviso de cobro a la agencia (Jorge); moderación de opiniones (Jorge).
 
 **Siguiente mejora propuesta.** Dos rondas seguidas de backend (47 y 49, con la 48 de interfaz). La 50 debería ser de interfaz. Candidatas: las pantallas de administración (`AdminCompliancePage`, `ComplianceDashboard`, que siguen con clases sueltas tipo `border-gray-300` fuera del sistema 2026), o el paso del inquilino a `/tenant/kyc` desde una invitación de co-titular.
+
+### Ronda 50 — 2026-10-12 07:40
+
+**Qué y por qué.** Ronda de interfaz, como proponía la 49 (dos rondas seguidas de backend). Elegí la ficha pública del anuncio (`/properties/:id`): es la pantalla que más ve un inquilino y ninguna ronda la había tocado. Además del estilo antiguo (degradado azul-índigo en el botón, iconos en círculos grises, verde y azul sueltos), tenía fallos:
+
+- un anuncio inexistente o retirado dejaba el esqueleto de carga para siempre;
+- «Compartir» y «Ver todas» no hacían nada;
+- con menos de cinco fotos repetía la misma, y sin fotos usaba `via.placeholder.com`;
+- «Guardar» salía siempre vacío (el backend no mandaba `_liked`), y tras solicitar el botón seguía igual;
+- el mapa tenía encima un botón invisible que abría un `window.confirm` en vez de dejar mover el mapa;
+- fechas y precios sin locale («1,450 €», «11/15/2026»), y «0 Habitaciones».
+
+Revisando el backend salieron tres cosas más, y otra en `Modal`.
+
+1. **Backend (`property.controller`).**
+   - La ficha y el listado públicos devolvían el documento entero: id del propietario, de la agencia, su tipo de acceso e historial. Ahora solo los ve quien gestiona el inmueble (dueño, agencia o administrador).
+   - La ficha añade `_mine`, `_liked` y `_application` (estado, fechas de visita; sin ids) para quien tiene sesión.
+   - `POST /:id/apply` admitía solicitudes a borradores y anuncios retirados de otros, con solo saber el id. Ahora da 404. Un id mal formado da 404 en la ficha, la solicitud y la visita (antes, 500 por `CastError`).
+   - `POST /:id/view` solo cuenta visitas a anuncios publicados.
+2. **Interfaz** (`PropertyDetail`, nuevos `components/property/PropertyGallery` y `utils/propertyDetail`):
+   - galería con foto principal y dos laterales, sin repetir, y visor a pantalla completa (portal, flechas, ←/→/Esc, «2 de 5»). Sin fotos, una franja «Este anuncio todavía no tiene fotos»;
+   - título en Manrope, dirección, «2 habitaciones · 1 baño · 68 m²» (estudio si no tiene habitaciones);
+   - características con marca gris: «Disponible ya» o «Disponible desde el 15 de noviembre de 2026», amueblado, mascotas, planta y ascensor, estado y año si están informados;
+   - descripción, mapa con enlace normal «Abrir en Google Maps»;
+   - tarjeta de precio (es-ES, fianza en meses: «1 mes (1450 €)») con la acción según quién mira: «Solicitar visita», el estado de tu solicitud con «Ver mis solicitudes», «Es tu anuncio · 87 visitas» con enlace a gestionar, Tenant PRO bloqueado con «Verificar mi solvencia», o «Las visitas se solicitan desde una cuenta de inquilino»;
+   - barra fija abajo en móvil con precio y acción;
+   - página «Este anuncio ya no está disponible» con «Ver otras viviendas»;
+   - los ingresos orientativos de Tenant PRO redondeaban mal (1400 / 0,35 da 4000,0000000000005, así que salía 4001 €).
+3. **`Modal`**: cerrado, su efecto ponía `overflow: hidden` en el `body` y escuchaba Escape (el listado y la ficha lo tienen siempre montado por `LoginPrompt`). Abierto, como dependía de `onClose` (una flecha nueva en cada render), devolvía el foco al primer botón en cada pulsación: escribir en un campo de un modal saltaba el foco. Ahora depende de `open`.
+
+**Commits.**
+- `583866e` Anuncios: ficha y listado públicos sin datos internos; `_mine`, `_liked` y `_application`; 404 para ids mal formados y anuncios no publicados
+- `d9a4d28` Interfaz: la ficha del anuncio pasa al sistema 2026; `Modal` cerrado no bloquea el scroll ni roba el foco
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` de `tests/properties`, `tests/tenantPro`, `tests/agency` y `src/__tests__/rbac.test.ts`: 10 suites y 58 tests OK. Hay un test nuevo, `tests/properties/property.view.test.ts`, con 3 casos:
+  - sin gestionar el inmueble no llegan `owner`, `agencyId`, `refAgencyId`, `agencyAccess` ni `history`, ni en la ficha ni en el listado; el dueño y la agencia sí, con `_mine`;
+  - `_liked` y `_application` tras guardar y solicitar;
+  - 404 con id mal formado, y al solicitar o sumar visitas a un borrador o un retirado (las visitas no cambian).
+- e2e (`npm run test:e2e`): 10/10.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 43 ficheros y 164 tests OK (antes 149). Son nuevos `PropertyDetail.test.tsx` (8 casos: datos en español y anónimo a iniciar sesión, visor, solicitar y guardar, visita concertada, Tenant PRO sin verificar, el dueño, anuncio inexistente y sin fotos), `propertyDetail.test.ts` (5) y `Modal.test.tsx` (2). En una pasada falló por tiempo `TicketCreatePage` (5,3 s), que no usa `Modal`; pasó aislado y en la siguiente suite completa.
+- Playwright (vite local, `/api/*` simulado, fotos de la landing) a 1280 y 390 px, en `/tmp/ra-shots50`: anónimo, inquilino con visita, Tenant PRO, propietario, sin fotos, inexistente y el visor. Sin desbordamiento horizontal en ninguna captura. Con ellas corregí tres cosas:
+  - el fondo del visor salía transparente (Tailwind 3 no aplica `/95` a `var(...)`), así que ahora usa un portal y un color en línea;
+  - el hueco sin fotos era enorme;
+  - «Volver a la búsqueda» repetía la miga de pan.
+- GitNexus: `impact` dio riesgo bajo en `getById`, `apply`, `PropertyDetail` y `Modal`, aunque el grafo no ve los 6 usos de `Modal` en JSX. `detect_changes` marca «alto» por número de símbolos, pero `suggestPrice` y `listApplications` salen solo por el desplazamiento de líneas (el diff toca `getById`, `search`, `countView` y `apply`).
+
+**Qué queda.**
+- `LandlordDashboard` lista los inmuebles del casero con `GET /api/properties?limit=200` y filtra los suyos en el cliente. El servidor da 50 como máximo y mezcla todos los anuncios activos, así que con más de 50 en el mercado el casero deja de ver los suyos en su panel. Hace falta un `GET /api/properties/mine` (o `owner=me`) paginado.
+- `PropertyCard` (el listado) sigue con `via.placeholder.com`, `indigo` y precios sin locale.
+- La ficha no deja escribir un mensaje al solicitar visita (`Application.message` existe, pero `apply` no lo guarda).
+- Dirección exacta visible para todos: anotado en «Para Jorge».
+- Pendientes anteriores: `/landlord/services` es un marcador (depende de producto); aviso de cobro a la agencia y moderación de opiniones (Jorge).
+
+**Siguiente mejora propuesta.** El fallo de `LandlordDashboard`: un `GET /api/properties/mine` paginado (dueño o agencia gestora, con borradores) y que el panel lo use, con test de más de 50 anuncios ajenos. De paso, `PropertyCard` al sistema 2026 (precio es-ES y sin imagen de relleno).

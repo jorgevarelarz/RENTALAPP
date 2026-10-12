@@ -1309,3 +1309,10 @@ Rules:
 - `exportAuditTrails`: non-ObjectId `contractIds` → 400 `invalid_contract_id` (ids were joined into a file path: traversal); catch ends the response if the zip already started.
 - `GET /api/reviews/user/:userId` returns `{id, roleContext, score, comment, createdAt, author}` (author via `reviewerLabel` from `pro.routes`), no `fromUserId`/`relatedId`.
 - Verification: tsc clean; new `tests/security/admin.errors.test.ts` (7); Jest `--runInBand` 56 suites/252; frontend build + 149 tests.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 50: public listing page + property privacy
+
+- `property.controller`: `toPropertyView` strips `owner/agencyId/refAgencyId/agencyAccess/agencyTransferredAt/history` for non-managers in `getById` and `search`; `getById` adds `_mine`, `_liked`, `_application` (tenant); malformed id 404 on get/apply/view; `apply` and `countView` 404 unless `status:'active'`.
+- Frontend: `PropertyDetail` rebuilt (2026) with `components/property/PropertyGallery` (portal viewer) and `utils/propertyDetail`; `Modal` effect only when open, `onClose` via ref (closed modals locked body scroll; open ones stole focus on every render).
+- Verification: tsc clean; Jest `--runInBand` 10 suites/58 (new `tests/properties/property.view.test.ts`); e2e 10/10; frontend build + 164 tests; Playwright `/tmp/ra-shots50`.
+- Next: `LandlordDashboard` loads `/api/properties?limit=200` (server max 50, all listings) and filters by owner client-side → needs `/api/properties/mine`.
