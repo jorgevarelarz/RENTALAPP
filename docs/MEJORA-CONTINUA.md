@@ -41,6 +41,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 50**: `GET /api/properties` y `GET /api/properties/:id` dejan de devolver `owner`, `agencyId`, `refAgencyId`, `agencyAccess`, `agencyTransferredAt` e `history` a quien no gestiona el inmueble (el dueño, su agencia y el administrador los siguen viendo). Solicitar visita a un borrador o a un anuncio retirado da ya 404. Una decisión: la ficha pública enseña la calle y el número (`address`) a cualquiera, también sin sesión, y el mapa marca el punto exacto. Idealista permite ocultar el número y Airbnb da la zona hasta reservar. ¿Debe la dirección exacta verse solo tras concertar la visita?
 - **Al desplegar la ronda 53**: las fechas que los inquilinos propusieron antes desde «Solicitudes» se guardaron con la hora desplazada (2 h tarde en verano y 1 h en invierno), el mismo fallo que la ronda 23 corrigió para el casero. Conviene revisarlas con una consulta de solo lectura (`db.applications.find({proposedBy:'tenant', proposedDate:{$gt:new Date()}})`). Además, proponer una fecha pasada da 400, aceptar una propuesta cuya hora ya pasó da 409 y una solicitud `rejected` no admite cambios. Ningún flujo pasa hoy una solicitud a `rejected`: el casero no tiene forma de descartar a un candidato. ¿Debe tenerla, y avisar al inquilino?
 - **Avisos de solicitudes y visitas (ronda 54)**: una solicitud nueva avisa por correo al propietario y a la agencia gestora (`agencyAccess: 'manage'`), con el nombre del inquilino, su mensaje y si tiene la solvencia verificada. Proponer o aceptar fecha avisa a la otra parte. Si la agencia propone o acepta, el inquilino ve el nombre de la agencia; si lo hace el administrador, no se da su nombre. Dos decisiones: (1) ¿debe enterarse también el propietario cuando su agencia concierta una visita? Hoy no. (2) Sin SMTP en producción, estos correos solo quedan en el log.
+- **Cambio de visita (ronda 56)**: cuando una parte propone otra hora para una visita ya concertada, la visita concertada sigue en pie hasta que la otra parte acepte la nueva. Si nadie responde, se mantiene la primera. ¿Es la regla que quieres, o proponer un cambio debe anular la visita? Tampoco hay forma de cancelar una visita sin proponer otra fecha.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -2103,3 +2104,49 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 - Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); una visita concertada no se puede cambiar desde «Solicitudes»; `/landlord/services` es un marcador.
 
 **Siguiente mejora propuesta.** Pasar `EmptyState` y `SkeletonGrid` a los tokens 2026 (los usan el listado y otras páginas) o, con más valor de producto, dejar cambiar una visita ya concertada desde «Solicitudes». El backend ya lo admite y solo falta la interfaz.
+
+### Ronda 56 — 2026-10-12 10:41
+
+**Qué y por qué.** Es la mejora que proponía la ronda 55, la de más valor de producto: un inquilino con una visita concertada no tenía forma de cambiarla desde «Solicitudes». El casero sí podía («Cambiar visita» en «Candidatos»), pero el resultado era confuso:
+
+- la solicitud pasaba a `proposed` y la interfaz olvidaba la visita concertada, aunque `visitDate` seguía en la base;
+- el correo decía «te propone visitar…», como si fuera la primera fecha.
+
+1. **Backend.**
+   - **Regla del cambio.** Proponer otra hora sobre una visita concertada que aún no ha llegado es un cambio de fecha. La visita concertada (`visitDate`) sigue guardada y en pie hasta que la otra parte acepte la nueva. Al aceptarla, se sustituye.
+   - **Misma hora.** Proponer la misma hora que la concertada da 400 `same_visit_date`.
+   - **Aviso por correo.** Lleva `previousDate`, con el asunto «Cambio de visita: …» y el texto «propone cambiar la visita del martes, 12 de octubre a las 10:00 al jueves, 14 de octubre a las 18:00. Hasta que se acepte la nueva fecha, sigue en pie la del…».
+   - **Visita ya pasada.** Proponer después de una visita que ya pasó no cuenta como cambio.
+2. **Interfaz.**
+   - **«Solicitudes» del inquilino.** Una visita concertada futura ofrece «Cambiar fecha». El formulario dice «Nueva fecha para la visita» y avisa: «Mientras el propietario no acepte la nueva fecha, sigue en pie la visita el…». Un cambio pendiente enseña las dos fechas: «El propietario propone cambiar la visita al… Mientras no aceptes, sigue en pie la del…», o «Has pedido cambiar…». Si la nueva fecha caduca, vuelve a «Visita concertada el…». Una visita ya pasada no se puede cambiar.
+   - **«Candidatos» (casero y agencia).** Muestra «El candidato propone cambiar la visita del 20 mar 2030, 17:30 al 22 mar 2030, 10:00».
+   - **Ficha del anuncio.** Muestra «Te proponen cambiar la visita» o «Has pedido cambiar la visita», con la fecha que sigue en pie.
+   - `same_visit_date` se traduce en las dos pantallas.
+
+**Commits.**
+- `37935a3` Visitas: cambio de fecha sobre una visita concertada, `same_visit_date` y aviso con la fecha anterior
+- `8f0198d` Interfaz: «Cambiar fecha» en «Solicitudes» y las dos fechas de un cambio pendiente
+
+**Verificación (resultados reales).**
+- **Backend.**
+  - `npx tsc --noEmit`: sin errores.
+  - Jest `--runInBand` de `tests/applications`: 2 suites y 20 tests OK.
+  - En `visit-proposal.test.ts` hay 2 casos nuevos: la misma hora da 400, cambiar deja `visitDate` hasta aceptar y aceptar sustituye; tras una visita pasada se propone sin restricción.
+  - En `application.notice.test.ts` hay 2 casos nuevos: el aviso lleva `previousDate`, y no lo lleva tras una visita pasada. La plantilla comprueba el asunto y el texto del cambio.
+- **Frontend.**
+  - `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`: 47 ficheros y 191 tests OK.
+  - Casos nuevos: 2 en `Applications.test.tsx` (cambiar con el error `same_visit_date` y el envío en ISO; cambios pendientes de las dos partes y visita pasada sin «Cambiar fecha») y 1 en `ApplicantsModal.test.tsx`.
+- **Playwright** (vite local, `/api/*` simulado), a 1280 y 390 px, capturas en `/tmp/ra-shots56`: formulario de cambio y cambio pendiente. No hay desbordamiento horizontal. «18:00» del 2 de abril de 2030 se envía como `2030-04-02T16:00:00.000Z`.
+- **GitNexus.**
+  - `impact`: `proposeVisit` LOW. Los símbolos del frontend y de la plantilla no están en el índice, que es de la copia canónica. Con grep, solo los usan `Applications.tsx` y el servicio de avisos.
+  - `detect_changes`: riesgo «medio», solo por `ApplicantsModal` y `TenantApplications`, que son los que cambian.
+
+**Qué queda.**
+- No hay forma de cancelar una visita sin proponer otra fecha, ni de retirar un cambio que has pedido. Va anotado en «Para Jorge» con la regla del cambio.
+- Al aceptar un cambio, el correo dice «ha aceptado la visita… el…», sin mencionar que sustituye a la anterior.
+- `SkeletonGrid` y `EmptyState` siguen con el estilo antiguo.
+- Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador.
+
+**Siguiente mejora propuesta.** Pasar `EmptyState` y `SkeletonGrid` a los tokens 2026. Son componentes compartidos del listado y otras páginas, y son lo último con bordes grises y estilos en línea del recorrido del inquilino.
+

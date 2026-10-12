@@ -1347,3 +1347,10 @@ Rules:
 - `TenantHome` counted favorites from `localStorage` (`utils/favorites`, never written anymore → always 0); now `listMyFavorites()` in parallel with contracts, `null` → «–» on failure. Deleted dead `pages/Favorites.tsx` and `utils/favorites.ts`.
 - `pages/properties/FavoritesPage.tsx` rebuilt (2026): `savedCountLabel`, SkeletonGrid while loading, load error + «Reintentar» (was swallowed → "nothing saved"), remove with «Deshacer» (re-favorite, same position), failed removal restores card + error.
 - Verification: backend untouched; frontend build + 188 tests (new `pages/properties/__tests__/FavoritesPage.test.tsx`); Playwright `/tmp/ra-shots55`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 56: rescheduling a scheduled visit
+
+- `proposeVisit`: proposing over a future `visitDate` is a change request (status `proposed`, `visitDate` kept until accepted, then replaced); same time → 400 `same_visit_date`. `notifyApplication` passes `previousDate` (future `visitDate`) → email «Cambio de visita: …».
+- Frontend: `utils/tenantApplications` `upcomingVisit`, `canPropose` allows future `scheduled`, change texts; `Applications.tsx` «Cambiar fecha»/«Proponer cambio» with note; `ApplicantsModal` and `propertyDetail.applicationText` show both dates.
+- Verification: tsc clean; Jest `--runInBand` tests/applications 20; frontend build + 191 tests; Playwright `/tmp/ra-shots56`.
+
