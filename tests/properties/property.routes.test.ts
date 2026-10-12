@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../../src/app";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
+import { Property } from "../../src/models/property.model";
 
 describe("Properties (minimal)", () => {
   const ownerId = "507f1f77bcf86cd799439011";
@@ -117,6 +118,31 @@ describe("Properties (minimal)", () => {
       .expect(200);
     expect(Array.isArray(res.body.items)).toBe(true);
     expect(res.body.items.length).toBeGreaterThan(0);
+  });
+
+  it("search by city ignores case but needs the whole name", async () => {
+    const ids = async (qs: string) =>
+      (await request(app).get("/api/properties?" + qs).expect(200)).body.items.map((p: any) => p._id);
+    expect(await ids("city=" + encodeURIComponent("a coruña"))).toContain(pid);
+    expect(await ids("city=" + encodeURIComponent(" A CORUÑA "))).toContain(pid);
+    expect(await ids("city=Coru")).toHaveLength(0);
+    // Los caracteres de regex se buscan como texto
+    expect(await ids("city=" + encodeURIComponent(".*"))).toHaveLength(0);
+  });
+
+  it("sorts by views for «Populares»", async () => {
+    const other = await Property.create({
+      owner: ownerId, title: "Piso visitado", address: "C/ Real 9", region: "galicia", city: "Lugo",
+      location: { type: "Point", coordinates: [-7.55, 43.01] }, price: 700, deposit: 700, sizeM2: 50,
+      rooms: 1, bathrooms: 1, availableFrom: new Date("2025-10-01"), status: "active", viewsCount: 50,
+    });
+    await Property.updateOne({ _id: pid }, { viewsCount: 5 });
+    const res = await request(app).get("/api/properties?sort=viewsCount&dir=desc").expect(200);
+    const order = res.body.items.map((p: any) => String(p._id));
+    expect(order.indexOf(String(other._id))).toBeLessThan(order.indexOf(pid));
+    const asc = await request(app).get("/api/properties?sort=viewsCount&dir=asc").expect(200);
+    const ascOrder = asc.body.items.map((p: any) => String(p._id));
+    expect(ascOrder.indexOf(pid)).toBeLessThan(ascOrder.indexOf(String(other._id)));
   });
 
   it("anonymous search never lists drafts and treats q as plain text", async () => {

@@ -272,7 +272,7 @@ export async function handoffToOwner(req: Request, res: Response) {
 }
 
 const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const SORTABLE_FIELDS = new Set(['createdAt', 'price', 'sizeM2', 'rooms', 'availableFrom']);
+const SORTABLE_FIELDS = new Set(['createdAt', 'price', 'sizeM2', 'rooms', 'availableFrom', 'viewsCount']);
 
 /** Quién ve qué: admin todo; con sesión, los activos y los propios; anónimo, solo los activos. */
 const visibilityFilter = (req: Request): Record<string, unknown> | null => {
@@ -361,8 +361,10 @@ export async function search(req: Request, res: Response) {
   } = req.query as any;
 
   if (region) q.region = String(region).toLowerCase();
-  // Valores de query forzados a string: ?city[$regex]=. no debe llegar como operador
-  if (city) q.city = String(city);
+  // Valores de query forzados a string: ?city[$regex]=. no debe llegar como operador.
+  // La ciudad entera, sin distinguir mayúsculas: «madrid» encuentra «Madrid»
+  const cityText = city ? escapeRegExp(String(city).trim().slice(0, 100)) : '';
+  if (cityText) q.city = { $regex: `^${cityText}$`, $options: 'i' };
   if (priceMin || priceMax) q.price = { ...(priceMin ? { $gte: +priceMin } : {}), ...(priceMax ? { $lte: +priceMax } : {}) };
   if (roomsMin || roomsMax) q.rooms = { ...(roomsMin ? { $gte: +roomsMin } : {}), ...(roomsMax ? { $lte: +roomsMax } : {}) };
   if (bathMin) q.bathrooms = { $gte: +bathMin };
