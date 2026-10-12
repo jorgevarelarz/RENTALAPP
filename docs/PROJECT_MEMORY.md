@@ -1437,3 +1437,10 @@ Rules:
 - Open for Jorge: Nominatim's usage policy forbids client-side autocomplete; a real geocoding provider is a product/billing decision.
 - Verification: frontend lint/build OK, 61 files / 250 tests. Details in `docs/MEJORA-CONTINUA.md` round 71.
 
+### 2026-10-12 - Claude Code (autonomous worker) - Round 72: keyboard-accessible address combobox + gallery error
+
+- `PropertyFormRHF` address suggestions are an ARIA combobox/listbox (arrows, Enter picks without advancing the step, Escape/blur close). Gallery step now shows `images` errors (a non-absolute photo URL used to block «Siguiente» silently with zod's «Invalid url»).
+- `ui/Dropzone` and `RentSuggestionCard` moved from inline styles / Tailwind indigo to `--ra-*` tokens.
+- Gotcha: without `APP_URL`, `/api/uploads/images` returns relative `/uploads/…` URLs that both frontend and backend property schemas reject.
+- Verification: frontend lint/build OK, 61 files / 254 tests; Playwright `/tmp/ra-shots72`. Details in `docs/MEJORA-CONTINUA.md` round 72.
+
