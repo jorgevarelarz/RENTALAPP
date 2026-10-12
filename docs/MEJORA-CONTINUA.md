@@ -2946,3 +2946,44 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: `ComplianceDashboard` en inglés y con pastillas propias; `pro/Profile`; `.auth-input` frente a `.ra-input`; fotos externas en los anuncios.
 
 **Siguiente mejora propuesta.** Volver a la interfaz tras dos rondas de backend: `ComplianceDashboard` en español, con `Badge` y tokens `--ra-*`, revisado con capturas. Si se prefiere backend: `/api/verification` detrás de `authenticate` y fuera de la lista de públicas.
+
+### Ronda 77 — 2026-10-12 22:42
+
+**Qué y por qué.** Lo que proponía la ronda 76: volver a la interfaz tras dos rondas de backend. El panel de cumplimiento de rentas (`/admin/compliance`) era la última pantalla de administración con el título en inglés, pastillas propias en mayúsculas y estilos en línea. Al revisarlo salió además un fallo en las cifras.
+
+1. **Fallo: cifras de «cumple» e «incumple» mal calculadas.** La API (`getComplianceDashboard`) solo daba evaluados y en riesgo. La pantalla contaba «Non-compliant» con las 25 filas de la página y sacaba «Compliant» restando esa cifra, así que con más de una página las dos tarjetas salían mal.
+   - Ahora `totals` trae también `compliant` y `nonCompliant`, contados sobre todo el filtro. Son campos nuevos; el portal de institución usa el mismo servicio y no cambia.
+   - De paso: con un filtro de estado puesto, «en riesgo» contaba todos los contratos en riesgo, porque `{...query, status: 'risk'}` pisaba el estado pedido. Ahora da 0 si se filtra por otro estado. Esto corrige también la tarjeta «en riesgo» del portal de institución cuando se filtra por estado.
+2. **Pantalla en español y con el sistema 2026** (`ComplianceDashboard.tsx`).
+   - Usa `PageHeader`, tarjetas `Card`, filtros `Input`/`Select` con etiqueta, tabla con `--ra-line` y `Badge`: Cumple, En riesgo e Incumple; gravedad Informativa, Aviso y Crítica.
+   - La zona se elige en un desplegable con las zonas que devuelve el servidor. Antes había que escribir a mano la clave, del tipo «galicia|oleiros|».
+   - La renta sale en euros con el porcentaje de subida, y cada fila enlaza al contrato.
+   - `invalid_date_range` se explica en español, también al exportar el CSV: el error llega dentro del Blob y antes salía «Request failed with status code 400». Hay botón «Reintentar».
+   - Una lista vacía distingue «todavía no hay contratos revisados» de «ningún contrato coincide», con un botón «Quitar filtros».
+   - El modo de ejemplo se anuncia como «Datos de ejemplo».
+   - El menú lateral, la miga de pan, el inicio y los informes de administración dicen ya «Cumplimiento» y «Eventos del sistema».
+
+**Commits.**
+- `3c94470` Cumplimiento: el panel recibe del servidor cuántos contratos cumplen e incumplen
+- `2bd641a` Interfaz: el panel de cumplimiento de rentas en español y con el sistema 2026
+- Docs: este registro y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` de `tests/admin/admin.compliance.test.ts` y `tests/institution/institution.compliance.test.ts`: **2 suites y 9 tests OK**. El caso nuevo crea 6 revisiones, pide páginas de 2 y comprueba `{evaluated: 6, risk: 2, compliant: 3, nonCompliant: 1}`; con `status=compliant`, `{3, 0, 3, 0}`.
+- Frontend: `lint` sin errores, `build` OK. `npm --prefix frontend test`: **65 ficheros y 272 tests OK** (266 antes). `ComplianceDashboard.test.tsx` es nuevo, con 6 casos:
+  - totales que vienen del servidor;
+  - pastillas y textos en español;
+  - filtro por zona desde el desplegable;
+  - paginación;
+  - error de fechas;
+  - lista vacía con y sin filtros;
+  - error del CSV leído del Blob.
+- Capturas con Playwright y la API simulada (`/tmp/ra-shots77`), a 1280 y 390 px. La primera captura en móvil partía en dos líneas los enlaces de la cabecera; se arregló con `whitespace-nowrap` y salto de línea entre botones. Un primer vite no recogía los cambios y hubo que reiniciarlo con `--force`.
+- **GitNexus.** `impact` de `getComplianceDashboard` y `ComplianceDashboard`: LOW. `detect_changes`: riesgo medio, solo por el flujo `ComplianceDashboard → FetchComplianceDashboard` (el que se cambia) y por `AdminReports`, al que solo se le cambia una etiqueta.
+
+**Qué queda.**
+- El CSV de cumplimiento sigue con cabeceras en inglés (`property_id,areaKey,…`). Puede haber quien lo procese, así que no se ha tocado.
+- Las otras pantallas de administración enlazadas desde aquí siguen con estilos en línea y textos en inglés: `SystemEvents` («System Events», «Type», «Resource»), `AdminCompliancePage` y `AdminUsersPage`/`AdminTenantProPage` (tablas en línea). El portal de institución (`institution-frontend`) no muestra todavía «cumple» ni «incumple».
+- Pendientes anteriores: `/api/verification` en la lista de rutas públicas; `pro/Profile`; `.auth-input` frente a `.ra-input`; fotos externas en los anuncios.
+
+**Siguiente mejora propuesta.** Seguir con administración y pasar `SystemEvents` y `AdminCompliancePage` al español y al sistema 2026 (mismas piezas que esta ronda). Si se prefiere backend: montar `/api/verification` detrás de `authenticate` y sacarla de la lista de rutas públicas.
