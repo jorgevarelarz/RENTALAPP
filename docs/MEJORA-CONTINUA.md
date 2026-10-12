@@ -1902,3 +1902,45 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 - Pendientes anteriores: `/landlord/services` es un marcador (depende de producto); aviso de cobro a la agencia y moderación de opiniones (Jorge).
 
 **Siguiente mejora propuesta.** El fallo de `LandlordDashboard`: un `GET /api/properties/mine` paginado (dueño o agencia gestora, con borradores) y que el panel lo use, con test de más de 50 anuncios ajenos. De paso, `PropertyCard` al sistema 2026 (precio es-ES y sin imagen de relleno).
+
+### Ronda 51 — 2026-10-12 07:40
+
+**Qué y por qué.** Es la mejora que proponía la ronda 50: un flujo roto del casero. Revisando el código salió además una fuga en favoritos.
+
+1. **El panel del casero perdía sus inmuebles.** `LandlordDashboard` pedía el listado público (`GET /api/properties?limit=200`), el servidor daba 50 como máximo y el panel filtraba los del casero en el cliente. Con más de 50 anuncios activos en el mercado, el casero dejaba de ver los suyos (y sus avisos, contadores y «Mis propiedades»). Ahora:
+   - el nuevo `GET /api/properties/mine` (casero, agencia o admin) devuelve los inmuebles de los que eres dueño o agencia, con borradores y retirados. Va paginado hasta 100, con `status` opcional (un valor fuera de `draft|active|archived` da 400) y orden por fecha de alta;
+   - `listMyProperties()` en el frontend recorre las páginas (20 como máximo) y el panel lo usa.
+2. **Favoritos con datos internos.** `GET /api/properties/favorites` devolvía el documento entero de cada anuncio guardado (propietario, agencia, tipo de acceso, historial), también de anuncios ajenos que su dueño había retirado o devuelto a borrador. Ahora pasa por `toPropertyView`, igual que la ficha, y solo enseña los activos (o los que gestionas).
+3. **Tarjeta del listado (`PropertyCard`) al sistema 2026**, la que usan «Buscar pisos» y «Favoritos». Antes:
+   - usaba `via.placeholder.com` sin fotos;
+   - mostraba el precio sin locale;
+   - tenía una etiqueta `indigo` y otra «Alquilado» para un estado que no existe;
+   - el corazón no tenía nombre accesible.
+   
+   Ahora sigue el estilo de Airbnb: foto redondeada (o «Sin fotos todavía»), ciudad, título enlazado, «2 habitaciones · 1 baño · 68 m²» (o «Estudio»), «950 € /mes» y corazón con `aria-label` y `aria-pressed` en el azul de marca. Reutiliza `formatRent` y `propertyFacts` de la ficha. De paso:
+   - textos de «Favoritos» con tildes;
+   - la miga de pan ya no enlaza `/me`, que no tiene página.
+
+**Commits.**
+- `1e0f3d8` Anuncios: `GET /api/properties/mine`; favoritos sin datos internos ni anuncios retirados
+- `6e743f8` Interfaz: panel del casero con `/mine`, `PropertyCard` 2026, miga de pan de favoritos
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Nuevo `tests/properties/property.mine.test.ts`, con 2 casos:
+  - con 60 anuncios ajenos, `/mine` da los 3 del dueño (con borrador y uno gestionado por agencia) y la agencia ve solo el suyo. También cubre el filtro de estado, la página 2 con `limit=2`, `status[$ne]` (400) y el inquilino (403);
+  - favoritos sin `owner`/`agencyId`/`agencyAccess`/`history` y sin el retirado ni el borrador.
+  
+  El 401 sin token no se puede probar: en test, `ALLOW_TEST_AUTH` autentica las peticiones anónimas como casero.
+- Jest `--runInBand`: `tests/properties`, 6 suites y 26 tests OK; `rbac`, `tests/agency` y `tests/tenantPro`, 5 suites y 34 tests OK.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 45 ficheros y 169 tests OK. Son nuevos `PropertyCard.test.tsx` (3) y `listMyProperties.test.ts` (2), y `Breadcrumbs` tiene un caso más (6 en total).
+- Playwright (vite local, `/api/*` simulado, fotos de la landing) a 1280 y 390 px, en `/tmp/ra-shots51`: listado, favoritos y panel del casero. Ninguna captura desborda en horizontal, y el panel pide `/api/properties/mine?page=1&limit=100`.
+- GitNexus: `impact` dio riesgo bajo en `listMyFavorites`, `LandlordDashboard` y `Breadcrumbs`. `detect_changes` marca «alto» por los 6 flujos del panel del casero, que son justo los que cambian (`refresh`). `getProperty`, `searchProperties` y `favoriteProperty` salen solo por el desplazamiento de líneas.
+
+**Qué queda.**
+- El panel pide `/mine` dos veces al cargar, porque `refresh` depende del objeto `user`, que cambia tras `/api/users/me`. Ya pasaba con el listado.
+- `pages/Favorites.tsx` (estilos en línea, favoritos en localStorage) no tiene ruta. Es código muerto y se puede borrar.
+- La página «Favoritos» sigue con `padding` en línea y un botón gris. Le falta el mismo pase al sistema 2026 que tuvo la ficha.
+- La ficha no deja escribir un mensaje al solicitar visita (`apply` no guarda `Application.message`).
+- Pendientes anteriores: dirección exacta visible para todos, aviso de cobro a la agencia y moderación de opiniones (Jorge); `/landlord/services` es un marcador.
+
+**Siguiente mejora propuesta.** El mensaje al solicitar visita, de punta a punta: `apply` guarda un `message` acotado y saneado, el casero lo ve en `ApplicantsModal` y la ficha ofrece un campo opcional. Es el primer contacto inquilino-casero, y hoy llega vacío.

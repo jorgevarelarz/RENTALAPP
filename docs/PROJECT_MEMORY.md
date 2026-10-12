@@ -1316,3 +1316,9 @@ Rules:
 - Frontend: `PropertyDetail` rebuilt (2026) with `components/property/PropertyGallery` (portal viewer) and `utils/propertyDetail`; `Modal` effect only when open, `onClose` via ref (closed modals locked body scroll; open ones stole focus on every render).
 - Verification: tsc clean; Jest `--runInBand` 10 suites/58 (new `tests/properties/property.view.test.ts`); e2e 10/10; frontend build + 164 tests; Playwright `/tmp/ra-shots50`.
 - Next: `LandlordDashboard` loads `/api/properties?limit=200` (server max 50, all listings) and filters by owner client-side → needs `/api/properties/mine`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 51: landlord's own listings + favorites privacy + PropertyCard 2026
+
+- New `GET /api/properties/mine` (`listMine`, landlord/agency/admin): owner or agencyId = me, all statuses, paginated (≤100), `status` validated. `listMyFavorites` goes through `toPropertyView` and drops non-active listings the viewer doesn't manage.
+- Frontend: `listMyProperties()` pages through `/mine`; `LandlordDashboard` uses it (was public search limit 200 → server max 50 + client filter). `PropertyCard` rebuilt (2026, `formatRent`/`propertyFacts`, no placeholder image). `Breadcrumbs` skips `/me`.
+- Verification: tsc clean; Jest `--runInBand` properties 26 + rbac/agency/tenantPro 34 (new `tests/properties/property.mine.test.ts`); frontend build + 169 tests; Playwright `/tmp/ra-shots51`.
