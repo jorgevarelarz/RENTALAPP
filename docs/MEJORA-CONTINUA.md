@@ -36,7 +36,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Recibos de renta (ronda 38)**: el PDF dice «Justificante del pago emitido por RentalApp en nombre del arrendador (art. 17.4 LAU)» y lleva nombres de arrendador y arrendatario, vivienda, periodo, fecha, importe y referencia de Stripe, sin DNI/NIF (no se guardan, ver ronda 21) ni los datos legales de RentalApp. Conviene que alguien con criterio legal revise ese texto y decida si el recibo debe llevar NIF de las partes y la razón social de RentalApp.
 - **Al desplegar la ronda 40**: las fianzas cobradas antes no tienen pago guardado, así que no tienen recibo ni salen en «Cobros y recibos». `npx ts-node scripts/backfill_deposit_payments.ts` cuenta las que faltan sin escribir nada; con `--apply` las crea (una vez por PaymentIntent, con la devolución si la hubo). Las que no tengan `depositPaymentIntentId` las lista aparte para revisarlas en Stripe. Ejecutarlo en producción es decisión tuya.
 - **Avisos de cobro (ronda 42)**: al cobrarse una renta o una fianza, el correo va al inquilino que paga y al propietario. ¿Debe recibirlo también la agencia gestora (`agencyAccess: 'manage'`), o en lugar del propietario? Sin SMTP en producción, estos correos solo quedan en el log.
-- **Al desplegar la ronda 44**: `POST /api/pros` solo admite cuentas `pro`. Los perfiles profesionales que ya hubieran creado inquilinos o caseros siguen en la base y en el directorio. Conviene buscarlos con una consulta de solo lectura (los `pros` cuyo `userId` no sea de un usuario con `role: 'pro'`) y decidir si se desactivan (`active: false`). Además, los nombres y ciudades guardados antes no se han limpiado.
+- **Al desplegar la ronda 44**: `POST /api/pros` solo admite cuentas `pro` (desde la ronda 45, tampoco se pueden asignar a una incidencia perfiles de cuentas que no sean `pro`). Los perfiles profesionales que ya hubieran creado inquilinos o caseros siguen en la base y en el directorio. Conviene buscarlos con una consulta de solo lectura (los `pros` cuyo `userId` no sea de un usuario con `role: 'pro'`) y decidir si se desactivan (`active: false`). Además, los nombres y ciudades guardados antes no se han limpiado.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -1650,3 +1650,53 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 
 **Siguiente mejora propuesta.** El directorio de profesionales (`ProList`, `/pros`) en el sistema 2026, con filtros por servicio y ciudad que vayan al servidor, y desde la ficha de una incidencia del casero, «Asignar» a un profesional del directorio. Antes conviene comprobar cómo elige hoy el casero al profesional en `TicketDetail`.
 
+
+### Ronda 45 — 2026-10-12 02:40
+
+**Qué y por qué.** Era la mejora propuesta en la ronda 44: el directorio de profesionales y cómo elige el casero al profesional de una avería. Al revisar `/assign` apareció un hueco que deja la ronda 44, así que va primero.
+
+1. **Backend**:
+   - `POST /api/tickets/:id/assign` solo miraba que el perfil existiera y estuviera activo. Los perfiles que crearon inquilinos o caseros antes de la ronda 44 seguían siendo asignables, y con ello veían la incidencia y podían presupuestar. Ahora la cuenta del perfil tiene que tener `role: 'pro'` (si no, 404 `pro not found`);
+   - un `proId` que no es texto da 400 `invalid_pro`, y uno mal formado 404. Antes daba 500 con el mensaje de Mongoose;
+   - `loadTicketFor`: un id de incidencia mal formado da 404 en todas las rutas `/api/tickets/:id/*` (antes, 500);
+   - `GET /api/tickets/:id` trae `propertyCity` (la ciudad del inmueble) y `pro.profileId` (el perfil público);
+   - `GET /api/pros`: la ciudad se busca sin distinguir mayúsculas ni tildes («malaga» encuentra «Málaga»; antes solo mayúsculas) y sigue escapada; un servicio desconocido da 400 `invalid_query`.
+2. **Interfaz**:
+   - `/pros` (`ProList`) se rehace en el sistema 2026. Antes tenía estilos sueltos, servicios en inglés («plumbing, painting»), «⭐ 0.0 (0)» para todos y solo la primera página. Ahora:
+     - filtros por servicio (chips) y ciudad (espera 300 ms), que van al servidor;
+     - recuento y paginación;
+     - servicios en español, «desde» del servicio elegido y valoración solo si hay opiniones;
+     - si los filtros no dan resultados, ofrece quitarlos;
+   - el casero tiene «Profesionales» en su menú. `/pros` y `/pros/:id` exigen sesión, como su API (antes, sin sesión, la página salía rota);
+   - en la incidencia, «Buscar profesional» (nuevo `components/pro/ProPicker.tsx`) busca en la ciudad del inmueble. Antes mandaba `ticket.city`, que no existe, así que mezclaba todas las ciudades. Además:
+     - cada fila tiene precio orientativo, valoración y enlace al perfil;
+     - si no hay nadie en la ciudad, lo dice y ofrece «Buscar en todas las ciudades»;
+     - si falla la carga, lo dice y ofrece reintentar (antes enseñaba «No hay profesionales»);
+   - el profesional asignado enlaza a su perfil público;
+   - `utils/pros.ts` (`proRatingText`, `proPriceText`) lo comparten el directorio, el selector y la ficha `/pros/:id`.
+
+**Commits.**
+- `2da2f35` Profesionales: asignar solo perfiles de cuentas de profesional; 400/404 en vez de 500; ciudad del inmueble y perfil en la ficha; ciudad sin tildes en el directorio
+- `576a496` Interfaz: directorio de profesionales en el sistema 2026 y selector de profesional en la incidencia
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` de `tests/escrow` y `tests/security`: 10 suites, 54 tests OK. Incluye el nuevo `tests/escrow/ticket.assign.test.ts`, con 4 casos:
+  - asignar un perfil de profesional, y la ficha trae `profileId` y `propertyCity`;
+  - el perfil de una cuenta de inquilino da 404 y no se asigna; un id mal formado da 404 y un array da 400 `invalid_pro`;
+  - `GET /api/tickets/xyz` da 404;
+  - el directorio encuentra «  malaga » en «Málaga», «Mala.a» no encuentra nada y `gardening` da 400.
+- e2e (`npm run test:e2e`): 10/10.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 39 ficheros y 143 tests OK (antes 38 y 140). Casos nuevos:
+  - `ProList.test.tsx`, con 2: filtros que llegan al servidor, precio del servicio elegido y nada de valoración sin opiniones; sin resultados ofrece quitar los filtros;
+  - en `TicketDetail.test.tsx`, el caso de «Buscar profesional» pasa a comprobar la búsqueda en la ciudad del inmueble, la ampliación a todas, el texto de la fila y la asignación; hay otro nuevo para el enlace al perfil del asignado.
+- Playwright (vite local, `/api/*` simulado) a 1280 y 390 px (`/tmp/ra-shots45`): directorio, directorio filtrado y selector en la incidencia (ciudad y todas). Sin desbordamiento horizontal. Con las capturas corregí un detalle: en la columna estrecha, el precio y la valoración se cortaban con «…», y ahora pasan a la línea siguiente.
+- GitNexus `detect_changes`: riesgo medio por `AppRoutes` y `TicketDetail`, que son los cambios buscados (rutas protegidas y selector), y los dos están cubiertos por los tests.
+
+**Qué queda.**
+- El directorio sigue incluyendo los perfiles antiguos de otros roles (ya no se pueden asignar). Desactivarlos es decisión de Jorge (ronda 44). Filtrarlos en `GET /api/pros` exigiría cruzar con usuarios en cada consulta.
+- La miga de pan de la incidencia dice «Mis incidencias» también para el casero, que llega desde «Incidencias de mis propiedades».
+- `/landlord/services` («Servicios») es un marcador de dos líneas.
+- La ficha pública del profesional no tiene opiniones ni contacto.
+- Pendientes anteriores: aviso de cobro a la agencia (Jorge), flujo de devolución de la fianza en la app, adjuntos de chat públicos, `console.*` fuera del logger.
+
+**Siguiente mejora propuesta.** Las rutas de incidencias que aún devuelven `err.message` en sus 500 (`ticket.routes.ts`, varios `catch`): pasarlas al logger con un código fijo, como `pro.routes` en la ronda 44. Y de paso, que la miga de pan de la incidencia diga «Incidencias» según el rol.

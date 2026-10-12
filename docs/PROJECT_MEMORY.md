@@ -1284,3 +1284,9 @@ Rules:
 - Frontend: `ProDashboard` rebuilt (2026: «Lo que te toca», owner-pending line, cobros, profile card/CTA); `pages/pro/Profile.tsx` is the real form (`services/pro.getMyProProfile|saveProProfile`, old `upsertPro/getMyPro` removed); `ProDetail` Spanish services with «desde»; Breadcrumbs `/pros`; pro entry removed from `OnboardingChecklist`.
 - Verification: tsc clean; Jest `--runInBand` security+escrow+auth-hardening 52; frontend build + 140 tests; Playwright `/tmp/ra-shots44`.
 
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 45: pro directory + pro picker on tickets
+
+- `POST /api/tickets/:id/assign` requires the profile's user to have `role:'pro'` (404 otherwise); non-string `proId` 400 `invalid_pro`, malformed 404; `loadTicketFor` 404 on malformed ticket id. `GET /api/tickets/:id` adds `propertyCity` and `pro.profileId`. `GET /api/pros` city match is case/accent-insensitive; unknown `service` 400.
+- Frontend: `ProList` rebuilt (2026, server filters + pagination), landlord nav «Profesionales», `/pros*` routes protected; new `components/pro/ProPicker` in `TicketDetail` (property city first, «Buscar en todas las ciudades»); `utils/pros.ts`.
+- Verification: tsc clean; Jest `--runInBand` escrow+security 54, e2e 10/10; frontend build + 143 tests; Playwright `/tmp/ra-shots45`.
