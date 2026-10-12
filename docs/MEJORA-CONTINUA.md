@@ -1944,3 +1944,41 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 - Pendientes anteriores: dirección exacta visible para todos, aviso de cobro a la agencia y moderación de opiniones (Jorge); `/landlord/services` es un marcador.
 
 **Siguiente mejora propuesta.** El mensaje al solicitar visita, de punta a punta: `apply` guarda un `message` acotado y saneado, el casero lo ve en `ApplicantsModal` y la ficha ofrece un campo opcional. Es el primer contacto inquilino-casero, y hoy llega vacío.
+
+### Ronda 52 — 2026-10-12 07:55
+
+**Qué y por qué.** Es la mejora que proponía la ronda 51. La solicitud de visita es el primer contacto entre inquilino y casero, y llegaba siempre vacía: `Application.message` existía y `ApplicantsModal` ya lo enseñaba al casero, pero `apply` no lo guardaba y la ficha no tenía dónde escribirlo.
+
+1. **Backend (`property.controller`).**
+   - `POST /api/properties/:id/apply` acepta `message` opcional. Se valida antes de crear nada con `cleanApplicationMessage`: tiene que ser texto (si no, 400 `invalid_message`), se quitan los caracteres de control salvo los saltos de línea, se dejan como mucho dos saltos seguidos y se recorta. Si pasa de 1000 caracteres, da 400 `message_too_long` con `max`. Un mensaje vacío no se guarda.
+   - Repetir la solicitud sigue devolviendo la existente y no cambia su mensaje.
+   - El inquilino ve su mensaje en la ficha (`_application.message`) y en `GET /api/applications/my`.
+   - `GET /api/properties/:id/applications` con un id mal formado da 404 (antes, `CastError`).
+2. **Interfaz (`PropertyDetail`).**
+   - Para el inquilino con sesión, la tarjeta del precio tiene «Mensaje para el propietario (opcional)», con una sugerencia de qué contar (quién vivirá, a qué se dedica, cuándo entraría), `maxLength` 1000 y contador cuando quedan 200.
+   - Tras enviar, la tarjeta enseña «Tu mensaje» (hasta 4 líneas).
+   - En móvil, el botón de la barra fija enviaba la solicitud directamente. Ahora lleva al campo y le da el foco, y se envía desde la tarjeta. Sin sesión sigue abriendo el aviso de iniciar sesión.
+
+**Commits.**
+- `0360372` Solicitudes: mensaje opcional al solicitar visita, validado y limpio; 404 con id mal formado en las solicitudes del anuncio
+- `486d23d` Interfaz: campo de mensaje en la ficha, «Tu mensaje» y la barra fija de móvil lleva al campo
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Nuevo `tests/properties/property.apply.test.ts`, con 4 casos:
+  - la limpieza del texto;
+  - el casero lee el mensaje, y el inquilino lo ve en la ficha y en `/applications/my`;
+  - sin mensaje funciona, un mensaje demasiado largo o que no es texto no crea la solicitud, y repetir no lo cambia;
+  - el 404 con id mal formado.
+  
+  La primera pasada falló porque el inmueble del test no tenía `availableFrom` (obligatorio). Corregido, 4/4.
+- Jest `--runInBand` de `tests/properties`, `tests/applications` y `rbac`: 9 suites y 42 tests OK.
+- Frontend: `npm --prefix frontend run build` OK (el primer intento falló por el tipo del `ref`, corregido). `npm --prefix frontend test`: 45 ficheros y 171 tests OK. `PropertyDetail.test.tsx` cubre el envío con mensaje y «Tu mensaje», y tiene un caso nuevo: sin texto va vacío, y la barra de móvil lleva al campo sin enviar.
+- Playwright (vite local, `/api/*` simulado) a 1280 y 390 px, en `/tmp/ra-shots52`: formulario y solicitud enviada. La petición lleva el mensaje con sus saltos de línea, el foco llega al campo desde la barra de móvil y no hay desbordamiento horizontal.
+- GitNexus: `impact` dio riesgo bajo en `apply` y `applyToProperty`. `detect_changes` marca «alto», pero `suggestPrice`, `search` y `getPropertyApplications` salen solo porque el índice es de la copia canónica y no casa las líneas. El diff toca `getById`, `apply`, `listApplications`, `listMyApplications` y `PropertyDetail`.
+
+**Qué queda.**
+- «Mis solicitudes» (`pages/tenant/Applications.tsx`) sigue con estilos en línea, «aun» sin tilde, fechas sin locale (`toLocaleString()` sin `es-ES`), botones verde y azul sueltos y errores sin capturar al aceptar o proponer visita. Tampoco enseña el mensaje, que la API ya devuelve.
+- El casero no recibe aviso (correo ni notificación) de una solicitud nueva. Solo la ve al abrir el panel.
+- Pendientes anteriores: dirección exacta visible para todos, aviso de cobro a la agencia y moderación de opiniones (Jorge); `pages/Favorites.tsx` es código muerto; la página «Favoritos» necesita el pase 2026; `/landlord/services` es un marcador.
+
+**Siguiente mejora propuesta.** «Mis solicitudes» del inquilino al sistema 2026: tarjeta con foto, estado en español, fechas es-ES, «Tu mensaje», acciones con su error (aceptar o proponer fecha sin `try/catch` dejan la promesa rechazada) y test de la página.

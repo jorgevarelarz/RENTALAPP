@@ -1322,3 +1322,9 @@ Rules:
 - New `GET /api/properties/mine` (`listMine`, landlord/agency/admin): owner or agencyId = me, all statuses, paginated (≤100), `status` validated. `listMyFavorites` goes through `toPropertyView` and drops non-active listings the viewer doesn't manage.
 - Frontend: `listMyProperties()` pages through `/mine`; `LandlordDashboard` uses it (was public search limit 200 → server max 50 + client filter). `PropertyCard` rebuilt (2026, `formatRent`/`propertyFacts`, no placeholder image). `Breadcrumbs` skips `/me`.
 - Verification: tsc clean; Jest `--runInBand` properties 26 + rbac/agency/tenantPro 34 (new `tests/properties/property.mine.test.ts`); frontend build + 169 tests; Playwright `/tmp/ra-shots51`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 52: message when requesting a visit
+
+- `property.controller`: `apply` accepts optional `message` via exported `cleanApplicationMessage` (string only, control chars stripped, ≤2 consecutive newlines, trimmed, max `APPLICATION_MESSAGE_MAX` 1000 → 400 `invalid_message`/`message_too_long` before creating). `_application.message` in `getById`; `listMyApplications` returns `message`; `listApplications` malformed id → 404.
+- Frontend: `applyToProperty(id, message?)`; `PropertyDetail` textarea in `ApplyBlock` (tenant signed in), «Tu mensaje» after sending; mobile sticky button scrolls/focuses the field instead of applying.
+- Verification: tsc clean; Jest `--runInBand` 9 suites/42 (new `tests/properties/property.apply.test.ts`); frontend build + 171 tests; Playwright `/tmp/ra-shots52`.
