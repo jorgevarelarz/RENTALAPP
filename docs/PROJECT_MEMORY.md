@@ -1296,3 +1296,9 @@ Rules:
 - New `src/utils/routeError.ts` `sendRouteError(res, err, code)`: deliberate 4xx keep their message; anything else is logged (method, path, user, err) and answered with a fixed code. Applied to ticket, chat, review, serviceOffers, appointments, verification, identity `/start`, invites routes. Controllers (`contract*`, `payment`, `admin`, `policy`) still pending.
 - Frontend `Breadcrumbs`: `/tickets/:id` parent crumb is `/landlord/issues` for landlords and `/pro/tickets` for pros.
 - Verification: tsc clean; Jest `--runInBand` 14 suites/73; e2e 10/10; frontend build + 145 tests.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 48: pro reviews end to end
+
+- `review.routes` `refreshRating` recomputes ratingAvg/reviewCount from the Review collection (old read-modify-write lost concurrent reviews); non-string `comment` 400, trimmed. New `GET /api/pros/:id/reviews` (paginated, author «Laura M.» via exported `reviewerLabel`, no ids/emails). `GET /api/tickets/:id` adds `proReview: { canReview, mine }` for owner/opener of a closed ticket with pro.
+- Frontend: `services/reviews.ts`, `components/pro/{Stars,ProReviewForm,ProReviews}.tsx`; review form in closed `TicketDetail`, «Opiniones» in `ProDetail`.
+- Verification: tsc clean; Jest `--runInBand` reviews 11 + escrow/security/chat 75; frontend build + 149 tests; Playwright `/tmp/ra-shots48`.

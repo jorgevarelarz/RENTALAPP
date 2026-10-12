@@ -37,6 +37,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 40**: las fianzas cobradas antes no tienen pago guardado, así que no tienen recibo ni salen en «Cobros y recibos». `npx ts-node scripts/backfill_deposit_payments.ts` cuenta las que faltan sin escribir nada; con `--apply` las crea (una vez por PaymentIntent, con la devolución si la hubo). Las que no tengan `depositPaymentIntentId` las lista aparte para revisarlas en Stripe. Ejecutarlo en producción es decisión tuya.
 - **Avisos de cobro (ronda 42)**: al cobrarse una renta o una fianza, el correo va al inquilino que paga y al propietario. ¿Debe recibirlo también la agencia gestora (`agencyAccess: 'manage'`), o en lugar del propietario? Sin SMTP en producción, estos correos solo quedan en el log.
 - **Al desplegar la ronda 44**: `POST /api/pros` solo admite cuentas `pro` (desde la ronda 45, tampoco se pueden asignar a una incidencia perfiles de cuentas que no sean `pro`). Los perfiles profesionales que ya hubieran creado inquilinos o caseros siguen en la base y en el directorio. Conviene buscarlos con una consulta de solo lectura (los `pros` cuyo `userId` no sea de un usuario con `role: 'pro'`) y decidir si se desactivan (`active: false`). Además, los nombres y ciudades guardados antes no se han limpiado.
+- **Opiniones de profesionales (ronda 48)**: al cerrarse una incidencia, el propietario y el inquilino que la abrió pueden valorar al profesional (1 a 5 y comentario). La opinión sale en su ficha pública con el nombre y la inicial del apellido («Laura M.»). Tres decisiones: (1) ¿vale ese formato de nombre o debe ser anónima? (2) No hay forma de denunciar ni de retirar una opinión, ni de que el profesional responda; ¿hace falta moderación antes de abrir? (3) Pueden opinar los dos (propietario e inquilino) sobre la misma incidencia; ¿solo quien paga?
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -1777,3 +1778,33 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: aviso de cobro a la agencia (Jorge), `/landlord/services` es un marcador, la ficha pública del profesional no tiene opiniones, adjuntos de chat públicos.
 
 **Siguiente mejora propuesta.** Hace tres rondas que no se toca la interfaz. La 48 debería dedicarse a ella: `/landlord/services` («Servicios»), que es un marcador de dos líneas, o las opiniones en la ficha pública del profesional. Los 500 de `admin`, `policy`, `taxReport` e `institution` (rutas de administración, de menor exposición) pueden ir en la siguiente ronda de seguridad.
+
+### Ronda 48 — 2026-10-12 06:10
+
+**Qué y por qué.** Ronda de interfaz, como proponía la 47 (llevaba tres rondas sin tocarla). Elegí las opiniones del profesional antes que «Servicios» del casero: «Servicios» depende de acuerdos con comercializadoras que no existen (sería inventar producto), mientras que las opiniones tenían backend y les faltaba todo el recorrido. El directorio ordena por valoración y la ficha enseña la media, pero no había ninguna forma de dejar una opinión desde la app.
+
+1. **Backend.**
+   - `review.routes`: la media y el número de reseñas se recalculan desde la colección (`refreshRating`). Antes se leía la media, se sumaba la nota y se guardaba, así que dos opiniones simultáneas perdían una (lo comprueba un test). Un `comment` que no es texto da 400 `invalid comment` y se guarda recortado.
+   - `GET /api/pros/:id/reviews` (paginado, 5 por defecto y 20 como máximo): nota, comentario, fecha y autor como «Laura M.» (`reviewerLabel`), sin ids de usuario ni correos. Un id mal formado da 404.
+   - `GET /api/tickets/:id` añade `proReview: { canReview, mine }`, solo para el propietario o el inquilino de una incidencia cerrada con profesional. La relación que da derecho a opinar ya la comprobaba `isReviewableRelation`.
+2. **Interfaz** (sistema 2026, estrellas en tinta, sin colores de pegatina):
+   - en la incidencia cerrada, «Qué puedes hacer» pide la valoración: cinco estrellas (radios accesibles, con «Mal… Excelente»), comentario opcional y el aviso de que sale en su perfil con nombre e inicial. Después enseña «Tu opinión sobre …»;
+   - en la ficha pública `/pros/:id`, la sección «Opiniones» con la media, autor, mes, comentario y «Ver más opiniones». Sin opiniones lo dice y no enseña un 0,0.
+
+**Commits.**
+- `1965673` Opiniones: media recalculada, comentario validado, `GET /api/pros/:id/reviews` y `proReview` en la incidencia
+- `25521ff` Interfaz: valorar al profesional al cerrarse la incidencia y opiniones en su ficha
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` de `tests/reviews`: 2 suites y 11 tests OK. El nuevo `pro.reviews.test.ts` tiene 6 casos: valorar y ver la opinión en la incidencia (el profesional no ve `proReview`), una incidencia sin cerrar no ofrece valorar, la lista pública con nombre abreviado sin ids ni correos (y 404 con id mal formado), dos opiniones simultáneas cuentan las dos (media 3,5), comentario no textual y `reviewerLabel`. Jest `--runInBand` de `tests/escrow`, `tests/security` y `tests/chat`: 14 suites y 75 tests OK.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 40 ficheros y 149 tests OK (antes 145). Hay un `ProReviews.test.tsx` nuevo (lista, «Ver más» y sin opiniones) y 2 casos en `TicketDetail.test.tsx` (valorar y la incidencia cerrada sin opción).
+- Playwright (vite local, `/api/*` simulado) a 1280 y 390 px (`/tmp/ra-shots48`): ficha con y sin opiniones, y la incidencia con el formulario y con «Tu opinión». Sin desbordamiento horizontal en las 8 capturas. Con ellas cambié un detalle: el anillo de foco de la estrella salía también con el ratón, y ahora solo con el teclado.
+- GitNexus: `impact` de `TicketDetail` y `ProDetail` dio riesgo bajo. `detect_changes` marca riesgo medio, con el único flujo `TicketDetail → GetTicket`, como se esperaba.
+
+**Qué queda.**
+- `GET /api/reviews/user/:userId` (sin uso en el frontend) sigue devolviendo `fromUserId` y `relatedId` a cualquier usuario verificado. Conviene limitarlo o quitarlo.
+- Las medias guardadas antes no se recalculan hasta la siguiente opinión de cada perfil.
+- Moderación de opiniones y formato del nombre: anotado en «Para Jorge».
+- Pendientes anteriores: los 500 de `admin`, `policy`, `taxReport` e `institution` con `e.message`; `/landlord/services` es un marcador (depende de producto); aviso de cobro a la agencia (Jorge).
+
+**Siguiente mejora propuesta.** Seguridad: pasar los 500 de `admin.controller`, `policy`, `taxReport` e `institution` a `sendRouteError` y, de paso, cerrar `GET /api/reviews/user/:userId` (quitar `fromUserId`/`relatedId` o reutilizar `reviewerLabel`).
