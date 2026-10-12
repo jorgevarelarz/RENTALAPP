@@ -2259,7 +2259,7 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 
 **Siguiente mejora propuesta.** Cabecera pública en móvil: que «Entrar» y «Crear cuenta» quepan a 390 px sin partirse (botones compactos o «Crear cuenta» dentro del menú). De paso, quitar el filtro `onlyTenantPro` redundante de `PropertiesList`.
 
-### Ronda 59 — 2026-10-12 11:40
+### Ronda 59 — 2026-10-12 11:32
 
 **Qué y por qué.** La ronda 58 proponía arreglar la cabecera en el móvil y quitar el filtro `onlyTenantPro` redundante del listado. Al mirarlo, había dos cabeceras con problemas distintos:
 
