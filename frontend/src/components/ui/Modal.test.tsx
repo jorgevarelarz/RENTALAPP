@@ -35,4 +35,21 @@ describe('Modal', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.body.style.overflow).toBe('');
   });
+
+  it('se nombra por el título, cierra con «Cerrar» y con el fondo, no al pulsar dentro, y pasa className al panel', async () => {
+    const onClose = vi.fn();
+    render(<Modal open onClose={onClose} title="Firma electrónica" className="max-w-6xl"><p>dentro</p><a href="/x">Firmar</a></Modal>);
+    // El foco va al contenido, no a «Cerrar»
+    await vi.waitFor(() => expect(screen.getByRole('link', { name: 'Firmar' })).toHaveFocus());
+    const dialog = screen.getByRole('dialog', { name: 'Firma electrónica' });
+    expect(dialog).toHaveClass('ra-modal-panel', 'max-w-6xl');
+    expect(screen.getByRole('heading', { level: 2, name: 'Firma electrónica' })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByText('dentro'));
+    expect(onClose).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByRole('button', { name: 'Cerrar' }));
+    expect(onClose).toHaveBeenCalledTimes(1);
+    await userEvent.click(dialog.parentElement!);
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
 });

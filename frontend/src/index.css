@@ -774,6 +774,40 @@ body {
 .ra-guest-account { border-top: 1px solid var(--ra-line); display: grid; gap: 8px; margin-top: 18px; padding: 16px 4px 0; }
 .ra-guest-account p { color: var(--ra-muted); font-size: 13px; line-height: 1.45; margin: 0 0 4px; }
 .ra-guest-account a { justify-content: center; text-align: center; }
+@layer components {
+  .ra-modal { align-items: center; background: rgba(8, 16, 45, .48); display: grid; inset: 0; justify-items: center; padding: 16px; position: fixed; z-index: 50; }
+  .ra-modal-panel { background: #fff; border: 1px solid var(--ra-line); border-radius: 20px; box-shadow: var(--ra-shadow); color: var(--ra-ink); display: flex; flex-direction: column; max-height: calc(100dvh - 32px); max-width: 520px; overflow: hidden; width: 100%; }
+  .ra-modal-head { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; padding: 20px 20px 4px 24px; }
+  .ra-modal-title { color: var(--ra-ink); font-family: 'Manrope', sans-serif; font-size: 19px; font-weight: 700; letter-spacing: -.02em; line-height: 1.3; margin: 0; min-width: 0; overflow-wrap: anywhere; }
+  .ra-modal-close { align-items: center; background: none; border: 0; border-radius: 999px; color: var(--ra-muted); cursor: pointer; display: inline-flex; flex-shrink: 0; height: 34px; justify-content: center; margin: -4px -6px 0 auto; width: 34px; }
+  .ra-modal-close:hover { background: var(--ra-paper); color: var(--ra-ink); }
+  .ra-modal-close:focus-visible { outline: 2px solid var(--ra-blue); outline-offset: 2px; }
+  .ra-modal-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 12px 24px 24px; }
+  /* Avisos: abajo a la izquierda en escritorio; en el móvil arriba, para no quedar bajo las barras fijas de las fichas */
+  .ra-toasts { bottom: 24px; display: grid; gap: 8px; left: 24px; max-width: min(420px, calc(100vw - 32px)); pointer-events: none; position: fixed; z-index: 70; }
+  .ra-toast { align-items: flex-start; background: var(--ra-ink); border-radius: 14px; box-shadow: 0 14px 40px rgba(8, 16, 45, .22); color: #fff; display: flex; font-size: 14px; font-weight: 500; gap: 10px; line-height: 1.4; padding: 12px 10px 12px 14px; pointer-events: auto; }
+  .ra-toast-icon { flex-shrink: 0; margin-top: 1px; }
+  .ra-toast-success .ra-toast-icon { color: var(--ra-lime); }
+  .ra-toast-info .ra-toast-icon { color: var(--ra-blue-light); }
+  .ra-toast-error { background: #b42318; }
+  .ra-toast-text { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+  .ra-toast-close { align-items: center; background: none; border: 0; border-radius: 999px; color: rgba(255, 255, 255, .7); cursor: pointer; display: inline-flex; flex-shrink: 0; height: 24px; justify-content: center; margin: -2px 0 0; width: 24px; }
+  .ra-toast-close:hover { color: #fff; }
+  .ra-toast-close:focus-visible { outline: 2px solid #fff; outline-offset: 1px; }
+  @media (max-width: 640px) {
+    .ra-toasts { bottom: auto; left: 16px; max-width: none; right: 16px; top: 12px; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .ra-toast { animation: ra-toast-in .18s ease-out; }
+  }
+  @keyframes ra-toast-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+  @media (max-width: 480px) {
+    .ra-modal { align-items: end; padding: 0; }
+    .ra-modal-panel { border-radius: 20px 20px 0 0; max-height: 92dvh; }
+    .ra-modal-head { padding: 18px 16px 4px 20px; }
+    .ra-modal-body { padding: 12px 20px 22px; }
+  }
+}
 .ra-login-prompt-text { color: var(--ra-muted); font-size: 14.5px; line-height: 1.5; margin: 0 0 18px; }
 .ra-login-prompt-actions { align-items: center; display: flex; flex-wrap: wrap; gap: 10px; }
 .ra-login-prompt-dismiss { background: none; border: 0; color: var(--ra-muted); cursor: pointer; font-size: 13px; font-weight: 600; margin-left: auto; padding: 8px 4px; }
