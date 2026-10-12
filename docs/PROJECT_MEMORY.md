@@ -1464,3 +1464,9 @@ Rules:
 - New `tests/security/invite-public-routes.test.ts` (no test-auth shortcut). `InviteAccept`/`CoTenantInviteAccept` only show "Invitación no válida" on 404 (else retry) and translate accept error codes.
 - Verification: tsc clean; Jest agency+cotenant+security 11 suites / 116 tests; frontend lint/build OK, 64 files / 266 tests. Details in `docs/MEJORA-CONTINUA.md` round 75.
 
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 76: no more prefix-less `app.use('/api', authenticate, …)`
+
+- Private routers in `src/app.ts` are mounted under their own prefix (`/api/postsign`, `/api/tenant-pro`, `/api/me/tenant-pro`, `/api/appointments`, `/api/applications`, `/api/payments`, `/api/connect`, `/api/service-offers`, `/api/tax`); their internal paths are now relative. `serviceOffers.routes.ts` also exports `serviceOfferAppointmentRoutes` (reschedule/cancel). `/api/invites` and `/api/institution` keep the `requireVerified` they used to inherit from the global mount.
+- New `tests/security/route-auth-map.test.ts` walks the Express stack: every `/api` route must return 401 without JWT unless it is in `PUBLIC_ROUTES` (27 entries); public ones must never answer "Token requerido"; unknown `/api` paths return 404. Add new public routes to that list.
+- Verification: tsc clean; 25 related Jest suites OK; anonymous and unverified-JWT responses identical to the previous code across 632 method/route combinations (except unknown paths → 404). Details in `docs/MEJORA-CONTINUA.md` round 76.

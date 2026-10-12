@@ -49,6 +49,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Invitaciones rotas en producción (ronda 75), conviene desplegarlo pronto**: en app.rentalapp.es, el propietario invitado por una agencia no puede ver la invitación ni crear su cuenta (la API responde 401 y la pantalla dice «Invitación no válida»), y el co-titular sin sesión tampoco ve la vista previa. Corregido en esta rama (`9bdbe75`) sin cambios de datos ni de entorno. Las invitaciones de agencia enviadas antes siguen valiendo si no han caducado (`INVITE_TTL_DAYS`), así que tras desplegar se pueden reenviar desde «Propietarios» o usar el mismo enlace.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
+- **Portal de institución (ronda 76)**: las cuentas `institution_viewer` necesitan la identidad verificada para entrar en `/api/institution` (sin verificar responden 403 `owner_not_verified`). No era intencionado: les llegaba el `requireVerified` global de `app.ts`. En la ronda 76 se ha dejado explícito para no cambiar nada. Si un organismo público no debe pasar por la verificación, basta quitar `requireVerified` de ese montaje. Decisión tuya.
 - **Co-titulares (ronda 12), dos decisiones de producto:**
   - «Firmar como co-titular» solo cambia el estado en la base (`POST /tenants/:partyId/sign`, backend de antes); no es una firma electrónica con proveedor. ¿Vale así o el co-titular debe firmar con Firma.dev como el inquilino principal?
   - Aceptar la invitación exige tener la identidad verificada (`requireVerified` está en toda `/api`). La página lo explica y enlaza a `/tenant/kyc`, pero ¿debe poder unirse antes y verificar después?
@@ -2913,3 +2914,35 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: `ComplianceDashboard` en inglés y con pastillas propias; `pro/Profile`; `.auth-input` frente a `.ra-input`; fotos externas en los anuncios.
 
 **Siguiente mejora propuesta.** Montar `postsignRouter` y `taxReportRoutes` con su prefijo (`/api/postsign`, `/api/tax`) en vez de `app.use('/api', authenticate, …)`, con el test de esta ronda como red, para que una ruta pública nueva no vuelva a quedar detrás de `authenticate` sin querer. Si se prefiere interfaz: `ComplianceDashboard` en español y con `Badge`.
+
+### Ronda 76 — 2026-10-12 22:40
+
+**Qué y por qué.** Lo que proponía la ronda 75: quitar la trampa que dejó las invitaciones detrás de la sesión. Varios routers se montaban con `app.use('/api', authenticate|requireVerified, router)` sin prefijo, y ese middleware corre en toda petición `/api` que llegue hasta él. Cualquier ruta pública montada después quedaba cerrada sin que nadie lo notara.
+
+1. **Cada router privado con su prefijo** (`src/app.ts`). `postsign`, `tenant-pro`, `me/tenant-pro`, `appointments`, `applications`, `payments`, `connect`, `service-offers` y `tax` se montan ya en `/api/<prefijo>` con su `authenticate` y, donde ya se aplicaba, `requireVerified`. Sus rutas internas pasan a relativas (`'/postsign/upsell/:id'` → `'/upsell/:id'`); las URLs que ve el frontend no cambian. Las dos rutas de citas de `serviceOffers.routes.ts` (`reschedule`, `cancel`) salen a `serviceOfferAppointmentRoutes` y van en `/api/appointments` junto a las de incidencias.
+   - Se conserva tal cual lo que imponía el global: `/api/invites` y `/api/institution` exigían la identidad verificada (les llegaba el `requireVerified` antiguo) y ahora lo dicen explícitamente. Lo de institución queda anotado en «Para Jorge».
+   - De paso, las rutas privadas montadas después ya no pasan dos veces por `authenticate` (dos consultas de `tokenVersion` a Mongo por petición).
+2. **Mapa de sesión de toda la API** (`tests/security/route-auth-map.test.ts`, 4 casos). Sin atajo de cabeceras ni `ALLOW_UNVERIFIED`, recorre la pila de Express y saca las rutas de `/api` (unas 195). Comprueba que:
+   - toda ruta fuera de una lista explícita de 27 públicas (webhooks, textos legales, acceso a la cuenta, anuncios, cláusulas, invitaciones) da 401 «Token requerido»;
+   - ninguna de esas 27 da «Token requerido»;
+   - `/api/no-existe` da 404.
+
+   Una ruta nueva entra sola en la comprobación: si se monta sin sesión sin querer, o si una pública queda detrás de `authenticate` (como en la ronda 75), falla.
+
+**Commits.**
+- `32c4492` Rutas: cada router privado se monta con su prefijo y un test vigila qué rutas de /api responden sin sesión
+- Docs: este registro, la nota del portal de institución en «Para Jorge» y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- **Comparación con el código anterior** (worktree temporal en `HEAD`, ya borrado): un script de un solo uso llamó a cada ruta `/api` sin sesión y con JWT de inquilino, casero e institución sin verificar. Fueron 632 combinaciones de método y ruta. Respondieron igual en los dos códigos (mismo estado y mismo error), salvo `/api/no-existe`, que antes daba 401 (sin sesión) o 403 `owner_not_verified` y ahora 404.
+- Backend: `npx tsc --noEmit` sin errores.
+- Jest `--runInBand` de `tests/security`, `tests/appointments`, `tests/applications`, `tests/tenantPro`, `tests/agency`, `tests/institution`, los de cobros, disputas, recibos y co-titulares, `serviceOffer.payment`, `property.apply`, `ticket.access` y `src/__tests__/api.test.ts`: **25 suites OK**. Una primera tanda se cortó a los 10 minutos con 11 suites aprobadas y sin el total de tests; las 14 restantes se repitieron aparte (**69 tests OK**). `route-auth-map` pasa 4/4.
+- **GitNexus.** `detect_changes`: riesgo bajo, sin flujos afectados (solo marca `shouldServeSpaFallback` y `publishSystem`, que únicamente se desplazan de línea).
+- Frontend sin cambios: no se ha pasado ni el build ni sus tests.
+
+**Qué queda.**
+- La lista de rutas públicas incluye tres de `/api/verification` que, sin sesión, responden 403 desde su controlador y no 401. Funciona, pero se podría montar ese router con `authenticate` (lo hace `dev/verify` por dentro) y sacarlas de la lista.
+- `/api/testing/inbound/leads` lista leads sin sesión fuera de producción (en producción no se monta). Sobra si nadie lo usa.
+- Pendientes anteriores: `ComplianceDashboard` en inglés y con pastillas propias; `pro/Profile`; `.auth-input` frente a `.ra-input`; fotos externas en los anuncios.
+
+**Siguiente mejora propuesta.** Volver a la interfaz tras dos rondas de backend: `ComplianceDashboard` en español, con `Badge` y tokens `--ra-*`, revisado con capturas. Si se prefiere backend: `/api/verification` detrás de `authenticate` y fuera de la lista de públicas.
