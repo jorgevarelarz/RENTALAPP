@@ -2209,3 +2209,52 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 - Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador.
 
 **Siguiente mejora propuesta.** Pasar `FilterBar` al sistema 2026: campos de habitaciones y baños legibles, pastillas con `--ra-blue` en vez de índigo y orden «Más baratos primero». De paso, comprobar el doble paso por el historial de `setFilters` y dejar una sola navegación.
+
+### Ronda 58 — 2026-10-12 11:10
+
+**Qué y por qué.** La ronda 57 proponía pasar `FilterBar` al sistema 2026 y comprobar el doble paso por el historial. Al revisarlo aparecieron cuatro fallos en la búsqueda, que es el flujo público más usado:
+
+1. **Apagar un interruptor filtraba al revés.** Al desmarcar «Amueblado», «Mascotas» o «Solo Tenant PRO» la barra guardaba `false`, la URL llevaba `furnished=false` y el backend buscaba solo pisos sin amueblar (o sin mascotas, o sin el requisito PRO). Ahora el interruptor apagado es `undefined` y `setFilters` descarta `false`.
+2. **Doble entrada en el historial.** `setFilters` llamaba a `setSearchParams` y a `navigate` con la misma búsqueda, así que «atrás» había que pulsarlo dos veces. Queda solo `setSearchParams`, también en `clearFilters`. El test nuevo falla con el hook anterior (comprobado).
+3. **«Populares» ordenaba por fecha.** El frontend mandaba `sort=views`, que el backend no admite (el campo es `viewsCount`) y cambiaba por `createdAt`. Ahora `viewsCount` está en `SORTABLE_FIELDS` y la opción se llama «Más vistos».
+4. **La ciudad tenía que coincidir letra a letra.** `?city=madrid` no encontraba «Madrid». Ahora es una regex anclada (`^…$`), escapada y sin distinguir mayúsculas: ciudad entera, sin mayúsculas, y `.*` se busca como texto.
+
+**Apariencia (`FilterBar`).**
+- Es un `<form role="search">`: Enter busca.
+- Etiquetas visibles («Buscar», «Ciudad», «Precio mín. (€/mes)»…) en vez de solo placeholders, con `useId` porque hay dos barras montadas (escritorio y cajón móvil).
+- Habitaciones y baños son selectores («Cualquiera», «2 o más»). Antes eran campos de 44 px que cortaban «Baño+».
+- Tokens `--ra-*`: borde `--ra-line`, foco y pastilla activa en `--ra-blue` (antes índigo), «Buscar» en azul.
+- Orden: «Más recientes», «Más baratos», «Más caros», «Más vistos».
+- «Borrar filtros» con texto en vez de un icono rojo.
+- En escritorio, «Buscar» va en la fila principal; en móvil, al final del formulario.
+
+**Commits.**
+- `5f5bcc6` Búsqueda: ciudad sin distinguir mayúsculas y orden por visitas
+- `3bc355e` Interfaz: barra de filtros 2026, interruptores, historial y orden
+
+**Verificación (resultados reales).**
+- **Backend.**
+  - `npx tsc --noEmit`: sin errores.
+  - `npx jest tests/properties/property.routes.test.ts tests/security/mongoOperators.test.ts --runInBand`: 2 suites y 16 tests OK. Hay 2 casos nuevos: ciudad en minúsculas y con espacios sí, «Coru» y `.*` no; orden por `viewsCount` en los dos sentidos.
+- **Frontend.**
+  - `tsc --noEmit`: sin errores.
+  - `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`: 48 ficheros y 202 tests OK.
+  - `PropertiesList.test.tsx` pasa de 8 a 11 tests: Enter y una sola entrada en el historial, interruptor apagado sin `false`, orden «Más vistos» con `viewsCount`.
+- **Playwright** (vite local, `/api/*` simulado), a 1280 y 390 px, capturas en `/tmp/ra-shots58`:
+  - sin desbordamiento horizontal;
+  - Enter en «Ciudad» busca;
+  - apagar «Amueblado» lo quita de la petición;
+  - un solo «atrás» vuelve a `?furnished=true&roomsMin=2`;
+  - la barra cabe en dos filas a 1280 px.
+- **GitNexus.**
+  - `impact`: `search` y `usePropertyFilters`, LOW.
+  - `detect_changes`: riesgo medio, solo por el flujo `Search`, que es el que cambia. `unfavorite` sale por el desplazamiento de líneas frente al índice de la copia canónica.
+
+**Qué queda.**
+- La ciudad sigue distinguiendo tildes («A Coruna» no encuentra «A Coruña»). La regex con `i` no usa el índice `{city:1, price:1}`; con pocos miles de anuncios no importa, pero con volumen convendría guardar la ciudad normalizada.
+- `PropertiesList` aún filtra `onlyTenantPro` en el cliente después de paginar. Es redundante, porque el backend ya lo filtra.
+- En móvil, a 390 px, la cabecera pública parte «Crear cuenta» en dos líneas (`NavBar`, anterior a esta ronda).
+- Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador.
+
+**Siguiente mejora propuesta.** Cabecera pública en móvil: que «Entrar» y «Crear cuenta» quepan a 390 px sin partirse (botones compactos o «Crear cuenta» dentro del menú). De paso, quitar el filtro `onlyTenantPro` redundante de `PropertiesList`.

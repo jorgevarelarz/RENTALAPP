@@ -1360,3 +1360,9 @@ Rules:
 - Bug: «Borrar filtros» (empty state and FilterBar funnel) called `setFilters({})`, which merges → nothing cleared. New `clearFilters()` in `usePropertyFilters`; `FilterBar` takes `onClear` and is keyed on `location.search` so its inputs follow the URL. Failed favorite in the list now reverts the heart + toast.
 - `EmptyState`, `SkeletonGrid` (mirrors PropertyCard), `SkeletonDetail` (mirrors PropertyDetail), `ErrorCard` moved to 2026 tokens; dead `ui/Skeleton.tsx` removed. Listing: h1, es-ES count, filtered vs. no-listings empty, Spanish error + retry.
 - Verification: frontend build + 199 tests (new `pages/properties/__tests__/PropertiesList.test.tsx`); Playwright `/tmp/ra-shots57`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 58: search filters
+
+- Backend `search`: `city` is an escaped, anchored, case-insensitive regex; `viewsCount` added to `SORTABLE_FIELDS`.
+- Frontend `FilterBar` rebuilt (2026, `<form role="search">`, labels, room/bath selects, sort `viewsCount-desc` «Más vistos»); toggles off → `undefined` (was `false` → backend filtered `furnished=false`); `usePropertyFilters` drops `false` and uses only `setSearchParams` (was double history entry). `SearchParams.sort` now `'price'|'createdAt'|'viewsCount'`.
+- Verification: tsc clean; Jest `--runInBand` property.routes + mongoOperators 16; frontend build + 202 tests; Playwright `/tmp/ra-shots58`.
