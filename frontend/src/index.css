@@ -7,27 +7,17 @@
 * { box-sizing: border-box; }
 
 :root {
-  --bg: #f8fafc;
-  --fg: #0f172a;
+  /* Tokens de la plantilla antigua, alineados con el sistema 2026 (--ra-*)
+     para que las pantallas que aún los usan no salgan en índigo. */
+  --bg: #f4f6fb;
+  --fg: #0b1025;
   --card: #ffffff;
-  --muted: #64748b;
-  --primary: #4f46e5;
-  --primary-hover: #4338ca;
-  --border: #e2e8f0;
-  --primary-rgb: 79, 70, 229; /* Añadido para sombras */
-  --primary-hover-rgb: 67, 56, 202; /* Añadido para sombras */
-}
-
-html[data-theme='dark'] {
-  --bg: #0b1020;
-  --fg: #e5e7eb;
-  --card: #141a2a;
-  --muted: #9ca3af;
-  --primary: #818cf8;
-  --primary-hover: #6366f1;
-  --border: #1f2937;
-  --primary-rgb: 129, 140, 248; /* Añadido para sombras */
-  --primary-hover-rgb: 99, 102, 241; /* Añadido para sombras */
+  --muted: #66708b;
+  --primary: #4368ff;
+  --primary-hover: #3157ee;
+  --border: #e3e6ee;
+  --primary-rgb: 67, 104, 255;
+  --primary-hover-rgb: 49, 87, 238;
 }
 
 body { @apply m-0 antialiased bg-white text-gray-900 font-sans; }
@@ -147,7 +137,7 @@ a {
 a:hover {
   opacity: 0.85;
 }
-button:focus, a:focus {
+button:focus-visible, a:focus-visible {
   outline: 2px solid var(--primary);
   outline-offset: 2px;
 }
@@ -776,6 +766,7 @@ body {
 .ra-guest-account a { justify-content: center; text-align: center; }
 @layer components {
   /* Botón de la app (ui/Button y buttonClassName). En la capa de componentes para que w-full, px-8, etc. de quien llama manden */
+  .ra-card { background: #fff; border: 1px solid var(--ra-line); border-radius: 16px; color: var(--ra-ink); }
   .ra-btn { align-items: center; border: 1px solid transparent; border-radius: 999px; cursor: pointer; display: inline-flex; font-family: inherit; font-size: 14px; font-weight: 600; gap: 8px; justify-content: center; line-height: 1.2; min-height: 40px; padding: 9px 18px; text-decoration: none; transition: background 160ms ease, border-color 160ms ease, color 160ms ease; }
   .ra-btn:hover { opacity: 1; }
   .ra-btn:focus-visible { outline: 2px solid var(--ra-blue); outline-offset: 2px; }

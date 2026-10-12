@@ -24,7 +24,7 @@ export default function OnboardingChecklist({ role }: { role?: string }) {
   if (!items.length) return null;
 
   return (
-    <Card className="p-5 border border-gray-200">
+    <Card className="p-5">
       <div className="flex items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-gray-950">Primeros pasos</h2>
