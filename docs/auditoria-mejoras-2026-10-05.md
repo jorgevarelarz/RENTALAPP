@@ -37,8 +37,8 @@
 | `utils/history.ts:56` | El historial se guarda duplicado: embebido en el contrato (`$push`) y en la colección. Los listados cargan el documento completo. Propuesta: proyectar `-history -signature.events`. | contratos largos | M |
 | Generación de PDF y hash en el request (`contract.controller.ts:139`, `admin.controller.ts:203`) | Bloquea el event loop; el ZIP de admin genera hasta 200 PDFs en serie. | decenas de usuarios concurrentes | M |
 | `property.controller.ts:313` | Búsqueda con `$regex` sin ancla, `sort` libre del cliente y `countDocuments` en cada búsqueda. | ~20k propiedades | M |
-| `rentSuggestion.service.ts:141` | Trae todos los comparables de la ciudad sin límite. | ciudades grandes | S-M |
-| `jobs/tenantProRetention.ts` | La purga de documentos Tenant-PRO nunca se programa. | ya (RGPD) | S |
+| `rentSuggestion.service.ts:141` | ~~Trae todos los comparables de la ciudad sin límite.~~ Hecho en la ronda 63: los 300 más recientes. | ciudades grandes | S-M |
+| `jobs/tenantProRetention.ts` | ~~La purga de documentos Tenant-PRO nunca se programa.~~ Hecho en la ronda 63: diaria a las 03:45. | ya (RGPD) | S |
 | `bcryptjs` | Hash en JS puro en el hilo principal (~80 ms). Propuesta: `bcrypt` nativo o `argon2`. | ~20 logins/s | S |
 | Consultas y CSV sin paginar (`admin.controller.ts:72`, `systemEvents.service.ts:44`, etc.) | Cargan colecciones enteras en memoria. | ~10k registros | S-M |
 

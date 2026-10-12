@@ -1384,3 +1384,10 @@ Rules:
 - `utils/authLinks.withIntent`; `LoginPrompt` `resume` prop (detail only) → return URL `?intent=save|apply`; `PropertyDetail` completes once (favorite + toast «Guardado en Favoritos», skipped if liked/mine/role without favorites; apply → focus message) and strips `intent`.
 - `ui/Modal`: 2026 classes (`.ra-modal*` in `@layer components` so caller Tailwind classes win — fixes signing modal stuck at 520 px), h2 + `aria-labelledby`, «Cerrar», mobile bottom sheet, initial focus in body. `ToastProvider`: `.ra-toast*`, role status/alert + aria-live, z-index 70 (top on mobile), counter ids (Date.now() collided), errors 6 s.
 - Verification: frontend tsc + build OK, 54 files/222 tests; Playwright `/tmp/ra-shots62`. Backend untouched.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 63: Tenant PRO retention scheduled + comparables cap
+
+- `jobs/tenantProRetention.ts`: `startTenantProRetentionJob` (cron 03:45, started in `app.ts`); purge uses a cursor over users with expired docs, deletes file then `$pull` doc + `$push` auditTrail, per-user try/catch, returns `{users, docs, failed}`; `tenantProDocsTtlDays()` (invalid → 365) also used by `GET /tenant-pro/me`. `deleteTP` basename-only, ENOENT-tolerant.
+- `rentSuggestion.findOwnComparables`: `sort({updatedAt:-1}).limit(MAX_OWN_COMPARABLES=300)`.
+- Verification: tsc clean; Jest `--runInBand` tests/tenantPro 8, rentSuggestion (new `tests/properties/rentSuggestion.comparables.test.ts`) + referenceImport + unit 14. Frontend untouched.
+

@@ -42,6 +42,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 53**: las fechas que los inquilinos propusieron antes desde «Solicitudes» se guardaron con la hora desplazada (2 h tarde en verano y 1 h en invierno), el mismo fallo que la ronda 23 corrigió para el casero. Conviene revisarlas con una consulta de solo lectura (`db.applications.find({proposedBy:'tenant', proposedDate:{$gt:new Date()}})`). Además, proponer una fecha pasada da 400, aceptar una propuesta cuya hora ya pasó da 409 y una solicitud `rejected` no admite cambios. Ningún flujo pasa hoy una solicitud a `rejected`: el casero no tiene forma de descartar a un candidato. ¿Debe tenerla, y avisar al inquilino?
 - **Avisos de solicitudes y visitas (ronda 54)**: una solicitud nueva avisa por correo al propietario y a la agencia gestora (`agencyAccess: 'manage'`), con el nombre del inquilino, su mensaje y si tiene la solvencia verificada. Proponer o aceptar fecha avisa a la otra parte. Si la agencia propone o acepta, el inquilino ve el nombre de la agencia; si lo hace el administrador, no se da su nombre. Dos decisiones: (1) ¿debe enterarse también el propietario cuando su agencia concierta una visita? Hoy no. (2) Sin SMTP en producción, estos correos solo quedan en el log.
 - **Cambio de visita (ronda 56)**: cuando una parte propone otra hora para una visita ya concertada, la visita concertada sigue en pie hasta que la otra parte acepte la nueva. Si nadie responde, se mantiene la primera. ¿Es la regla que quieres, o proponer un cambio debe anular la visita? Tampoco hay forma de cancelar una visita sin proponer otra fecha.
+- **Al desplegar la ronda 63**: la purga de documentos Tenant PRO pasa a ejecutarse cada día a las 03:45. La primera noche borrará del disco y de la base todos los documentos subidos hace más de `TENANT_PRO_DOCS_TTL_DAYS` días (365 si no está puesta); de cada uno queda en `auditTrail` el tipo, el hash y el estado de la revisión. El estado verificado del inquilino no cambia. Es lo que prometen la política de privacidad y la pantalla de Tenant PRO, pero borra datos: si quieres saber antes cuántos son, consulta de solo lectura `db.users.countDocuments({'tenantPro.docs': {$elemMatch: {uploadedAt: {$lt: new Date(Date.now() - 365*864e5)}}}})`. Con varias réplicas, el job correría en cada una (igual que los demás jobs); es inocuo, pero repetido.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -2446,3 +2447,42 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador; `ticket.routes.ts` conserva su propio `escapeRegExp`.
 
 **Siguiente mejora propuesta.** Unificar los avisos en `ToastProvider` (los tres usos de `react-hot-toast` y quitar la dependencia) y repasar los textos de `PaymentModal`. Si se prefiere volver al backend: limitar los comparables del precio sugerido (`rentSuggestion.service.ts`, sin `limit`; pendiente en `auditoria-mejoras`).
+
+### Ronda 63 — 2026-10-12 15:25
+
+**Qué y por qué.** Ronda de backend, tras seis rondas seguidas de interfaz. Dos pendientes de `docs/auditoria-mejoras-2026-10-05.md`:
+
+1. **La purga RGPD de Tenant PRO no se ejecutaba nunca.** `purgeOldTenantProDocs` estaba importada en `app.ts` pero nadie la llamaba. Las nóminas, contratos y declaraciones de renta se guardaban cifrados para siempre, aunque la política de privacidad dice que «caduca y se elimina» y la pantalla de Tenant PRO muestra `ttlDays`. Además, la función tenía fallos que habrían salido al programarla:
+   - cargaba en memoria todos los usuarios con algún documento, caducado o no;
+   - hacía `save()` del usuario entero: un usuario antiguo que no pasara la validación actual, o un cambio concurrente del inquilino, podía fallar o pisarse; y un fallo en uno abortaba el `Promise.all` de todos;
+   - `deleteTP` lanzaba si el borrado fallaba y unía la ruta sin limitarla al directorio.
+
+   Ahora:
+   - `startTenantProRetentionJob` la programa cada día a las 03:45, junto a los demás jobs (no en tests);
+   - recorre con cursor solo los usuarios con algún documento vencido, borra primero el fichero (si falla la base, el siguiente pase lo reintenta; al revés quedaría un fichero huérfano que nadie borraría) y después quita el documento con `$pull` y añade la entrada a `auditTrail` con `$push`, sin tocar el resto del usuario;
+   - un usuario que falla queda en el log y no detiene a los demás; devuelve `{users, docs, failed}`, que se registra con pino;
+   - `tenantProDocsTtlDays()` lee la variable en cada pase y vuelve a 365 si no es un número positivo; la usa también `GET /api/tenant-pro/me`, que antes hacía su propio `parseInt`;
+   - `deleteTP` solo borra por nombre dentro de `storage/tenant-pro` (`path.basename`) y no falla si el fichero ya no está. Lo usan también el borrado del propio inquilino y la purga del administrador.
+2. **Comparables del precio sugerido sin límite.** `findOwnComparables` traía todos los anuncios activos de la ciudad (o del radio) en cada sugerencia. Ahora toma los 300 más recientes (`updatedAt`), que además reflejan mejor el precio actual. Con menos de 300 no cambia nada.
+
+**Commits.**
+- `03212fe` Tenant PRO: la purga de documentos caducados se programa cada día
+- `6458f79` Precio sugerido: los comparables se limitan a los 300 anuncios más recientes
+
+**Verificación (resultados reales).**
+- **Backend.**
+  - `npx tsc --noEmit`: sin errores.
+  - `npx jest tests/tenantPro --runInBand`: 2 suites y 8 tests OK. Casos nuevos: con un documento vencido y otro reciente solo se borra el vencido (fichero y entrada), queda la entrada de `auditTrail` con tipo, hash y estado, el estado `verified` se mantiene, un fichero que ya no existe no rompe la purga y un segundo pase no hace nada; `TENANT_PRO_DOCS_TTL_DAYS=abc` usa 365 y `30` purga a los 40 días; `deleteTP('../keep-me.txt')` no sale del directorio.
+  - `npx jest tests/properties/rentSuggestion.comparables.test.ts tests/properties/property.referenceImport.test.ts tests/unit/rentSuggestion.test.ts --runInBand`: 3 suites y 14 tests OK. El nuevo crea 300 anuncios recientes a 20 €/m² y 40 antiguos a 10 €/m²: la muestra es 300 y la base, 20 €/m².
+- **Frontend:** sin cambios, no hacía falta build ni tests.
+- **GitNexus.**
+  - `impact`: `purgeOldTenantProDocs`, `deleteTP` y `findOwnComparables`, LOW.
+  - `detect_changes` (contra `ca840e9`): riesgo medio, solo por el flujo `SuggestPrice`, que es el que cambia.
+- La sesión se cortó a mitad de la ronda (cuota); al retomar, el límite de comparables estaba editado sin test ni commit, y se completó.
+
+**Qué queda.**
+- Los jobs se ejecutan en cada réplica (auditoría de mejoras). Con una sola instancia no importa.
+- Al purgar no se avisa al inquilino de que su documentación ha caducado ni se le pide que la renueve; su estado verificado se mantiene sin documentos detrás. ¿Debe caducar también la verificación? Es decisión de producto; no la he tomado.
+- Pendientes anteriores: unificar los avisos (`react-hot-toast` en tres sitios) y los textos de `PaymentModal`; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador.
+
+**Siguiente mejora propuesta.** Unificar los avisos en `ToastProvider` (los tres usos de `react-hot-toast`, quitar `<Toaster/>` y la dependencia) y repasar los textos de `PaymentModal` («Error de Configuración», «Realizar Pago»).
