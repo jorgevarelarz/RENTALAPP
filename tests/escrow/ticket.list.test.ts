@@ -49,6 +49,11 @@ describe('GET /api/tickets/my/*: búsqueda y filtro de estado', () => {
     expect(titles(await list('pro', PRO, 'pro', { q: 'electri' }))).toEqual(['Enchufe del salón (2)']);
   });
 
+  it('busca por título sin distinguir tildes', async () => {
+    expect(titles(await list('tenant', TENANT, 'tenant', { q: 'salon' }))).toEqual(['Enchufe del salón (2)']);
+    expect(titles(await list('tenant', TENANT, 'tenant', { q: 'SALÓN' }))).toEqual(['Enchufe del salón (2)']);
+  });
+
   it('trata la búsqueda como texto, no como expresión regular', async () => {
     expect(titles(await list('tenant', TENANT, 'tenant', { q: '(2)' }))).toEqual(['Enchufe del salón (2)']);
     const res = await list('tenant', TENANT, 'tenant', { q: '.*' });

@@ -24,6 +24,7 @@ import { logger } from '../utils/logger';
 import { isOwnUploadUrl } from '../utils/uploadUrl';
 import { csvRow } from '../utils/csv';
 import { sendRouteError } from '../utils/routeError';
+import { accentInsensitivePattern } from '../utils/searchRegex';
 
 const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
@@ -391,12 +392,12 @@ r.post('/:id/unassign', async (req, res) => {
 const TICKET_STATUSES = ['open', 'quoted', 'in_progress', 'awaiting_schedule', 'scheduled', 'awaiting_validation', 'closed', 'disputed'];
 const SEARCH_MAX = 100;
 
-const escapeRegExp = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const fold = (value: string) => value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
 /**
  * Filtro del listado: estado validado (400 invalid_status) y búsqueda por título
- * o por el nombre del servicio en español («fontaneria» encuentra plumbing).
+ * (sin distinguir tildes: «calefaccion» encuentra «Calefacción») o por el nombre del servicio en
+ * español («fontaneria» encuentra plumbing).
  */
 function buildListFilter(base: Record<string, string>, query: any): { filter?: any; error?: string } {
   const filter: any = { ...base };
@@ -414,7 +415,7 @@ function buildListFilter(base: Record<string, string>, query: any): { filter?: a
     const folded = fold(term);
     const services = TICKET_SERVICES.filter(s => fold(SERVICE_LABELS[s]).includes(folded));
     filter.$or = [
-      { title: { $regex: escapeRegExp(term), $options: 'i' } },
+      { title: { $regex: accentInsensitivePattern(term), $options: 'i' } },
       ...(services.length ? [{ service: { $in: services } }] : []),
     ];
   }
