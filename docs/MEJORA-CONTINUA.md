@@ -2487,7 +2487,7 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 
 **Siguiente mejora propuesta.** Unificar los avisos en `ToastProvider` (los tres usos de `react-hot-toast`, quitar `<Toaster/>` y la dependencia) y repasar los textos de `PaymentModal` («Error de Configuración», «Realizar Pago»).
 
-### Ronda 64 — 2026-10-12 15:45
+### Ronda 64 — 2026-10-12 15:35
 
 **Qué y por qué.** Ronda de interfaz: lo que proponían las rondas 62 y 63.
 
