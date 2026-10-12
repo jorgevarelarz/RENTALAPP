@@ -46,6 +46,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 67**: cambian dependencias de ejecución (express 4.22, qs, proxy-addr, nodemailer 10.1, axios), así que hay que reinstalar con `npm ci` en el servidor, no sincronizar solo ficheros sueltos. nodemailer 10 exige Node 20 o superior: el Dockerfile ya usa `node:20`, pero conviene confirmar `node -v` en el VPS antes. Node 20 está ya sin soporte (auditoría de seguridad); pasar a Node 22/24 es decisión tuya.
 - **Webhooks de firma genéricos (ronda 69)**: `POST /api/contracts/signature/webhook` y `/api/contracts/:id/signature/callback` cuelgan de `app.use('/api/contracts', authenticate, requireVerified, …)`, así que en producción responden 401 a cualquier proveedor (solo `/signature/callback` y `/signature/firma` son públicos, montados antes en `app.ts`). No es un agujero (rechazan), pero son rutas que no pueden funcionar. Es el punto #9 abierto de `docs/review-firma-2026-10-05.md`: ¿se eliminan o se dejan solo para mock y tests?
 - **Búsqueda de direcciones con Nominatim (ronda 71)**: el alta de inmueble sugiere direcciones llamando a `nominatim.openstreetmap.org` desde el navegador mientras se escribe. La política de uso de Nominatim prohíbe expresamente montar un autocompletado en el cliente con su API pública. Desde la ronda 71 se busca como mucho una vez por segundo y no se repite al elegir, pero sigue siendo autocompletado. Con poco tráfico no pasará nada; al abrir conviene elegir un proveedor pensado para esto (Photon de Komoot, MapTiler, Google Places…), que implica darse de alta y quizá pagar. Decisión tuya.
+- **Invitaciones rotas en producción (ronda 75), conviene desplegarlo pronto**: en app.rentalapp.es, el propietario invitado por una agencia no puede ver la invitación ni crear su cuenta (la API responde 401 y la pantalla dice «Invitación no válida»), y el co-titular sin sesión tampoco ve la vista previa. Corregido en esta rama (`9bdbe75`) sin cambios de datos ni de entorno. Las invitaciones de agencia enviadas antes siguen valiendo si no han caducado (`INVITE_TTL_DAYS`), así que tras desplegar se pueden reenviar desde «Propietarios» o usar el mismo enlace.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -2879,3 +2880,36 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: `pro/Profile`; `.auth-input` frente a `.ra-input`; «Ingresos» fuera del menú del casero; las fotos externas en los anuncios (píxeles de rastreo).
 
 **Siguiente mejora propuesta.** Cambiar de terreno: el test de rutas públicas de la ronda 73 para `/api/users`, `/api/tickets` y `/api/chat` (qué responde sin sesión). Si se vuelve a la interfaz: `ComplianceDashboard` en español y con `Badge`.
+
+### Ronda 75 — 2026-10-12 21:52
+
+**Qué y por qué.** La ronda 74 proponía extender el test de rutas públicas a `/api/users`, `/api/tickets` y `/api/chat`. Al sondear `app.ts` con peticiones anónimas reales salió algo más grave: un flujo roto, también en producción.
+
+1. **Fallo: las invitaciones públicas respondían 401.** `app.use('/api', authenticate, postsignRouter)` (antes en la línea 326) ejecuta `authenticate` en toda petición `/api/*` que llegue hasta él, no solo en `/api/postsign`. `GET /api/agency-invites/:token`, `POST /api/agency-invites/:token/accept` y `GET /api/invites/preview` se montaban después, así que sin JWT daban «Token requerido».
+   - Consecuencia: el propietario invitado por una agencia (que aún no tiene cuenta) veía «Invitación no válida» y no podía activar su cuenta; el co-titular sin sesión, igual. Producción (726bf6f) tiene el mismo orden.
+   - Por qué no lo veían los tests: `jest.setup.ts` pone `ALLOW_TEST_AUTH=true` en toda la suite, y con él `authenticate` inventa un usuario cuando no hay cabecera.
+   - Arreglo mínimo: las tres rutas suben antes del primer `authenticate` global, con un comentario que explica por qué. No se ha reorganizado el resto de montajes.
+2. **Test sin atajos** (`tests/security/invite-public-routes.test.ts`, 15 casos): con `ALLOW_TEST_AUTH=false` y `ALLOW_UNVERIFIED=false`, la agencia invita con un JWT real, el propietario anónimo ve la invitación y crea su cuenta (201), y con su JWT recién emitido (cuenta sin verificar) puede volver a abrirla. Además, la vista previa del co-titular responde sin sesión, y diez rutas privadas (`/api/users/me`, `/api/tickets`, `/api/chat/conversations`, `/api/agency/landlords`, la invitación de la agencia, `/api/me/tenant-pro`, el upsell de `postsign`, `/api/payments`, `/api/tax/report`, `/api/invites/accept`) siguen dando 401.
+3. **Pantallas de invitación** (`InviteAccept`, `CoTenantInviteAccept`).
+   - Cualquier fallo al cargar (red, 500, el 401 de arriba) se pintaba como «Invitación no válida». Ahora solo un 404; lo demás da «No se pudo cargar la invitación» con «Reintentar».
+   - Al activar la cuenta de propietario, `user_already_exists`, `invite_expired`, `invite_already_accepted` e `invalid_payload` salían como el código en crudo (`formatApiError`). Ahora salen en español y, si el correo ya tiene cuenta, con un enlace a «Iniciar sesión» (estilo `.auth-alert a`).
+
+**Commits.**
+- `9bdbe75` Invitaciones: el propietario invitado por una agencia ya puede crear su cuenta y el co-titular ver la invitación sin sesión
+- `e861f69` Invitaciones: la pantalla solo da el enlace por no válido con un 404 y explica los errores al activar
+- Docs: este registro, la nota en «Para Jorge» y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- Sondeo anónimo antes del arreglo: las tres rutas daban 401 `{"error":"Token requerido"}`.
+- El test nuevo con el `app.ts` anterior: **5 fallos** (los cinco casos públicos) y 10 aciertos; con el arreglo, 15/15.
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` de `tests/agency`, `tests/contracts/contract.cotenant.test.ts` y `tests/security`: **11 suites y 116 tests OK**.
+- Frontend: `lint` sin errores, `build` OK, `npm --prefix frontend test` **64 ficheros y 266 tests OK** (260 antes): `InviteAccept.test.tsx` nuevo (5 casos) y un caso de reintento en `CoTenantInviteAccept.test.tsx`.
+- **GitNexus.** `impact` de `InviteAccept`: LOW (solo la ruta en `AppRoutes`). `detect_changes`: riesgo medio por el flujo `submit → GetApiErrorRequestId`, que es el que se cambia. `app.ts` no tiene símbolos afectados (es montaje de nivel superior).
+- Sin capturas: los cambios visibles son textos de estado y error, cubiertos por los tests.
+
+**Qué queda.**
+- Los `app.use('/api', authenticate|requireVerified, router)` sin prefijo (líneas de `postsign`, `appointmentsFlowRoutes`, `connectRoutes`, `serviceOfferRoutes`, `taxReportRoutes`) siguen aplicándose a todo lo que se monta detrás. Hoy no hay más rutas públicas después, pero es una trampa: lo correcto sería montar cada router con su prefijo (`/api/postsign`, `/api/tax`…), lo que cambia las rutas internas de cada router. Queda propuesto.
+- `ALLOW_TEST_AUTH=true` global en `jest.setup.ts` esconde fallos de este tipo. Los flujos públicos críticos (registro, login, recuperación, invitaciones, webhooks) ya tienen test sin atajo; el resto no.
+- Pendientes anteriores: `ComplianceDashboard` en inglés y con pastillas propias; `pro/Profile`; `.auth-input` frente a `.ra-input`; fotos externas en los anuncios.
+
+**Siguiente mejora propuesta.** Montar `postsignRouter` y `taxReportRoutes` con su prefijo (`/api/postsign`, `/api/tax`) en vez de `app.use('/api', authenticate, …)`, con el test de esta ronda como red, para que una ruta pública nueva no vuelva a quedar detrás de `authenticate` sin querer. Si se prefiere interfaz: `ComplianceDashboard` en español y con `Badge`.

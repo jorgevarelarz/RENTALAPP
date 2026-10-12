@@ -1456,3 +1456,11 @@ Rules:
 - `ui/Badge` now takes `tone: StatusTone` and renders `.ra-badge .ra-badge-<tone>` classes (index.css); `StatusBadge`, `ContractStatusBadge` and `AgencyLandlords` use it. `STATUS_TONE_STYLES` removed. `ui/Drawer` styling moved to `.drawer-panel-left/right` + `.is-open` classes (only `width` stays inline).
 - Removed unused `ui/Alert`, `ui/Pagination`, unrouted `pages/Verification` and `services/verification`.
 - Verification: frontend lint/build OK, 63 files / 260 tests; Playwright `/tmp/ra-shots74`. Details in `docs/MEJORA-CONTINUA.md` round 74.
+
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 75: public invite routes were behind global authenticate
+
+- `app.use('/api', authenticate, postsignRouter)` runs `authenticate` for every `/api/*` request reaching it; `/api/agency-invites/:token`, `/:token/accept` and `/api/invites/preview` were mounted after it and returned 401 to anonymous invitees (also in production). Moved above it in `src/app.ts`. Hidden in tests because `jest.setup.ts` sets `ALLOW_TEST_AUTH=true`.
+- New `tests/security/invite-public-routes.test.ts` (no test-auth shortcut). `InviteAccept`/`CoTenantInviteAccept` only show "Invitación no válida" on 404 (else retry) and translate accept error codes.
+- Verification: tsc clean; Jest agency+cotenant+security 11 suites / 116 tests; frontend lint/build OK, 64 files / 266 tests. Details in `docs/MEJORA-CONTINUA.md` round 75.
+
