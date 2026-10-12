@@ -36,6 +36,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Recibos de renta (ronda 38)**: el PDF dice «Justificante del pago emitido por RentalApp en nombre del arrendador (art. 17.4 LAU)» y lleva nombres de arrendador y arrendatario, vivienda, periodo, fecha, importe y referencia de Stripe, sin DNI/NIF (no se guardan, ver ronda 21) ni los datos legales de RentalApp. Conviene que alguien con criterio legal revise ese texto y decida si el recibo debe llevar NIF de las partes y la razón social de RentalApp.
 - **Al desplegar la ronda 40**: las fianzas cobradas antes no tienen pago guardado, así que no tienen recibo ni salen en «Cobros y recibos». `npx ts-node scripts/backfill_deposit_payments.ts` cuenta las que faltan sin escribir nada; con `--apply` las crea (una vez por PaymentIntent, con la devolución si la hubo). Las que no tengan `depositPaymentIntentId` las lista aparte para revisarlas en Stripe. Ejecutarlo en producción es decisión tuya.
 - **Avisos de cobro (ronda 42)**: al cobrarse una renta o una fianza, el correo va al inquilino que paga y al propietario. ¿Debe recibirlo también la agencia gestora (`agencyAccess: 'manage'`), o en lugar del propietario? Sin SMTP en producción, estos correos solo quedan en el log.
+- **Al desplegar la ronda 44**: `POST /api/pros` solo admite cuentas `pro`. Los perfiles profesionales que ya hubieran creado inquilinos o caseros siguen en la base y en el directorio. Conviene buscarlos con una consulta de solo lectura (los `pros` cuyo `userId` no sea de un usuario con `role: 'pro'`) y decidir si se desactivan (`active: false`). Además, los nombres y ciudades guardados antes no se han limpiado.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -1601,3 +1602,51 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: aviso de cobro a la agencia (Jorge), flujo de devolución de fianza en la app, adjuntos de chat públicos, `console.*` fuera del logger.
 
 **Siguiente mejora propuesta.** El inicio del profesional (`ProDashboard`) en el sistema 2026: quitar el degradado y las tarjetas con icono, enseñar «lo que te toca hoy» con el mismo resumen (por presupuestar, citas por proponer, por validar) y separar el formulario de perfil público en `/pro/profile`, que hoy es un marcador.
+
+### Ronda 44 — 2026-10-12 02:18
+
+**Qué y por qué.** Era la mejora propuesta en la ronda 43: el inicio del profesional. Al revisar de dónde salen sus datos (`/api/pros`) apareció un fallo de permisos, así que va primero.
+
+1. **Seguridad** (`routes/pro.routes.ts`):
+   - `POST /api/pros` no comprobaba el rol, así que cualquier inquilino o casero verificado podía crearse un perfil profesional activo. Ese perfil salía en el directorio público y el casero podía asignarle averías (`/:id/assign` solo mira que el perfil exista y esté activo). Ahora solo lo admite el rol `pro` (403 para los demás);
+   - los campos se validan y se limpian: nombre de 2 a 80 caracteres, ciudad de 2 a 60, servicios conocidos sin repetir, precio orientativo numérico de 0 a 100.000 € (redondeado a céntimos) y `active` booleano. Si algo falla, da 400 `invalid_display_name`, `invalid_city`, `invalid_services` o `invalid_active`. Antes `services` llegaba tal cual;
+   - `active` permite pausar el perfil. Antes cada guardado lo dejaba activo a la fuerza;
+   - `GET /:id` con un id mal formado da 404 (antes, 500 con el mensaje de Mongoose). Los 500 ya no devuelven `err.message`, que se anota en el logger.
+2. **Resumen** (`GET /api/tickets/my/pro/summary`): añade `work` con los trabajos por agendar, en curso (agendados o empezados) y por validar.
+3. **Interfaz**:
+   - `ProDashboard`: pasa al sistema 2026 y pierde el degradado naranja, las tarjetas con icono en círculo y la casilla «Primeros pasos», que nunca marcaba nada. Ahora tiene:
+     - «Lo que te toca», con por presupuestar, por agendar y en curso, cada uno enlazado a su lista y solo si hay alguno;
+     - una línea «Pendiente del propietario» (presupuestos por aprobar y trabajos por validar);
+     - los cobros, con las mismas cifras de Facturación;
+     - la tarjeta del perfil (nombre, ciudad, servicios, visible o pausado). Si no hay perfil, avisa de que sin él no le pueden asignar averías.
+     
+     Había otros fallos: el formulario no avisaba si fallaba al guardar (promesa sin capturar), el enlace «Bolsa de trabajos» prometía buscar incidencias, cuando solo se ven las asignadas, y el de Facturación hablaba de «facturas» que no existen;
+   - `/pro/profile` deja de ser un marcador de 3 líneas. Es el formulario real: nombre comercial, ciudad, servicios con precio orientativo opcional (admite coma decimal) y «Visible para propietarios». Valida antes de enviar, traduce los errores del servidor y enlaza a «Ver perfil público»;
+   - la ficha pública `/pros/:id` enseñaba las claves en inglés («plumbing, painting»). Ahora muestra los servicios en español con «desde 45,00 €» y la valoración solo si hay opiniones. La miga de pan dice «Profesionales / Profesional» en vez de «pros / p1».
+
+**Commits.**
+- `a01a7d8` Profesionales: solo una cuenta de profesional crea o edita perfil; validación, pausa, 404 y errores sin detalles internos; el resumen cuenta por agendar, en curso y por validar
+- `dba51b3` Interfaz: inicio del profesional en el sistema 2026, formulario real en /pro/profile y ficha pública en español
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` de `tests/security`, `tests/escrow` y `src/__tests__/auth-hardening.test.ts`: 10 suites, 52 tests OK. El nuevo `tests/security/pro.profile.test.ts` tiene 11 casos:
+  - un inquilino recibe 403 y no se crea nada;
+  - los datos se limpian, `verified` y `ratingAvg` del cuerpo se ignoran, y el perfil pausado sale del directorio;
+  - 8 cuerpos no válidos dan 400 con su código: nombre como array, nombre corto, ciudad vacía, servicio desconocido, servicio repetido, precio negativo, precio como texto y `active` como texto;
+  - el id mal formado da 404.
+  
+  `ticket.pro.summary` comprueba los recuentos de `work`. Un filtro `?city[]=…` ya no llega como array a la ruta (el servidor lo aplana antes), así que dejé esa comprobación solo como defensa en el código.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 38 ficheros y 140 tests OK (antes 37 y 135). Casos nuevos:
+  - `ProHomeProfile.test.tsx`, con 4: enlaces y filas del inicio, línea del propietario y aviso de crear perfil; resumen del perfil en español; el formulario no envía sin servicio y luego guarda `45,50` como 45,5; error del servidor traducido y perfil pausado cargado;
+  - un caso más en `Breadcrumbs`.
+- Playwright (vite local, `/api/*` simulado) a 1280 y 390 px (`/tmp/ra-shots44`): inicio con y sin perfil, perfil y ficha pública. Sin desbordamiento horizontal en ninguna de las 8 capturas. Con las capturas corregí dos detalles: la frase de espera, que repetía «esperando», y el título «Servicios», que quedaba montado sobre la línea divisoria.
+- GitNexus `detect_changes` (contra `ab3203f`): riesgo bajo, sin flujos afectados.
+
+**Qué queda.**
+- Los perfiles profesionales que hubieran creado otros roles siguen en la base (ver «Para Jorge»).
+- El directorio `/pros` (`ProList`) sigue con el aspecto antiguo. La ficha pública no tiene botón de contacto ni opiniones.
+- «En curso» enlaza al filtro «Agendadas». `in_progress` no lo asigna ningún flujo hoy.
+- Pendientes anteriores: aviso de cobro a la agencia (Jorge), flujo de devolución de la fianza en la app, adjuntos de chat públicos, `console.*` fuera del logger.
+
+**Siguiente mejora propuesta.** El directorio de profesionales (`ProList`, `/pros`) en el sistema 2026, con filtros por servicio y ciudad que vayan al servidor, y desde la ficha de una incidencia del casero, «Asignar» a un profesional del directorio. Antes conviene comprobar cómo elige hoy el casero al profesional en `TicketDetail`.
+

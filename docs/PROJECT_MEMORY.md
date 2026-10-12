@@ -1276,3 +1276,11 @@ Rules:
 - Frontend `pages/pro/Quotes.tsx` + `Billing.tsx` rebuilt on new `components/pro/ProTicketList` (server pagination/search/status chips with counts) and `utils/proTickets`; they previously used `limit:100` (server max 50) and nonexistent statuses `done`/`awaiting_approval`.
 - Fixed race in `tests/escrow/ticket.access.test.ts` (owner account created after ticket → notify email sometimes missing).
 - Verification: tsc clean; Jest `--runInBand` tests/escrow 23; frontend build + 135 tests; Playwright `/tmp/ra-shots43`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 44: pro profile security + pro home/profile UI
+
+- `POST /api/pros` now `authorizeRoles('pro')` (any verified tenant/landlord could create an active public pro profile and be assigned tickets); validated/cleaned `displayName` (2-80), `city` (2-60), `services` (known keys, unique, `basePrice` number 0-100000), optional boolean `active` (400 `invalid_*`); `GET /:id` invalid ObjectId → 404; 500s no longer leak `err.message`.
+- `GET /api/tickets/my/pro/summary` adds `work: { toSchedule, inProgress, awaitingValidation }`.
+- Frontend: `ProDashboard` rebuilt (2026: «Lo que te toca», owner-pending line, cobros, profile card/CTA); `pages/pro/Profile.tsx` is the real form (`services/pro.getMyProProfile|saveProProfile`, old `upsertPro/getMyPro` removed); `ProDetail` Spanish services with «desde»; Breadcrumbs `/pros`; pro entry removed from `OnboardingChecklist`.
+- Verification: tsc clean; Jest `--runInBand` security+escrow+auth-hardening 52; frontend build + 140 tests; Playwright `/tmp/ra-shots44`.
+
