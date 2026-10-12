@@ -593,6 +593,8 @@ body {
   .ra-input:focus { border-color: var(--ra-blue); box-shadow: 0 0 0 3px rgba(67, 104, 255, .14); outline: none; }
   .ra-input:disabled { background: var(--ra-paper); color: var(--ra-muted); cursor: not-allowed; }
   .ra-input[aria-invalid="true"] { border-color: #b42318; }
+  .ra-field-hint { color: var(--ra-muted); font-size: 13px; line-height: 1.4; margin: 0; }
+  .ra-field-error { color: #b42318; font-size: 13px; line-height: 1.4; margin: 0; }
   select.ra-input { appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2366708b' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); background-position: right 14px center; background-repeat: no-repeat; cursor: pointer; padding-right: 38px; }
   /* En móvil, 16 px para que iOS no amplíe la página al enfocar */
   @media (max-width: 640px) { .ra-input { font-size: 16px; } }

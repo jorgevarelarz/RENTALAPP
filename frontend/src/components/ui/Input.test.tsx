@@ -34,3 +34,12 @@ describe('Select', () => {
     expect(select.value).toBe('2');
   });
 });
+
+describe('Input con ref', () => {
+  it('reenvía la ref al <input> (lo necesita register de react-hook-form)', () => {
+    const ref = React.createRef<HTMLInputElement>();
+    render(<Input ref={ref} label="Ciudad" defaultValue="Madrid" />);
+    expect(ref.current).toBe(screen.getByLabelText('Ciudad'));
+    expect(ref.current?.value).toBe('Madrid');
+  });
+});

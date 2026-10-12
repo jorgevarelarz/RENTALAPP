@@ -3,53 +3,95 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 import { zodResolver } from '@hookform/resolvers/zod';
 import {
-  MapPin, Home, Image as ImageIcon, Euro, ArrowLeft, ArrowRight, Check, Trash2, UploadCloud, Sparkles,
+  MapPin, Home, Image as ImageIcon, Euro, ArrowLeft, ArrowRight, Check, X, UploadCloud, Sparkles,
 } from 'lucide-react';
+import type { FieldErrors } from 'react-hook-form';
 import Dropzone from './ui/Dropzone';
 import Button from './ui/Button';
+import Input from './ui/Input';
+import Select from './ui/Select';
 import RentSuggestionCard from './RentSuggestionCard';
 import { generateDescription } from '../services/ai';
 import { useToast } from '../context/ToastContext';
 
 const schema = z.object({
-  title: z.string().min(5, 'El título debe ser descriptivo (min 5 letras)'),
-  address: z.string().min(5, 'Dirección obligatoria'),
-  description: z.string().max(1200, 'Descripción demasiado larga').optional().default(''),
-  region: z.string().min(2, 'Región obligatoria'),
-  city: z.string().min(2, 'Ciudad obligatoria'),
+  title: z.string().min(5, 'El título necesita al menos 5 caracteres'),
+  address: z.string().min(5, 'Escribe la dirección'),
+  description: z.string().max(1200, 'La descripción admite hasta 1200 caracteres').optional().default(''),
+  region: z.string().min(2, 'Escribe la región o provincia'),
+  city: z.string().min(2, 'Escribe la ciudad'),
   location: z.object({
     lat: z.coerce.number().min(-90).max(90),
     lng: z.coerce.number().min(-180).max(180),
   }),
-  sizeM2: z.coerce.number().min(10, 'Tamaño inválido (min 10m²)'),
-  rooms: z.coerce.number().min(0, 'Habitaciones inválidas'),
-  bathrooms: z.coerce.number().min(0, 'Baños inválidos'),
+  sizeM2: z.coerce.number().min(10, 'El tamaño mínimo es 10 m²'),
+  rooms: z.coerce.number().min(0, 'Revisa las habitaciones'),
+  bathrooms: z.coerce.number().min(0, 'Revisa los baños'),
   furnished: z.boolean().default(false),
   petsAllowed: z.boolean().default(false),
   condition: z.enum(['obra_nueva', 'reformado', 'buen_estado', 'a_reformar']).default('buen_estado'),
-  floor: z.coerce.number().min(0, 'Planta inválida').max(60).optional(),
+  floor: z.coerce.number().min(0, 'Revisa la planta').max(60, 'Revisa la planta').optional(),
   hasElevator: z.boolean().optional(),
   yearBuilt: z.coerce
     .number()
-    .min(1800, 'Año inválido')
-    .max(new Date().getFullYear() + 2)
+    .min(1800, 'Revisa el año')
+    .max(new Date().getFullYear() + 2, 'Revisa el año')
     .optional(),
   images: z.array(z.string().url()).min(3, 'Sube al menos 3 fotos para publicar').max(20),
-  price: z.coerce.number().min(100, 'Renta mínima 100€'),
-  deposit: z.coerce.number().min(0, 'Depósito inválido'),
-  availableFrom: z.string().min(2, 'Fecha requerida'),
+  price: z.coerce.number().min(100, 'La renta mínima es 100 €'),
+  deposit: z.coerce.number().min(0, 'Revisa la fianza'),
+  availableFrom: z.string().min(2, 'Elige la fecha'),
   onlyTenantPro: z.boolean().optional().default(false),
   requiredTenantProMaxRent: z.coerce.number().min(0).optional().default(0),
 });
 
 export type PropertyFormData = z.infer<typeof schema>;
 
+// fields: lo que se valida al pulsar «Siguiente» y a qué paso se vuelve si falla al enviar
 const STEPS = [
-  { id: 'location', label: 'Ubicación', icon: <MapPin size={18} />, fields: ['title', 'address', 'city', 'region'] },
-  { id: 'details', label: 'Detalles', icon: <Home size={18} />, fields: ['sizeM2', 'rooms', 'bathrooms'] },
+  { id: 'location', label: 'Ubicación', icon: <MapPin size={18} />, fields: ['title', 'address', 'city', 'region', 'location'] },
+  { id: 'details', label: 'Detalles', icon: <Home size={18} />, fields: ['sizeM2', 'rooms', 'bathrooms', 'condition', 'floor', 'yearBuilt'] },
   { id: 'photos', label: 'Galería', icon: <ImageIcon size={18} />, fields: ['images'] },
-  { id: 'price', label: 'Condiciones', icon: <Euro size={18} />, fields: ['price', 'deposit', 'availableFrom'] },
+  { id: 'price', label: 'Condiciones', icon: <Euro size={18} />, fields: ['price', 'description', 'deposit', 'availableFrom'] },
 ];
+
+/** Mensaje de error bajo un campo, enlazado con aria-describedby */
+function FieldError({ id, message }: { id: string; message?: string }) {
+  if (!message) return null;
+  return <p id={id} className="ra-field-error">{message}</p>;
+}
+
+/** Campo numérico con una unidad dentro (€, m²); la unidad queda fuera de la etiqueta */
+const AffixInput = React.forwardRef<HTMLInputElement, React.InputHTMLAttributes<HTMLInputElement> & {
+  label: string;
+  affix: string;
+  affixSide: 'left' | 'right';
+}>(({ label, affix, affixSide, className, id, ...rest }, ref) => {
+  const autoId = React.useId();
+  const inputId = id || autoId;
+  return (
+    <div className="ra-field">
+      <label htmlFor={inputId} className="ra-field-label">{label}</label>
+      <div className="relative">
+        <input
+          ref={ref}
+          id={inputId}
+          {...rest}
+          className={['ra-input', affixSide === 'left' ? 'pl-9' : 'pr-12', className].filter(Boolean).join(' ')}
+        />
+        <span
+          aria-hidden="true"
+          className={`pointer-events-none absolute inset-y-0 flex items-center text-sm text-[var(--ra-muted)] ${
+            affixSide === 'left' ? 'left-3.5' : 'right-3.5'
+          }`}
+        >
+          {affix}
+        </span>
+      </div>
+    </div>
+  );
+});
+AffixInput.displayName = 'AffixInput';
 
 type Props = {
   onSubmit: (data: PropertyFormData) => Promise<void> | void;
@@ -196,6 +238,36 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
 
   const prevStep = () => setStep((s) => Math.max(s - 1, 0));
 
+  // Al enviar con errores en un paso anterior (p. ej. la planta), volver a ese paso para que se vean
+  const onInvalid = (errs: FieldErrors<PropertyFormData>) => {
+    const failing = STEPS.findIndex(st => st.fields.some(f => (errs as any)[f]));
+    if (failing >= 0 && failing !== step) setStep(failing);
+    push({ title: 'Revisa los datos marcados antes de guardar.', tone: 'error' });
+  };
+
+  // Intro dentro de un campo avanza de paso; solo en el último guarda
+  const handleFormSubmit = (e: React.FormEvent) => {
+    if (step < STEPS.length - 1) {
+      e.preventDefault();
+      void nextStep();
+      return;
+    }
+    void handleSubmit(onSubmit, onInvalid)(e);
+  };
+
+  const err = (name: string) => {
+    const e = name.split('.').reduce<any>((acc, k) => acc?.[k], errors);
+    return e?.message as string | undefined;
+  };
+  const a11y = (name: string) => {
+    const invalid = Boolean(err(name));
+    return {
+      'aria-invalid': invalid || undefined,
+      'aria-describedby': invalid ? `pf-${name.replace('.', '-')}-error` : undefined,
+    };
+  };
+  const errorFor = (name: string) => <FieldError id={`pf-${name.replace('.', '-')}-error`} message={err(name)} />;
+
   const handleDrop = async (files: File[]) => {
     if (!files.length) return;
     setUploading(true);
@@ -240,233 +312,252 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
     }
   };
 
+
+  const checkboxClass = 'h-5 w-5 shrink-0 rounded accent-[var(--ra-blue)]';
+  const toggleRowClass =
+    'flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-[var(--ra-line)] bg-white px-4 py-3.5 transition-colors hover:bg-[var(--ra-paper)]';
+
   return (
     <div className="flex flex-col h-full max-h-[80vh]">
-      <div className="mb-6 px-1">
-        <div className="flex items-center justify-between relative">
-          <div className="absolute top-1/2 left-0 w-full h-1 bg-gray-100 -z-10 rounded"></div>
-          {STEPS.map((s, i) => {
-            const isActive = i === step;
-            const isDone = i < step;
-            return (
-              <div key={s.id} className="flex flex-col items-center gap-2 bg-white px-2">
-                <div
-                  className={`w-10 h-10 rounded-full flex items-center justify-center transition-all duration-300 border-2 ${
-                    isActive
-                      ? 'border-blue-600 bg-blue-50 text-blue-600 scale-110'
-                      : isDone
-                      ? 'border-green-500 bg-green-500 text-white'
-                      : 'border-gray-200 text-gray-400'
-                  }`}
-                >
-                  {isDone ? <Check size={20} /> : s.icon}
-                </div>
-                <span className={`text-xs font-medium ${isActive ? 'text-blue-600' : 'text-gray-500'}`}>{s.label}</span>
-              </div>
-            );
-          })}
-        </div>
-      </div>
+      <ol className="mb-6 grid grid-cols-4 gap-2 px-1" aria-label="Pasos del anuncio">
+        {STEPS.map((s, i) => {
+          const isActive = i === step;
+          const isDone = i < step;
+          return (
+            <li key={s.id} aria-current={isActive ? 'step' : undefined} className="flex min-w-0 flex-col gap-2">
+              <span
+                aria-hidden="true"
+                className={`h-1 rounded-full ${isActive || isDone ? 'bg-[var(--ra-blue)]' : 'bg-[var(--ra-line)]'}`}
+              />
+              <span
+                className={`flex items-center gap-1.5 truncate text-xs font-semibold ${
+                  isActive ? 'text-[var(--ra-ink)]' : 'text-[var(--ra-muted)]'
+                }`}
+              >
+                <span aria-hidden="true" className={isActive || isDone ? 'text-[var(--ra-blue)]' : ''}>
+                  {isDone ? <Check size={14} /> : React.cloneElement(s.icon, { size: 14 })}
+                </span>
+                {/* En móvil no caben las cuatro etiquetas: solo la del paso activo */}
+                <span className={isActive ? 'truncate' : 'sr-only sm:not-sr-only sm:truncate'}>{s.label}</span>
+              </span>
+            </li>
+          );
+        })}
+      </ol>
 
-      <form onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-y-auto px-1 py-2 space-y-6">
+      <form onSubmit={handleFormSubmit} noValidate className="flex-1 overflow-y-auto px-1 py-2 space-y-6">
         {step === 0 && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Título del anuncio</label>
-              <input className="auth-input w-full" placeholder="Ej. Ático luminoso en el centro" {...register('title')} autoFocus />
-              {errors.title && <p className="text-red-500 text-xs mt-1">{errors.title.message}</p>}
+          <div className="space-y-5">
+            <div className="grid gap-1.5">
+              <Input
+                label="Título del anuncio"
+                placeholder="Ej. Ático luminoso en el centro"
+                autoFocus
+                {...a11y('title')}
+                {...register('title')}
+              />
+              {errorFor('title')}
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Dirección completa</label>
+            <div className="grid gap-1.5">
               <div className="relative">
-                <input
-                  className="auth-input w-full"
-                  placeholder="Ej. Calle Mayor, 10, 3A"
+                <Input
+                  label="Dirección completa"
+                  placeholder="Ej. Calle Mayor, 10, 3.º A"
+                  autoComplete="off"
+                  {...a11y('address')}
                   {...register('address')}
                 />
                 {isSearchingAddress && (
-                  <div className="absolute right-3 top-2.5 text-xs text-gray-400">Buscando...</div>
+                  <span className="pointer-events-none absolute bottom-3 right-3.5 text-xs text-[var(--ra-muted)]">Buscando…</span>
                 )}
                 {addressSuggestions.length > 0 && (
-                  <div className="absolute z-10 mt-1 w-full rounded-lg border border-gray-200 bg-white shadow-lg max-h-56 overflow-auto">
+                  <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-[var(--ra-line)] bg-white py-1 shadow-lg">
                     {addressSuggestions.map((item) => (
-                      <button
-                        type="button"
-                        key={item.place_id}
-                        onClick={() => applySuggestion(item)}
-                        className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
-                      >
-                        {item.display_name}
-                      </button>
+                      <li key={item.place_id}>
+                        <button
+                          type="button"
+                          onClick={() => applySuggestion(item)}
+                          className="w-full px-3.5 py-2.5 text-left text-sm text-[var(--ra-ink)] hover:bg-[var(--ra-paper)]"
+                        >
+                          {item.display_name}
+                        </button>
+                      </li>
                     ))}
-                  </div>
+                  </ul>
                 )}
               </div>
               {!isSearchingAddress && addressQuery.length >= 4 && addressSuggestions.length === 0 && (
-                <p className="text-xs text-gray-500 mt-2">
-                  Si no aparece una coincidencia, puedes seguir con la direccion manual y ajustar ciudad, region y coordenadas.
+                <p className="ra-field-hint">
+                  Si no aparece la dirección, sigue con la que has escrito y completa ciudad, región y coordenadas.
                 </p>
               )}
-              {errors.address && <p className="text-red-500 text-xs mt-1">{errors.address.message}</p>}
+              {errorFor('address')}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Ciudad</label>
-                <input className="auth-input w-full" placeholder="Ej. Madrid" {...register('city')} />
-                {errors.city && <p className="text-red-500 text-xs mt-1">{errors.city.message}</p>}
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid gap-1.5">
+                <Input label="Ciudad" placeholder="Ej. Madrid" {...a11y('city')} {...register('city')} />
+                {errorFor('city')}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Región / Provincia</label>
-                <input className="auth-input w-full" placeholder="Ej. Comunidad de Madrid" {...register('region')} />
-                {errors.region && <p className="text-red-500 text-xs mt-1">{errors.region.message}</p>}
+              <div className="grid gap-1.5">
+                <Input label="Región o provincia" placeholder="Ej. Comunidad de Madrid" {...a11y('region')} {...register('region')} />
+                {errorFor('region')}
               </div>
             </div>
 
-            <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
-              <p className="text-sm text-blue-800 mb-3 font-medium">Coordenadas aproximadas (para el mapa)</p>
-              <div className="grid grid-cols-2 gap-4">
-                <input className="auth-input bg-white" type="number" step="any" placeholder="Latitud" {...register('location.lat', { valueAsNumber: true })} />
-                <input className="auth-input bg-white" type="number" step="any" placeholder="Longitud" {...register('location.lng', { valueAsNumber: true })} />
+            <fieldset className="grid gap-3 rounded-xl bg-[var(--ra-paper)] p-4">
+              <legend className="sr-only">Coordenadas</legend>
+              <div>
+                <p className="ra-field-label">Coordenadas para el mapa</p>
+                <p className="ra-field-hint mt-0.5">Se rellenan solas al elegir una dirección sugerida.</p>
               </div>
-            </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="grid gap-1.5">
+                  <Input label="Latitud" type="number" step="any" inputMode="decimal" {...a11y('location.lat')} {...register('location.lat', { valueAsNumber: true })} />
+                  {errorFor('location.lat')}
+                </div>
+                <div className="grid gap-1.5">
+                  <Input label="Longitud" type="number" step="any" inputMode="decimal" {...a11y('location.lng')} {...register('location.lng', { valueAsNumber: true })} />
+                  {errorFor('location.lng')}
+                </div>
+              </div>
+            </fieldset>
           </div>
         )}
 
         {step === 1 && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Tamaño</label>
-                <div className="relative">
-                  <input className="auth-input w-full pr-8" type="number" {...register('sizeM2', { valueAsNumber: true })} />
-                  <span className="absolute right-3 top-2.5 text-gray-400 text-sm">m²</span>
-                </div>
+          <div className="space-y-5">
+            <div className="grid grid-cols-3 gap-3 sm:gap-4">
+              <div className="grid content-start gap-1.5">
+                <AffixInput label="Tamaño" affix="m²" affixSide="right" type="number" min={0} inputMode="numeric" {...a11y('sizeM2')} {...register('sizeM2', { valueAsNumber: true })} />
+                {errorFor('sizeM2')}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Habitaciones</label>
-                <input className="auth-input w-full" type="number" {...register('rooms', { valueAsNumber: true })} />
+              <div className="grid content-start gap-1.5">
+                <Input label="Habitaciones" type="number" min={0} inputMode="numeric" {...a11y('rooms')} {...register('rooms', { valueAsNumber: true })} />
+                {errorFor('rooms')}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Baños</label>
-                <input className="auth-input w-full" type="number" {...register('bathrooms', { valueAsNumber: true })} />
+              <div className="grid content-start gap-1.5">
+                <Input label="Baños" type="number" min={0} inputMode="numeric" {...a11y('bathrooms')} {...register('bathrooms', { valueAsNumber: true })} />
+                {errorFor('bathrooms')}
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Estado de la vivienda</label>
-              <select className="auth-input w-full" {...register('condition')}>
+            <div className="grid gap-1.5">
+              <Select label="Estado de la vivienda" aria-describedby="pf-condition-help" {...register('condition')}>
                 <option value="obra_nueva">Obra nueva</option>
                 <option value="reformado">Reformado</option>
                 <option value="buen_estado">Buen estado</option>
                 <option value="a_reformar">A reformar</option>
-              </select>
-              <p className="mt-1 text-xs text-gray-500">
+              </Select>
+              <p id="pf-condition-help" className="ra-field-hint">
                 Se usa para ajustar el precio sugerido al estado real de la vivienda.
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Planta</label>
-                <input
-                  className="auth-input w-full"
+            <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="grid content-start gap-1.5">
+                <Input
+                  label="Planta"
                   type="number"
                   min={0}
+                  inputMode="numeric"
                   placeholder="Opcional"
+                  {...a11y('floor')}
                   {...register('floor', { setValueAs: v => (v === '' ? undefined : Number(v)) })}
                 />
+                {errorFor('floor')}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Año construcción</label>
-                <input
-                  className="auth-input w-full"
+              <div className="grid content-start gap-1.5">
+                <Input
+                  label="Año de construcción"
                   type="number"
+                  inputMode="numeric"
                   placeholder="Opcional"
+                  {...a11y('yearBuilt')}
                   {...register('yearBuilt', { setValueAs: v => (v === '' ? undefined : Number(v)) })}
                 />
-              </div>
-              <div className="flex items-end pb-1">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
-                    {...register('hasElevator')}
-                  />
-                  <span className="text-sm font-medium text-gray-700">Ascensor</span>
-                </label>
+                {errorFor('yearBuilt')}
               </div>
             </div>
 
-            <div className="space-y-3">
-              <label className="flex items-center justify-between p-4 border rounded-xl hover:bg-gray-50 cursor-pointer transition-colors">
-                <span className="font-medium text-gray-700">¿Está amueblado?</span>
-                <input type="checkbox" className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500" {...register('furnished')} />
+            <div className="space-y-2">
+              <label className={toggleRowClass}>
+                <span className="text-sm font-medium text-[var(--ra-ink)]">Tiene ascensor</span>
+                <input type="checkbox" className={checkboxClass} {...register('hasElevator')} />
               </label>
-              <label className="flex items-center justify-between p-4 border rounded-xl hover:bg-gray-50 cursor-pointer transition-colors">
-                <span className="font-medium text-gray-700">¿Admite mascotas?</span>
-                <input type="checkbox" className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500" {...register('petsAllowed')} />
+              <label className={toggleRowClass}>
+                <span className="text-sm font-medium text-[var(--ra-ink)]">Está amueblado</span>
+                <input type="checkbox" className={checkboxClass} {...register('furnished')} />
+              </label>
+              <label className={toggleRowClass}>
+                <span className="text-sm font-medium text-[var(--ra-ink)]">Admite mascotas</span>
+                <input type="checkbox" className={checkboxClass} {...register('petsAllowed')} />
               </label>
             </div>
           </div>
         )}
 
         {step === 2 && (
-          <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-            <div className={`rounded-xl border px-4 py-3 text-sm ${
-              imageCount >= 3 ? 'border-green-200 bg-green-50 text-green-800' : 'border-amber-200 bg-amber-50 text-amber-800'
-            }`}>
-              <div className="font-semibold">
-                {imageCount >= 3 ? 'Galeria lista para publicar' : `Faltan ${Math.max(3 - imageCount, 0)} fotos para publicar`}
-              </div>
-              <div className="mt-1">La publicacion requiere al menos 3 imagenes. La primera imagen se usa como portada.</div>
+          <div className="space-y-4">
+            <div
+              role="status"
+              className={`rounded-xl border px-4 py-3 text-sm ${
+                imageCount >= 3 ? 'border-green-200 bg-green-50 text-green-800' : 'border-amber-200 bg-amber-50 text-amber-800'
+              }`}
+            >
+              <p className="font-semibold">
+                {imageCount >= 3
+                  ? 'Galería lista para publicar'
+                  : `Faltan ${Math.max(3 - imageCount, 0)} ${3 - imageCount === 1 ? 'foto' : 'fotos'} para publicar`}
+              </p>
+              <p className="mt-0.5">Hacen falta al menos 3. La primera es la portada del anuncio.</p>
             </div>
             <Dropzone
               onFiles={handleDrop}
-              className="bg-gray-50 border-2 border-dashed border-gray-300 rounded-xl hover:border-blue-400 transition-colors"
+              className="rounded-xl border border-dashed border-[rgba(11,16,37,.24)] bg-[var(--ra-paper)] transition-colors hover:border-[var(--ra-blue)]"
               style={{ padding: 24 }}
               label={
                 <div className="text-center">
-                  <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
-                    <UploadCloud size={24} />
-                  </div>
-                  <p className="font-medium text-gray-900">Haz clic o arrastra fotos aquí</p>
-                  <p className="text-sm text-gray-500 mt-1">Sube al menos 3 imágenes de buena calidad</p>
+                  <UploadCloud size={28} className="mx-auto mb-2 text-[var(--ra-blue)]" aria-hidden="true" />
+                  <p className="font-semibold text-[var(--ra-ink)]">Haz clic o arrastra las fotos aquí</p>
+                  <p className="mt-1 text-sm text-[var(--ra-muted)]">JPG, PNG o WebP, con buena luz y en horizontal</p>
                 </div>
               }
             />
 
             {uploading && (
-              <div className="text-center py-2 text-blue-600 animate-pulse text-sm font-medium">Subiendo imágenes...</div>
+              <p role="status" className="text-center text-sm font-medium text-[var(--ra-muted)]">Subiendo fotos…</p>
             )}
-
-            {uploadError && <p className="text-red-500 text-sm text-center">{uploadError}</p>}
-
-            {errors.images && <p className="text-red-500 text-sm text-center">{errors.images.message}</p>}
+            {uploadError && <p role="alert" className="ra-field-error text-center">{uploadError}</p>}
 
             {images.length > 0 && (
-              <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mt-4">
+              <ul className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
                 {images.map((url, idx) => (
-                  <div key={url} className="relative group aspect-square rounded-lg overflow-hidden border border-gray-200">
-                    <img src={url} alt={`Foto ${idx}`} className="w-full h-full object-cover" />
+                  <li key={url} className="relative aspect-square overflow-hidden rounded-xl border border-[var(--ra-line)] bg-[var(--ra-paper)]">
+                    <img src={url} alt={`Foto ${idx + 1}`} className="h-full w-full object-cover" />
                     <button
                       type="button"
-                      onClick={() => setValue('images', images.filter((_, i) => i !== idx))}
-                      className="absolute top-1 right-1 bg-red-500 text-white p-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity shadow-sm hover:bg-red-600"
+                      onClick={() => setValue('images', images.filter((_, i) => i !== idx), { shouldValidate: true })}
+                      aria-label={`Quitar la foto ${idx + 1}`}
+                      className="absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/95 text-[var(--ra-ink)] shadow-sm hover:bg-white"
                     >
-                      <Trash2 size={14} />
+                      <X size={14} aria-hidden="true" />
                     </button>
-                    {idx === 0 && <span className="absolute bottom-0 left-0 right-0 bg-black/60 text-white text-[10px] text-center py-1">Portada</span>}
-                  </div>
+                    {idx === 0 && (
+                      <span className="absolute bottom-1.5 left-1.5 rounded-full bg-white/95 px-2 py-0.5 text-[11px] font-semibold text-[var(--ra-ink)]">
+                        Portada
+                      </span>
+                    )}
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </div>
         )}
 
         {step === 3 && (
-          <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+          <div className="space-y-5">
             <RentSuggestionCard
               input={{
                 region: String(region || ''),
@@ -486,78 +577,103 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
               onApply={value => setValue('price', value, { shouldValidate: true, shouldDirty: true })}
             />
 
-            <div className={`rounded-xl border px-4 py-3 text-sm ${
-              isPublishReady ? 'border-green-200 bg-green-50 text-green-800' : 'border-amber-200 bg-amber-50 text-amber-800'
-            }`}>
-              <div className="font-semibold">{isPublishReady ? 'Anuncio listo para publicar' : publishReadiness.hasMinPhotos ? 'Puedes publicar, pero revisa estos datos' : 'Faltan fotos para poder publicar'}</div>
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span>Fotos {imageCount}/3</span>
-                <span>{publishReadiness.hasPrice ? 'Precio ok' : 'Falta precio valido'}</span>
-                <span>{publishReadiness.hasAddress ? 'Ubicacion ok' : 'Falta direccion o ciudad'}</span>
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Precio Mensual</label>
-              <div className="relative">
-                <input className="auth-input w-full pl-8 text-lg font-bold" type="number" {...register('price', { valueAsNumber: true })} placeholder="0" />
-                <span className="absolute left-3 top-3 text-gray-500">€</span>
-              </div>
-              {errors.price && <p className="text-red-500 text-xs mt-1">{errors.price.message}</p>}
+            <div
+              className={`rounded-xl border px-4 py-3 text-sm ${
+                isPublishReady ? 'border-green-200 bg-green-50 text-green-800' : 'border-amber-200 bg-amber-50 text-amber-800'
+              }`}
+            >
+              <p className="font-semibold">
+                {isPublishReady
+                  ? 'Anuncio listo para publicar'
+                  : publishReadiness.hasMinPhotos
+                  ? 'Puedes publicar, pero revisa estos datos'
+                  : 'Faltan fotos para poder publicar'}
+              </p>
+              <ul className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1">
+                <li>Fotos: {imageCount} de 3</li>
+                <li>{publishReadiness.hasPrice ? 'Precio correcto' : 'Falta un precio válido'}</li>
+                <li>{publishReadiness.hasAddress ? 'Ubicación completa' : 'Falta la dirección, la ciudad o la región'}</li>
+              </ul>
             </div>
 
-            <div>
-              <div className="mb-1 flex items-center justify-between gap-3">
-                <label className="block text-sm font-medium text-gray-700">Descripción del anuncio</label>
+            <div className="grid gap-1.5">
+              <AffixInput
+                label="Renta mensual"
+                affix="€"
+                affixSide="left"
+                type="number"
+                min={0}
+                inputMode="numeric"
+                placeholder="0"
+                className="text-lg font-semibold"
+                {...a11y('price')}
+                {...register('price', { valueAsNumber: true })}
+              />
+              {errorFor('price')}
+            </div>
+
+            <div className="grid gap-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <label htmlFor="pf-description" className="ra-field-label">Descripción del anuncio</label>
                 <Button
                   type="button"
                   variant="secondary"
                   size="sm"
                   onClick={handleGenerateDescription}
                   disabled={generatingDescription}
-                  className="flex items-center gap-2"
                 >
-                  <Sparkles size={15} />
-                  {generatingDescription ? 'Generando...' : 'Generar con IA'}
+                  <Sparkles size={15} aria-hidden="true" />
+                  {generatingDescription ? 'Generando…' : 'Generar con IA'}
                 </Button>
               </div>
               <textarea
-                className="auth-input min-h-[130px] w-full resize-y"
+                id="pf-description"
+                className="ra-input min-h-[130px] resize-y"
                 placeholder="Describe la vivienda, sus puntos fuertes y el tipo de inquilino ideal."
+                {...a11y('description')}
                 {...register('description')}
               />
-              {errors.description && <p className="text-red-500 text-xs mt-1">{errors.description.message}</p>}
-              {descriptionError && <p className="text-amber-700 text-xs mt-1">{descriptionError}</p>}
+              {errorFor('description')}
+              {descriptionError && <p className="ra-field-error">{descriptionError}</p>}
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Fianza / Depósito</label>
-                <div className="relative">
-                  <input className="auth-input w-full pl-8" type="number" {...register('deposit', { valueAsNumber: true })} />
-                  <span className="absolute left-3 top-2.5 text-gray-500">€</span>
-                </div>
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div className="grid content-start gap-1.5">
+                <AffixInput
+                  label="Fianza"
+                  affix="€"
+                  affixSide="left"
+                  type="number"
+                  min={0}
+                  inputMode="numeric"
+                  {...a11y('deposit')}
+                  {...register('deposit', { valueAsNumber: true })}
+                />
+                {errorFor('deposit')}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Disponible desde</label>
-                <input className="auth-input w-full" type="date" {...register('availableFrom')} />
+              <div className="grid content-start gap-1.5">
+                <Input label="Disponible desde" type="date" {...a11y('availableFrom')} {...register('availableFrom')} />
+                {errorFor('availableFrom')}
               </div>
             </div>
 
-            <div className="border border-blue-100 rounded-xl overflow-hidden">
-              <label className={`flex items-start gap-4 p-4 cursor-pointer transition-colors ${onlyPro ? 'bg-blue-50' : 'bg-white hover:bg-gray-50'}`}>
-                <input type="checkbox" className="mt-1 w-5 h-5 text-blue-600 rounded" {...register('onlyTenantPro')} />
-                <div>
-                  <span className="block font-bold text-gray-900">Solo inquilinos Tenant PRO</span>
-                  <span className="text-sm text-gray-500">Exige perfil verificado y análisis de solvencia automático.</span>
-                </div>
+            <div className="overflow-hidden rounded-xl border border-[var(--ra-line)]">
+              <label className={`flex cursor-pointer items-start gap-3 p-4 transition-colors ${onlyPro ? 'bg-[var(--ra-paper)]' : 'bg-white hover:bg-[var(--ra-paper)]'}`}>
+                <input type="checkbox" className={`mt-0.5 ${checkboxClass}`} {...register('onlyTenantPro')} />
+                <span>
+                  <span className="block text-sm font-semibold text-[var(--ra-ink)]">Solo inquilinos Tenant PRO</span>
+                  <span className="block text-sm text-[var(--ra-muted)]">Exige perfil verificado y análisis de solvencia.</span>
+                </span>
               </label>
 
               {onlyPro && (
-                <div className="bg-blue-50/50 px-4 pb-4 pt-0 text-sm text-blue-800">
-                  <div className="pl-9 space-y-1">
-                    <p>ℹ️ Requisito de solvencia calculado: <strong>{Number(price || 0).toLocaleString()} €/mes</strong> (capacidad de pago).</p>
-                    <p className="text-xs opacity-80">El inquilino deberá tener un límite de renta aprobado igual o superior a este precio.</p>
-                  </div>
+                <div className="bg-[var(--ra-paper)] px-4 pb-4 pl-12 text-sm text-[var(--ra-ink)]">
+                  <p>
+                    Solvencia exigida: <strong>{Number(price || 0).toLocaleString('es-ES')} €/mes</strong>.
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--ra-muted)]">
+                    El inquilino necesita un límite de renta aprobado igual o superior a este precio.
+                  </p>
                 </div>
               )}
             </div>
@@ -565,13 +681,8 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
         )}
       </form>
 
-      <div className="pt-4 border-t border-gray-100 flex justify-between items-center mt-auto">
-        <Button
-          variant="ghost"
-          onClick={prevStep}
-          disabled={step === 0}
-          className="text-gray-500 hover:text-gray-900"
-        >
+      <div className="mt-auto flex items-center justify-between border-t border-[var(--ra-line)] pt-4">
+        <Button variant="ghost" onClick={prevStep} disabled={step === 0}>
           <ArrowLeft size={18} aria-hidden="true" /> Atrás
         </Button>
 
@@ -580,8 +691,8 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
             Siguiente <ArrowRight size={18} aria-hidden="true" />
           </Button>
         ) : (
-          <Button onClick={handleSubmit(onSubmit)} className="px-8">
-            {(defaultValues as any)?._id ? 'Guardar Cambios' : 'Crear Propiedad'}
+          <Button onClick={handleSubmit(onSubmit, onInvalid)} className="px-8">
+            {(defaultValues as any)?._id ? 'Guardar cambios' : 'Crear anuncio'}
           </Button>
         )}
       </div>
