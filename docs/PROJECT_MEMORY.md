@@ -1290,3 +1290,9 @@ Rules:
 - `POST /api/tickets/:id/assign` requires the profile's user to have `role:'pro'` (404 otherwise); non-string `proId` 400 `invalid_pro`, malformed 404; `loadTicketFor` 404 on malformed ticket id. `GET /api/tickets/:id` adds `propertyCity` and `pro.profileId`. `GET /api/pros` city match is case/accent-insensitive; unknown `service` 400.
 - Frontend: `ProList` rebuilt (2026, server filters + pagination), landlord nav «Profesionales», `/pros*` routes protected; new `components/pro/ProPicker` in `TicketDetail` (property city first, «Buscar en todas las ciudades»); `utils/pros.ts`.
 - Verification: tsc clean; Jest `--runInBand` escrow+security 54, e2e 10/10; frontend build + 143 tests; Playwright `/tmp/ra-shots45`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 46: no internal messages in 500s + ticket breadcrumb by role
+
+- New `src/utils/routeError.ts` `sendRouteError(res, err, code)`: deliberate 4xx keep their message; anything else is logged (method, path, user, err) and answered with a fixed code. Applied to ticket, chat, review, serviceOffers, appointments, verification, identity `/start`, invites routes. Controllers (`contract*`, `payment`, `admin`, `policy`) still pending.
+- Frontend `Breadcrumbs`: `/tickets/:id` parent crumb is `/landlord/issues` for landlords and `/pro/tickets` for pros.
+- Verification: tsc clean; Jest `--runInBand` 14 suites/73; e2e 10/10; frontend build + 145 tests.

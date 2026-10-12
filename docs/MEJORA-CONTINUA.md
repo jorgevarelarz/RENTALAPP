@@ -1700,3 +1700,38 @@ No se ha tocado `contract.payments.routes.ts` (`pay-rent-saved`), que es el fluj
 - Pendientes anteriores: aviso de cobro a la agencia (Jorge), flujo de devolución de la fianza en la app, adjuntos de chat públicos, `console.*` fuera del logger.
 
 **Siguiente mejora propuesta.** Las rutas de incidencias que aún devuelven `err.message` en sus 500 (`ticket.routes.ts`, varios `catch`): pasarlas al logger con un código fijo, como `pro.routes` en la ronda 44. Y de paso, que la miga de pan de la incidencia diga «Incidencias» según el rol.
+
+### Ronda 46 — 2026-10-12 05:40
+
+**Qué y por qué.** La mejora propuesta en la ronda 45. Es de seguridad: varias rutas devolvían `err.message` en sus 500. Con un error de Mongo, el cliente recibía el texto interno, y un `E11000` lleva el correo duplicado. Lo mismo pasaba con los errores de Stripe y de configuración (`docusign_env_missing: …` nombra variables de entorno). Además, esos 500 no se registraban en ningún log. De paso, la miga de pan de la incidencia, que la ronda 45 dejó anotada.
+
+1. **`src/utils/routeError.ts`** (`sendRouteError(res, err, código)`):
+   - un 4xx lanzado a propósito (`Object.assign(new Error('Forbidden'), { status: 403 })`) conserva su mensaje, porque es el contrato con el frontend;
+   - cualquier otro error se registra con el logger (método, ruta sin query, usuario y `err`, que ya pasa por la censura de datos personales) y el cliente solo recibe `{ error: '<código fijo>', code }`;
+   - un 5xx deliberado, como el 503 de `escrow_mock_not_allowed_in_prod`, conserva su estado, pero no el mensaje.
+   
+   Se aplica a 39 `catch` de `ticket`, `chat`, `review`, `serviceOffers`, `appointments`, `verification`, `identity` (`/start`) e `invites`. Cada fichero tiene su código: `ticket_request_failed`, `chat_request_failed`, etc. La firma inválida del webhook de identidad responde `webhook_signature_invalid` sin repetir el error de Stripe.
+2. **Miga de pan de `/tickets/:id`**: el casero vuelve a «Incidencias de mis propiedades» (`/landlord/issues`) y el profesional a «Incidencias asignadas» (`/pro/tickets`). Antes, todos volvían a «Mis incidencias», la lista del inquilino.
+
+**Commits.**
+- `efc9ff7` Seguridad: las rutas ya no devuelven el mensaje interno en sus 500
+- `fbd2374` Interfaz: la miga de pan de una incidencia vuelve a la lista de cada rol
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand` de `tests/unit/routeError.test.ts`, `tests/escrow`, `tests/chat` y `tests/security`: 14 suites, 73 tests OK.
+  - Hay un test nuevo, `routeError.test.ts`, con 4 casos:
+    - un 4xx conserva su mensaje;
+    - un E11000 con correo da `thing_failed` sin el correo y se registra con método y ruta;
+    - un 503 deliberado conserva el estado sin el mensaje;
+    - un estado no numérico da 500.
+  - En `escrow.release.recovery`, el 500 de la liberación interrumpida comprueba ahora que el cuerpo es exactamente `{ error: 'ticket_request_failed', code: 500 }` (antes llegaba «db down»).
+- e2e (`npm run test:e2e`): 10/10.
+- Frontend: `npm --prefix frontend run build` OK. `npm --prefix frontend test`: 39 ficheros y 145 tests OK (antes 143). Hay 2 casos nuevos en `Breadcrumbs.test.tsx`: casero, profesional e inquilino. En la primera pasada falló una vez `AppShell.test.tsx` («abre el menú…»), pero pasó aislado y en la segunda suite completa; es intermitente, no del cambio.
+- GitNexus `detect_changes`: riesgo bajo, sin flujos afectados.
+
+**Qué queda.**
+- Unos 28 sitios más devuelven `e.message` en controladores: `contract*`, `payment`, `admin`, `policy`, `requireVerified` y `tenantPro.routes`. Algunos son 4xx con mensaje a propósito; hay que revisarlos uno a uno antes de pasarlos a `sendRouteError`.
+- `stripe.webhook.ts` responde `Webhook Error: <mensaje>` cuando la firma falla. Es el patrón de la documentación de Stripe y no filtra datos, así que no lo he tocado.
+- Pendientes anteriores: aviso de cobro a la agencia (Jorge), `/landlord/services` es un marcador, la ficha pública del profesional no tiene opiniones, adjuntos de chat públicos y `console.*` fuera del logger.
+
+**Siguiente mejora propuesta.** Revisar los controladores de contratos y pagos (`contract.controller`, `contract.payment.controller`, `payment.controller`): separar los 4xx deliberados de los 500 y pasar estos a `sendRouteError`, con un test por controlador del 500 sin mensaje interno.
