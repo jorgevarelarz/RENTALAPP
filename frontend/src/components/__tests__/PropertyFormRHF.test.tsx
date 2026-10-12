@@ -71,6 +71,18 @@ describe('PropertyFormRHF', () => {
     expect(screen.getByText('Faltan 2 fotos para publicar')).toBeInTheDocument();
   });
 
+  it('una foto con dirección no válida se explica en «Galería» en vez de no avanzar', async () => {
+    renderForm({ ...filled, images: ['/uploads/a.jpg', '/uploads/b.jpg', '/uploads/c.jpg'] });
+    userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
+    await screen.findByLabelText('Habitaciones');
+    userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
+    await screen.findByRole('button', { name: 'Quitar la foto 1' });
+    userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
+    expect(await screen.findByText('Una de las fotos no se subió bien. Quítala y vuelve a subirla')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Quitar la foto 1' })).toBeInTheDocument();
+    expect(screen.queryByText(/Invalid url/)).toBeNull();
+  });
+
   it('la planta fuera de rango se marca en «Detalles» antes de seguir', async () => {
     renderForm({ ...filled, floor: 99 });
     userEvent.click(screen.getByRole('button', { name: /Siguiente/ }));
@@ -124,14 +136,14 @@ describe('PropertyFormRHF', () => {
     vi.stubGlobal('fetch', fetchMock);
     renderForm();
     userEvent.type(screen.getByLabelText('Dirección completa'), 'Alcalá 42');
-    userEvent.click(await screen.findByRole('button', { name: suggestion.display_name }, { timeout: 3000 }));
+    userEvent.click(await screen.findByRole('option', { name: suggestion.display_name }, { timeout: 3000 }));
 
     expect(screen.getByLabelText('Dirección completa')).toHaveValue(suggestion.display_name);
     expect(screen.getByLabelText('Ciudad')).toHaveValue('Madrid');
     expect(screen.getByLabelText('Latitud')).toHaveValue(40.4189);
     await new Promise((r) => setTimeout(r, 1300));
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(screen.queryByRole('button', { name: suggestion.display_name })).toBeNull();
+    expect(screen.queryByRole('option', { name: suggestion.display_name })).toBeNull();
     expect(screen.queryByText(/Si no aparece la dirección/)).toBeNull();
   });
 
@@ -141,5 +153,65 @@ describe('PropertyFormRHF', () => {
     renderForm(filled);
     await new Promise((r) => setTimeout(r, 1300));
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  describe('sugerencias de dirección con el teclado', () => {
+    const suggestions = [
+      { place_id: 1, display_name: 'Calle de Alcalá, 42, Madrid', lat: '40.4189', lon: '-3.6969', address: { city: 'Madrid', state: 'Comunidad de Madrid' } },
+      { place_id: 2, display_name: 'Calle de Alcalá, 42, Alcalá de Henares', lat: '40.48', lon: '-3.36', address: { city: 'Alcalá de Henares', state: 'Comunidad de Madrid' } },
+    ];
+
+    const openList = async () => {
+      vi.stubGlobal('fetch', vi.fn(async () => ({ ok: true, json: async () => suggestions })));
+      renderForm();
+      const input = screen.getByRole('combobox', { name: 'Dirección completa' });
+      userEvent.type(input, 'Alcalá 42');
+      await screen.findByRole('listbox', {}, { timeout: 3000 });
+      return input;
+    };
+
+    it('anuncia la lista y mueve la opción resaltada con las flechas', async () => {
+      const input = await openList();
+      expect(input).toHaveAttribute('aria-expanded', 'true');
+      expect(input).toHaveAttribute('aria-controls', 'pf-address-listbox');
+      expect(input).not.toHaveAttribute('aria-activedescendant');
+
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      expect(input).toHaveAttribute('aria-activedescendant', 'pf-address-option-0');
+      expect(screen.getAllByRole('option')[0]).toHaveAttribute('aria-selected', 'true');
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      expect(input).toHaveAttribute('aria-activedescendant', 'pf-address-option-1');
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      expect(input).toHaveAttribute('aria-activedescendant', 'pf-address-option-0');
+      fireEvent.keyDown(input, { key: 'ArrowUp' });
+      expect(input).toHaveAttribute('aria-activedescendant', 'pf-address-option-1');
+    });
+
+    it('Intro elige la opción resaltada y no pasa de paso', async () => {
+      const input = await openList();
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      fireEvent.keyDown(input, { key: 'Enter' });
+      expect(input).toHaveValue(suggestions[1].display_name);
+      expect(screen.getByLabelText('Ciudad')).toHaveValue('Alcalá de Henares');
+      expect(screen.queryByRole('listbox')).toBeNull();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.getByLabelText('Título del anuncio')).toBeInTheDocument();
+    });
+
+    it('Escape y salir del campo cierran la lista sin la pista de «no aparece»; la flecha la reabre', async () => {
+      const input = await openList();
+      fireEvent.keyDown(input, { key: 'Escape' });
+      expect(screen.queryByRole('listbox')).toBeNull();
+      expect(input).toHaveAttribute('aria-expanded', 'false');
+      expect(screen.queryByText(/Si no aparece la dirección/)).toBeNull();
+
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      expect(screen.getByRole('listbox')).toBeInTheDocument();
+      expect(input).toHaveAttribute('aria-activedescendant', 'pf-address-option-0');
+
+      fireEvent.blur(input);
+      expect(screen.queryByRole('listbox')).toBeNull();
+    });
   });
 });

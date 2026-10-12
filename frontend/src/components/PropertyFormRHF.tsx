@@ -39,7 +39,7 @@ const schema = z.object({
     .min(1800, 'Revisa el año')
     .max(new Date().getFullYear() + 2, 'Revisa el año')
     .optional(),
-  images: z.array(z.string().url()).min(3, 'Sube al menos 3 fotos para publicar').max(20, 'Caben 20 fotos como máximo'),
+  images: z.array(z.string().url('Una de las fotos no se subió bien. Quítala y vuelve a subirla')).min(3, 'Sube al menos 3 fotos para publicar').max(20, 'Caben 20 fotos como máximo'),
   price: num('Escribe la renta mensual').min(100, 'La renta mínima es 100 €'),
   deposit: num('Escribe la fianza (0 si no hay)').min(0, 'Revisa la fianza'),
   availableFrom: z.string().min(2, 'Elige la fecha'),
@@ -109,6 +109,9 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [addressSuggestions, setAddressSuggestions] = useState<any[]>([]);
   const [isSearchingAddress, setIsSearchingAddress] = useState(false);
+  // Lista de sugerencias como combobox: opción resaltada con flechas y lista cerrada con Escape o al salir del campo
+  const [activeSuggestion, setActiveSuggestion] = useState(-1);
+  const [suggestionsDismissed, setSuggestionsDismissed] = useState(false);
   // Dirección ya confirmada (sugerencia elegida o la guardada al editar): no se busca, la lista se abriría sola
   const pickedAddress = useRef<string | null>(String(defaultValues?.address || '').trim() || null);
   const { push } = useToast();
@@ -180,6 +183,8 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
 
   useEffect(() => {
     const query = String(addressValue || '').trim();
+    setActiveSuggestion(-1);
+    setSuggestionsDismissed(false);
     if (query.length < 4 || query === pickedAddress.current) {
       setAddressSuggestions([]);
       setIsSearchingAddress(false);
@@ -235,7 +240,38 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
     if (!Number.isNaN(lat)) setValue('location.lat', lat, { shouldValidate: true });
     if (!Number.isNaN(lng)) setValue('location.lng', lng, { shouldValidate: true });
     setAddressSuggestions([]);
+    setActiveSuggestion(-1);
   };
+
+  const suggestionsOpen = addressSuggestions.length > 0 && !suggestionsDismissed;
+  const { onBlur: addressOnBlur, ...addressField } = register('address');
+
+  const handleAddressKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (!addressSuggestions.length) return;
+    const last = addressSuggestions.length - 1;
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      setSuggestionsDismissed(false);
+      if (!suggestionsOpen) {
+        setActiveSuggestion(e.key === 'ArrowDown' ? 0 : last);
+        return;
+      }
+      setActiveSuggestion((i) => (e.key === 'ArrowDown' ? (i >= last ? 0 : i + 1) : i <= 0 ? last : i - 1));
+    } else if (e.key === 'Enter' && suggestionsOpen && activeSuggestion >= 0) {
+      // Intro elige la opción resaltada en vez de pasar de paso
+      e.preventDefault();
+      applySuggestion(addressSuggestions[activeSuggestion]);
+    } else if (e.key === 'Escape' && suggestionsOpen) {
+      e.preventDefault();
+      setSuggestionsDismissed(true);
+      setActiveSuggestion(-1);
+    }
+  };
+
+  useEffect(() => {
+    if (activeSuggestion < 0) return;
+    document.getElementById(`pf-address-option-${activeSuggestion}`)?.scrollIntoView?.({ block: 'nearest' });
+  }, [activeSuggestion]);
 
   const nextStep = async () => {
     const fieldsToValidate = STEPS[step].fields as any[];
@@ -273,6 +309,11 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
       'aria-describedby': invalid ? `pf-${name.replace('.', '-')}-error` : undefined,
     };
   };
+  // Un fallo en una foto concreta llega como images[i], sin mensaje en images
+  const imagesError =
+    imageCount >= 3
+      ? err('images') || (Array.isArray(errors.images) ? errors.images.find(Boolean)?.message : undefined)
+      : undefined;
   const errorFor = (name: string) => <FieldError id={`pf-${name.replace('.', '-')}-error`} message={err(name)} />;
 
   const handleDrop = async (files: File[]) => {
@@ -369,30 +410,53 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
             <div className="grid gap-1.5">
               <div className="relative">
                 <Input
+                  id="pf-address"
                   label="Dirección completa"
                   placeholder="Ej. Calle Mayor, 10, 3.º A"
                   autoComplete="off"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={suggestionsOpen}
+                  aria-controls="pf-address-listbox"
+                  aria-activedescendant={suggestionsOpen && activeSuggestion >= 0 ? `pf-address-option-${activeSuggestion}` : undefined}
+                  onKeyDown={handleAddressKeyDown}
                   {...a11y('address')}
-                  {...register('address')}
+                  {...addressField}
+                  onBlur={(e) => {
+                    setSuggestionsDismissed(true);
+                    setActiveSuggestion(-1);
+                    void addressOnBlur(e);
+                  }}
                 />
                 {isSearchingAddress && (
                   <span className="pointer-events-none absolute bottom-3 right-3.5 text-xs text-[var(--ra-muted)]">Buscando…</span>
                 )}
-                {addressSuggestions.length > 0 && (
-                  <ul className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-[var(--ra-line)] bg-white py-1 shadow-lg">
-                    {addressSuggestions.map((item) => (
-                      <li key={item.place_id}>
-                        <button
-                          type="button"
-                          onClick={() => applySuggestion(item)}
-                          className="w-full px-3.5 py-2.5 text-left text-sm text-[var(--ra-ink)] hover:bg-[var(--ra-paper)]"
-                        >
-                          {item.display_name}
-                        </button>
+                <ul
+                  id="pf-address-listbox"
+                  role="listbox"
+                  aria-label="Direcciones sugeridas"
+                  hidden={!suggestionsOpen}
+                  className="absolute z-10 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-[var(--ra-line)] bg-white py-1 shadow-lg"
+                >
+                  {suggestionsOpen &&
+                    addressSuggestions.map((item, i) => (
+                      <li
+                        key={item.place_id}
+                        id={`pf-address-option-${i}`}
+                        role="option"
+                        aria-selected={i === activeSuggestion}
+                        // mousedown sin foco: si el campo pierde el foco antes del clic, la lista se cierra y el clic se pierde
+                        onMouseDown={(e) => e.preventDefault()}
+                        onMouseEnter={() => setActiveSuggestion(i)}
+                        onClick={() => applySuggestion(item)}
+                        className={`cursor-pointer px-3.5 py-2.5 text-sm text-[var(--ra-ink)] ${
+                          i === activeSuggestion ? 'bg-[var(--ra-paper)]' : ''
+                        }`}
+                      >
+                        {item.display_name}
                       </li>
                     ))}
-                  </ul>
-                )}
+                </ul>
               </div>
               {!isSearchingAddress && addressQuery.length >= 4 && addressQuery !== pickedAddress.current && addressSuggestions.length === 0 && (
                 <p className="ra-field-hint">
@@ -522,8 +586,7 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
             </div>
             <Dropzone
               onFiles={handleDrop}
-              className="rounded-xl border border-dashed border-[rgba(11,16,37,.24)] bg-[var(--ra-paper)] transition-colors hover:border-[var(--ra-blue)]"
-              style={{ padding: 24 }}
+              className="border border-dashed border-[rgba(11,16,37,.24)] bg-[var(--ra-paper)] p-6 transition-colors hover:border-[var(--ra-blue)]"
               label={
                 <div className="text-center">
                   <UploadCloud size={28} className="mx-auto mb-2 text-[var(--ra-blue)]" aria-hidden="true" />
@@ -537,6 +600,8 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
               <p role="status" className="text-center text-sm font-medium text-[var(--ra-muted)]">Subiendo fotos…</p>
             )}
             {uploadError && <p role="alert" className="ra-field-error text-center">{uploadError}</p>}
+            {/* Con menos de 3 fotos ya lo dice el recuadro de arriba */}
+            {imagesError && <p role="alert" className="ra-field-error text-center">{imagesError}</p>}
 
             {images.length > 0 && (
               <ul className="mt-2 grid grid-cols-3 gap-2 sm:grid-cols-4 sm:gap-3">
