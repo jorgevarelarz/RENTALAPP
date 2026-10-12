@@ -2709,3 +2709,44 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: «Ingresos» fuera del menú del casero; el corazón del listado sin sesión no se guarda solo al volver; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; el frontend sin ESLint.
 
 **Siguiente mejora propuesta.** Seguir con los formularios grandes: el alta de inmueble y el de avería a `Input`, `Select` y `.ra-input`, con etiquetas asociadas, revisados con capturas. Si toca backend: un test que compruebe en `app.ts` qué rutas de `/api/contracts` son públicas, para que no se cuele ningún webhook detrás de `authenticate` sin querer.
+
+### Ronda 70 — 2026-10-12 20:45
+
+**Qué y por qué.** Como proponía la ronda 69, toca seguir con los formularios grandes. El alta de inmueble es el primer paso del casero, y al revisarlo salieron fallos además de la apariencia. La sesión se cortó al agotarse la cuota antes de editar nada; se retomó con el árbol limpio.
+
+1. **Alta de inmueble (`PropertyFormRHF`).**
+   - **Fallo: errores invisibles.** Tamaño, habitaciones, baños, planta, año, fianza y fecha no mostraban su mensaje de error. Con un valor fuera de rango (p. ej. 5 m²), «Siguiente» o «Crear propiedad» no hacían nada y no decían por qué. Ahora cada campo enseña su error debajo, con `aria-invalid` y `aria-describedby`. Si al guardar falla un dato de un paso anterior, el asistente vuelve a ese paso y avisa con un toast (`onInvalid`). «Detalles» valida ya planta y año al avanzar.
+   - **Fallo: quitar foto en el móvil.** El botón de borrar una foto solo aparecía al pasar el ratón (`opacity-0 group-hover`), así que en una pantalla táctil no se veía. Además no tenía nombre accesible. Ahora se ve siempre («Quitar la foto N») y vuelve a validar el mínimo de fotos.
+   - **Accesibilidad:** ningún `<label>` estaba asociado a su campo. Ahora usan `Input`, `Select` y `.ra-input`. Los campos con unidad (m², €) van en un `AffixInput` local, con la unidad fuera de la etiqueta.
+   - **Apariencia 2026:** los pasos son una barra fina en azul de marca (antes, círculos con verde y escalado; en móvil solo se ve la etiqueta del paso activo). Las sugerencias de dirección, el recuadro de coordenadas, la zona de subida, Tenant PRO y las casillas usan los tokens `--ra-*`; las casillas, `accent-color` de marca. Se quita el emoji ℹ️. Textos con tildes («Galería», «publicación», «válido», «Ubicación»…), «Crear anuncio» y «Guardar cambios», y mensajes de validación en lenguaje claro («El tamaño mínimo es 10 m²» en vez de «Tamaño inválido (min 10m²)»).
+   - Guarda en `onSubmit`: antes del último paso, enviar el formulario avanza de paso en vez de guardar. En el navegador, Intro no enviaba nada porque el formulario no tiene botón de envío, así que esto no corrige un fallo visible; protege por si se añade uno.
+2. **`Input` y `Select` con `forwardRef`**, para poder usarlos con `register()` de react-hook-form. Con los 6 usos actuales no cambia nada.
+3. **Formulario de avería (`TicketCreatePage`).** Deja su `fieldClass` propio (radio 8, foco gris) por `Select`, `Input` y `.ra-input`, y sus copias de botón por `buttonClassName`. Las pastillas del tipo de avería pasan a tokens `--ra-*`. Nuevas clases `.ra-field-hint` y `.ra-field-error` en `@layer components`.
+
+**Commits.**
+- `a024f2e` Interfaz: alta de inmueble al sistema 2026 y con los errores a la vista
+- `3dfc989` Interfaz: el formulario de avería usa Select, Input y .ra-input
+- Docs: este registro
+
+**Verificación (resultados reales).**
+- **Frontend.**
+  - `npm --prefix frontend run lint`: sin errores. `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`: **61 ficheros y 247 tests OK**.
+  - Tests nuevos: `components/__tests__/PropertyFormRHF.test.tsx` (6 casos: etiquetas asociadas y error del título enlazado; error del tamaño visible sin salir de «Detalles»; planta fuera de rango; quitar foto con nombre; guardar con la fianza mal no envía, marca el campo y avisa; enviar antes del último paso no guarda) y un caso de `ref` en `Input.test.tsx`.
+  - **Ojo al escribir tests de formularios:** `src/setupTests.ts` sustituye `zodResolver` por uno que nunca da errores. Por eso ningún test veía la validación. El test nuevo hace `vi.unmock('@hookform/resolvers/zod')`. Con node se comprobó que el resolver real sí valida, así que en la app funciona.
+- **Backend:** sin cambios.
+- **Playwright** (vite local en 3970, `/api/*` y Nominatim simulados). Capturas en `/tmp/ra-shots70` del alta (pasos 1 a 3, con y sin errores) y de la avería, a 1280 y 390 px:
+  - campos de 44 px con radio 12;
+  - con el formulario vacío, «Siguiente» marca en rojo los cuatro campos con su mensaje;
+  - sin desbordamiento horizontal;
+  - en móvil, los cuatro pasos caben (solo la etiqueta activa).
+  - El paso 4 no se capturó: exige subir 3 fotos y la subida no estaba simulada. Lo cubren los tests.
+- **GitNexus.** `impact` de `PropertyFormRHF` e `Input`: LOW (no sigue JSX; los importadores se revisaron con grep). `detect_changes`: riesgo medio, solo por los flujos de `TicketCreatePage`, que cambian únicamente en el render.
+
+**Qué queda.**
+- El mock global de `zodResolver` en `setupTests.ts` esconde la validación en todos los tests de formularios. Conviene quitarlo y ver qué tests dependían de él.
+- `RentSuggestionCard`, la zona de `Dropzone` (sigue con `style` en línea) y los recuadros verde y ámbar del alta usan colores de Tailwind, no tokens.
+- Nominatim se llama desde el navegador sin `User-Agent` ni límite propio. Su política pide máximo 1 petición por segundo; el debounce de 350 ms puede pasarse al escribir rápido.
+- Pendientes anteriores: `ui/Badge`, `Alert`, `Pagination` y `Drawer` con estilos en línea; `pro/Profile` y la subida de foto del perfil; `.auth-input` frente a `.ra-input`; «Ingresos» fuera del menú del casero; el casero no puede descartar candidatos (Jorge); el frontend sin ESLint.
+
+**Siguiente mejora propuesta.** Quitar el mock global de `zodResolver` en `setupTests.ts` y arreglar los tests que dependan de él, para que la validación real quede probada en todos los formularios. Después, subir el debounce de Nominatim a 1 s y cancelar la búsqueda al elegir una sugerencia.

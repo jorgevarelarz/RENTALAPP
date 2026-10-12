@@ -1423,3 +1423,9 @@ Rules:
 - Removed 182 lines of unused template CSS from `index.css` plus the unimported `src/style.css`.
 - `tests/contracts/signature.security.test.ts` pins `NODE_ENV`/`ALLOW_TEST_AUTH` and restores only its keys. Note: `/api/contracts/signature/webhook` and `/:id/signature/callback` sit behind `authenticate`, so they return 401 in production (open item #9 in review-firma).
 - Verification: frontend lint/build OK, 240/240 tests; signature.security 8/8. Details in `docs/MEJORA-CONTINUA.md` round 69.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 70: property form + ticket form on 2026 fields
+
+- `PropertyFormRHF` uses `Input`/`Select`/`.ra-input` (labels now associated), shows every field error (size/rooms/baths/floor/year/deposit/date errors were silently blocking "Siguiente"/"Crear"), jumps back to the failing step on submit (`onInvalid`), photo remove button visible on touch. `Input`/`Select` now `forwardRef` (usable with `register()`). `TicketCreatePage` drops its own `fieldClass`. New `.ra-field-hint`/`.ra-field-error`.
+- Gotcha: `frontend/src/setupTests.ts` globally mocks `zodResolver` to never return errors; form tests needing validation must `vi.unmock('@hookform/resolvers/zod')`.
+- Verification: frontend lint/build OK, 61 files / 247 tests; Playwright screenshots in `/tmp/ra-shots70`. Details in `docs/MEJORA-CONTINUA.md` round 70.
