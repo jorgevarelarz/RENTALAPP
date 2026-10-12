@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Check, Heart, MapPin, Share2, ShieldCheck } from 'lucide-react';
@@ -34,6 +34,9 @@ const MANAGE_LINKS: Record<string, string> = {
   admin: '/admin/properties',
 };
 
+// Igual que APPLICATION_MESSAGE_MAX en el backend
+const MESSAGE_MAX = 1000;
+
 const linkButton =
   'inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-medium text-gray-700 hover:bg-white hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ra-blue)]';
 
@@ -44,6 +47,8 @@ export default function PropertyDetail() {
   const qc = useQueryClient();
   const [promptLogin, setPromptLogin] = useState(false);
   const [applying, setApplying] = useState(false);
+  const [message, setMessage] = useState('');
+  const messageRef = useRef<HTMLTextAreaElement>(null);
 
   const { data: property, isLoading, isError } = useQuery({
     queryKey: ['property', id, user?._id || 'anon'],
@@ -112,8 +117,10 @@ export default function PropertyDetail() {
     if (!user) return setPromptLogin(true);
     setApplying(true);
     try {
-      await applyToProperty(property._id);
-      setCached({ _application: { status: 'pending', createdAt: new Date().toISOString() } });
+      const text = message.trim();
+      await applyToProperty(property._id, text);
+      setCached({ _application: { status: 'pending', createdAt: new Date().toISOString(), message: text || undefined } });
+      setMessage('');
       toast.push({ title: 'Solicitud enviada', tone: 'success' });
     } catch (e: any) {
       const status = e?.response?.status;
@@ -122,11 +129,22 @@ export default function PropertyDetail() {
           ? e.response.data.message
           : status === 404
             ? 'Este anuncio ya no admite solicitudes'
-            : 'No se pudo enviar la solicitud. Inténtalo de nuevo.';
+            : status === 400 && e?.response?.data?.error === 'message_too_long'
+              ? `El mensaje no puede pasar de ${MESSAGE_MAX} caracteres`
+              : 'No se pudo enviar la solicitud. Inténtalo de nuevo.';
       toast.push({ title: message, tone: 'error' });
     } finally {
       setApplying(false);
     }
+  };
+
+  // En móvil, la barra fija lleva al formulario (con el mensaje) en vez de enviar la solicitud vacía
+  const goToApply = () => {
+    if (!user) return setPromptLogin(true);
+    const field = messageRef.current;
+    if (!field) return apply();
+    field.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    field.focus({ preventScroll: true });
   };
 
   const photos = property.images?.length ? property.images : property.photos || [];
@@ -268,6 +286,9 @@ export default function PropertyDetail() {
                 proBlocked={proBlocked}
                 applying={applying}
                 onApply={apply}
+                message={message}
+                onMessageChange={setMessage}
+                messageRef={messageRef}
               />
             </div>
           </div>
@@ -283,7 +304,7 @@ export default function PropertyDetail() {
         {canApply ? (
           <button
             type="button"
-            onClick={apply}
+            onClick={goToApply}
             disabled={applying}
             className="rounded-full bg-[var(--ra-blue)] px-5 py-2.5 text-sm font-semibold text-white disabled:opacity-60"
           >
@@ -307,6 +328,9 @@ function ApplyBlock({
   proBlocked,
   applying,
   onApply,
+  message,
+  onMessageChange,
+  messageRef,
 }: {
   property: Property;
   signedIn: boolean;
@@ -315,6 +339,9 @@ function ApplyBlock({
   proBlocked: boolean;
   applying: boolean;
   onApply: () => void;
+  message: string;
+  onMessageChange: (value: string) => void;
+  messageRef: React.RefObject<HTMLTextAreaElement | null>;
 }) {
   const primary =
     'w-full rounded-full bg-[var(--ra-blue)] px-5 py-3 text-[15px] font-semibold text-white hover:bg-[#3557e6] focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ra-blue)] focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60';
@@ -344,6 +371,14 @@ function ApplyBlock({
       <div className="text-sm" role="status">
         <p className="font-semibold text-gray-900">{title}</p>
         <p className="mt-1 leading-relaxed text-gray-600">{detail}</p>
+        {property._application.message && (
+          <div className="mt-3">
+            <p className="text-xs font-medium text-gray-500">Tu mensaje</p>
+            <p className="mt-1 line-clamp-4 whitespace-pre-line border-l-2 border-[var(--ra-line)] pl-3 text-gray-700 [overflow-wrap:anywhere]">
+              {property._application.message}
+            </p>
+          </div>
+        )}
         <Link to="/tenant/applications" className="mt-3 inline-block font-semibold text-[var(--ra-blue)] hover:underline">
           Ver mis solicitudes
         </Link>
@@ -371,8 +406,31 @@ function ApplyBlock({
     );
   }
 
+  const remaining = MESSAGE_MAX - message.length;
   return (
     <div>
+      {signedIn && (
+        <div className="mb-4">
+          <label htmlFor="apply-message" className="text-sm font-medium text-gray-900">
+            Mensaje para el propietario <span className="font-normal text-gray-500">(opcional)</span>
+          </label>
+          <textarea
+            id="apply-message"
+            ref={messageRef}
+            value={message}
+            onChange={(e) => onMessageChange(e.target.value)}
+            maxLength={MESSAGE_MAX}
+            rows={4}
+            aria-describedby="apply-message-hint"
+            placeholder="Cuéntale quién vivirá en el piso, a qué te dedicas y cuándo te gustaría entrar."
+            className="mt-2 block w-full resize-y rounded-xl border border-[var(--ra-line)] px-3 py-2.5 text-sm text-gray-900 placeholder:text-gray-400 focus:border-[var(--ra-blue)] focus:outline-none focus:ring-1 focus:ring-[var(--ra-blue)]"
+          />
+          <p id="apply-message-hint" className="mt-1 flex justify-between gap-3 text-xs text-gray-500">
+            <span>Lo leerá junto a tu solicitud.</span>
+            {remaining <= 200 && <span className="tabular-nums">{remaining} caracteres</span>}
+          </p>
+        </div>
+      )}
       <button type="button" onClick={onApply} disabled={applying} className={primary}>
         {applying ? 'Enviando…' : 'Solicitar visita'}
       </button>

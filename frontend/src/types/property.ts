@@ -69,6 +69,7 @@ export interface PropertyViewerApplication {
   visitDate?: string;
   proposedDate?: string;
   proposedBy?: 'tenant' | 'landlord';
+  message?: string;
 }
 
 export interface PropertyListResponse {

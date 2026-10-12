@@ -82,8 +82,9 @@ export async function incrementView(id: string) {
   }
 }
 
-export async function applyToProperty(id: string) {
-  const { data } = await client.post(`/api/properties/${id}/apply`);
+export async function applyToProperty(id: string, message?: string) {
+  const text = message?.trim();
+  const { data } = await client.post(`/api/properties/${id}/apply`, text ? { message: text } : {});
   return data as { ok: boolean };
 }
 

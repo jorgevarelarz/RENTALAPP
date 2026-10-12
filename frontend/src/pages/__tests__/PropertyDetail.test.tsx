@@ -113,11 +113,33 @@ describe('Ficha del anuncio', () => {
     expect(mocks.favoriteProperty).toHaveBeenCalledWith('p1');
     expect(await screen.findByRole('button', { name: 'Guardado' })).toHaveAttribute('aria-pressed', 'true');
 
-    await userEvent.click(screen.getAllByRole('button', { name: 'Solicitar visita' })[0]);
-    expect(mocks.applyToProperty).toHaveBeenCalledWith('p1');
+    await userEvent.type(screen.getByLabelText(/Mensaje para el propietario/), 'Somos dos y entramos en noviembre');
+    await userEvent.click(card().getByRole('button', { name: 'Solicitar visita' }));
+    expect(mocks.applyToProperty).toHaveBeenCalledWith('p1', 'Somos dos y entramos en noviembre');
     expect(await card().findByText('Solicitud enviada')).toBeInTheDocument();
+    expect(card().getByText('Somos dos y entramos en noviembre')).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Ver mis solicitudes' })).toHaveAttribute('href', '/tenant/applications');
     expect(screen.queryByRole('button', { name: 'Solicitar visita' })).toBeNull();
+  });
+
+  it('sin escribir nada la solicitud va sin mensaje; en móvil la barra lleva al campo', async () => {
+    mocks.user = { _id: 't1', role: 'tenant' };
+    mocks.getProperty.mockResolvedValue({ ...PROPERTY });
+    mocks.applyToProperty.mockResolvedValue({ ok: true });
+    renderPage();
+
+    const field = await screen.findByLabelText(/Mensaje para el propietario/);
+    const scroll = vi.fn();
+    field.scrollIntoView = scroll;
+    const [inCard, inBar] = screen.getAllByRole('button', { name: 'Solicitar visita' });
+    expect(screen.getByRole('complementary').contains(inBar)).toBe(false);
+    await userEvent.click(inBar);
+    expect(scroll).toHaveBeenCalled();
+    expect(field).toHaveFocus();
+    expect(mocks.applyToProperty).not.toHaveBeenCalled();
+
+    await userEvent.click(inCard);
+    expect(mocks.applyToProperty).toHaveBeenCalledWith('p1', '');
   });
 
   it('si ya tiene visita concertada lo dice en lugar del botón', async () => {
