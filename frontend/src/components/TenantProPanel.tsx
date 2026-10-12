@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { TenantProInfo, acceptTenantProConsent, getTenantProInfo, uploadTenantProDoc } from '../services/tenantPro';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import toast from 'react-hot-toast';
+import { useToast } from '../context/ToastContext';
 
 const DOC_TYPES: { value: string; label: string }[] = [
   { value: 'nomina', label: 'Nómina' },
@@ -19,6 +19,7 @@ type Props = {
 export default function TenantProPanel({ requiredRent }: Props) {
   const { user } = useAuth();
   const qc = useQueryClient();
+  const { push } = useToast();
   const { data: info, isLoading: loading, error, refetch } = useQuery<TenantProInfo>({
     queryKey: ['tenant-pro/me'],
     queryFn: getTenantProInfo,
@@ -30,18 +31,18 @@ export default function TenantProPanel({ requiredRent }: Props) {
   const uploadMut = useMutation({
     mutationFn: async (file: File) => uploadTenantProDoc(docType, file),
     onSuccess: async () => {
-      toast.success('Documento subido');
+      push({ title: 'Documento subido', tone: 'success' });
       await qc.invalidateQueries({ queryKey: ['tenant-pro/me'] });
     },
-    onError: () => toast.error('No se pudo subir el documento'),
+    onError: () => push({ title: 'No se pudo subir el documento', tone: 'error' }),
   });
   const consentMut = useMutation({
     mutationFn: async () => acceptTenantProConsent('v1'),
     onSuccess: async () => {
-      toast.success('Consentimiento aceptado');
+      push({ title: 'Consentimiento aceptado', tone: 'success' });
       await qc.invalidateQueries({ queryKey: ['tenant-pro/me'] });
     },
-    onError: () => toast.error('No se pudo registrar el consentimiento'),
+    onError: () => push({ title: 'No se pudo registrar el consentimiento', tone: 'error' }),
   });
 
   if (!user || user.role !== 'tenant') {
