@@ -12,6 +12,7 @@ import { emitSystemEvent } from '../events/system.events';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 import { suggestRent } from '../services/rentSuggestion.service';
 import { isManagingAgency } from '../utils/propertyAccess';
+import { notifyApplication } from '../services/applicationNotice.service';
 
 const tensionedAreaDateQuery = (changeDate: Date) => ({
   active: true,
@@ -569,6 +570,8 @@ export async function apply(req: Request, res: Response) {
   });
 
   res.json({ ok: true, propertyId: property._id, applicationId: app._id });
+  // Aviso al propietario y a su agencia gestora; no retrasa la respuesta y nunca lanza
+  void notifyApplication('received', app._id, userId);
 }
 
 export async function listApplications(req: Request, res: Response) {

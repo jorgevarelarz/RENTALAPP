@@ -4,6 +4,7 @@ import { Application } from '../models/application.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
 import { isManagingAgency } from '../utils/propertyAccess';
+import { notifyApplication } from '../services/applicationNotice.service';
 
 export async function listMyApplications(req: Request, res: Response) {
   const user: any = (req as any).user;
@@ -101,6 +102,8 @@ export async function proposeVisit(req: Request, res: Response) {
     proposedDate: app.proposedDate,
     proposedBy: app.proposedBy,
   });
+  // Aviso a la otra parte; no retrasa la respuesta y nunca lanza
+  void notifyApplication('proposed', app._id, userId);
 }
 
 export async function acceptProposedVisit(req: Request, res: Response) {
@@ -141,4 +144,5 @@ export async function acceptProposedVisit(req: Request, res: Response) {
   await app.save();
 
   res.json({ ok: true, _id: app._id, status: app.status, visitDate: app.visitDate });
+  void notifyApplication('scheduled', app._id, userId);
 }

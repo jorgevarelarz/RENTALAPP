@@ -367,3 +367,103 @@ export async function sendTicketOpenedEmail(to: string, ticket: TicketOpenedEmai
   const { subject, html } = ticketOpenedEmail(ticket);
   return sendEmail(to, subject, html);
 }
+
+/** Fecha y hora de una visita en Madrid: «jueves, 15 de octubre a las 18:00». */
+export function visitDateLabel(value: Date): string {
+  const tz = { timeZone: 'Europe/Madrid' } as const;
+  const day = value.toLocaleDateString('es-ES', { ...tz, weekday: 'long', day: 'numeric', month: 'long' });
+  const time = value.toLocaleTimeString('es-ES', { ...tz, hour: '2-digit', minute: '2-digit' });
+  return `${day} a las ${time}`;
+}
+
+export type ApplicationNoticeEmail = {
+  /**
+   * `received`: solicitud nueva (al casero o su agencia). `proposed`: la otra parte propone fecha.
+   * `scheduled`: la otra parte ha aceptado la fecha que propusiste.
+   */
+  kind: 'received' | 'proposed' | 'scheduled';
+  /** Quién recibe el correo: el inquilino o quien gestiona el inmueble. */
+  audience: 'tenant' | 'manager';
+  /** Página donde se gestiona la solicitud. */
+  link: string;
+  name?: string;
+  /** Nombre de la otra parte (el inquilino, para el casero; el propietario, para el inquilino). */
+  otherName?: string;
+  propertyTitle?: string;
+  propertyAddress?: string;
+  /** Mensaje del inquilino al solicitar (solo en `received`). */
+  message?: string;
+  /** Si el inquilino tiene la solvencia verificada (Tenant PRO). Solo en `received`. */
+  tenantVerified?: boolean;
+  /** Fecha propuesta (`proposed`) o concertada (`scheduled`). */
+  date?: Date;
+};
+
+/** Avisos de solicitudes y visitas: solicitud nueva, fecha propuesta y visita concertada. */
+export function applicationNoticeEmail(notice: ApplicationNoticeEmail) {
+  const name = oneLine(notice.name);
+  const toTenant = notice.audience === 'tenant';
+  const other = oneLine(notice.otherName) || (toTenant ? 'El propietario' : 'Un inquilino');
+  const otherHtml = notice.otherName ? `<strong>${escapeHtml(other)}</strong>` : escapeHtml(other);
+  const title = oneLine(notice.propertyTitle, 160);
+  const place = title ? ` <strong>${escapeHtml(title)}</strong>` : ' tu anuncio';
+  const when = notice.date ? visitDateLabel(notice.date) : '';
+  const url = escapeHtml(notice.link);
+  const message = notice.message?.trim().slice(0, 1000);
+
+  let heading: string;
+  let lead: string;
+  let cta: string;
+  let subject: string;
+  if (notice.kind === 'received') {
+    heading = 'Nueva solicitud de visita';
+    lead = `${otherHtml} quiere visitar${place}.`;
+    cta = 'Ver la solicitud';
+    subject = `Nueva solicitud de visita${title ? `: ${title}` : ''}`;
+  } else if (notice.kind === 'proposed') {
+    heading = 'Te proponen una fecha de visita';
+    lead = toTenant
+      ? `${otherHtml} te propone visitar${title ? ` <strong>${escapeHtml(title)}</strong>` : ' la vivienda'} el <strong>${escapeHtml(when)}</strong>.`
+      : `${otherHtml} propone visitar${place} el <strong>${escapeHtml(when)}</strong>.`;
+    cta = toTenant ? 'Aceptar o proponer otra fecha' : 'Ver la propuesta';
+    subject = `Fecha de visita propuesta: ${when}`;
+  } else {
+    heading = 'Visita concertada';
+    lead = `${otherHtml} ha aceptado la visita${title ? ` a <strong>${escapeHtml(title)}</strong>` : ''} el <strong>${escapeHtml(when)}</strong>.`;
+    cta = toTenant ? 'Ver mis solicitudes' : 'Ver la solicitud';
+    subject = `Visita concertada: ${when}`;
+  }
+
+  const address = oneLine(notice.propertyAddress, 160);
+  const verified =
+    notice.kind === 'received' && notice.tenantVerified
+      ? '<p style="margin: 0 0 12px; color: #047857;">Tiene la solvencia verificada en RentalApp.</p>'
+      : '';
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px; color: #111827;">
+      <h2 style="margin-top: 0;">${heading}</h2>
+      ${name ? `<p>Hola, ${escapeHtml(name)}:</p>` : ''}
+      <p>${lead}</p>
+      ${verified}
+      ${
+        message
+          ? `<div style="background-color: #f3f4f6; padding: 12px 16px; margin: 16px 0; border-radius: 6px;">
+        <p style="margin: 0 0 6px; color: #4b5563; font-size: 13px;">Su mensaje</p>
+        <p style="margin: 0; white-space: pre-line;">${escapeHtml(message)}</p>
+      </div>`
+          : ''
+      }
+      ${address ? `<p style="color: #4b5563;">Vivienda: ${escapeHtml(address)}</p>` : ''}
+      <div style="text-align: center; margin: 28px 0;">
+        <a href="${url}" style="background-color: #111827; color: #ffffff; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">${cta}</a>
+      </div>
+      <p style="color: #6b7280; font-size: 12px;">Si no puedes hacer clic, copia este enlace: ${url}</p>
+    </div>
+  `;
+  return { subject, html };
+}
+
+export async function sendApplicationNoticeEmail(to: string, notice: ApplicationNoticeEmail): Promise<EmailDelivery> {
+  const { subject, html } = applicationNoticeEmail(notice);
+  return sendEmail(to, subject, html);
+}
