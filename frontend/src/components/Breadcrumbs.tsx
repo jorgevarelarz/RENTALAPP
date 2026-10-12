@@ -14,6 +14,8 @@ function labelFor(path: string): string {
   if (/^\/contracts\/[a-z0-9]+$/i.test(path)) return 'Contrato';
   if (/^\/tickets\/[a-z0-9]+$/i.test(path)) return 'Incidencia';
   if (/^\/properties\/[a-z0-9]+$/i.test(path)) return 'Inmueble';
+  if (path === '/pros') return 'Profesionales';
+  if (/^\/pros\/[a-z0-9]+$/i.test(path)) return 'Profesional';
   return path.split('/').pop() || '';
 }
 

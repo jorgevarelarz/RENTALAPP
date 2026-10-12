@@ -1,160 +1,134 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import { getMyPro, upsertPro } from '../services/pro';
-import Card from '../components/ui/Card';
-import Input from '../components/ui/Input';
-import Button from '../components/ui/Button';
-import { useToast } from '../context/ToastContext';
+import React from 'react';
 import { Link } from 'react-router-dom';
-import { Briefcase, Wallet, Settings, CheckCircle2 } from 'lucide-react';
-import OnboardingChecklist from '../components/OnboardingChecklist';
+import { useQuery } from '@tanstack/react-query';
+import { ChevronRight } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { getMyProProfile } from '../services/pro';
+import { getProSummary } from '../services/tickets';
+import Card from '../components/ui/Card';
+import { SummaryFigures } from '../components/pro/ProTicketList';
+import { formatEuros, getServiceLabel } from '../utils/tickets';
 
-const ALL_SERVICES = [
-  { key: 'plumbing', label: 'Fontanería' },
-  { key: 'electricity', label: 'Electricidad' },
-  { key: 'appliances', label: 'Electrodomésticos' },
-  { key: 'locksmith', label: 'Cerrajería' },
-  { key: 'cleaning', label: 'Limpieza' },
-  { key: 'painting', label: 'Pintura' },
-  { key: 'others', label: 'Otros' },
-];
+const primaryLink =
+  'inline-flex items-center justify-center whitespace-nowrap rounded-lg bg-[var(--primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90';
+const secondaryLink =
+  'inline-flex items-center justify-center whitespace-nowrap rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-sm font-semibold text-gray-900 hover:bg-gray-50';
+
+const count = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
+const jobs = (n: number) => count(n, 'trabajo', 'trabajos');
+
+/** Perfil público: crearlo es lo primero, porque sin él no se le pueden asignar averías. */
+function ProfileCard() {
+  const { data: pro, isLoading, isError } = useQuery({ queryKey: ['pro/me'], queryFn: getMyProProfile });
+  if (isLoading || isError) return null;
+
+  if (!pro) {
+    return (
+      <Card className="flex flex-col gap-4 px-5 py-5 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h2 className="font-semibold text-gray-900">Crea tu perfil profesional</h2>
+          <p className="mt-1 text-sm text-gray-600">
+            Los propietarios solo pueden asignarte averías cuando tienes perfil: nombre comercial, ciudad y servicios.
+          </p>
+        </div>
+        <Link to="/pro/profile" className={`${primaryLink} self-start md:self-auto`}>Crear perfil</Link>
+      </Card>
+    );
+  }
+
+  const services = (pro.services || []).map(s => getServiceLabel(s.key)).join(', ');
+  return (
+    <Card className="flex flex-col gap-3 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="min-w-0">
+        <p className="font-semibold text-gray-900 [overflow-wrap:anywhere]">{pro.displayName}</p>
+        <p className="mt-0.5 text-sm text-gray-500">
+          {[pro.city, services || 'Sin servicios'].join(' · ')}
+        </p>
+      </div>
+      <div className="flex shrink-0 items-center gap-4">
+        <span className={`text-sm font-medium ${pro.active ? 'text-emerald-700' : 'text-gray-500'}`}>
+          {pro.active ? 'Visible para propietarios' : 'Perfil pausado'}
+        </span>
+        <Link to="/pro/profile" className="text-sm font-medium text-[var(--primary)] hover:underline">Editar</Link>
+      </div>
+    </Card>
+  );
+}
 
 const ProDashboard: React.FC = () => {
-  const { token, user } = useAuth();
-  const { push } = useToast();
-  const [displayName, setDisplayName] = useState('');
-  const [city, setCity] = useState('');
-  const [services, setServices] = useState<{ key: string; basePrice?: number }[]>([]);
-  const [loading, setLoading] = useState(false);
+  const { user } = useAuth();
+  const { data: summary, isLoading, isError } = useQuery({ queryKey: ['pro/summary'], queryFn: getProSummary });
+  const firstName = (user as any)?.name?.split?.(' ')?.[0] || user?.email?.split?.('@')?.[0] || '';
 
-  useEffect(() => {
-    (async () => {
-      if (!token || !user) return;
-      try {
-        setLoading(true);
-        const me = await getMyPro(token, user._id);
-        setDisplayName(me.displayName || '');
-        setCity(me.city || '');
-        setServices(me.services || []);
-      } catch {}
-      finally { setLoading(false); }
-    })();
-  }, [token, user]);
-
-  const toggleService = (key: string) => {
-    setServices(prev => prev.find(s => s.key === key) ? prev.filter(s => s.key !== key) : [...prev, { key }]);
-  };
-
-  const setPrice = (key: string, price: string) => {
-    const v = Number(price);
-    setServices(prev => prev.map(s => s.key === key ? { ...s, basePrice: Number.isFinite(v) ? v : undefined } : s));
-  };
-
-  const save = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!token || !user) return;
-    await upsertPro(token, user._id, { displayName, city, services });
-    push({ title: 'Perfil actualizado', tone: 'success' });
-  };
-
-  if (!token || !user) return <div>Cargando...</div>;
-
-  const isProfileComplete = displayName && services.length > 0;
+  const todo = summary
+    ? [
+        { to: '/pro/quotes', label: 'Por presupuestar', detail: 'Te han asignado la avería y falta tu presupuesto.', count: summary.quotes.toQuote },
+        { to: '/pro/tickets?status=awaiting_schedule', label: 'Por agendar', detail: 'Presupuesto aprobado: acuerda la visita.', count: summary.work?.toSchedule || 0 },
+        { to: '/pro/tickets?status=scheduled', label: 'En curso', detail: 'Visita agendada o trabajo empezado.', count: summary.work?.inProgress || 0 },
+      ].filter(item => item.count > 0)
+    : [];
+  const waiting = summary
+    ? [
+        summary.quotes.awaitingApproval > 0 && `aprobar ${count(summary.quotes.awaitingApproval, 'presupuesto', 'presupuestos')}`,
+        (summary.work?.awaitingValidation || 0) > 0 && `validar ${count(summary.work.awaitingValidation, 'trabajo terminado', 'trabajos terminados')}`,
+      ].filter(Boolean)
+    : [];
+  const b = summary?.billing;
 
   return (
-    <div className="space-y-8">
-      <div className="bg-gradient-to-r from-orange-50 to-orange-100 border border-orange-200 rounded-2xl p-6">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-4">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Portal Profesional</h1>
-            <p className="text-gray-600">
-              {isProfileComplete
-                ? 'Tu perfil está activo y visible para clientes.'
-                : 'Completa tu perfil para empezar a recibir ofertas.'}
-            </p>
-          </div>
-          {isProfileComplete && (
-            <div className="bg-white/50 px-4 py-2 rounded-lg flex items-center gap-2 text-green-700 font-medium">
-              <CheckCircle2 size={20} /> Disponible
-            </div>
-          )}
+    <div className="space-y-6 pb-10">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-gray-900">{firstName ? `Hola, ${firstName}` : 'Tu trabajo'}</h1>
+          <p className="mt-1 text-gray-500">Las averías que te han asignado, tus presupuestos y lo que tienes por cobrar.</p>
         </div>
+        <Link to="/pro/tickets" className={`${secondaryLink} self-start md:self-auto`}>Ver todos los trabajos</Link>
       </div>
 
-      <OnboardingChecklist role="pro" />
+      <ProfileCard />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <Link to="/pro/tickets" className="block group">
-          <Card className="hover:border-orange-400 transition-colors cursor-pointer h-full flex flex-col items-center text-center p-6">
-            <div className="bg-orange-100 p-4 rounded-full mb-4 text-orange-600 group-hover:bg-orange-600 group-hover:text-white transition-colors">
-              <Briefcase size={32} />
-            </div>
-            <h3 className="text-xl font-bold mb-2">Bolsa de Trabajos</h3>
-            <p className="text-gray-500">Busca incidencias y envía presupuestos a propietarios.</p>
-          </Card>
-        </Link>
+      <Card className="overflow-hidden">
+        <h2 className="border-b border-gray-100 px-5 py-4 font-semibold text-gray-900">Lo que te toca</h2>
+        {isLoading ? (
+          <p className="px-5 py-6 text-sm text-gray-500">Cargando…</p>
+        ) : isError ? (
+          <p className="px-5 py-6 text-sm text-red-700">No se pudo cargar tu resumen. Vuelve a intentarlo en un momento.</p>
+        ) : todo.length === 0 ? (
+          <p className="px-5 py-6 text-sm text-gray-500">Nada pendiente por tu parte. Cuando un propietario te asigne una avería, aparecerá aquí.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {todo.map(item => (
+              <li key={item.label}>
+                <Link to={item.to} className="group flex items-center justify-between gap-4 px-5 py-4 hover:bg-gray-50">
+                  <div className="min-w-0">
+                    <p className="font-medium text-gray-900">{item.label}</p>
+                    <p className="mt-0.5 text-sm text-gray-500">{item.detail}</p>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-3">
+                    <span className="text-xl font-semibold tabular-nums text-gray-900">{item.count}</span>
+                    <ChevronRight className="h-4 w-4 text-gray-300 group-hover:text-gray-500" aria-hidden="true" />
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
+        {waiting.length > 0 && (
+          <p className="border-t border-gray-100 px-5 py-3 text-sm text-gray-500">Pendiente del propietario: {waiting.join(' · ')}.</p>
+        )}
+      </Card>
 
-        <Link to="/pro/billing" className="block group">
-          <Card className="hover:border-blue-400 transition-colors cursor-pointer h-full flex flex-col items-center text-center p-6">
-            <div className="bg-blue-100 p-4 rounded-full mb-4 text-blue-600 group-hover:bg-blue-600 group-hover:text-white transition-colors">
-              <Wallet size={32} />
-            </div>
-            <h3 className="text-xl font-bold mb-2">Facturación</h3>
-            <p className="text-gray-500">Gestiona tus ingresos y facturas de servicios realizados.</p>
-          </Card>
-        </Link>
-      </div>
-
-      <div>
-        <div className="flex items-center gap-2 mb-4">
-          <Settings className="text-gray-400" />
-          <h3 className="text-lg font-bold text-gray-800">Configuración de Perfil</h3>
+      <div className="space-y-2">
+        <div className="flex items-baseline justify-between gap-3">
+          <h2 className="font-semibold text-gray-900">Cobros</h2>
+          <Link to="/pro/billing" className="text-sm font-medium text-[var(--primary)] hover:underline">Ver facturación</Link>
         </div>
-
-        <Card style={{ padding: 24 }}>
-          <form onSubmit={save} className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-4">
-              <h4 className="font-semibold text-gray-700 border-b pb-2">Datos Públicos</h4>
-              <Input label="Nombre Comercial / Empresa" value={displayName} onChange={e => setDisplayName(e.target.value)} placeholder="Ej. Reformas García" />
-              <Input label="Ciudad de operación" value={city} onChange={e => setCity(e.target.value)} placeholder="Ej. Madrid" />
-            </div>
-
-            <div className="space-y-4">
-              <h4 className="font-semibold text-gray-700 border-b pb-2">Servicios Ofrecidos</h4>
-              <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
-                {ALL_SERVICES.map(s => {
-                  const active = !!services.find(x => x.key === s.key);
-                  const price = services.find(x => x.key === s.key)?.basePrice;
-                  return (
-                    <div key={s.key} className={`flex items-center justify-between p-2 rounded border ${active ? 'bg-orange-50 border-orange-200' : 'border-transparent hover:bg-gray-50'}`}>
-                      <label className="flex items-center gap-3 cursor-pointer select-none flex-1">
-                        <input type="checkbox" className="w-4 h-4 text-orange-600 rounded" checked={active} onChange={() => toggleService(s.key)} />
-                        <span className={active ? 'font-medium text-gray-900' : 'text-gray-600'}>{s.label}</span>
-                      </label>
-                      {active && (
-                        <div className="w-24">
-                          <Input
-                            placeholder="€ Base"
-                            type="number"
-                            value={price ?? '' as any}
-                            onChange={e => setPrice(s.key, e.target.value)}
-                            style={{ padding: '4px 8px', fontSize: 13 }}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-
-            <div className="md:col-span-2 flex justify-end pt-4 border-t">
-              <Button type="submit" disabled={loading}>
-                {loading ? 'Guardando...' : 'Guardar Cambios'}
-              </Button>
-            </div>
-          </form>
-        </Card>
+        <SummaryFigures
+          figures={[
+            { label: 'Pendiente de liberar', value: b ? formatEuros(b.pendingTotal) : '—', hint: b ? jobs(b.pendingCount) : undefined },
+            { label: 'Pagos liberados', value: b ? formatEuros(b.releasedTotal) : '—', hint: b ? jobs(b.releasedCount) : undefined },
+          ]}
+        />
       </div>
     </div>
   );

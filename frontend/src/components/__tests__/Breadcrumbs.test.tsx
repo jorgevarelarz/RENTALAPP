@@ -28,4 +28,10 @@ describe('Breadcrumbs', () => {
     at('/properties/66f1a2b3c4d5e6f7a8b9c0d1');
     expect(screen.getByText('Inmueble')).toBeInTheDocument();
   });
+
+  it('nombra la ficha de un profesional', () => {
+    at('/pros/66f1a2b3c4d5e6f7a8b9c0d1');
+    expect(screen.getByText('Profesionales')).toBeInTheDocument();
+    expect(screen.getByText('Profesional')).toBeInTheDocument();
+  });
 });

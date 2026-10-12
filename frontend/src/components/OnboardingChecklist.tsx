@@ -17,12 +17,6 @@ const itemsByRole: Record<string, Item[]> = {
     { label: 'Revisar candidatos', to: '/landlord/showings' },
     { label: 'Preparar contratos', to: '/contracts' },
   ],
-  pro: [
-    { label: 'Completar perfil profesional', to: '/pro/profile' },
-    { label: 'Definir servicios', to: '/pro' },
-    { label: 'Revisar trabajos', to: '/pro/tickets' },
-    { label: 'Preparar facturación', to: '/pro/billing' },
-  ],
 };
 
 export default function OnboardingChecklist({ role }: { role?: string }) {

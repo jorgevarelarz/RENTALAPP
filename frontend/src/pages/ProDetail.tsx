@@ -1,26 +1,44 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { useParams } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { getPro } from '../services/pro';
 import Card from '../components/ui/Card';
+import { formatEuros, getServiceLabel } from '../utils/tickets';
 
 const ProDetail: React.FC = () => {
   const { id } = useParams();
-  const [pro, setPro] = useState<any>();
-  const [err, setErr] = useState('');
-  useEffect(() => { (async ()=>{ try{ if(id){ setPro(await getPro(id)); }}catch(e:any){ setErr(e?.message||'Error'); }})(); }, [id]);
-  if (err) return <div style={{ color: 'red' }}>{err}</div>;
-  if (!pro) return <div>Cargando…</div>;
+  const { data: pro, isLoading, isError } = useQuery({ queryKey: ['pros', id], queryFn: () => getPro(id!), enabled: !!id });
+
+  if (isLoading) return <p className="text-sm text-gray-500">Cargando…</p>;
+  if (isError || !pro) return <p className="text-sm text-red-700">No encontramos este profesional.</p>;
+
+  const reviews = Number(pro.reviewCount) || 0;
   return (
-    <div>
-      <h2>{pro.displayName}</h2>
-      <Card style={{ padding: 16 }}>
-        <div><b>Ciudad:</b> {pro.city}</div>
-        <div><b>Servicios:</b> {(pro.services||[]).map((s:any)=>s.key).join(', ')}</div>
-        <div><b>Valoración:</b> ⭐ {(pro.ratingAvg ?? 0).toFixed(1)} ({pro.reviewCount || 0})</div>
+    <div className="max-w-2xl space-y-4 pb-10">
+      <div>
+        <h1 className="text-2xl font-semibold text-gray-900 [overflow-wrap:anywhere]">{pro.displayName}</h1>
+        <p className="mt-1 text-sm text-gray-500">
+          {pro.city}
+          {reviews > 0 && <> · {(Number(pro.ratingAvg) || 0).toFixed(1).replace('.', ',')} de 5 ({reviews} {reviews === 1 ? 'opinión' : 'opiniones'})</>}
+        </p>
+      </div>
+      <Card className="overflow-hidden">
+        <h2 className="border-b border-gray-100 px-5 py-3 text-sm font-semibold text-gray-900">Servicios</h2>
+        {(pro.services || []).length === 0 ? (
+          <p className="px-5 py-4 text-sm text-gray-500">Sin servicios publicados.</p>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {(pro.services || []).map((s: any) => (
+              <li key={s.key} className="flex items-center justify-between gap-3 px-5 py-3 text-sm">
+                <span className="text-gray-900">{getServiceLabel(s.key)}</span>
+                {s.basePrice != null && <span className="tabular-nums text-gray-500">desde {formatEuros(Number(s.basePrice))}</span>}
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
     </div>
   );
 };
 
 export default ProDetail;
-

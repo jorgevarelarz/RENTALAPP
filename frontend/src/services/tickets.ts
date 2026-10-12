@@ -81,6 +81,7 @@ export async function resolveTicket(id: string) {
 export type ProSummary = {
   quotes: { toQuote: number; awaitingApproval: number; approved: number; quotedTotal: number };
   billing: { pendingCount: number; pendingTotal: number; releasedCount: number; releasedTotal: number };
+  work: { toSchedule: number; inProgress: number; awaitingValidation: number };
 };
 
 /** Recuento e importes del profesional sobre todas sus incidencias (no solo la página cargada). */
