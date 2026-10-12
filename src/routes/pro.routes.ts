@@ -16,6 +16,17 @@ const cleanText = (value: unknown, min: number, max: number) => {
   return text.length >= min && text.length <= max ? text : null;
 };
 
+const ACCENTS: Record<string, string> = { a: '[aá]', e: '[eé]', i: '[ií]', o: '[oó]', u: '[uúü]', n: '[nñ]' };
+
+/** Ciudad exacta sin distinguir mayúsculas ni tildes («malaga» encuentra «Málaga»); el texto va escapado. */
+function cityPattern(city: string) {
+  const plain = city.trim().replace(/\s+/g, ' ').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const body = plain
+    .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    .replace(/[aeioun]/g, ch => ACCENTS[ch]);
+  return new RegExp(`^${body}$`, 'i');
+}
+
 /** Servicios del perfil: claves conocidas, sin repetir, con precio orientativo opcional (0 a 100.000 €). */
 function cleanServices(value: unknown) {
   if (value === undefined) return [];
@@ -99,8 +110,9 @@ r.get('/', async (req, res) => {
     const q: any = { active: true };
     if (service !== undefined && typeof service !== 'string') return res.status(400).json({ error: 'invalid_query', code: 400 });
     if (city !== undefined && typeof city !== 'string') return res.status(400).json({ error: 'invalid_query', code: 400 });
+    if (service && !SERVICE_KEYS.includes(service as ProService)) return res.status(400).json({ error: 'invalid_query', code: 400 });
     if (service) q['services.key'] = service;
-    if (city) q.city = new RegExp(`^${String(city).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
+    if (city) q.city = cityPattern(city);
 
     const [items, total] = await Promise.all([
       Pro.find(q)

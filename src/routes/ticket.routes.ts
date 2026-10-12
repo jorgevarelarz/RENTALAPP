@@ -1,5 +1,6 @@
 
 import { Router } from 'express';
+import { Types } from 'mongoose';
 import Ticket from '../models/ticket.model';
 import Conversation from '../models/conversation.model';
 import Message from '../models/message.model';
@@ -81,7 +82,8 @@ type TicketParty = 'owner' | 'tenant' | 'pro';
 /** Carga el ticket y responde 404/403 si quien llama no es una de las partes indicadas. */
 async function loadTicketFor(req: any, res: any, parties: TicketParty[], opts: { allowAdmin?: boolean } = {}) {
   const userId = getUserId(req);
-  const t = await Ticket.findById(req.params.id);
+  // Un id mal formado es una incidencia que no existe (antes, 500 con el mensaje de Mongoose)
+  const t = Types.ObjectId.isValid(req.params.id) ? await Ticket.findById(req.params.id) : null;
   if (!t) {
     res.status(404).json({ error: 'not found', code: 404 });
     return null;
@@ -338,13 +340,17 @@ r.post('/:id/assign', async (req, res) => {
     const userId = getUserId(req);
     const { proId } = req.body || {};
     if (!proId) return res.status(400).json({ error: 'proId required', code: 400 });
+    if (typeof proId !== 'string') return res.status(400).json({ error: 'invalid_pro', code: 400 });
 
     const ticket = await loadTicketFor(req, res, ['owner'], { allowAdmin: true });
     if (!ticket) return;
     if (ticket.escrowId) return res.status(409).json({ error: 'ticket already approved', code: 409 });
 
-    const pro = await Pro.findById(proId);
+    const pro = Types.ObjectId.isValid(proId) ? await Pro.findById(proId) : null;
     if (!pro || !pro.active) return res.status(404).json({ error: 'pro not found', code: 404 });
+    // Solo cuentas de profesional: los perfiles que crearon otros roles antes de la ronda 44 no se asignan
+    const proUser = await User.findById(pro.userId).select('role').lean();
+    if ((proUser as any)?.role !== 'pro') return res.status(404).json({ error: 'pro not found', code: 404 });
 
     if (ticket.proId && ticket.proId !== pro.userId) {
       return res.status(409).json({ error: 'ticket already assigned', code: 409 });
@@ -584,10 +590,11 @@ r.get('/:id', async (req, res) => {
     const userIds = [t.ownerId, t.openedBy];
     const proIds = t.proId ? [t.proId] : [];
 
-    const [users, pros, appointment] = await Promise.all([
+    const [users, pros, appointment, property] = await Promise.all([
       User.find({ _id: { $in: userIds } }, { ratingAvg: 1, reviewCount: 1 }).lean(),
       Pro.find({ userId: { $in: proIds } }, { userId: 1, displayName: 1, ratingAvg: 1, reviewCount: 1 }).lean(),
       Appointment.findOne({ ticketId: String(t._id) }).sort({ createdAt: -1 }).select('start end status').lean(),
+      t.propertyId && Types.ObjectId.isValid(t.propertyId) ? Property.findById(t.propertyId).select('city').lean() : null,
     ]);
 
     const userMap = new Map(users.map(u => [String(u._id), u]));
@@ -598,6 +605,8 @@ r.get('/:id', async (req, res) => {
       pro: t.proId ? {
         id: t.proId,
         displayName: proMap.get(t.proId)?.displayName,
+        // Perfil público (/pros/:id), para enlazarlo desde la incidencia
+        profileId: proMap.get(t.proId)?._id ? String(proMap.get(t.proId)!._id) : undefined,
         ratingAvg: proMap.get(t.proId)?.ratingAvg ?? 0,
         reviewCount: proMap.get(t.proId)?.reviewCount ?? 0,
       } : null,
@@ -611,6 +620,8 @@ r.get('/:id', async (req, res) => {
         ratingAvg: userMap.get(t.openedBy)?.ratingAvg ?? 0,
         reviewCount: userMap.get(t.openedBy)?.reviewCount ?? 0,
       },
+      // Ciudad del inmueble: el propietario busca profesional ahí primero
+      propertyCity: (property as any)?.city || undefined,
       // Última cita propuesta por el profesional (el inquilino la acepta o la rechaza)
       appointment: appointment ? { start: appointment.start, end: appointment.end, status: appointment.status } : null,
     };
