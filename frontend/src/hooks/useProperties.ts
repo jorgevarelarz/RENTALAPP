@@ -51,7 +51,13 @@ export function usePropertyFilters() {
     navigate({ search: '?' + new URLSearchParams(obj).toString() }, { replace: false });
   };
 
-  return { filters, setFilters };
+  // Quita todos los filtros (setFilters mezcla con los actuales, así que no sirve para borrarlos)
+  const clearFilters = () => {
+    setSp({}, { replace: false });
+    navigate({ search: '' }, { replace: false });
+  };
+
+  return { filters, setFilters, clearFilters };
 }
 
 export function usePropertiesQuery(filters: SearchParams & { onlyTenantPro?: boolean }) {

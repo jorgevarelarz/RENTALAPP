@@ -5,9 +5,10 @@ import { Search, MapPin, Euro, BedDouble, Bath, ArrowUpDown, FilterX } from 'luc
 type Props = {
   initial: Partial<SearchParams & { onlyTenantPro?: boolean }>;
   onApply: (filters: Partial<SearchParams & { onlyTenantPro?: boolean }>) => void;
+  onClear: () => void;
 };
 
-export default function FilterBar({ initial, onApply }: Props) {
+export default function FilterBar({ initial, onApply, onClear }: Props) {
   type FilterState = Partial<SearchParams & { onlyTenantPro?: boolean }> & {
     sort?: SearchParams['sort'];
     dir?: SearchParams['dir'];
@@ -24,7 +25,9 @@ export default function FilterBar({ initial, onApply }: Props) {
 
   const TogglePill = ({ label, active, onClick }: { label: string, active: boolean, onClick: () => void }) => (
     <button
+      type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={`px-3.5 py-2 rounded-full text-[13px] font-medium transition-all border ${
         active
           ? 'bg-indigo-600 text-white border-indigo-600'
@@ -119,6 +122,7 @@ export default function FilterBar({ initial, onApply }: Props) {
           </div>
 
           <button
+            type="button"
             onClick={() => onApply(state)}
             className="bg-gray-950 text-white px-5 h-10 rounded-lg text-sm font-semibold hover:bg-gray-800 transition-colors"
           >
@@ -126,11 +130,16 @@ export default function FilterBar({ initial, onApply }: Props) {
           </button>
 
           <button
-            onClick={() => onApply({})}
+            type="button"
+            onClick={() => {
+              setState({ limit: 12, sort: 'createdAt', dir: 'desc' });
+              onClear();
+            }}
             className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"
             title="Borrar filtros"
+            aria-label="Borrar filtros"
           >
-            <FilterX size={19} />
+            <FilterX size={19} aria-hidden="true" />
           </button>
         </div>
       </div>
