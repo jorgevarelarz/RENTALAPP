@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Outlet, Link, NavLink, useLocation } from 'react-router-dom';
 import {
   Activity, BadgeCheck, BarChart3, Bath, Briefcase, Building2, CalendarDays,
-  CircleDot, CreditCard, Menu, X, FileSignature, FileText, Heart, Home, Map as MapIcon,
+  CircleDot, CreditCard, HardHat, Menu, X, FileSignature, FileText, Heart, Home, Map as MapIcon,
   MessageSquare, Receipt, Scale, Search, Settings, ShieldCheck, Sparkles,
   User, Users, Wrench,
 } from 'lucide-react';
@@ -29,6 +29,7 @@ const iconRules: Array<[RegExp, LucideIcon]> = [
   [/^\/landlord$/, Home],
   [/^\/pro$/, Home],
   [/^\/admin$/, Home],
+  [/^\/pros/, HardHat],
   [/owner\/properties|admin\/properties|agency\/properties/, Building2],
   [/tickets|issues|incidents/, Wrench],
   [/showings/, CalendarDays],

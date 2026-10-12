@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getPro } from '../services/pro';
 import Card from '../components/ui/Card';
 import { formatEuros, getServiceLabel } from '../utils/tickets';
+import { proRatingText } from '../utils/pros';
 
 const ProDetail: React.FC = () => {
   const { id } = useParams();
@@ -12,14 +13,14 @@ const ProDetail: React.FC = () => {
   if (isLoading) return <p className="text-sm text-gray-500">Cargando…</p>;
   if (isError || !pro) return <p className="text-sm text-red-700">No encontramos este profesional.</p>;
 
-  const reviews = Number(pro.reviewCount) || 0;
+  const rating = proRatingText(pro);
   return (
     <div className="max-w-2xl space-y-4 pb-10">
       <div>
         <h1 className="text-2xl font-semibold text-gray-900 [overflow-wrap:anywhere]">{pro.displayName}</h1>
         <p className="mt-1 text-sm text-gray-500">
           {pro.city}
-          {reviews > 0 && <> · {(Number(pro.ratingAvg) || 0).toFixed(1).replace('.', ',')} de 5 ({reviews} {reviews === 1 ? 'opinión' : 'opiniones'})</>}
+          {rating && <> · {rating}</>}
         </p>
       </div>
       <Card className="overflow-hidden">

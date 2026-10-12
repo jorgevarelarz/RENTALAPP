@@ -145,8 +145,8 @@ export default function AppRoutes() {
               <Route path="/agency" element={withProtected(<AgencyHome />, ["agency"])} />
               <Route path="/agency/landlords" element={withProtected(<AgencyLandlords />, ["agency"])} />
               <Route path="/agency/properties" element={withProtected(<AgencyProperties />, ["agency"])} />
-              <Route path="/pros" element={<ProList />} />
-              <Route path="/pros/:id" element={<ProDetail />} />
+              <Route path="/pros" element={withProtected(<ProList />)} />
+              <Route path="/pros/:id" element={withProtected(<ProDetail />)} />
               <Route path="/profile" element={withProtected(<ProfilePage />)} />
               <Route path="/403" element={<ForbiddenPage />} />
               <Route path="*" element={<div style={{ padding: 24 }}>404</div>} />

@@ -21,6 +21,7 @@
     { "label": "Contratos", "path": "/contracts" },
     { "label": "Pagos", "path": "/landlord/payments" },
     { "label": "Incidencias de mis propiedades", "path": "/landlord/issues" },
+    { "label": "Profesionales", "path": "/pros" },
     { "label": "Visitas", "path": "/landlord/showings" },
     { "label": "Servicios", "path": "/landlord/services" },
     { "label": "Perfil y cuenta", "path": "/profile" }

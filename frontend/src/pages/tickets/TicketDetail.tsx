@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useCallback } from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 import {
   getTicket,
   assignPro,
@@ -14,7 +14,7 @@ import {
 } from "../../services/tickets";
 import { proposeAppointment as proposeAppt, acceptAppointment, rejectAppointment } from "../../services/appointments";
 import ChatPanel from "../../components/ChatPanel";
-import { searchPros } from "../../services/pros";
+import ProPicker from "../../components/pro/ProPicker";
 import { useAuth } from "../../context/AuthContext";
 import { useNotify } from "../../utils/notify";
 import Card from "../../components/ui/Card";
@@ -43,7 +43,6 @@ export default function TicketDetail() {
   const { id } = useParams();
   const { user } = useAuth();
   const [ticket, setTicket] = useState<any>(null);
-  const [pros, setPros] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
 
@@ -52,7 +51,6 @@ export default function TicketDetail() {
   const [extraAmount, setExtraAmount] = useState<number>(0);
   const [extraReason, setExtraReason] = useState("");
   const [when, setWhen] = useState<string>("");
-  const [showProSearch, setShowProSearch] = useState(false);
   const [showPayment, setShowPayment] = useState(false);
 
   const role = user?.role;
@@ -85,16 +83,6 @@ export default function TicketDetail() {
     }
   };
 
-  const loadPros = async () => {
-    setShowProSearch(true);
-    try {
-      const list = await searchPros(ticket?.city, ticket?.service);
-      setPros(list.items || []);
-    } catch {
-      setPros([]);
-    }
-  };
-
   if (loading) return <div className="p-8 text-center text-gray-500">Cargando detalles...</div>;
   if (!ticket) return <div className="p-8 text-center text-red-600">Incidencia no encontrada</div>;
 
@@ -116,7 +104,11 @@ export default function TicketDetail() {
       ticket.proId ? (
         <div key="pro" className="flex items-center justify-between gap-3 rounded-lg border border-[var(--border)] p-3">
           <span className="flex min-w-0 items-center gap-2 text-sm font-medium text-gray-900">
-            <User size={16} className="shrink-0 text-gray-400" aria-hidden="true" /> <span className="truncate">{proName}</span>
+            <User size={16} className="shrink-0 text-gray-400" aria-hidden="true" /> {ticket.pro?.profileId ? (
+              <Link to={`/pros/${ticket.pro.profileId}`} className="truncate hover:underline">{proName}</Link>
+            ) : (
+              <span className="truncate">{proName}</span>
+            )}
           </span>
           <button
             type="button"
@@ -128,25 +120,13 @@ export default function TicketDetail() {
           </button>
         </div>
       ) : (
-        <div key="pro" className="space-y-3">
-          <Button onClick={loadPros} className="w-full">Buscar profesional</Button>
-          {showProSearch && (
-            <ul className="max-h-60 space-y-2 overflow-y-auto">
-              {pros.length === 0 && <li className="text-sm text-gray-500">No hay profesionales disponibles para este servicio.</li>}
-              {pros.map(pro => (
-                <li key={pro._id} className="flex items-center justify-between gap-2 rounded-lg border border-[var(--border)] p-2 text-sm">
-                  <span className="min-w-0 truncate">
-                    <span className="block font-medium text-gray-900">{pro.displayName}</span>
-                    {pro.city && <span className="text-gray-500">{pro.city}</span>}
-                  </span>
-                  <Button size="sm" variant="secondary" disabled={busy} onClick={() => handleAction(() => assignPro(ticket._id, pro._id), "Profesional asignado")}>
-                    Asignar
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <ProPicker
+          key="pro"
+          service={ticket.service}
+          city={ticket.propertyCity}
+          busy={busy}
+          onAssign={proId => handleAction(() => assignPro(ticket._id, proId), "Profesional asignado")}
+        />
       )
     );
   }

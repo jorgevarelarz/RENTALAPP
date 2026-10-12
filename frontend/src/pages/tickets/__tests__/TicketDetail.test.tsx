@@ -103,16 +103,39 @@ describe('TicketDetail Component', () => {
     expect(screen.getByRole('button', { name: /Aprobar y pagar/i })).toBeInTheDocument();
   });
 
-  test('LANDLORD: Puede asignar un profesional si está abierta', async () => {
-    (ticketService.getTicket as Mock).mockResolvedValue({ ...mockTicket, status: 'open', pro: null });
+  test('LANDLORD: busca profesional en la ciudad del inmueble, amplía a otras y asigna', async () => {
+    (ticketService.getTicket as Mock).mockResolvedValue({ ...mockTicket, status: 'open', pro: null, propertyCity: 'Málaga' });
+    (ticketService.assignPro as Mock).mockResolvedValue({});
+    (proService.searchPros as Mock)
+      .mockResolvedValueOnce({ items: [] })
+      .mockResolvedValueOnce({
+        items: [{ _id: 'p9', displayName: 'Fontanería Sur', city: 'Sevilla', services: [{ key: 'plumbing', basePrice: 40 }], ratingAvg: 4.5, reviewCount: 2 }],
+      });
 
     renderWithContext(<TicketDetail />, 'landlord');
 
-    const searchButton = await screen.findByRole('button', { name: /Buscar profesional/i });
+    await userEvent.click(await screen.findByRole('button', { name: /Buscar profesional/i }));
+    expect(proService.searchPros).toHaveBeenCalledWith('Málaga', 'plumbing');
+    expect(await screen.findByText('Nadie ofrece fontanería en Málaga todavía.')).toBeInTheDocument();
 
-    userEvent.click(searchButton);
+    await userEvent.click(screen.getByRole('button', { name: 'Buscar en todas las ciudades' }));
+    expect(proService.searchPros).toHaveBeenLastCalledWith(undefined, 'plumbing');
+    expect((await screen.findByText('Fontanería Sur')).closest('a')).toHaveAttribute('href', '/pros/p9');
+    expect(screen.getByText(/Sevilla · desde 40,00\s€ · 4,5 de 5 \(2 opiniones\)/)).toBeInTheDocument();
 
-    await waitFor(() => expect(proService.searchPros).toHaveBeenCalled());
+    await userEvent.click(screen.getByRole('button', { name: 'Asignar' }));
+    await waitFor(() => expect(ticketService.assignPro).toHaveBeenCalledWith('ticket123', 'p9'));
+  });
+
+  test('LANDLORD: el profesional asignado enlaza a su perfil público', async () => {
+    (ticketService.getTicket as Mock).mockResolvedValue({
+      ...mockTicket, status: 'open', proId: 'u9', pro: { id: 'u9', displayName: 'Fontanería Sur', profileId: 'p9' },
+    });
+
+    renderWithContext(<TicketDetail />, 'landlord');
+
+    const links = await screen.findAllByRole('link', { name: 'Fontanería Sur' });
+    expect(links[0]).toHaveAttribute('href', '/pros/p9');
   });
 
   test('PRO: con el presupuesto pagado y la cita aceptada puede marcar el trabajo terminado', async () => {

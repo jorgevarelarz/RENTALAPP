@@ -160,6 +160,7 @@ const ERROR_TEXTS: Record<string, string> = {
   invalid_status: 'Este paso ya no está disponible. Recarga la página.',
   appointment_not_proposed: 'Esa propuesta de cita ya no está pendiente.',
   'ticket already assigned': 'La incidencia ya tiene un profesional asignado.',
+  'pro not found': 'Ese profesional ya no está disponible. Busca otro.',
   release_in_progress: 'El pago se está liberando. Recarga en un momento.',
   escrow_not_held: 'El pago ya se liberó.',
 };
