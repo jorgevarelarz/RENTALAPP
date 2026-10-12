@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import Button from '../../components/ui/Button';
 import ApplicantsModal from '../../components/ApplicantsModal';
 import { listAgencyProperties, type AgencyPropertyItem } from '../../services/agency';
@@ -51,6 +51,20 @@ export default function AgencyProperties() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  // El correo de una solicitud nueva enlaza ?solicitudes=<inmueble>: abre sus candidatos una vez
+  const [searchParams, setSearchParams] = useSearchParams();
+  const applicantsParam = searchParams.get('solicitudes');
+  useEffect(() => {
+    if (!applicantsParam || loading) return;
+    const property = items.find((p) => p.id === applicantsParam && p.agencyAccess === 'manage');
+    if (property) setApplicantsFor(property);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('solicitudes');
+      return next;
+    }, { replace: true });
+  }, [applicantsParam, loading, items, setSearchParams]);
 
   const managed = items.filter((p) => p.agencyAccess === 'manage');
   const transferred = items.filter((p) => p.agencyAccess !== 'manage');

@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { api as axios } from '../api/client';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { createProperty, listMyProperties } from '../services/properties';
 import { listContracts } from '../services/contracts';
 import { userService } from '../services/user';
@@ -64,6 +64,8 @@ const LandlordDashboard: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<any | null>(null);
   const [showApplicantsFor, setShowApplicantsFor] = useState<any>(null);
+  const [mineLoaded, setMineLoaded] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
   const { push } = useToast();
 
   const refresh = useCallback(async () => {
@@ -72,6 +74,7 @@ const LandlordDashboard: React.FC = () => {
     } catch {
       setMine([]);
     }
+    setMineLoaded(true);
     if (token) {
       try {
         const [{ items }, ...inProgress] = await Promise.all(
@@ -101,6 +104,19 @@ const LandlordDashboard: React.FC = () => {
   useEffect(() => {
     refresh();
   }, [refresh]);
+
+  // El correo de una solicitud nueva enlaza /landlord?solicitudes=<inmueble>: abre sus candidatos una vez
+  const applicantsParam = searchParams.get('solicitudes');
+  useEffect(() => {
+    if (!applicantsParam || !mineLoaded) return;
+    const property = mine.find(p => String(p._id) === applicantsParam);
+    if (property) setShowApplicantsFor(property);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.delete('solicitudes');
+      return next;
+    }, { replace: true });
+  }, [applicantsParam, mineLoaded, mine, setSearchParams]);
 
   useEffect(() => {
     userService

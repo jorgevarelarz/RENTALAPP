@@ -1,6 +1,6 @@
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import { MemoryRouter } from 'react-router-dom';
+import { render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
 
 vi.mock('../../context/AuthContext', () => ({
@@ -43,7 +43,9 @@ vi.mock('../../services/user', () => ({
 
 vi.mock('../../components/OnboardingChecklist', () => ({ default: () => null }));
 vi.mock('../../components/PropertyFormRHF', () => ({ default: () => null }));
-vi.mock('../../components/ApplicantsModal', () => ({ default: () => null }));
+vi.mock('../../components/ApplicantsModal', () => ({
+  default: (props: any) => (props.isOpen ? <div role="dialog">Candidatos de {props.property.title}</div> : null),
+}));
 
 import LandlordDashboard from '../LandlordDashboard';
 
@@ -73,5 +75,30 @@ describe('LandlordDashboard', () => {
     const links = screen.getAllByRole('link').map((a) => a.getAttribute('href'));
     expect(links).toEqual(expect.arrayContaining(['/contracts', '/landlord/payments', '/landlord/showings', '/landlord/issues']));
     expect(links).not.toContain('/properties');
+  });
+
+  test('el enlace del correo de una solicitud (?solicitudes=<id>) abre los candidatos de ese inmueble y se limpia', async () => {
+    const Search = () => <output data-testid="search">{useLocation().search}</output>;
+    render(
+      <MemoryRouter initialEntries={['/landlord?solicitudes=p1']}>
+        <LandlordDashboard />
+        <Search />
+      </MemoryRouter>,
+    );
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Candidatos de Piso Centro');
+    await waitFor(() => expect(screen.getByTestId('search').textContent).toBe(''));
+  });
+
+  test('con un inmueble que no es suyo no abre nada', async () => {
+    const Search = () => <output data-testid="search">{useLocation().search}</output>;
+    render(
+      <MemoryRouter initialEntries={['/landlord?solicitudes=ajeno']}>
+        <LandlordDashboard />
+        <Search />
+      </MemoryRouter>,
+    );
+    expect((await screen.findAllByText('Piso Centro')).length).toBeGreaterThan(0);
+    await waitFor(() => expect(screen.getByTestId('search').textContent).toBe(''));
+    expect(screen.queryByRole('dialog')).toBeNull();
   });
 });

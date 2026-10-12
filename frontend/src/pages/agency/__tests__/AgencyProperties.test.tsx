@@ -80,4 +80,17 @@ describe('AgencyProperties', () => {
     expect(await screen.findByText('Piso en Santiago')).toBeInTheDocument();
     expect(listMock).toHaveBeenCalledTimes(2);
   });
+
+  it('el enlace del correo (?solicitudes=<id>) abre los candidatos de un inmueble gestionado, no de uno traspasado', async () => {
+    listMock.mockResolvedValue([managed, transferred]);
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/agency/properties?solicitudes=p1']}><AgencyProperties /></MemoryRouter>,
+    );
+    expect(await screen.findByRole('dialog')).toHaveTextContent('Candidatos de Piso en Santiago');
+    unmount();
+
+    render(<MemoryRouter initialEntries={['/agency/properties?solicitudes=p2']}><AgencyProperties /></MemoryRouter>);
+    expect(await screen.findByText('Ático en Vigo')).toBeInTheDocument();
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
 });
