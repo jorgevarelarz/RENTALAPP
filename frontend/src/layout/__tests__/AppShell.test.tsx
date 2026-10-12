@@ -4,29 +4,29 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AppShell from '../AppShell';
 
-const { listConversationsMock } = vi.hoisted(() => ({
+const { listConversationsMock, auth } = vi.hoisted(() => ({
   listConversationsMock: vi.fn(),
+  auth: { current: null as null | { token?: string; user?: { _id: string; email: string; role: string } } },
 }));
 
+const tenantAuth = { token: 'token-1', user: { _id: 'tenant-1', email: 'ana@example.com', role: 'tenant' } };
+
 vi.mock('../../context/AuthContext', () => ({
-  useAuth: () => ({
-    token: 'token-1',
-    user: { _id: 'tenant-1', email: 'ana@example.com', role: 'tenant' },
-    logout: vi.fn(),
-  }),
+  useAuth: () => ({ ...auth.current, logout: vi.fn() }),
 }));
 
 vi.mock('../../services/chat', () => ({
   listConversations: listConversationsMock,
 }));
 
-function renderShell() {
+function renderShell(path = '/tenant') {
   return render(
-    <MemoryRouter initialEntries={['/tenant']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route element={<AppShell />}>
           <Route path="/tenant" element={<p>Inicio del inquilino</p>} />
           <Route path="/tenant/payments" element={<p>Página de pagos</p>} />
+          <Route path="/properties" element={<p>Listado</p>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -35,6 +35,7 @@ function renderShell() {
 
 describe('AppShell, menú del móvil', () => {
   beforeEach(() => {
+    auth.current = tenantAuth;
     listConversationsMock.mockReset();
     listConversationsMock.mockResolvedValue([{ unread: { 'tenant-1': 2 } }]);
   });
@@ -65,5 +66,19 @@ describe('AppShell, menú del móvil', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(dialog).toHaveAttribute('aria-hidden', 'true');
     await waitFor(() => expect(listConversationsMock).toHaveBeenCalledTimes(1));
+  });
+
+  it('sin sesión no ofrece Mensajes ni Asistente, sino crear cuenta o entrar', async () => {
+    auth.current = {};
+    renderShell('/properties');
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir menú' }));
+    const dialog = screen.getByRole('dialog', { name: 'Menú' });
+    expect(within(dialog).queryByRole('link', { name: /Mensajes/ })).toBeNull();
+    expect(within(dialog).queryByRole('link', { name: /Asistente/ })).toBeNull();
+    expect(within(dialog).getByRole('link', { name: 'Buscar pisos' })).toHaveAttribute('href', '/properties');
+    expect(within(dialog).getByText(/guardas pisos, pides visitas/)).toBeInTheDocument();
+    expect(within(dialog).getByRole('link', { name: 'Crear cuenta' })).toHaveAttribute('href', '/register');
+    expect(within(dialog).getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', '/login');
+    expect(listConversationsMock).not.toHaveBeenCalled();
   });
 });

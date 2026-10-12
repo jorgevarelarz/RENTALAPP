@@ -166,6 +166,17 @@ const roleLabels: Record<string, string> = {
 
 const sectionTitle = 'text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-3 mb-1.5';
 
+// Sin sesión, Mensajes y Asistente solo llevarían al login: en su lugar, qué da la cuenta y cómo entrar
+function GuestAccount({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <div className="ra-guest-account">
+      <p>Con una cuenta guardas pisos, pides visitas y hablas con el propietario.</p>
+      <Link to="/register" onClick={onNavigate} className="ra-button ra-button-blue ra-button-small">Crear cuenta</Link>
+      <Link to="/login" onClick={onNavigate} className="ra-app-login">Entrar</Link>
+    </div>
+  );
+}
+
 // Enlaces del menú; los comparten el lateral de escritorio y el menú desplegable del móvil
 function NavSections({ unread, onNavigate }: { unread: number; onNavigate?: () => void }) {
   const { user } = useAuth();
@@ -173,20 +184,24 @@ function NavSections({ unread, onNavigate }: { unread: number; onNavigate?: () =
   const guestItems = [{ path: '/properties', label: 'Buscar pisos' }];
   return (
     <>
-      {!role && (
+      {!role ? (
         <>
           <div className={sectionTitle}>Explorar</div>
-          <div className="grid gap-0.5 mb-5">
+          <div className="grid gap-0.5">
             {guestItems.map((item) => <NavItem key={item.path} item={item} unread={0} onNavigate={onNavigate} />)}
+          </div>
+          <GuestAccount onNavigate={onNavigate} />
+        </>
+      ) : (
+        <>
+          <div className={sectionTitle}>General</div>
+          <div className="grid gap-0.5">
+            {(navConfig as any).general?.map((item: any) => (
+              <NavItem key={item.path} item={item} unread={unread} onNavigate={onNavigate} />
+            ))}
           </div>
         </>
       )}
-      <div className={sectionTitle}>General</div>
-      <div className="grid gap-0.5">
-        {(navConfig as any).general?.map((item: any) => (
-          <NavItem key={item.path} item={item} unread={unread} onNavigate={onNavigate} />
-        ))}
-      </div>
       {role && (navConfig as any)[role] && (
         <>
           <div className={`${sectionTitle} mt-5`}>{roleLabels[role]}</div>
@@ -224,11 +239,6 @@ function MobileNav({ open, onClose, unread }: { open: boolean; onClose: () => vo
         </div>
         <NavSections unread={unread} onNavigate={onClose} />
         {user?.email && <div className="ra-mobile-nav-foot">{user.email}</div>}
-        {!user && (
-          <Link to="/register" onClick={onClose} className="ra-button ra-button-blue ra-mobile-nav-register">
-            Crear cuenta
-          </Link>
-        )}
       </div>
     </Drawer>
   );
