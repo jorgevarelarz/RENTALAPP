@@ -2258,3 +2258,52 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 - Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador.
 
 **Siguiente mejora propuesta.** Cabecera pública en móvil: que «Entrar» y «Crear cuenta» quepan a 390 px sin partirse (botones compactos o «Crear cuenta» dentro del menú). De paso, quitar el filtro `onlyTenantPro` redundante de `PropertiesList`.
+
+### Ronda 59 — 2026-10-12 11:40
+
+**Qué y por qué.** La ronda 58 proponía arreglar la cabecera en el móvil y quitar el filtro `onlyTenantPro` redundante del listado. Al mirarlo, había dos cabeceras con problemas distintos:
+
+1. **`AppShell` (listado, ficha y resto de la app) sin sesión.** «Crear cuenta» llevaba `hidden sm:inline-flex ra-button`. `.ra-button` se define después de las utilidades de Tailwind y su `display: inline-flex` pisaba el `hidden`, así que el botón nunca se ocultaba y a 390 px se partía en dos líneas (62 px de alto). Ahora:
+   - el botón lleva la clase `ra-app-register`, que se oculta por debajo de 640 px;
+   - el menú lateral del móvil acaba en «Crear cuenta» cuando no hay sesión.
+2. **`PublicLayout` (inicio, legales, `/info/:segment`).** Por debajo de 980 px desaparecía la navegación y por debajo de 680 px también «Entrar»: en el móvil solo quedaban el logo y «Crear cuenta», sin forma de entrar ni de llegar a «Viviendas» desde la cabecera. Ahora:
+   - «Entrar» se ve siempre;
+   - por debajo de 980 px hay un botón de menú, como en `AppShell`, con Viviendas, Producto y Para quién;
+   - en el móvil, «Crear cuenta» pasa a ese menú como botón a todo lo ancho;
+   - el menú se cierra al navegar (también con atrás o adelante) y con Escape, y lleva `aria-expanded` y `aria-controls`.
+3. **«Mi Cuenta» de la cabecera pública iba siempre a `/tenant`.** Para un casero o una agencia, `RoleGuard` lo rebotaba a su inicio. Ahora va directo al de cada rol y se escribe «Mi cuenta». El mapa de inicios estaba copiado cuatro veces (`RoleGuard`, `RedirectHome`, `AppShell` y el `homeFor` de `RegisterPage`, que se queda porque solo cubre los tres roles de registro). Las tres primeras usan ya `utils/roleHome.ts`.
+4. **Listado.** `PropertiesList` volvía a filtrar `onlyTenantPro` en el navegador después de paginar. El servidor ya lo filtra, así que sobraba, y podía dejar páginas más cortas que el recuento. Se quita.
+
+**Commits.**
+- `3c30477` Interfaz: cabeceras en el móvil, menú público y «Mi cuenta» por rol
+- `4f3ad4b` Interfaz: el listado deja de filtrar Tenant PRO en el navegador
+
+**Verificación (resultados reales).**
+- **Backend:** sin cambios.
+- **Frontend.**
+  - `tsc --noEmit`: sin errores.
+  - `npm --prefix frontend run build`: OK.
+  - `npx vitest run` (la suite completa): 49 ficheros y 206 tests OK. La primera pasada de `npm test`, lanzada junto con el build, dio 1 fallo en 206. Al repetirla salió todo en verde y no he podido reproducirlo; parece un tiempo de espera intermitente.
+  - Nuevo `layout/__tests__/PublicLayout.test.tsx`, con 4 tests:
+    - enlaces sin sesión;
+    - el menú abre, se cierra al navegar y con Escape;
+    - «Mi cuenta» de un casero va a `/landlord`;
+    - `roleHome` con su respaldo.
+- **Playwright** (vite local, `/api/*` simulado), capturas en `/tmp/ra-shots59`:
+  - **`/legal/terminos` a 1280, 820, 390 y 320 px:** sin desbordamiento horizontal. «Entrar» se ve en todos los anchos. El menú aparece por debajo de 980 px y «Viviendas» lleva a `/properties` y cierra el menú.
+  - **`/properties` sin sesión:**
+    - a 390 y 320 px, la cabecera queda en menú, logo y «Entrar», todos de 38 px de alto o menos (antes, «Crear cuenta» medía 62 px);
+    - a 700 px se ve «Crear cuenta» en una línea;
+    - el menú lateral termina en «Crear cuenta», que lleva a `/register`.
+  - Hubo que reiniciar vite con `--force`: la primera tanda de capturas del listado salió con el CSS anterior.
+- **GitNexus.**
+  - `impact`: `RoleGuard` y `PublicLayout`, LOW.
+  - `detect_changes`: riesgo medio, solo por `Header` de `AppShell` (flujos `AppShell → ListConversations/UseAuth`), que es el que cambia.
+
+**Qué queda.**
+- En el menú lateral sin sesión salen «Mensajes» y «Asistente», que piden cuenta: llevan al login.
+- `RegisterPage.homeFor` no usa `roleHome`. Solo registra tres roles y no hace falta, pero se podría unificar.
+- La ciudad sigue distinguiendo tildes (ronda 58).
+- Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador.
+
+**Siguiente mejora propuesta.** Menú lateral sin sesión: cambiar «Mensajes» y «Asistente», que piden cuenta, por «Entrar» y una línea que explique qué se gana con la cuenta. Después, buscar ciudades sin distinguir tildes («A Coruna» → «A Coruña»), con un campo normalizado en el modelo y su índice.

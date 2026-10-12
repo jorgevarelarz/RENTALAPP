@@ -1366,3 +1366,9 @@ Rules:
 - Backend `search`: `city` is an escaped, anchored, case-insensitive regex; `viewsCount` added to `SORTABLE_FIELDS`.
 - Frontend `FilterBar` rebuilt (2026, `<form role="search">`, labels, room/bath selects, sort `viewsCount-desc` «Más vistos»); toggles off → `undefined` (was `false` → backend filtered `furnished=false`); `usePropertyFilters` drops `false` and uses only `setSearchParams` (was double history entry). `SearchParams.sort` now `'price'|'createdAt'|'viewsCount'`.
 - Verification: tsc clean; Jest `--runInBand` property.routes + mongoOperators 16; frontend build + 202 tests; Playwright `/tmp/ra-shots58`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 59: mobile headers
+
+- `AppShell` guest «Crear cuenta» never hid on mobile (`.ra-button` display beat Tailwind `hidden`) → wrapped to 2 lines; now `ra-app-register` hidden <640 px and a «Crear cuenta» button closes the mobile drawer for guests.
+- `PublicLayout`: mobile had no «Entrar»/«Viviendas»; now «Entrar» always, menu button <980 px (Viviendas, Producto, Para quién, + «Crear cuenta» <680 px), closes on navigation/Escape. «Mi cuenta» → `roleHome(role)` (was always `/tenant`); new `utils/roleHome.ts` used by RoleGuard, RedirectHome, AppShell. `PropertiesList` no longer re-filters `onlyTenantPro` client-side.
+- Verification: frontend tsc + build OK, vitest 49 files/206 (new `layout/__tests__/PublicLayout.test.tsx`); Playwright `/tmp/ra-shots59`.
