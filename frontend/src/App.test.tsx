@@ -3,7 +3,6 @@ import { render } from '@testing-library/react';
 import { vi } from 'vitest';
 import AppRoutes from './AppRoutes';
 import { AuthProvider } from './context/AuthContext';
-import { ThemeProvider } from './context/ThemeContext';
 import { ToastProvider } from './context/ToastContext';
 
 // Mock react-router-dom completely to avoid resolver issues
@@ -32,14 +31,12 @@ vi.mock('@stripe/stripe-js', () => ({ loadStripe: vi.fn(async () => null) }), { 
 
 test('la app renderiza sin crashear', () => {
   render(
-    <ThemeProvider>
       <ToastProvider>
         <AuthProvider>
           {/* App needs to be inside a Router, even a mocked one */}
           <AppRoutes />
         </AuthProvider>
       </ToastProvider>
-    </ThemeProvider>
   );
   expect(true).toBe(true);
 });
