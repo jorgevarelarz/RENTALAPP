@@ -2342,3 +2342,53 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
 - Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador.
 
 **Siguiente mejora propuesta.** Repasar el flujo del inquilino sin sesión desde la ficha: qué ve al pulsar «Solicitar visita» o el corazón (¿le lleva al login y vuelve a la ficha después?). Si el retorno se pierde, guardar la ruta de origen y volver a ella tras entrar o registrarse.
+
+### Ronda 61 — 2026-10-12 12:04
+
+**Qué y por qué.** La mejora que proponía la ronda 60: el inquilino sin sesión que quiere guardar un piso o pedir visita. Al repasar el flujo encontré esto:
+
+- **El aviso no dejaba registrarse.** Al pulsar el corazón o «Solicitar visita» salía un «Inicia sesión» genérico («Para usar esta función debes iniciar sesión») con estilos en línea anteriores al sistema 2026. Solo tenía «Ir a iniciar sesión», así que quien aún no tenía cuenta, que es casi todo el que llega a una ficha, no tenía forma directa de crearla. Ahora el aviso dice para qué hace falta la cuenta:
+  - «Guarda este piso»: «…los tienes a mano en «Favoritos»»;
+  - «Pide una visita»: «…Al terminar vuelves a este anuncio».
+  
+  Tiene tres salidas: «Crear cuenta» (azul), «Ya tengo cuenta» y «Ahora no». En el móvil los botones ocupan el ancho entero.
+- **La cabecera y el menú lateral perdían la página.** «Entrar» y «Crear cuenta» llevaban a `/login` y `/register` sin vuelta: quien entraba desde una ficha o una búsqueda con filtros acababa en el inicio de su rol. El nuevo `utils/authLinks.ts` (`authHref`, `returnPath`) añade `?redirect=` con la ruta, la consulta y el ancla. Desde `/` y desde las propias pantallas de acceso deja el enlace limpio. Lo usan `LoginPrompt`, la cabecera de `AppShell` y el bloque sin sesión del menú lateral. El login, el registro y Google/Apple ya respetaban `redirect` (con `safeInternalPath`).
+- **Las rutas protegidas perdían la consulta.** `ProtectedRoute` recordaba solo el `pathname`: un enlace de un correo como `/contracts/<id>?deposit=success` volvía sin `?deposit=success` tras entrar. Ahora recuerda también la consulta y el ancla.
+- **«Crea una gratis» perdía la vuelta.** En el login, el enlace solo pasaba la vuelta si venía en `?redirect=`, no cuando se llegaba redirigido desde una ruta protegida (`state.from`). Ahora la pasa siempre que haya a dónde volver.
+
+Descarté guardar el mensaje de la solicitud antes del login: el campo solo aparece con sesión, así que no hay borrador que perder.
+
+**Commits.**
+- `612180c` Interfaz: aviso sin sesión con motivo y «Crear cuenta», y vuelta a la página de origen al entrar o registrarse
+
+**Verificación (resultados reales).**
+- **Frontend.**
+  - `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`:
+    - primera pasada: 1 fallo en `TicketCreatePage.test.tsx`, que no he tocado. Es el fallo intermitente por tiempo de espera que ya salió en la ronda 59;
+    - ese fichero aislado: 4/4 OK;
+    - segunda pasada completa: 53 ficheros y 214 tests OK.
+  - Tests nuevos:
+    - `utils/__tests__/authLinks.test.ts` (2): vuelta con consulta y ancla; sin vuelta desde `/`, `/login`, `/register`, `/forgot-password`, `/reset` y `/auth/callback`;
+    - `components/__tests__/LoginPrompt.test.tsx` (2): textos por motivo, enlaces con `redirect` y «Ahora no» cierra;
+    - `components/__tests__/ProtectedRoute.test.tsx` (1): `state.from` conserva `?deposit=success#pagos`;
+    - `pages/auth/__tests__/LoginPage.redirect.test.tsx` (2): «Crea una gratis» con y sin origen.
+  - Tests actualizados: `AppShell.test.tsx` (enlaces con `redirect` a `/properties?city=Madrid`) y `PropertyDetail.test.tsx` (aviso «Pide una visita» con vuelta a `/properties/p1`).
+  - Backend sin cambios: no hacía falta `tsc` ni Jest.
+- **Playwright** (vite local, `/api/*` simulado), capturas en `/tmp/ra-shots61`, a 390 y 1280 px. En la ficha sin sesión:
+  - «Guardar» abre «Guarda este piso» y «Solicitar visita» abre «Pide una visita»;
+  - no hay desbordamiento horizontal;
+  - «Ya tengo cuenta» lleva a `/login?redirect=%2Fproperties%2Fp1`;
+  - tras entrar con el login simulado, vuelve a `/properties/p1`.
+- **GitNexus.**
+  - `impact`: `LoginPrompt`, `ProtectedRoute` y `PropertyDetail`, LOW.
+  - `detect_changes`: riesgo medio, solo por los flujos de `AppShell` (`Header` y `SideNav`), que son los que cambian.
+
+**Qué queda.**
+- Tras entrar desde «Guardar», el piso no se guarda solo: hay que pulsar el corazón otra vez. Se podría pasar la intención en la vuelta (`?intent=save`) y completarla al cargar la ficha.
+- `RoleGuard` sigue mandando a `/login` sin vuelta. Hoy no importa, porque siempre va dentro de `ProtectedRoute`.
+- La cabecera pública (`PublicLayout`: inicio, legales, `/info`) sigue sin vuelta, a propósito: ahí no hay nada a lo que volver.
+- El componente `Modal` sigue con estilos en línea (cabecera y radio de 12 px); el contenido del aviso ya usa los tokens 2026.
+- Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador; `ticket.routes.ts` conserva su propio `escapeRegExp`.
+
+**Siguiente mejora propuesta.** Completar la intención tras entrar: si el inquilino pulsó «Guardar» sin sesión, guardar el piso al volver a la ficha (y avisar con un toast). Si pulsó «Solicitar visita», llevarle al campo del mensaje. Después, pasar `Modal` a los tokens 2026 (lo usan todos los diálogos).
