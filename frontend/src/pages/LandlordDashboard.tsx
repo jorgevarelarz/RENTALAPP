@@ -483,9 +483,14 @@ const LandlordDashboard: React.FC = () => {
                     </Button>
                   )}
                   <Button variant="secondary" size="sm" onClick={() => openEdit(p)}>Editar</Button>
-                  <Button variant="ghost" size="sm" className="hover:bg-red-50" style={{ color: '#b91c1c' }} onClick={async () => {
+                  <Button variant="ghost" size="sm" className="text-red-700 hover:bg-red-50" onClick={async () => {
                     if (!window.confirm(`¿Eliminar «${p.title || 'esta propiedad'}»? Esta acción no se puede deshacer.`)) return;
-                    await axios.delete(`/api/properties/${p._id}`, { headers: { Authorization: `Bearer ${token}` } });
+                    try {
+                      await axios.delete(`/api/properties/${p._id}`, { headers: { Authorization: `Bearer ${token}` } });
+                    } catch (err: any) {
+                      push({ title: err?.response?.data?.message || 'No se ha podido eliminar la propiedad', tone: 'error' });
+                      return;
+                    }
                     await refresh();
                     push({ title: 'Eliminada', tone: 'success' });
                   }}>Borrar</Button>

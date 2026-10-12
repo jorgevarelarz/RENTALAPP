@@ -775,7 +775,22 @@ body {
 .ra-guest-account p { color: var(--ra-muted); font-size: 13px; line-height: 1.45; margin: 0 0 4px; }
 .ra-guest-account a { justify-content: center; text-align: center; }
 @layer components {
-  .ra-modal { align-items: center; background: rgba(8, 16, 45, .48); display: grid; inset: 0; justify-items: center; padding: 16px; position: fixed; z-index: 50; }
+  /* Botón de la app (ui/Button y buttonClassName). En la capa de componentes para que w-full, px-8, etc. de quien llama manden */
+  .ra-btn { align-items: center; border: 1px solid transparent; border-radius: 999px; cursor: pointer; display: inline-flex; font-family: inherit; font-size: 14px; font-weight: 600; gap: 8px; justify-content: center; line-height: 1.2; min-height: 40px; padding: 9px 18px; text-decoration: none; transition: background 160ms ease, border-color 160ms ease, color 160ms ease; }
+  .ra-btn:hover { opacity: 1; }
+  .ra-btn:focus-visible { outline: 2px solid var(--ra-blue); outline-offset: 2px; }
+  .ra-btn:disabled, .ra-btn[aria-disabled="true"] { cursor: not-allowed; opacity: .5; }
+  .ra-btn-sm { font-size: 13px; gap: 6px; min-height: 34px; padding: 6px 14px; }
+  .ra-btn-lg { font-size: 15px; min-height: 48px; padding: 12px 24px; }
+  .ra-btn-primary { background: var(--ra-blue); color: #fff; }
+  .ra-btn-primary:not(:disabled):hover { background: #3157ee; color: #fff; }
+  .ra-btn-secondary { background: #fff; border-color: var(--ra-line); color: var(--ra-ink); }
+  .ra-btn-secondary:not(:disabled):hover { background: var(--ra-paper); border-color: rgba(11, 16, 37, .24); color: var(--ra-ink); }
+  .ra-btn-ghost { background: transparent; color: var(--ra-ink); }
+  .ra-btn-ghost:not(:disabled):hover { background: var(--ra-paper); }
+  .ra-btn-danger { background: #b42318; color: #fff; }
+  .ra-btn-danger:not(:disabled):hover { background: #912018; color: #fff; }
+  .ra-modal {align-items: center; background: rgba(8, 16, 45, .48); display: grid; inset: 0; justify-items: center; padding: 16px; position: fixed; z-index: 50; }
   .ra-modal-panel { background: #fff; border: 1px solid var(--ra-line); border-radius: 20px; box-shadow: var(--ra-shadow); color: var(--ra-ink); display: flex; flex-direction: column; max-height: calc(100dvh - 32px); max-width: 520px; overflow: hidden; width: 100%; }
   .ra-modal-head { align-items: flex-start; display: flex; gap: 12px; justify-content: space-between; padding: 20px 20px 4px 24px; }
   .ra-modal-title { color: var(--ra-ink); font-family: 'Manrope', sans-serif; font-size: 19px; font-weight: 700; letter-spacing: -.02em; line-height: 1.3; margin: 0; min-width: 0; overflow-wrap: anywhere; }

@@ -572,15 +572,15 @@ export default function PropertyFormRHF({ onSubmit, defaultValues, onUploadPhoto
           disabled={step === 0}
           className="text-gray-500 hover:text-gray-900"
         >
-          <ArrowLeft size={18} className="mr-2" /> Atrás
+          <ArrowLeft size={18} aria-hidden="true" /> Atrás
         </Button>
 
         {step < STEPS.length - 1 ? (
           <Button onClick={nextStep} className="px-6">
-            Siguiente <ArrowRight size={18} className="ml-2" />
+            Siguiente <ArrowRight size={18} aria-hidden="true" />
           </Button>
         ) : (
-          <Button onClick={handleSubmit(onSubmit)} className="px-8 bg-green-600 hover:bg-green-700 text-white">
+          <Button onClick={handleSubmit(onSubmit)} className="px-8">
             {(defaultValues as any)?._id ? 'Guardar Cambios' : 'Crear Propiedad'}
           </Button>
         )}
