@@ -2002,7 +2002,7 @@ Revisando el backend salieron tres cosas más, y otra en `Modal`.
    - el mensaje no se mostraba.
 
    Ahora es una lista en tarjeta, como «Contratos»:
-   - foto (o un hueco gris sin icono de relleno), título enlazado a la ficha, dirección y «1450 € /mes»;
+   - foto (sin fotos, un hueco gris con el icono de imagen y sin imagen de relleno), título enlazado a la ficha, dirección y «1450 € /mes»;
    - una línea de estado en español: «El propietario te propone visitarlo el jueves, 15 de octubre a las 18:00», «Has propuesto…», «Visita concertada…», «La fecha que te propusieron ya pasó. Propón otra.» o «El propietario ha seguido con otros candidatos»;
    - «Tu mensaje»;
    - acciones según el caso: «Aceptar visita», «Proponer otra fecha» (formulario en la tarjeta, sin fechas pasadas), «Firmar contrato» o «Ver contrato» y «Escribir al propietario». El modal «Detalle de la visita» desaparece, porque repetía lo que ya está en la tarjeta;
