@@ -1378,3 +1378,9 @@ Rules:
 - New `src/utils/searchRegex.ts` (`escapeRegExp`, `accentInsensitivePattern`): property `search` city filter and `q`, plus `rentSuggestion` city comparables, ignore accents/ñ/ç and ’ vs '. No migration.
 - `AppShell` guest menu: no Mensajes/Asistente; `GuestAccount` block (explanation + «Crear cuenta» + «Entrar»), CSS `.ra-guest-account` replaces `.ra-mobile-nav-register`.
 - Verification: tsc clean; Jest `--runInBand` property.routes + mongoOperators 17, searchRegex + rentSuggestion + referenceImport 15; frontend build + 207 tests; Playwright `/tmp/ra-shots60`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 62: resume intent after login + Modal/Toast 2026
+
+- `utils/authLinks.withIntent`; `LoginPrompt` `resume` prop (detail only) → return URL `?intent=save|apply`; `PropertyDetail` completes once (favorite + toast «Guardado en Favoritos», skipped if liked/mine/role without favorites; apply → focus message) and strips `intent`.
+- `ui/Modal`: 2026 classes (`.ra-modal*` in `@layer components` so caller Tailwind classes win — fixes signing modal stuck at 520 px), h2 + `aria-labelledby`, «Cerrar», mobile bottom sheet, initial focus in body. `ToastProvider`: `.ra-toast*`, role status/alert + aria-live, z-index 70 (top on mobile), counter ids (Date.now() collided), errors 6 s.
+- Verification: frontend tsc + build OK, 54 files/222 tests; Playwright `/tmp/ra-shots62`. Backend untouched.

@@ -2392,3 +2392,57 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador; `ticket.routes.ts` conserva su propio `escapeRegExp`.
 
 **Siguiente mejora propuesta.** Completar la intención tras entrar: si el inquilino pulsó «Guardar» sin sesión, guardar el piso al volver a la ficha (y avisar con un toast). Si pulsó «Solicitar visita», llevarle al campo del mensaje. Después, pasar `Modal` a los tokens 2026 (lo usan todos los diálogos).
+
+### Ronda 62 — 2026-10-12 12:20
+
+**Qué y por qué.** Ronda de interfaz. Retoma lo que proponía la ronda 61:
+
+1. **Completar lo que se pidió sin sesión.** Tras entrar o registrarse desde el aviso de la ficha, había que volver a pulsar el corazón. Ahora la vuelta lleva `?intent=save|apply` (nuevo `withIntent` en `utils/authLinks`), y la ficha lo completa una sola vez y lo quita de la URL:
+   - **«Guardar»:** guarda el piso y avisa «Guardado en Favoritos». No lo hace si el piso ya estaba guardado, si el anuncio es suyo o si el rol no tiene favoritos (agencia o profesional; son los mismos roles que admite el backend);
+   - **«Solicitar visita»:** lleva el foco al campo del mensaje. No envía nada.
+
+   El aviso dice qué pasará al volver («Al terminar vuelves aquí con el piso ya guardado»). Para eso `LoginPrompt` tiene la propiedad nueva `resume`. El listado no la usa: no sabe qué piso era, así que solo vuelve a la búsqueda.
+2. **`Modal` al sistema 2026.** Lo usan todos los diálogos: aviso de cuenta, candidatos, pago, alta de inmueble y firma. Tenía estilos en línea:
+   - panel blanco de 20 px con `--ra-shadow` sobre un fondo azul marino, título `h2` en Manrope y botón «Cerrar»;
+   - el diálogo toma el nombre del título (`aria-labelledby`); antes usaba `aria-label` y, sin título, se llamaba «Modal»;
+   - en el móvil se abre como hoja inferior, y el cuerpo tiene su propio scroll;
+   - **fallo corregido:** el `width: 520` en línea anulaba el `className` de quien llama, así que el diálogo de firma del contrato (`max-w-6xl h-[85vh]`) se quedaba en 520 px. Ahora los estilos base van en `@layer components` y las utilidades de Tailwind mandan;
+   - el foco inicial va al contenido (el campo o la acción principal), no a «Cerrar».
+3. **Avisos (`ToastProvider`).** Salían en verde chillón con estilos en línea y sin `z-index`. En el móvil quedaban debajo de la barra fija de la ficha, como se ve en la captura de la primera pasada. Cambios:
+   - tinta oscura con icono, y rojo para los errores;
+   - botón «Cerrar aviso»;
+   - `role="status"` o `alert` y `aria-live`;
+   - por encima de diálogos y barras: abajo a la izquierda en escritorio y arriba en el móvil;
+   - los errores duran 6 s;
+   - **fallo corregido:** el id salía de `Date.now()`, así que dos avisos en el mismo milisegundo compartían id y se cerraban juntos. Ahora es un contador. `push` es estable (`useCallback`).
+
+**Commits.**
+- `36252d5` Interfaz: tras entrar desde el aviso de la ficha, el piso queda guardado o el foco va al mensaje
+- `5ff9441` Interfaz: Modal y avisos al sistema 2026
+
+**Verificación (resultados reales).**
+- **Backend:** sin cambios, no hacía falta `tsc` ni Jest.
+- **Frontend.**
+  - `tsc --noEmit`: sin errores.
+  - `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`: 54 ficheros y 222 tests OK, a la primera.
+  - Tests nuevos:
+    - `PropertyDetail.test.tsx`, 3 casos: `?intent=save` guarda una vez, avisa y limpia la URL conservando `?from=list`; no guarda si ya estaba guardado ni con el rol agencia; `?intent=apply` enfoca el mensaje sin enviar nada;
+    - `LoginPrompt.test.tsx`: con y sin `resume`;
+    - `authLinks.test.ts`: `withIntent` conserva la consulta y no repite `intent`;
+    - `Modal.test.tsx`: nombre por el título, «Cerrar», clic en el fondo, `className` en el panel y foco en el contenido;
+    - nuevo `context/__tests__/ToastContext.test.tsx` (2): dos avisos seguidos conviven y se cierran por separado; el error es `alert` y dura más.
+- **Playwright** (vite local, `/api/*` simulado), capturas en `/tmp/ra-shots62`, a 390 y 1280 px. Flujo: ficha sin sesión → «Guardar» → «Ya tengo cuenta» → `/login?redirect=%2Fproperties%2Fp1%3Fintent%3Dsave` → entrar → `/properties/p1`.
+  - Resultado: un solo `POST …/favorite`, el botón dice «Guardado» y sale el aviso «Guardado en Favoritos», arriba en el móvil y abajo a la izquierda en escritorio. Sin desbordamiento horizontal. El diálogo mide 520 px en escritorio y ocupa el ancho entero en el móvil.
+  - La primera tanda salió con el código anterior: vite no recogió los cambios hasta reiniciarlo.
+- **GitNexus.**
+  - `impact`: `Modal` y `PropertyDetail`, LOW.
+  - `detect_changes`: riesgo bajo, sin flujos afectados.
+
+**Qué queda.**
+- Siguen conviviendo dos sistemas de avisos: `react-hot-toast` en `TenantProPanel`, `CopyLinkButton` y `AdminAuditDashboard`, frente a `ToastProvider` en el resto. Basta con pasar esos tres a `useToast` y quitar `<Toaster/>` de `index.tsx`.
+- El corazón del listado sin sesión no se guarda solo al volver. Haría falta pasar el id del piso en la intención (`intent=save:<id>`).
+- `PaymentModal` sigue con su «Error de Configuración» y «Realizar Pago» (mayúsculas a la inglesa).
+- Pendientes anteriores: el casero no puede descartar candidatos y no se entera cuando su agencia concierta una visita (Jorge); `/landlord/services` es un marcador; `ticket.routes.ts` conserva su propio `escapeRegExp`.
+
+**Siguiente mejora propuesta.** Unificar los avisos en `ToastProvider` (los tres usos de `react-hot-toast` y quitar la dependencia) y repasar los textos de `PaymentModal`. Si se prefiere volver al backend: limitar los comparables del precio sugerido (`rentSuggestion.service.ts`, sin `limit`; pendiente en `auditoria-mejoras`).
