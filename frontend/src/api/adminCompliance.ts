@@ -15,7 +15,8 @@ export type ComplianceDashboardItem = {
 };
 
 export type ComplianceDashboardData = {
-  totals: { evaluated: number; risk: number };
+  // compliant y nonCompliant: recuentos de todo el filtro (no solo de la página)
+  totals: { evaluated: number; risk: number; compliant?: number; nonCompliant?: number };
   lastUpdated?: string | Date | null;
   byArea: { areaKey: string; total: number; risk: number }[];
   items: ComplianceDashboardItem[];

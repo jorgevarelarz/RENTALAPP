@@ -4,7 +4,8 @@ import { parseDateRange } from '../../../utils/dateRange';
 import { csvRows } from '../../../utils/csv';
 
 type DashboardData = {
-  totals: { evaluated: number; risk: number };
+  // compliant y nonCompliant cuentan sobre todo el filtro, no solo la página
+  totals: { evaluated: number; risk: number; compliant: number; nonCompliant: number };
   lastUpdated?: Date | null;
   byArea: { areaKey: string; total: number; risk: number }[];
   byAreaTotal?: number;
@@ -119,11 +120,13 @@ function getDemoDashboardData(filters: ComplianceDashboardFilters = {}): Dashboa
   const byAreaPageSize = Math.min(100, Math.max(1, Number(filters.byAreaPageSize || 100)));
   const total = filtered.length;
   const risk = filtered.filter(item => item.status === 'risk').length;
+  const compliant = filtered.filter(item => item.status === 'compliant').length;
+  const nonCompliant = filtered.filter(item => item.status === 'non_compliant').length;
   const lastUpdated = filtered.length ? new Date(filtered[0].checkedAt) : null;
   const paged = filters.includeAll ? filtered : filtered.slice((page - 1) * pageSize, page * pageSize);
 
   return {
-    totals: { evaluated: total, risk },
+    totals: { evaluated: total, risk, compliant, nonCompliant },
     byArea,
     byAreaTotal: byArea.length,
     items: paged,
@@ -169,9 +172,14 @@ export async function getComplianceDashboard(filters: ComplianceDashboardFilters
     { $sort: { total: -1 as const } },
   ];
 
-  const [total, risk, byArea, byAreaTotalRow, rows, lastUpdatedRow] = await Promise.all([
+  const countStatus = (status: string) =>
+    query.status && query.status !== status ? Promise.resolve(0) : ComplianceStatus.countDocuments({ ...query, status });
+
+  const [total, risk, compliant, nonCompliant, byArea, byAreaTotalRow, rows, lastUpdatedRow] = await Promise.all([
     ComplianceStatus.countDocuments(query),
-    ComplianceStatus.countDocuments({ ...query, status: 'risk' }),
+    countStatus('risk'),
+    countStatus('compliant'),
+    countStatus('non_compliant'),
     ComplianceStatus.aggregate([
       ...byAreaMatch,
       { $skip: (byAreaPage - 1) * byAreaPageSize },
@@ -204,7 +212,7 @@ export async function getComplianceDashboard(filters: ComplianceDashboardFilters
   }));
 
   return {
-    totals: { evaluated: total, risk },
+    totals: { evaluated: total, risk, compliant, nonCompliant },
     byArea,
     byAreaTotal: byAreaTotalRow?.[0]?.total || 0,
     items,

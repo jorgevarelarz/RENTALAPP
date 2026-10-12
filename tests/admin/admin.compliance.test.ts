@@ -130,4 +130,33 @@ describe('Admin compliance API', () => {
     expect(res.text).toContain('property_id,areaKey,previousRent,newRent,status,checkedAt');
     expect(res.text).toContain(String(propertyId));
   });
+  it('counts compliant and non-compliant over the whole filter, not the page', async () => {
+    const adminToken = await signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
+    const statuses = ['compliant', 'compliant', 'compliant', 'risk', 'risk', 'non_compliant'];
+    await ComplianceStatus.create(
+      statuses.map((status, idx) => ({
+        contract: new Types.ObjectId(),
+        property: new Types.ObjectId(),
+        status,
+        severity: status === 'compliant' ? 'info' : status === 'risk' ? 'warning' : 'critical',
+        checkedAt: new Date(Date.UTC(2025, 0, 1 + idx)),
+        previousRent: 900,
+        newRent: 1000,
+        meta: { areaKey: 'galicia|oleiros|' },
+      })),
+    );
+
+    const all = await request(app)
+      .get('/api/admin/compliance/dashboard?pageSize=2')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(all.body.data.items).toHaveLength(2);
+    expect(all.body.data.totals).toEqual({ evaluated: 6, risk: 2, compliant: 3, nonCompliant: 1 });
+
+    const onlyCompliant = await request(app)
+      .get('/api/admin/compliance/dashboard?status=compliant')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(onlyCompliant.body.data.totals).toEqual({ evaluated: 3, risk: 0, compliant: 3, nonCompliant: 0 });
+  });
 });
