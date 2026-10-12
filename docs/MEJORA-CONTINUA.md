@@ -45,6 +45,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Al desplegar la ronda 63**: la purga de documentos Tenant PRO pasa a ejecutarse cada día a las 03:45. La primera noche borrará del disco y de la base todos los documentos subidos hace más de `TENANT_PRO_DOCS_TTL_DAYS` días (365 si no está puesta); de cada uno queda en `auditTrail` el tipo, el hash y el estado de la revisión. El estado verificado del inquilino no cambia. Es lo que prometen la política de privacidad y la pantalla de Tenant PRO, pero borra datos: si quieres saber antes cuántos son, consulta de solo lectura `db.users.countDocuments({'tenantPro.docs': {$elemMatch: {uploadedAt: {$lt: new Date(Date.now() - 365*864e5)}}}})`. Con varias réplicas, el job correría en cada una (igual que los demás jobs); es inocuo, pero repetido.
 - **Al desplegar la ronda 67**: cambian dependencias de ejecución (express 4.22, qs, proxy-addr, nodemailer 10.1, axios), así que hay que reinstalar con `npm ci` en el servidor, no sincronizar solo ficheros sueltos. nodemailer 10 exige Node 20 o superior: el Dockerfile ya usa `node:20`, pero conviene confirmar `node -v` en el VPS antes. Node 20 está ya sin soporte (auditoría de seguridad); pasar a Node 22/24 es decisión tuya.
 - **Webhooks de firma genéricos (ronda 69)**: `POST /api/contracts/signature/webhook` y `/api/contracts/:id/signature/callback` cuelgan de `app.use('/api/contracts', authenticate, requireVerified, …)`, así que en producción responden 401 a cualquier proveedor (solo `/signature/callback` y `/signature/firma` son públicos, montados antes en `app.ts`). No es un agujero (rechazan), pero son rutas que no pueden funcionar. Es el punto #9 abierto de `docs/review-firma-2026-10-05.md`: ¿se eliminan o se dejan solo para mock y tests?
+- **Búsqueda de direcciones con Nominatim (ronda 71)**: el alta de inmueble sugiere direcciones llamando a `nominatim.openstreetmap.org` desde el navegador mientras se escribe. La política de uso de Nominatim prohíbe expresamente montar un autocompletado en el cliente con su API pública. Desde la ronda 71 se busca como mucho una vez por segundo y no se repite al elegir, pero sigue siendo autocompletado. Con poco tráfico no pasará nada; al abrir conviene elegir un proveedor pensado para esto (Photon de Komoot, MapTiler, Google Places…), que implica darse de alta y quizá pagar. Decisión tuya.
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -2750,3 +2751,36 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: `ui/Badge`, `Alert`, `Pagination` y `Drawer` con estilos en línea; `pro/Profile` y la subida de foto del perfil; `.auth-input` frente a `.ra-input`; «Ingresos» fuera del menú del casero; el casero no puede descartar candidatos (Jorge); el frontend sin ESLint.
 
 **Siguiente mejora propuesta.** Quitar el mock global de `zodResolver` en `setupTests.ts` y arreglar los tests que dependan de él, para que la validación real quede probada en todos los formularios. Después, subir el debounce de Nominatim a 1 s y cancelar la búsqueda al elegir una sugerencia.
+
+### Ronda 71 — 2026-10-12 20:52
+
+**Qué y por qué.** Lo que proponía la ronda 70: que la validación real quede probada. Al hacerlo salieron dos fallos del alta de inmueble, el primer paso del casero.
+
+1. **Fuera el mock global de `zodResolver`** (`frontend/src/setupTests.ts`). Sustituía el resolver por uno que nunca daba errores, así que ningún test de formulario veía la validación. Solo lo usa `PropertyFormRHF`, cuyos tests ya pedían el real con `vi.unmock`. Sin el mock, la suite completa pasa igual (61 ficheros, 247 tests) y el `vi.unmock` sobra.
+2. **Fallo: mensajes de zod en inglés.** Al vaciar un campo numérico (renta, fianza, tamaño, habitaciones, baños, latitud o longitud), `valueAsNumber` da `NaN` y el formulario enseñaba «Expected number, received nan». Ahora cada número tiene su texto («Escribe la renta mensual», «Escribe la fianza (0 si no hay)»…), igual que los rangos de latitud y longitud y el máximo de 20 fotos, que tampoco tenían texto propio.
+3. **Fallo: la lista de direcciones se reabría.** Al elegir una sugerencia, la dirección que se escribía en el campo lanzaba otra búsqueda: la lista volvía a abrirse con la misma opción, o salía la pista «Si no aparece la dirección…». Al editar un anuncio, se buscaba la dirección guardada nada más abrir. Ahora la dirección elegida (o la guardada) no se busca. Además:
+   - espera de 1 s entre búsquedas, en vez de 350 ms (Nominatim admite como mucho 1 petición por segundo);
+   - «Buscando…» se ve desde que se escribe, para que la pista de «no aparece» no salga durante la espera;
+   - una búsqueda cancelada ya no apaga el «Buscando…» de la siguiente.
+
+**Commits.**
+- `84e4857` Tests del frontend: fuera el mock global de zodResolver
+- `8a417fa` Alta de inmueble: mensajes en español para números vacíos y búsqueda de dirección que no se reabre
+- Docs: este registro, la nota de Nominatim en «Para Jorge» y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- Antes de editar, con node y zod 3.25: `z.coerce.number().min(0,'…')` con `NaN` da «Expected number, received nan». Así se confirmó el fallo 2.
+- `npm --prefix frontend run lint`: sin errores. `npm --prefix frontend run build`: OK.
+- `npm --prefix frontend test`: **61 ficheros y 250 tests OK** (247 sin el mock, antes de los cambios del alta; después, 3 más).
+- Tests nuevos en `PropertyFormRHF.test.tsx`: la fianza vacía da el mensaje en español y no envía; elegir una sugerencia rellena dirección, ciudad y latitud, `fetch` se llama una sola vez y no vuelven ni la lista ni la pista; al editar con dirección guardada no se llama a `fetch`.
+- **GitNexus.** `impact` de `PropertyFormRHF`: LOW (lo importa `LandlordDashboard`, que en su test lo sustituye). `detect_changes`: riesgo bajo, sin flujos afectados.
+- Backend sin cambios. No se hicieron capturas: el cambio visible es texto de errores y que la lista no se reabra, ya cubierto por los tests.
+
+**Qué queda.**
+- Nominatim como autocompletado va contra su política de uso (nota en «Para Jorge»).
+- Las sugerencias no se manejan con el teclado (flechas, Escape) ni tienen `role="listbox"`. Para alguien que no usa ratón, la lista no es accesible.
+- `RentSuggestionCard`, la zona de `Dropzone` y los recuadros verde y ámbar del alta siguen con colores de Tailwind.
+- Pendientes anteriores: `ui/Badge`, `Alert`, `Pagination` y `Drawer` con estilos en línea; `pro/Profile`; `.auth-input` frente a `.ra-input`; «Ingresos» fuera del menú del casero; el frontend sin ESLint.
+
+**Siguiente mejora propuesta.** Hacer accesibles las sugerencias de dirección: patrón combobox con `aria-expanded`, `aria-activedescendant`, flechas, Intro y Escape, y cerrar al perder el foco. Después, `Dropzone` y `RentSuggestionCard` a tokens `--ra-*`.
+

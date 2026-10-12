@@ -1429,3 +1429,11 @@ Rules:
 - `PropertyFormRHF` uses `Input`/`Select`/`.ra-input` (labels now associated), shows every field error (size/rooms/baths/floor/year/deposit/date errors were silently blocking "Siguiente"/"Crear"), jumps back to the failing step on submit (`onInvalid`), photo remove button visible on touch. `Input`/`Select` now `forwardRef` (usable with `register()`). `TicketCreatePage` drops its own `fieldClass`. New `.ra-field-hint`/`.ra-field-error`.
 - Gotcha: `frontend/src/setupTests.ts` globally mocks `zodResolver` to never return errors; form tests needing validation must `vi.unmock('@hookform/resolvers/zod')`.
 - Verification: frontend lint/build OK, 61 files / 247 tests; Playwright screenshots in `/tmp/ra-shots70`. Details in `docs/MEJORA-CONTINUA.md` round 70.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 71: real zod validation in tests + property form fixes
+
+- Removed the global `zodResolver` mock from `frontend/src/setupTests.ts` (form tests now see real validation; the `vi.unmock` gotcha from round 70 no longer applies).
+- `PropertyFormRHF`: numeric fields use a `num(message)` helper so an emptied field shows Spanish text instead of zod's "Expected number, received nan"; address search skips the picked/saved address (no reopening list, no search on edit), 1 s debounce for Nominatim.
+- Open for Jorge: Nominatim's usage policy forbids client-side autocomplete; a real geocoding provider is a product/billing decision.
+- Verification: frontend lint/build OK, 61 files / 250 tests. Details in `docs/MEJORA-CONTINUA.md` round 71.
+
