@@ -44,6 +44,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Cambio de visita (ronda 56)**: cuando una parte propone otra hora para una visita ya concertada, la visita concertada sigue en pie hasta que la otra parte acepte la nueva. Si nadie responde, se mantiene la primera. ¿Es la regla que quieres, o proponer un cambio debe anular la visita? Tampoco hay forma de cancelar una visita sin proponer otra fecha.
 - **Al desplegar la ronda 63**: la purga de documentos Tenant PRO pasa a ejecutarse cada día a las 03:45. La primera noche borrará del disco y de la base todos los documentos subidos hace más de `TENANT_PRO_DOCS_TTL_DAYS` días (365 si no está puesta); de cada uno queda en `auditTrail` el tipo, el hash y el estado de la revisión. El estado verificado del inquilino no cambia. Es lo que prometen la política de privacidad y la pantalla de Tenant PRO, pero borra datos: si quieres saber antes cuántos son, consulta de solo lectura `db.users.countDocuments({'tenantPro.docs': {$elemMatch: {uploadedAt: {$lt: new Date(Date.now() - 365*864e5)}}}})`. Con varias réplicas, el job correría en cada una (igual que los demás jobs); es inocuo, pero repetido.
 - **Al desplegar la ronda 67**: cambian dependencias de ejecución (express 4.22, qs, proxy-addr, nodemailer 10.1, axios), así que hay que reinstalar con `npm ci` en el servidor, no sincronizar solo ficheros sueltos. nodemailer 10 exige Node 20 o superior: el Dockerfile ya usa `node:20`, pero conviene confirmar `node -v` en el VPS antes. Node 20 está ya sin soporte (auditoría de seguridad); pasar a Node 22/24 es decisión tuya.
+- **Webhooks de firma genéricos (ronda 69)**: `POST /api/contracts/signature/webhook` y `/api/contracts/:id/signature/callback` cuelgan de `app.use('/api/contracts', authenticate, requireVerified, …)`, así que en producción responden 401 a cualquier proveedor (solo `/signature/callback` y `/signature/firma` son públicos, montados antes en `app.ts`). No es un agujero (rechazan), pero son rutas que no pueden funcionar. Es el punto #9 abierto de `docs/review-firma-2026-10-05.md`: ¿se eliminan o se dejan solo para mock y tests?
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Co-titulares (ronda 12), dos decisiones de producto:**
@@ -2668,3 +2669,43 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: «Ingresos» fuera del menú del casero; el corazón del listado sin sesión no se guarda solo al volver; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; `ui/Input` y `Select` con estilos en línea; CSS muerto de la plantilla en `index.css`.
 
 **Siguiente mejora propuesta.** Volver a la interfaz: `ui/Input` y `Select` a clases 2026 (`@layer components`, sin estilos en línea), revisados con capturas, y quitar el CSS muerto de la plantilla en `index.css`. Si toca backend: hacer determinista `signature.security` (restaurar solo las variables de entorno que toca).
+
+### Ronda 69 — 2026-10-12 17:43
+
+**Qué y por qué.** Vuelta a la interfaz, como proponía la ronda 68, más el test intermitente que esa ronda dejó anotado.
+
+1. **`signature.security` determinista.** En la suite completa de la ronda 68 dio una vez 401 donde esperaba 400. Dos de las rutas que prueba (`/signature/webhook` y `/:id/signature/callback`) pasan por `authenticate`. Por eso el 400 del HMAC solo llega si el atajo de test `ALLOW_TEST_AUTH` está activo, y el test no lo fijaba: además, en `afterEach` sustituía `process.env` entero por una copia tomada al cargar el fichero. Ahora `beforeEach` fija `NODE_ENV=test` y `ALLOW_TEST_AUTH=true`, y `afterEach` restaura solo las seis variables que toca. La causa exacta del 401 no se pudo reproducir; el test ya no depende del entorno heredado. De paso queda a la vista que esas dos rutas exigen sesión en producción (nota en «Para Jorge»).
+2. **`ui/Input` y `ui/Select` al sistema 2026.** Como `Button` y `Card`: sin estilos en línea, con `.ra-field` (etiqueta que envuelve) y `.ra-input` en `@layer components`. El campo tiene radio 12, 44 px de alto, borde fino en tinta al 18 %, foco azul de marca con halo suave, desactivado en gris papel y 16 px en móvil, para que iOS no amplíe al enfocar. El desplegable lleva una flecha propia. Nueva prop `containerClassName` para el contenedor; `className` sigue yendo al campo.
+   - **Fallo de maquetación:** en el presupuesto del profesional (`TicketDetail`), `w-24` iba al `<input>` y no a la etiqueta que lo envuelve (con `width: 100%`). El importe se llevaba media fila y la nota la otra media. Ahora el importe mide `w-28` y la nota ocupa el resto.
+   - **Accesibilidad:** en el perfil, «Especialidad principal» y «Sobre ti» tenían un `<label>` sin asociar a su campo (y estilos índigo `rounded-md`). Ahora son `Select` y `.ra-field`, y el lector de pantalla los anuncia.
+   - `Select` no lo usaba nadie. Ahora lo usan la duración del asistente de contrato (antes imitaba el componente con estilos en línea) y la especialidad del perfil. Los desplegables en línea del asistente (mascotas, días de margen) usan `ra-input w-auto` en vez de `auth-input`.
+   - La fecha de la cita del profesional pasa de `<input>` suelto a `Input`. En el perfil sobran las clases de desactivado propias: lo da `.ra-input:disabled`.
+3. **CSS muerto de la plantilla.** Se quitan de `index.css` 182 líneas de clases que nada usa: `.navbar`, `.nav-*`, `.login-wrapper` (con su degradado morado), `.login-container`, `.btn-form`, `.input-box`, `.social-icons`, `.card-media`, `.grid-cards`, `.grid-detail`, `.auth-brand-icon`, `.auth-legal`… También `src/style.css`, que nadie importaba. Se comprobó con grep en `src` e `index.html`. `.auth-social-apple` se queda porque `SocialAuthButtons` compone la clase con el proveedor; `form p[style]` también se queda.
+
+**Commits.**
+- `f441d2f` Tests: signature.security fija NODE_ENV y ALLOW_TEST_AUTH
+- `07e158d` Interfaz: ui/Input y ui/Select al sistema 2026
+- `143b294` Limpieza: fuera 182 líneas de CSS de la plantilla y src/style.css
+- Docs: este registro y la nota en «Para Jorge»
+
+**Verificación (resultados reales).**
+- **Backend:** solo cambia un test. `npx jest tests/contracts/signature.security.test.ts --runInBand`: 8/8 OK.
+- **Frontend.**
+  - `npm --prefix frontend run lint`: sin errores. `npm --prefix frontend run build`: OK (también después del commit de limpieza).
+  - `npm --prefix frontend test`: **60 ficheros y 240 tests OK**, sin timeouts.
+  - Test nuevo `components/ui/Input.test.tsx` (3 casos): etiqueta asociada, clases `ra-input`/`ra-field` más las de quien llama, sin `style`; sin etiqueta no pinta el texto vacío; `Select` conserva valor y opciones.
+- **Playwright** (vite local con `--force`, `/api/*` simulado). Capturas en `/tmp/ra-shots69` del perfil del profesional a 1280 px, del perfil del inquilino a 390 px y del asistente de contrato a 1280 y 390 px:
+  - todos los campos miden 44 px con radio 12;
+  - 15 px en escritorio y 16 px en móvil;
+  - el foco va en azul `rgb(67,104,255)`;
+  - sin desbordamiento horizontal.
+  - El `input type="date"` mide 45-46 px por el control nativo, una diferencia mínima.
+- **GitNexus.** `impact` de `Input`: LOW (no sigue el JSX; los 6 ficheros que lo importan se revisaron a mano). `detect_changes`: riesgo medio, solo por el flujo `TicketDetail → GetTicket`, que cambia solo en el render.
+
+**Qué queda.**
+- `ui/Badge`, `Alert`, `Pagination` y `Drawer` siguen con estilos en línea. También quedan campos sueltos con clases propias: la subida de foto y el resto del perfil, `pro/Profile` y los formularios de alta de inmueble y de avería. Pasarlos a `Input` y `.ra-input` iría pantalla a pantalla.
+- Las pantallas de acceso usan `.auth-input`, ya alineado con 2026 en la ronda 64 pero con reglas índigo de base que se sobrescriben. Se podría unificar con `.ra-input`.
+- En `index.css` quedan reglas antiguas con «revisar» (`.card`, `.gallery-*`, `.badge`) que sí se usan; no se han tocado.
+- Pendientes anteriores: «Ingresos» fuera del menú del casero; el corazón del listado sin sesión no se guarda solo al volver; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; el frontend sin ESLint.
+
+**Siguiente mejora propuesta.** Seguir con los formularios grandes: el alta de inmueble y el de avería a `Input`, `Select` y `.ra-input`, con etiquetas asociadas, revisados con capturas. Si toca backend: un test que compruebe en `app.ts` qué rutas de `/api/contracts` son públicas, para que no se cuele ningún webhook detrás de `authenticate` sin querer.
