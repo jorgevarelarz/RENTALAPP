@@ -2486,3 +2486,34 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: unificar los avisos (`react-hot-toast` en tres sitios) y los textos de `PaymentModal`; el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador.
 
 **Siguiente mejora propuesta.** Unificar los avisos en `ToastProvider` (los tres usos de `react-hot-toast`, quitar `<Toaster/>` y la dependencia) y repasar los textos de `PaymentModal` («Error de Configuración», «Realizar Pago»).
+
+### Ronda 64 — 2026-10-12 15:45
+
+**Qué y por qué.** Ronda de interfaz: lo que proponían las rondas 62 y 63.
+
+1. **Un solo sistema de avisos.** `TenantProPanel`, `CopyLinkButton` y la auditoría de firmas (`AdminAuditDashboard`) seguían con `react-hot-toast`: sus avisos salían arriba a la derecha, con otro estilo y sin `role`/`aria-live`, mientras el resto de la app usa `ToastProvider`. Ahora los tres usan `useToast`, y se quitan `<Toaster/>` de `index.tsx` y la dependencia. El progreso del ZIP de auditoría, que era un aviso fijo con estilos en línea, va en el propio botón («Exportando ZIP… 42 %», desactivado mientras dura).
+2. **Diálogo de pago con tarjeta (`PaymentModal` + `CheckoutForm`).** Es el paso donde el inquilino paga la renta y el propietario aprueba un presupuesto, y era la pantalla más descuidada:
+   - antes: «Error de Configuración» y «Falta la clave pública de Stripe (VITE_STRIPE_KEY)» al usuario; importe `1250.00 €`; campo de tarjeta con Inter y colores de la demo de Stripe, y textos de Stripe en inglés («Card number»); «Pagos seguros encriptados por Stripe»; caja azul para la descripción;
+   - ahora: concepto e importe arriba (Manrope, cifras tabulares), campo «Tarjeta» con DM Sans y los colores de los tokens, Stripe Elements en español (`locale: 'es'`), botón `.ra-button-blue` «Pagar 1250,00 €», error como `role="alert"` y nota «Pago procesado por Stripe. RentalApp no guarda los datos de tu tarjeta». Sin clave: «Los pagos con tarjeta no están disponibles ahora mismo. Inténtalo más tarde; no se te ha cobrado nada»; la variable solo se nombra en desarrollo;
+   - **fallo de texto corregido:** en «Pagos» el diálogo se titulaba siempre «Pagar renta», también al pagar la fianza. Ahora es «Pagar recibo» y dice qué se paga («Renta de octubre de 2026», «Fianza»), con el mismo `paymentTitle` de la lista.
+
+**Commits.**
+- `0b8cb26` Interfaz: un solo sistema de avisos
+- `9f9a9ad` Interfaz: diálogo de pago con tarjeta al sistema 2026
+
+**Verificación (resultados reales).**
+- **Backend:** sin cambios.
+- **Frontend.**
+  - `tsc --noEmit`: sin errores. `npm --prefix frontend run build`: OK.
+  - `npm --prefix frontend test`: 56 ficheros y 227 tests OK (antes del último retoque, `locale: 'es'` y el concepto en «Pagos»; después, tsc, build y las 6 suites afectadas, 25 tests, OK).
+  - Tests nuevos: `payments/__tests__/PaymentModal.test.tsx` (3: sin clave no habla de configuración ni ofrece pagar; concepto e importe `850,50 €` y paga con el `clientSecret`; un rechazo sale como alerta y no llama a `onSuccess`); `components/__tests__/CopyLinkButton.test.tsx` (2: aviso `status` al copiar y `alert` si falla el portapapeles).
+- **Playwright** (vite local con `VITE_STRIPE_KEY=pk_test_dummy`, `/api/*` simulado), capturas en `/tmp/ra-shots64`, 390 y 1280 px: «Pagos» → «Pagar ahora» abre «Pagar recibo» con «Renta de octubre de 2026», «1250,00 €», «Número de tarjeta MM / AA CVC» y «Pagar 1250,00 €»; hoja inferior en el móvil, sin desbordamiento horizontal. La primera tanda salió con «Card number»: vite no recogió `locale` hasta reiniciarlo.
+- **GitNexus.** `impact`: `PaymentModal` y `CheckoutForm`, LOW. `detect_changes`: riesgo medio, solo por los flujos de `Payments` (`GetPayments`, `PayReceipt`), que son los que cambian.
+
+**Qué queda.**
+- `CopyLinkButton`, la página de auditoría y `ui/Button` siguen con estilos antiguos (borde gris, `var(--primary)`); `Button` lo usan muchas pantallas y conviene pasarlo a `.ra-button` con cuidado.
+- `CheckoutForm` sin `clientSecret` llama a `POST /api/payments/create-intent`; hoy los dos usos pasan el secreto, pero esa ruta conviene revisarla con el rediseño del escrow (P5, Jorge).
+- El corazón del listado sin sesión no se guarda solo al volver (`intent=save:<id>`).
+- Pendientes anteriores: el casero no puede descartar candidatos (Jorge); `/landlord/services` es un marcador; `ticket.routes.ts` conserva su propio `escapeRegExp`.
+
+**Siguiente mejora propuesta.** Pasar `ui/Button` a las clases 2026 (`.ra-button` y variantes), revisando una a una las pantallas que lo usan con capturas. Si toca backend: unificar `ticket.routes.ts` con `utils/searchRegex`.

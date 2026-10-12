@@ -1391,3 +1391,9 @@ Rules:
 - `rentSuggestion.findOwnComparables`: `sort({updatedAt:-1}).limit(MAX_OWN_COMPARABLES=300)`.
 - Verification: tsc clean; Jest `--runInBand` tests/tenantPro 8, rentSuggestion (new `tests/properties/rentSuggestion.comparables.test.ts`) + referenceImport + unit 14. Frontend untouched.
 
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 64: single toast system + payment dialog 2026
+
+- `react-hot-toast` removed (dependency + `<Toaster/>`): `TenantProPanel`, `CopyLinkButton`, `AdminAuditDashboard` use `useToast`; ZIP export progress shown in its button.
+- `PaymentModal`/`CheckoutForm`: `.ra-pay-*` classes, concept + es-ES amount, Stripe Elements `locale: 'es'`, card style with DM Sans/tokens, `.ra-button-blue` submit, alert errors; no-key state user-friendly (env var only in DEV). Tenant `Payments` modal title «Pagar recibo» + `paymentTitle` concept (was «Pagar renta» for deposits too).
+- Verification: frontend tsc + build OK, 56 files/227 tests (new PaymentModal 3, CopyLinkButton 2); Playwright `/tmp/ra-shots64`. Backend untouched.
