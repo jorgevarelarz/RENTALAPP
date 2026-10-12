@@ -578,6 +578,7 @@ body {
 .auth-input:focus { border-color: var(--ra-blue); box-shadow: 0 0 0 3px rgba(67, 104, 255, .14); }
 .auth-link-muted,
 .auth-footer .auth-link { color: var(--ra-blue); }
+.auth-alert a { color: inherit; font-weight: 600; text-decoration: underline; text-underline-offset: 2px; }
 .auth-back { align-items: center; color: var(--ra-muted); display: flex; font-size: 12px; gap: 6px; justify-content: center; margin-top: 20px; text-decoration: none; }
 .auth-button { text-decoration: none; }
 .auth-button-secondary { background: #fff; border: 1px solid var(--ra-line); color: var(--ra-ink); }

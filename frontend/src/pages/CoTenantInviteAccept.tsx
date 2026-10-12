@@ -18,6 +18,8 @@ export default function CoTenantInviteAccept() {
   const { user, logout } = useAuth();
   const [invite, setInvite] = useState<CoTenantInvitePreview | null>(null);
   const [notFound, setNotFound] = useState(false);
+  const [loadFailed, setLoadFailed] = useState(false);
+  const [reload, setReload] = useState(0);
   const [accepting, setAccepting] = useState(false);
   const [err, setErr] = useState<{ code: string; message: string } | null>(null);
 
@@ -26,8 +28,15 @@ export default function CoTenantInviteAccept() {
       setNotFound(true);
       return;
     }
-    getCoTenantInvitePreview(token).then(setInvite).catch(() => setNotFound(true));
-  }, [token]);
+    setLoadFailed(false);
+    getCoTenantInvitePreview(token)
+      .then(setInvite)
+      .catch((e: any) => {
+        // Solo un 404 significa que el enlace no vale; lo demás (red, 500) se puede reintentar
+        if (e?.response?.status === 404) setNotFound(true);
+        else setLoadFailed(true);
+      });
+  }, [token, reload]);
 
   const here = `/invites/accept?token=${encodeURIComponent(token)}`;
   const loginHref = `/login?redirect=${encodeURIComponent(here)}`;
@@ -61,6 +70,15 @@ export default function CoTenantInviteAccept() {
         <Link className="auth-button" to={user ? '/contracts' : '/login'}>
           {user ? 'Ir a mis contratos' : 'Iniciar sesión'}
         </Link>
+      </>
+    );
+  }
+  if (loadFailed) {
+    return (
+      <>
+        <h1 className="auth-title">No se pudo cargar la invitación</h1>
+        <p className="auth-subtitle">Comprueba tu conexión e inténtalo de nuevo. El enlace sigue valiendo.</p>
+        <button className="auth-button" onClick={() => setReload((n) => n + 1)}>Reintentar</button>
       </>
     );
   }

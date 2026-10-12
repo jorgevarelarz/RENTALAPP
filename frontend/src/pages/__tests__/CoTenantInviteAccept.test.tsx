@@ -101,4 +101,14 @@ describe('CoTenantInviteAccept', () => {
     expect(await screen.findByText('Invitación caducada')).toBeInTheDocument();
     expect(screen.getByText(/Lucía Pérez/)).toBeInTheDocument();
   });
+
+  it('un fallo que no es 404 no da el enlace por malo y deja reintentar', async () => {
+    previewMock.mockRejectedValueOnce({ response: { status: 500 } });
+    renderPage();
+    expect(await screen.findByText('No se pudo cargar la invitación')).toBeInTheDocument();
+    expect(screen.queryByText('Invitación no válida')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Reintentar' }));
+    expect(await screen.findByText(/Lucía Pérez/)).toBeInTheDocument();
+    expect(previewMock).toHaveBeenCalledTimes(2);
+  });
 });
