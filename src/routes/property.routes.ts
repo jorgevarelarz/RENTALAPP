@@ -37,6 +37,8 @@ r.get(
   asyncHandler(ctrl.listMyFavorites),
 );
 
+r.get('/properties/mine', ...assertRole('landlord', 'agency', 'admin'), asyncHandler(ctrl.listMine));
+
 // Públicas: el anónimo solo ve anuncios activos; con sesión, también los propios
 r.get('/properties/:id', optionalAuthenticate, asyncHandler(ctrl.getById));
 r.get('/properties', optionalAuthenticate, asyncHandler(ctrl.search));

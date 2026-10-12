@@ -453,11 +453,33 @@ export async function listMyFavorites(req: Request, res: Response) {
     .sort({ createdAt: -1 })
     .populate('propertyId')
     .lean();
+  // Un guardado que su dueño ha retirado o devuelto a borrador deja de verse, como en la ficha
   const items = rows
     .map((row: any) => row.propertyId)
-    .filter(Boolean)
-    .map((p: any) => ({ ...p, _liked: true }));
+    .filter((p: any) => p && (p.status === 'active' || canManageProperty(req, p)))
+    .map((p: any) => ({ ...toPropertyView(req, p), _liked: true }));
   res.json({ items });
+}
+
+const MINE_STATUSES = new Set(['draft', 'active', 'archived']);
+
+// Inmuebles que gestiona quien pide (dueño o agencia), con borradores y retirados, paginados
+export async function listMine(req: Request, res: Response) {
+  const userId = viewerId(req);
+  if (!Types.ObjectId.isValid(userId)) return res.status(401).json({ error: 'unauthorized' });
+  const { status, page = '1', limit = '50' } = req.query as any;
+  const q: any = { $or: [{ owner: userId }, { agencyId: userId }] };
+  if (status !== undefined) {
+    if (!MINE_STATUSES.has(String(status))) return res.status(400).json({ error: 'invalid_status' });
+    q.status = String(status);
+  }
+  const pg = Math.max(1, parseInt(String(page)) || 1);
+  const lim = Math.min(100, Math.max(1, parseInt(String(limit)) || 50));
+  const [items, total] = await Promise.all([
+    Property.find(q).sort({ createdAt: -1, _id: -1 }).skip((pg - 1) * lim).limit(lim),
+    Property.countDocuments(q),
+  ]);
+  res.json({ items: items.map((p) => toPropertyView(req, p)), page: pg, limit: lim, total });
 }
 
 export async function subscribePriceAlert(req: Request, res: Response) {
