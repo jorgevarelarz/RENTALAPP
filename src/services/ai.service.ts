@@ -1,7 +1,5 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText, llmConfig } from './llm.service';
 import type { AiDescriptionInput } from '../validators/ai.schema';
-
-const MODEL_NAME = 'gemini-flash-latest';
 
 const languageMap: Record<AiDescriptionInput['language'], string> = {
   es: 'espanol',
@@ -26,44 +24,22 @@ function buildPrompt(input: AiDescriptionInput) {
 }
 
 export async function generatePropertyDescription(input: AiDescriptionInput) {
-  const apiKey = process.env.GOOGLE_API_KEY;
-  if (!apiKey) {
-    const err = new Error('GOOGLE_API_KEY no configurada');
-    (err as any).status = 500;
-    throw err;
-  }
-
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-  const prompt = buildPrompt(input);
-
-  const result = await model.generateContent(prompt);
-  const text = result.response.text()?.trim();
-
-  if (!text) {
-    const err = new Error('Respuesta vacia del modelo');
-    (err as any).status = 502;
-    throw err;
-  }
-
+  const { text } = await generateText(buildPrompt(input), { maxTokens: 2000 });
   return text;
 }
 
 export async function checkAiHealth(runTest: boolean) {
-  const apiKey = process.env.GOOGLE_API_KEY;
-  if (!apiKey) {
+  const config = llmConfig();
+  if (!config) {
     return { ok: false, reason: 'missing_api_key' };
   }
 
   if (!runTest) {
-    return { ok: true, model: MODEL_NAME, test: 'skipped' as const };
+    return { ok: true, provider: config.provider, model: config.model, test: 'skipped' as const };
   }
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-  const result = await model.generateContent('Responde solo con la palabra OK.');
-  const text = result.response.text()?.trim() || '';
+  const { text } = await generateText('Responde solo con la palabra OK.', { maxTokens: 200 });
   const ok = text.toLowerCase().includes('ok');
 
-  return { ok, model: MODEL_NAME, test: 'ran' as const };
+  return { ok, provider: config.provider, model: config.model, test: 'ran' as const };
 }

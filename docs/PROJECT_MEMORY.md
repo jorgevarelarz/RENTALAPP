@@ -946,3 +946,9 @@ Rules:
   - Signature anchors `[[firma_*]]` are only printed in the PDF sent to Firma.dev, not in draft downloads.
   - Frontend-only analytics dropped (nothing consumed them; backend already records funnel events).
 - Tests added: `tests/contracts/signature.firma.test.ts` (HMAC verification, public reachability, completion → signed + PDF hash, replay idempotency, retry after failed download, legacy `signing`, one envelope per contract).
+
+## 2026-10-15 — IA preparada para Claude (rama feat/claude-ia, Claude Code)
+- Nuevo `src/services/llm.service.ts`: un solo punto de llamada a la IA. Usa Claude (`@anthropic-ai/sdk`, `claude-opus-5-5`, esfuerzo `low`, fallback de servidor ante rechazos) si hay `ANTHROPIC_API_KEY`; si no, Gemini con `GOOGLE_API_KEY` como antes. `CLAUDE_MODEL` y `CLAUDE_EFFORT` lo ajustan sin tocar código.
+- `ai.service.ts` (descripciones + health) y `assistant.service.ts` (Clara) pasan por él. Health devuelve también `provider`.
+- Producción NO tiene ninguna clave de IA (ni Google ni Anthropic): la IA no funciona hoy. Jorge pide créditos de Claude for Startups; cuando lleguen: desplegar esta rama + `ANTHROPIC_API_KEY` en `.env.valeris`.
+- Tests: `ai.routes.test.ts` y nuevo `llm.service.test.ts` OK; `tsc --noEmit` OK.
