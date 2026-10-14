@@ -1,18 +1,18 @@
-import LegalLayout, { LEGAL_CONTACT_EMAIL, LEGAL_OWNER } from './LegalLayout';
+import LegalLayout, { LEGAL_ADDRESS, LEGAL_BRAND, LEGAL_CONTACT_EMAIL, LEGAL_NIF, LEGAL_OWNER } from './LegalLayout';
 
 export default function PrivacyPage() {
   return (
     <LegalLayout
       title="Política de privacidad"
-      updated="6 de julio de 2026"
-      intro={`En ${LEGAL_OWNER} tratamos tus datos personales para que puedas alquilar, publicar o gestionar viviendas con todas las garantías. Esta política explica qué datos recogemos, para qué los usamos y qué derechos tienes conforme al Reglamento (UE) 2016/679 (RGPD) y la LOPDGDD.`}
+      updated="15 de octubre de 2026"
+      intro={`En ${LEGAL_BRAND} tratamos tus datos personales para que puedas alquilar, publicar o gestionar viviendas con todas las garantías. Esta política explica qué datos recogemos, para qué los usamos y qué derechos tienes conforme al Reglamento (UE) 2016/679 (RGPD) y la LOPDGDD.`}
       sections={[
         {
           title: 'Responsable del tratamiento',
           body: (
             <p>
-              {LEGAL_OWNER}, titular de la plataforma app.rentalapp.es. Contacto para cuestiones de privacidad:{' '}
-              {LEGAL_CONTACT_EMAIL}.
+              {LEGAL_OWNER}, NIF {LEGAL_NIF}, con domicilio en {LEGAL_ADDRESS}, titular de la plataforma
+              app.rentalapp.es ({LEGAL_BRAND}). Contacto para cuestiones de privacidad: {LEGAL_CONTACT_EMAIL}.
             </p>
           ),
         },
