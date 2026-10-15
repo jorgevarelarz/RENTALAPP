@@ -315,7 +315,7 @@ if (process.env.NODE_ENV !== 'production') {
   app.use('/api', testingInboundRoutes);
 }
 app.use('/api/auth', authRoutes);
-app.use('/api/verification', verificationRoutes);
+app.use('/api/verification', authenticate, verificationRoutes);
 app.use('/api/kyc', identityRoutes);
 app.use('/api', propertyRoutes);
 app.use('/api', clausesRoutes);

@@ -40,10 +40,6 @@ const PUBLIC_ROUTES = new Set([
   'POST /api/auth/login',
   'POST /api/auth/request-reset',
   'POST /api/auth/reset',
-  // Verificación: comprueban el rol dentro y responden 403 sin sesión
-  'POST /api/verification/:userId/approve',
-  'POST /api/verification/:userId/reject',
-  'POST /api/verification/dev/verify',
   // Anuncios públicos y catálogo de cláusulas
   'GET /api/properties',
   'GET /api/properties/:id',
