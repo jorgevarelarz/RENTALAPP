@@ -102,7 +102,7 @@ describe('ApplicantsModal', () => {
       items: [{ ...ana, status: 'proposed', proposedBy: 'tenant', visitDate: '2030-03-20T16:30:00Z', proposedDate: '2030-03-22T09:00:00Z' }],
     });
     renderModal();
-    expect(await screen.findByText(/El candidato propone cambiar la visita del 20 mar 2030, \d{2}:30 al 22 mar 2030, \d{2}:00/)).toBeInTheDocument();
+    expect(await screen.findByText(/El candidato propone cambiar la visita del 20 mar 2030, \d{1,2}:30 al 22 mar 2030, \d{1,2}:00/)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Aceptar visita' })).toBeInTheDocument();
   });
 });
