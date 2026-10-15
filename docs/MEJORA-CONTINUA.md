@@ -47,6 +47,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Webhooks de firma genéricos (ronda 69)**: `POST /api/contracts/signature/webhook` y `/api/contracts/:id/signature/callback` cuelgan de `app.use('/api/contracts', authenticate, requireVerified, …)`, así que en producción responden 401 a cualquier proveedor (solo `/signature/callback` y `/signature/firma` son públicos, montados antes en `app.ts`). No es un agujero (rechazan), pero son rutas que no pueden funcionar. Es el punto #9 abierto de `docs/review-firma-2026-10-05.md`: ¿se eliminan o se dejan solo para mock y tests?
 - **Búsqueda de direcciones con Nominatim (ronda 71)**: el alta de inmueble sugiere direcciones llamando a `nominatim.openstreetmap.org` desde el navegador mientras se escribe. La política de uso de Nominatim prohíbe expresamente montar un autocompletado en el cliente con su API pública. Desde la ronda 71 se busca como mucho una vez por segundo y no se repite al elegir, pero sigue siendo autocompletado. Con poco tráfico no pasará nada; al abrir conviene elegir un proveedor pensado para esto (Photon de Komoot, MapTiler, Google Places…), que implica darse de alta y quizá pagar. Decisión tuya.
 - **Invitaciones rotas en producción (ronda 75), conviene desplegarlo pronto**: en app.rentalapp.es, el propietario invitado por una agencia no puede ver la invitación ni crear su cuenta (la API responde 401 y la pantalla dice «Invitación no válida»), y el co-titular sin sesión tampoco ve la vista previa. Corregido en esta rama (`9bdbe75`) sin cambios de datos ni de entorno. Las invitaciones de agencia enviadas antes siguen valiendo si no han caducado (`INVITE_TTL_DAYS`), así que tras desplegar se pueden reenviar desde «Propietarios» o usar el mismo enlace.
+- **CI y tests en la nube (ronda 78)**: el PR #46 no ha pasado por CI desde el 6 de octubre, así que las rondas 1–77 no se han comprobado allí. Al menos dos cosas habrían salido en rojo y están corregidas en la ronda 78: el `package-lock.json` del frontend (roto desde la ronda 64 para el npm 10 de CI) y un test de `ApplicantsModal` que solo pasaba con la hora de Madrid. Conviene que CI corra sobre la rama antes de fusionar. Los tests del backend no se pudieron ejecutar en la sesión de la ronda 78 porque su red no deja descargar MongoDB (`fastdl.mongodb.org`).
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Portal de institución (ronda 76)**: las cuentas `institution_viewer` necesitan la identidad verificada para entrar en `/api/institution` (sin verificar responden 403 `owner_not_verified`). No era intencionado: les llegaba el `requireVerified` global de `app.ts`. En la ronda 76 se ha dejado explícito para no cambiar nada. Si un organismo público no debe pasar por la verificación, basta quitar `requireVerified` de ese montaje. Decisión tuya.
@@ -2987,3 +2988,37 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: `/api/verification` en la lista de rutas públicas; `pro/Profile`; `.auth-input` frente a `.ra-input`; fotos externas en los anuncios.
 
 **Siguiente mejora propuesta.** Seguir con administración y pasar `SystemEvents` y `AdminCompliancePage` al español y al sistema 2026 (mismas piezas que esta ronda). Si se prefiere backend: montar `/api/verification` detrás de `authenticate` y sacarla de la lista de rutas públicas.
+
+### Ronda 78 — 2026-10-15 12:00
+
+**Qué y por qué.** La ronda 77 proponía montar `/api/verification` detrás de `authenticate`. Al prepararla salieron además dos fallos que habrían roto CI.
+
+1. **Fallo: el frontend no se instalaba con `npm ci`.** Desde la ronda 64 (`0b8cb26`, al quitar `react-hot-toast`), el `frontend/package-lock.json` estaba generado con un npm más nuevo. El npm 10 de CI (Node 20) lo rechazaba con «Missing: @emnapi/runtime@1.11.3 from lock file». El job `frontend` de CI habría fallado en el primer paso. Se regenera con npm 10 (`npm install --package-lock-only`): solo cambian las marcas `peer` y entra `@emnapi/runtime` (opcional, de desarrollo). Ninguna versión cambia.
+2. **Fallo: un test que dependía de la zona horaria.** `ApplicantsModal` esperaba la hora con dos cifras (`\d{2}:00`). En Madrid sale «10:00», pero en UTC, que es lo que usa CI, sale «9:00». Ahora acepta una o dos cifras.
+3. **`/api/verification` detrás de `authenticate`** (`src/app.ts`, `src/routes/verification.routes.ts`).
+   - El router se montaba sin sesión y cada ruta se protegía por su cuenta. `approve` y `reject` solo tenían `requireAdmin`, que lee `req.user`; como nadie lo rellenaba, **respondían 403 también al administrador**: la revisión manual de identidad no funcionaba. `dev/verify` daba 401 por la misma razón.
+   - Ahora todo el router va detrás de `authenticate`, y las tres rutas salen de `PUBLIC_ROUTES` en `route-auth-map.test.ts`.
+   - `approve`/`reject` comprueban que el usuario existe (404 `user_not_found`): antes un ID cualquiera creaba un registro de verificación suelto. Las notas del rechazo son texto de hasta 500 caracteres (400 `invalid_notes`).
+   - `submit` valida el método (`dni`, `nie` o `passport`; 400 `invalid_method`). Los documentos solo pueden ser ficheros subidos a nuestro `/uploads` (`isOwnUploadUrl`; 400 `invalid_files` con URLs ajenas, rutas raras o claves desconocidas). Antes se guardaba cualquier cosa.
+   - Una cuenta ya verificada no puede volver a «pendiente» enviando otra vez (409 `already_verified`).
+
+**Commits.**
+- Frontend: `package-lock.json` válido para el npm 10 de CI y test de `ApplicantsModal` independiente de la zona horaria
+- Verificación: `/api/verification` detrás de authenticate; aprobar y rechazar ya funcionan y los documentos solo pueden ser ficheros propios
+- Docs: este registro y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- `npm --prefix frontend ci` con npm 10.9: falla con el lockfile anterior (comprobado también sobre `0b8cb26~1`, que está bien, y sobre `52e0779`, que ya falla) y pasa con el nuevo. `institution-frontend` instala bien.
+- Frontend: `lint` sin errores, `build` OK, `vitest`: **65 ficheros y 272 tests OK** en UTC (antes, 1 fallo en UTC).
+- Backend: `npx tsc --noEmit` sin errores; los tests nuevos y `route-auth-map.test.ts` compilan.
+- **Jest del backend NO ejecutado**: la sesión no tenía acceso a `fastdl.mongodb.org` y `mongodb-memory-server` no pudo bajar `mongod`. `tests/security/verification.routes.test.ts` (nuevo, 15 casos) y `route-auth-map.test.ts` quedan por pasar en CI o en local.
+- En su lugar se probaron las rutas contra la app real con supertest, sin base de datos, en todos los casos que no la tocan. Sin sesión, las cinco rutas dan 401; un inquilino que aprueba, 403; un administrador con un ID inválido, 404 `user_not_found`; notas de 501 caracteres, 400; método `carnet`, 400 `invalid_method`. URL ajena, `/uploads/../x` o una lista dan 400 `invalid_files`.
+- **GitNexus no disponible** en esta sesión (ni servidor MCP ni `.gitnexus/`). Impacto revisado a mano: ningún código del frontend llama a `/api/verification` (la pantalla se quitó en la ronda 74). `requireVerified` y `agencyInvite.controller` solo leen el modelo `Verification`, que no cambia.
+
+**Qué queda.**
+- Pasar el Jest completo del backend en CI.
+- Los documentos de identidad (`idFrontUrl`, `selfieUrl`) se sirven desde `/uploads`, que es público para quien tenga el enlace. Para DNI y selfis debería ser almacenamiento privado con URL firmada; es la misma pregunta que los adjuntos del chat (ronda 34).
+- No hay pantalla para que el administrador revise las verificaciones pendientes; las rutas funcionan, pero solo se pueden llamar desde la API.
+- Pendientes anteriores: `SystemEvents` y `AdminCompliancePage` en inglés y con estilos en línea; `pro/Profile`; `.auth-input` frente a `.ra-input`.
+
+**Siguiente mejora propuesta.** `SystemEvents` y `AdminCompliancePage` al español y al sistema 2026 (lo que proponía la ronda 77 para la interfaz).

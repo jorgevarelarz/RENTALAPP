@@ -1476,3 +1476,11 @@ Rules:
 - `getComplianceDashboard` (`src/modules/rentalPublic/services/complianceDashboard.service.ts`) now returns `totals.compliant` and `totals.nonCompliant` over the whole filter (the admin screen used to count non-compliant from the current page only). Status counts respect the `status` filter (before, `risk` ignored it). Institution portal shares the service; its fields are unchanged.
 - `frontend/src/pages/admin/ComplianceDashboard.tsx` rewritten with `PageHeader`/`Card`/`Input`/`Select`/`Badge`, Spanish labels, area dropdown from `byArea`, Spanish `invalid_date_range` (also from the CSV Blob). Admin nav/AdminHome/Reports say «Cumplimiento» / «Eventos del sistema».
 - Verification: tsc clean; Jest admin+institution compliance 9/9; frontend lint/build OK, 65 files / 272 tests; Playwright `/tmp/ra-shots77`. Details in `docs/MEJORA-CONTINUA.md` round 77.
+
+### 2026-10-15 - Claude Code (autonomous worker) - Round 78: CI-breaking lockfile + `/api/verification` behind authenticate
+
+- `frontend/package-lock.json` had been rejected by npm 10 / Node 20 (`npm ci`: "Missing: @emnapi/runtime@1.11.3") since round 64 (`0b8cb26`); regenerated with npm 10, no version changes. `ApplicantsModal` test assumed two-digit hours (fails in UTC, i.e. CI).
+- `/api/verification` is mounted behind `authenticate` (`src/app.ts`); `approve`/`reject` used to answer 403 even to admins (nothing set `req.user`). They now 404 unknown users and cap notes at 500 chars. `submit` validates `method` and only accepts own `/uploads` files (`isOwnUploadUrl`), and returns 409 `already_verified`. Removed from `PUBLIC_ROUTES`; new `tests/security/verification.routes.test.ts`.
+- Gotcha: PR #46 CI has not run since 2026-10-06; this session's sandbox blocks `fastdl.mongodb.org`, so backend Jest was NOT run (only tsc + supertest smoke without DB). Run the backend suite before merging.
+- Verification: tsc clean; frontend `npm ci` OK, lint/build OK, 65 files / 272 tests (UTC). Details in `docs/MEJORA-CONTINUA.md` round 78.
+
