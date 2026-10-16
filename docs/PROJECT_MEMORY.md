@@ -1476,3 +1476,10 @@ Rules:
 - `getComplianceDashboard` (`src/modules/rentalPublic/services/complianceDashboard.service.ts`) now returns `totals.compliant` and `totals.nonCompliant` over the whole filter (the admin screen used to count non-compliant from the current page only). Status counts respect the `status` filter (before, `risk` ignored it). Institution portal shares the service; its fields are unchanged.
 - `frontend/src/pages/admin/ComplianceDashboard.tsx` rewritten with `PageHeader`/`Card`/`Input`/`Select`/`Badge`, Spanish labels, area dropdown from `byArea`, Spanish `invalid_date_range` (also from the CSV Blob). Admin nav/AdminHome/Reports say «Cumplimiento» / «Eventos del sistema».
 - Verification: tsc clean; Jest admin+institution compliance 9/9; frontend lint/build OK, 65 files / 272 tests; Playwright `/tmp/ra-shots77`. Details in `docs/MEJORA-CONTINUA.md` round 77.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 78: system events + policy acceptances (CSV injection, date range, 2026 UI)
+
+- `src/services/systemEvents.service.ts` uses `parseDateRange` (dateTo inclusive of the whole day; invalid/inverted → 400 `invalid_date_range` in list and CSV); page/pageSize fall back to 1/25. New `tests/admin/admin.system-events.test.ts`.
+- `AdminCompliancePage` built its CSV client-side without formula neutralisation (User-Agent is user-controlled): now `frontend/src/utils/csv.ts` (mirror of backend `utils/csv.ts`). `frontend/src/utils/download.ts` (`saveBlob`, `blobErrorBody`) shared with `ComplianceDashboard` and `SystemEvents`.
+- `SystemEvents` and `AdminCompliancePage` rewritten with PageHeader/Card/Select/Badge/Modal; all 4 event types and cookies_policy in filters; breadcrumbs «Políticas»/«Pistas de firma». Gotcha: a `sr-only` `<th>` inside `overflow-x-auto` widens the page on mobile unless the scroll container is `relative`.
+- Verification: tsc clean; Jest 3/3; frontend lint/build OK, 67 files / 280 tests; Playwright `/tmp/ra-shots78`. Details in `docs/MEJORA-CONTINUA.md` round 78.

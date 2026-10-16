@@ -2987,3 +2987,56 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: `/api/verification` en la lista de rutas públicas; `pro/Profile`; `.auth-input` frente a `.ra-input`; fotos externas en los anuncios.
 
 **Siguiente mejora propuesta.** Seguir con administración y pasar `SystemEvents` y `AdminCompliancePage` al español y al sistema 2026 (mismas piezas que esta ronda). Si se prefiere backend: montar `/api/verification` detrás de `authenticate` y sacarla de la lista de rutas públicas.
+
+### Ronda 78 — 2026-10-16 04:19
+
+**Qué y por qué.** Seguí lo que proponía la ronda 77: pasar al español y al sistema 2026 las dos pantallas de administración que enlaza el panel de cumplimiento, «Eventos del sistema» (`/admin/system-events`) y «Políticas» (`/admin/compliance/policies`). Al revisarlas salieron dos fallos y un hueco de seguridad, que se corrigieron antes que la apariencia.
+
+1. **Inyección de fórmulas en el CSV de aceptaciones de políticas** (seguridad). `AdminCompliancePage` montaba el CSV en el navegador uniendo valores con comas.
+   - El User-Agent lo manda quien acepta las políticas, así que un `=HYPERLINK(...)` se ejecutaba al abrir el fichero en Excel. Era el único exportador que se había quedado fuera de la corrección del 2026-10-11, porque no pasa por el backend.
+   - Una coma o una comilla en el valor descolocaba además las columnas.
+   - Ahora usa `frontend/src/utils/csv.ts`, con las mismas reglas que el `utils/csv.ts` del backend. La auditoría de seguridad lo recoge.
+2. **Fechas de los eventos del sistema** (backend, `systemEvents.service.ts`).
+   - «Hasta 2026-10-12» se convertía en la medianoche de ese día, así que los eventos del propio día no salían, tampoco en el CSV.
+   - Una fecha no válida o un rango al revés daba 500, y `?page=abc` también.
+   - Ahora usa `parseDateRange`, igual que el panel de cumplimiento: «hasta» incluye el día entero y los errores responden 400 `invalid_date_range`. Una paginación con valores raros vuelve a 1 y 25.
+3. **«Eventos del sistema» en español y con el sistema 2026.**
+   - El filtro solo ofrecía dos de los cuatro tipos que escribe el backend. Faltaban los avisos de precio por encima del límite (`LISTING_PRICE_LIMIT_EXCEEDED`) y las limpiezas (`SYSTEM_EVENTS_RETENTION_RUN`), y no se podía filtrar por inmueble ni por sistema.
+   - Ahora cada evento sale con una `Badge` y su nombre en español, y el recurso enlaza a la ficha del contrato o del inmueble.
+   - El detalle se abre en `ui/Modal` con el JSON sobre `--ra-paper` (antes era un bloque oscuro) y con el ID de petición para copiar. La columna «ID de petición» se quitó de la tabla, porque solo la tiene un tipo de evento y desbordaba a 1280 px.
+   - Hay botón CSV: la API ya lo tenía y la pantalla no. Si falla, lee el error que viene dentro del Blob.
+   - Además: `invalid_date_range` explicado, «Reintentar» y lista vacía con «Quitar filtros».
+4. **«Aceptación de políticas» con el sistema 2026.**
+   - Usa `PageHeader`, `Card`, `Select` con etiqueta, tabla con `--ra-line` y la versión en una `Badge`. El User-Agent sale recortado, con el texto completo en `title`.
+   - Se añade «Cookies» al filtro: `cookies_policy` existe en el modelo y faltaba.
+   - La lista vacía ofrece «Ver también versiones anteriores».
+   - La miga de pan decía «policies» y «audit-trails»; ahora dice «Políticas» y «Pistas de firma».
+   - `utils/download.ts` reúne la descarga de un Blob y la lectura del error que viene dentro. `ComplianceDashboard` la usa también.
+
+**Commits.**
+- `0e595d7` Eventos del sistema: «hasta» incluye el día entero y una fecha no válida da 400
+- `b02656c` Políticas: el CSV de aceptaciones ya no ejecuta fórmulas y la pantalla pasa al español y al sistema 2026
+- `d113036` Interfaz: «Eventos del sistema» en español, con el sistema 2026 y todos los tipos de evento
+- Docs: este registro, la nota en `auditoria-seguridad-2026-10-05.md` y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. `tests/admin/admin.system-events.test.ts` es nuevo (primer test de esta API) y pasa con Jest `--runInBand`: **3/3**. Comprueba:
+  - que solo entra el administrador;
+  - que «hasta» incluye el día entero;
+  - los filtros por recurso;
+  - que el CSV respeta las fechas;
+  - el 400 con fecha no válida o rango al revés, también en el CSV;
+  - la paginación con `page=abc`.
+- Frontend: `lint` sin errores y `build` OK. `npm --prefix frontend test`: **67 ficheros y 280 tests OK** (antes 272). Hay 5 tests nuevos de `SystemEvents` y 3 de `AdminCompliancePage`; uno de estos últimos comprueba que `=HYPERLINK("…")` sale en el CSV como `"'=HYPERLINK(""…"")"`.
+- Capturas con Playwright y la API simulada (`/tmp/ra-shots78`), a 1280 y 390 px:
+  - La primera captura a 1280 cortaba la columna «Ver detalle»; se quitó la columna del ID de petición.
+  - En móvil, la página de eventos medía 550 px de ancho. La causa era el `<th>` con `sr-only`: es absoluto y se escapaba del contenedor con scroll. Se arregló con `relative` en ese contenedor (medido: 390 px). Ninguna otra tabla tiene ese patrón.
+- **GitNexus.** `impact` de `buildSystemEventsQuery`: LOW (2 llamadores, los dos controladores). `detect_changes`: riesgo medio, solo por los flujos `SystemEvents → FetchSystemEvents` y `ComplianceDashboard → FetchComplianceDashboard`, que son los que se cambian.
+
+**Qué queda.**
+- `GET /api/admin/policies/acceptances` devuelve todas las aceptaciones sin paginar. Con muchos usuarios convendrá paginarlo y exportar el CSV desde el servidor, como los demás.
+- El CSV de eventos y el de cumplimiento siguen con cabeceras en inglés (puede haber quien los procese).
+- `parseDateRange` pone el fin del día en la hora local del servidor y el inicio en UTC. En un VPS en UTC da igual; si el servidor estuviera en hora de Madrid, el rango se desplazaría una o dos horas. No se ha tocado porque lo comparten cumplimiento, institución y contratos.
+- Pendientes anteriores: `AdminUsersPage`/`AdminTenantProPage` con tablas en línea, `/api/verification` en la lista de rutas públicas, `pro/Profile`, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
+
+**Siguiente mejora propuesta.** Paginar `GET /api/admin/policies/acceptances` (con total) y mover su CSV al servidor con `csvRow`, para que la pantalla no cargue todas las aceptaciones de golpe. Si se prefiere interfaz: `AdminUsersPage` y `AdminTenantProPage` con el sistema 2026.
