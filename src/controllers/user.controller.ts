@@ -7,6 +7,8 @@ import bcrypt from 'bcryptjs';
 import { Types } from 'mongoose';
 import { emailInUse } from '../utils/userEmail';
 import { logger } from '../utils/logger';
+import { csvRows } from '../utils/csv';
+import { accentInsensitivePattern, escapeRegExp } from '../utils/searchRegex';
 
 const toPublicUser = (u: any) => ({
   id: String(u._id),
@@ -51,27 +53,52 @@ const toMeUser = (u: any) => ({
     : undefined,
 });
 
+export const USER_ROLES = ['landlord', 'tenant', 'admin', 'pro', 'agency', 'institution_viewer'] as const;
+const CSV_MAX_ROWS = 10000;
+
+class UserFilterError extends Error {}
+
+// `q` iba a $regex sin escapar (un «(a+)+$» bloqueaba Mongo) y buscaba en el rol, no en el nombre;
+// un rol inexistente daba lista vacía en vez de avisar.
+function buildUsersQuery(raw: Record<string, unknown>) {
+  const query: Record<string, unknown> = {};
+  const role = typeof raw.role === 'string' ? raw.role : '';
+  if (role) {
+    if (!(USER_ROLES as readonly string[]).includes(role)) throw new UserFilterError('invalid_role');
+    query.role = role;
+  }
+  const term = typeof raw.q === 'string' ? raw.q.trim().slice(0, 100) : '';
+  if (term) {
+    const pattern = escapeRegExp(term);
+    query.$or = [
+      { email: { $regex: pattern, $options: 'i' } },
+      { name: { $regex: accentInsensitivePattern(term), $options: 'i' } },
+      { companyName: { $regex: accentInsensitivePattern(term), $options: 'i' } },
+    ];
+  }
+  return query;
+}
+
 /**
- * Retrieve a list of all users. The password hash is excluded for security.
+ * Lista de usuarios para el administrador, de la cuenta más reciente a la más antigua.
+ * El hash de la contraseña no sale (toPublicUser).
  */
 export const getAllUsers = async (req: Request, res: Response) => {
-  const { q = '', role = '', page = '1', limit = '10' } = (req.query || {}) as any;
+  const { page = '1', limit = '10' } = (req.query || {}) as any;
   const pg = Math.max(1, parseInt(String(page)) || 1);
   const lim = Math.min(100, Math.max(1, parseInt(String(limit)) || 10));
 
-  const query: any = {};
-  if (role) query.role = role;
-  if (q) {
-    const term = String(q).trim();
-    if (term) query.$or = [
-      { email: { $regex: term, $options: 'i' } },
-      { role: { $regex: term, $options: 'i' } },
-    ];
+  let query: Record<string, unknown>;
+  try {
+    query = buildUsersQuery(req.query || {});
+  } catch (error) {
+    if (error instanceof UserFilterError) return res.status(400).json({ error: error.message });
+    throw error;
   }
 
   const [items, total] = await Promise.all([
     User.find(query)
-      .sort({ ratingAvg: -1, reviewCount: -1, createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .skip((pg - 1) * lim)
       .limit(lim)
       .lean(),
@@ -79,6 +106,35 @@ export const getAllUsers = async (req: Request, res: Response) => {
   ]);
 
   res.json({ items: items.map(toPublicUser), total, page: pg, limit: lim });
+};
+
+/** CSV con todos los usuarios del filtro (máx. 10.000), con fórmulas neutralizadas. */
+export const exportUsersCsv = async (req: Request, res: Response) => {
+  let query: Record<string, unknown>;
+  try {
+    query = buildUsersQuery(req.query || {});
+  } catch (error) {
+    if (error instanceof UserFilterError) return res.status(400).json({ error: error.message });
+    throw error;
+  }
+  const users = await User.find(query)
+    .select(['name', 'email', 'role', 'companyName', 'isVerified', 'createdAt'])
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(CSV_MAX_ROWS)
+    .lean();
+  const header = ['id', 'nombre', 'email', 'rol', 'empresa', 'verificado', 'alta'];
+  const rows = users.map((u: any) => [
+    String(u._id),
+    u.name,
+    u.email,
+    u.role,
+    u.companyName ?? '',
+    u.isVerified ? 'sí' : 'no',
+    u.createdAt ? new Date(u.createdAt).toISOString() : '',
+  ]);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="usuarios.csv"');
+  res.send(csvRows([header, ...rows]));
 };
 
 export const createUser = async (req: Request, res: Response) => {
