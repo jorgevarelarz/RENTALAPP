@@ -3164,3 +3164,37 @@ Al revisar los filtros vi que `?userId[$ne]=x` ya lo corta `rejectMongoOperators
 
 **Siguiente mejora propuesta.** Lista blanca en `PATCH /api/users/:id` para el administrador (nombre, empresa, teléfono; correo normalizado y sin duplicados con `emailInUse`; `role` e `isVerified` fuera o con validación explícita) con su test, y nombre aleatorio para los ficheros cifrados de Tenant PRO.
 
+
+### Ronda 82 — 2026-10-16 05:14
+
+**Qué y por qué.** Lo que proponía la ronda 81, y lo único de seguridad que quedaba abierto en la lista de usuarios. Las dos últimas rondas fueron de interfaz; esta es de backend.
+
+1. **`PATCH /api/users/:id` con lista blanca** (`src/controllers/user.controller.ts`, `buildUserUpdate`).
+   - Antes el administrador podía escribir cualquier campo del cuerpo salvo seis: `role: 'admin'`, `isVerified` como texto, `ratingAvg`, `reviewCount`, `referredByAgencyId`, `institutionScope`, o el correo sin pasar a minúsculas ni comprobar si ya existía (rompía el inicio de sesión de dos cuentas). Un id mal formado daba 500.
+   - Ahora cada cuenta edita solo su perfil (teléfono, bio, avatar, puesto, ingresos, empresa y categoría), con tipos y longitudes validados; `null` o `''` borra el campo.
+   - El administrador puede cambiar además el nombre, el correo (normalizado; si es de otra cuenta, 409 `email_already_exists`), el rol entre inquilino, propietario, profesional y agencia (los mismos con los que puede crear cuentas; 400 `invalid_role`) y la identidad verificada (solo `true`/`false`). Una cuenta de administración o de institución no cambia de rol (400 `role_locked`), así que el administrador tampoco puede quitarse el suyo por error.
+   - Valoraciones, tokens, Stripe y Tenant PRO quedan fuera; los campos desconocidos se ignoran. Ninguna pantalla usa hoy esta ruta, así que no cambia nada visible.
+2. **Justificantes de Tenant PRO con nombre aleatorio** (`src/services/tenantProStorage.ts`). El fichero cifrado se llamaba `<fecha>_<nombre original>.bin`: el nombre que ponía el inquilino («nomina_lucia_perez.pdf») quedaba en claro en `storage/` y en la base, y venía del cliente (multer ya quita las rutas, pero no hay por qué fiarse). Ahora son 128 bits aleatorios. `readDecryptedTP`, como `deleteTP`, solo lee dentro del directorio de Tenant PRO. Los ficheros ya subidos conservan su nombre y se siguen abriendo.
+
+**Commits.**
+- `c4a9427` Usuarios: PATCH /api/users/:id con lista blanca también para el administrador
+- `739d8bd` Tenant PRO: los justificantes cifrados se guardan con nombre aleatorio
+- Docs: este registro, la nota en `auditoria-seguridad-2026-10-05.md` y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- `npx tsc --noEmit` sin errores.
+- Jest `--runInBand`:
+  - `tests/admin/admin.users.update.test.ts` (nuevo, **5/5**): el administrador cambia nombre, correo, rol e identidad sin tocar valoraciones, `tokenVersion`, Stripe ni Tenant PRO; correo duplicado (también con otras mayúsculas) 409, y su propio correo con otras mayúsculas no cuenta como duplicado; rol, identidad, nombre vacío, ingresos negativos y categoría desconocida dan 400; el rol de un administrador no cambia; una cuenta normal no cambia rol, identidad, correo ni nombre ni toca cuentas ajenas (403); id mal formado 400 e inexistente 404.
+  - `admin.users` y `auth/session-revocation`: OK (3 suites y 14 tests en total con la nueva).
+  - `tests/tenantPro` (3 suites, 12 tests, OK). El test de la subida comprueba que el nombre guardado es `<32 hex>.bin`.
+  - `security/route-auth-map`: en la misma tanda que Tenant PRO falló «toda ruta privada responde 401 sin sesión» al pasar los 58 s; sola pasa **4/4** en 14 s. Es el tiempo de espera de siempre, no el cambio (no hay rutas nuevas).
+- Frontend: sin cambios en esta ronda, así que no se ha vuelto a compilar.
+- **GitNexus.** `impact` de `updateUser` y `encryptAndSaveTP`: LOW. `detect_changes`: riesgo bajo y ningún flujo afectado.
+
+**Qué queda.**
+- Desde «Usuarios» no se puede abrir el detalle de una cuenta, cambiar su rol ni desactivarla. La API ya lo admite con validación; falta la pantalla.
+- No hay forma de desactivar una cuenta (no existe el campo); se puede cambiar el rol, pero no suspenderla.
+- Los justificantes de Tenant PRO ya subidos conservan el nombre antiguo hasta que la purga los borre (365 días).
+- Pendientes anteriores: flujo manual de `/api/verification` sin pantalla, `parseDateRange` con hora local y UTC mezcladas, `pro/Profile`, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
+
+**Siguiente mejora propuesta.** Interfaz: ficha de la cuenta en «Usuarios» (`ui/Modal` desde la fila) con nombre, correo, rol e identidad editables a través de este `PATCH`, con los errores en español y captura con Playwright. Si se prefiere otra cosa: `pro/Profile` con el sistema 2026.

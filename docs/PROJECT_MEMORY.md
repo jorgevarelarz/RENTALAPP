@@ -1504,3 +1504,9 @@ Rules:
 - Open: `PATCH /api/users/:id` lets admin write any body field (no whitelist).
 - Verification: tsc clean; Jest admin.users 4/4 + route-auth-map OK; frontend lint/build OK, 69 files / 292 tests; Playwright `/tmp/ra-shots81`. Details in `docs/MEJORA-CONTINUA.md` round 81.
 
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 82: PATCH /api/users/:id whitelist + random Tenant PRO filenames
+
+- `updateUser` (`src/controllers/user.controller.ts`) now uses `buildUserUpdate`: self → phone/bio/avatar/jobTitle/monthlyIncome/companyName/serviceCategory (typed, trimmed, `null`/`''` unsets); admin also name, email (normalized, 409 on duplicate via `findUserByEmail`), role only among tenant/landlord/pro/agency (`role_locked` for admin/institution targets), boolean `isVerified`. 400 `invalid_user_id`. New `tests/admin/admin.users.update.test.ts` (5).
+- `encryptAndSaveTP(buf)` (signature changed, no filename) writes `<32 hex>.bin`; `readDecryptedTP` uses `path.basename`. Old files keep their names and still read.
+- Verification: tsc clean; Jest admin.users.update 5/5, admin.users, session-revocation, tenantPro (3 suites), route-auth-map OK. Frontend untouched. Details in `docs/MEJORA-CONTINUA.md` round 82.
