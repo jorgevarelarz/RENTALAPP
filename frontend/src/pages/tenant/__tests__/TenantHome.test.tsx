@@ -4,9 +4,10 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import TenantHome from '../TenantHome';
 
-const { listContractsMock, listMyFavoritesMock } = vi.hoisted(() => ({
+const { listContractsMock, listMyFavoritesMock, verified } = vi.hoisted(() => ({
   listContractsMock: vi.fn(),
   listMyFavoritesMock: vi.fn(),
+  verified: { current: undefined as boolean | undefined },
 }));
 
 vi.mock('../../../context/AuthContext', () => ({
@@ -18,6 +19,7 @@ vi.mock('../../../context/AuthContext', () => ({
       name: 'Ana Garcia',
       role: 'tenant',
       tenantPro: { status: 'verified' },
+      isVerified: verified.current,
     },
   }),
 }));
@@ -32,6 +34,8 @@ vi.mock('../../../services/properties', () => ({
 
 describe('TenantHome', () => {
   beforeEach(() => {
+    verified.current = undefined;
+    listContractsMock.mockClear();
     listMyFavoritesMock.mockResolvedValue({ items: [{ _id: 'p1' }, { _id: 'p2' }] });
     listContractsMock.mockResolvedValue({
       items: [
@@ -84,6 +88,19 @@ describe('TenantHome', () => {
     expect(screen.getByText('Ático Retiro')).toBeInTheDocument();
     expect(screen.getByText('Contratos en trámite', { selector: 'p' }).parentElement).toHaveTextContent('2');
     expect(screen.queryByText(/undefined/)).not.toBeInTheDocument();
+  });
+
+  it('sin identidad verificada no pide los contratos ni muestra un error', async () => {
+    verified.current = false;
+    render(
+      <MemoryRouter>
+        <TenantHome />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByText('Aún no tienes un alquiler activo')).toBeInTheDocument();
+    expect(listContractsMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole('alert')).toBeNull();
   });
 
   it('offers to search when there is no active rental', async () => {

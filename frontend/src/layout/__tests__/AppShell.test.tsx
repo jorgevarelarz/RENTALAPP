@@ -6,7 +6,9 @@ import AppShell from '../AppShell';
 
 const { listConversationsMock, auth } = vi.hoisted(() => ({
   listConversationsMock: vi.fn(),
-  auth: { current: null as null | { token?: string; user?: { _id: string; email: string; role: string } } },
+  auth: {
+    current: null as null | { token?: string; user?: { _id: string; email: string; role: string; isVerified?: boolean } },
+  },
 }));
 
 const tenantAuth = { token: 'token-1', user: { _id: 'tenant-1', email: 'ana@example.com', role: 'tenant' } };
@@ -81,5 +83,35 @@ describe('AppShell, menú del móvil', () => {
     expect(within(dialog).getByRole('link', { name: 'Crear cuenta' })).toHaveAttribute('href', `/register?redirect=${back}`);
     expect(within(dialog).getByRole('link', { name: 'Entrar' })).toHaveAttribute('href', `/login?redirect=${back}`);
     expect(listConversationsMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('AppShell, cuenta sin verificar', () => {
+  beforeEach(() => {
+    listConversationsMock.mockReset();
+    listConversationsMock.mockResolvedValue([]);
+  });
+
+  it('avisa al inquilino, enlaza a la verificación y no sondea los mensajes', async () => {
+    auth.current = { token: 't', user: { ...tenantAuth.user, isVerified: false } };
+    renderShell();
+    const notice = screen.getByRole('status');
+    expect(notice).toHaveTextContent('Tu identidad está sin verificar');
+    expect(within(notice).getByRole('link', { name: 'Ver qué falta' })).toHaveAttribute('href', '/tenant/kyc');
+    expect(await screen.findByText('Inicio del inquilino')).toBeInTheDocument();
+    expect(listConversationsMock).not.toHaveBeenCalled();
+  });
+
+  it('al propietario se lo explica sin enlace y no sale con la identidad verificada', () => {
+    auth.current = { token: 't', user: { _id: 'l1', email: 'luis@example.com', role: 'landlord', isVerified: false } };
+    const { unmount } = renderShell();
+    const notice = screen.getByRole('status');
+    expect(notice).toHaveTextContent('no podrás usar contratos, mensajes ni pagos');
+    expect(within(notice).queryByRole('link')).toBeNull();
+    unmount();
+
+    auth.current = { token: 't', user: { ...tenantAuth.user, isVerified: true } };
+    renderShell();
+    expect(screen.queryByText('Tu identidad está sin verificar')).toBeNull();
   });
 });

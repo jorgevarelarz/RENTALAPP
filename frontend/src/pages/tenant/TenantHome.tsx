@@ -101,7 +101,10 @@ export default function TenantHome() {
       try {
         // Los favoritos viven en el servidor; que fallen no debe tapar los contratos
         const [contractsRes, favoritesRes] = await Promise.all([
-          token ? listContracts(token, { include: 'cotenant' }) : Promise.resolve({ items: [] as Contract[] }),
+          // Sin identidad verificada los contratos responden 403; el aviso de AppShell ya lo explica
+          token && user?.isVerified !== false
+            ? listContracts(token, { include: 'cotenant' })
+            : Promise.resolve({ items: [] as Contract[] }),
           listMyFavorites().then((res) => (res.items || []).length).catch(() => null),
         ]);
         if (!active) return;
@@ -121,7 +124,7 @@ export default function TenantHome() {
     return () => {
       active = false;
     };
-  }, [token]);
+  }, [token, user?.isVerified]);
 
   const activeContract = useMemo(
     () => summary.contracts.find((contract) => ['active', 'signed'].includes(contract?.status)),

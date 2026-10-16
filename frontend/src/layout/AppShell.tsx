@@ -61,7 +61,8 @@ function useUnread() {
     let timer: any;
     const load = async () => {
       try {
-        if (!user?._id) { setUnread(0); return; }
+        // Sin identidad verificada /api/chat responde 403: no se sondea
+        if (!user?._id || user.isVerified === false) { setUnread(0); return; }
         const list = await listConversations({ page: 1, limit: 50, kind: 'direct' });
         const total = list.reduce((acc: number, c: any) => acc + (c?.unread?.[user._id] || 0), 0);
         setUnread(total);
@@ -71,7 +72,7 @@ function useUnread() {
     // polling ligero cada 30s
     timer = setInterval(load, 30_000);
     return () => clearInterval(timer);
-  }, [user?._id]);
+  }, [user?._id, user?.isVerified]);
   return unread;
 }
 
@@ -165,6 +166,34 @@ const roleLabels: Record<string, string> = {
   admin: 'Administración',
   agency: 'Agencia',
 };
+
+// Casi toda la API exige identidad verificada (requireVerified). En vez de que cada pantalla
+// falle por su lado, un aviso fijo dice qué falta y, al inquilino, dónde ver su estado.
+function VerificationNotice() {
+  const { user } = useAuth();
+  const { pathname } = useLocation();
+  if (!user || user.role === 'admin' || user.isVerified !== false) return null;
+  if (pathname.startsWith('/tenant/kyc')) return null;
+  const isTenant = user.role === 'tenant';
+  return (
+    <div className="ra-verify-notice" role="status">
+      <ShieldCheck size={18} className="ra-verify-notice-icon" aria-hidden="true" />
+      <div className="ra-verify-notice-text">
+        <strong>Tu identidad está sin verificar</strong>
+        <span>
+          {isTenant
+            ? 'Hasta que el equipo de RentalApp la verifique no podrás pedir visitas, escribir a los propietarios ni firmar contratos.'
+            : 'Hasta que el equipo de RentalApp la verifique no podrás usar contratos, mensajes ni pagos.'}
+        </span>
+      </div>
+      {isTenant && (
+        <Link to="/tenant/kyc" className="ra-button ra-button-blue ra-button-small ra-verify-notice-action">
+          Ver qué falta
+        </Link>
+      )}
+    </div>
+  );
+}
 
 const sectionTitle = 'text-[11px] font-semibold uppercase tracking-wider text-gray-400 px-3 mb-1.5';
 
@@ -262,6 +291,7 @@ export default function AppShell() {
         <SideNav unread={unread} />
         <main className="ra-app-content flex-1 min-w-0 h-full overflow-y-auto pr-2">
           <Breadcrumbs />
+          <VerificationNotice />
           <Outlet />
         </main>
       </div>
