@@ -1,124 +1,367 @@
-import React, { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import api from '../../api/client';
-import { formatApiError } from '../../api/client';
+import React, { useCallback, useEffect, useState } from 'react';
+import { Download, Plus, RefreshCw } from 'lucide-react';
+import Badge from '../../components/ui/Badge';
+import Button from '../../components/ui/Button';
+import Card from '../../components/ui/Card';
+import EmptyState from '../../components/ui/EmptyState';
+import ErrorCard from '../../components/ui/ErrorCard';
+import Input from '../../components/ui/Input';
+import Modal from '../../components/ui/Modal';
+import PageHeader from '../../components/ui/PageHeader';
+import Select from '../../components/ui/Select';
+import { api, formatApiError } from '../../api/client';
+import { blobErrorBody, saveBlob } from '../../utils/download';
+import type { StatusTone } from '../../utils/statusBadges';
+
+type AdminUser = {
+  id: string;
+  name?: string;
+  email: string;
+  role: string;
+  isVerified?: boolean;
+  companyName?: string;
+  createdAt?: string;
+};
+
+// Los roles del modelo (user.model.ts)
+const ROLES: Record<string, { label: string; tone: StatusTone }> = {
+  tenant: { label: 'Inquilino', tone: 'neutral' },
+  landlord: { label: 'Propietario', tone: 'neutral' },
+  agency: { label: 'Agencia', tone: 'info' },
+  pro: { label: 'Profesional', tone: 'info' },
+  admin: { label: 'Administrador', tone: 'warning' },
+  institution_viewer: { label: 'Institución', tone: 'neutral' },
+};
+
+const ERRORS: Record<string, string> = {
+  invalid_role: 'Ese rol no existe.',
+  email_already_exists: 'Ya hay una cuenta con ese correo.',
+  invalid_payload: 'Revisa los datos: nombre, correo y una contraseña de al menos 8 caracteres.',
+};
+
+const PAGE_SIZE = 25;
+const COLUMNS = ['Usuario', 'Rol', 'Identidad', 'Alta'];
+// En móvil solo queda la columna «Usuario»: rol, identidad y alta van debajo del nombre
+const colClass = (idx: number) => (idx === 0 ? '' : 'hidden md:table-cell');
+const EMPTY_AGENCY = { name: '', email: '', password: '', companyName: '' };
+
+const date = (value?: string) => (value ? new Date(value).toLocaleDateString('es-ES', { dateStyle: 'medium' }) : '—');
 
 export default function AdminUsersPage() {
-  const queryClient = useQueryClient();
-  const [q, setQ] = useState('');
+  const [items, setItems] = useState<AdminUser[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
+  const [search, setSearch] = useState('');
+  const [q, setQ] = useState('');
   const [role, setRole] = useState('');
   const [page, setPage] = useState(1);
-  const [agencyForm, setAgencyForm] = useState({ name: '', email: '', password: '', companyName: '' });
-  const [creatingAgency, setCreatingAgency] = useState(false);
-  const pageSize = 10;
-  const { data, isLoading } = useQuery({
-    queryKey: ['admin/users', { q, role, page, limit: pageSize }],
-    queryFn: async () => {
-      setError(null);
-      const { data } = await api.get('/api/users', { params: { q, role, page, limit: pageSize } });
-      return data as { items: any[]; total: number; page: number; limit: number };
-    },
-  });
-  const totalPages = Math.max(1, Math.ceil((data?.total || 0) / (data?.limit || pageSize)));
-  const pageItems = data?.items || [];
+  const [agencyOpen, setAgencyOpen] = useState(false);
+  const [agencyForm, setAgencyForm] = useState(EMPTY_AGENCY);
+  const [agencyError, setAgencyError] = useState<string | null>(null);
+  const [creating, setCreating] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+
+  // Se busca al dejar de teclear, y siempre desde la primera página
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setQ(search.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const filters = useCallback(() => {
+    const params: Record<string, string> = {};
+    if (q) params.q = q;
+    if (role) params.role = role;
+    return params;
+  }, [q, role]);
+
+  const fetchUsers = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const { data } = await api.get('/api/users', { params: { ...filters(), page, limit: PAGE_SIZE } });
+      setItems(data?.items || []);
+      setTotal(data?.total ?? 0);
+    } catch (err: any) {
+      setError(ERRORS[err?.response?.data?.error] || formatApiError(err, 'No se pudieron cargar los usuarios.'));
+    } finally {
+      setLoading(false);
+    }
+  }, [filters, page]);
+
+  useEffect(() => {
+    fetchUsers();
+  }, [fetchUsers]);
+
+  // El CSV lo genera el servidor con todas las cuentas del filtro, no solo la página visible
+  const exportCSV = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const res = await api.get('/api/users/export.csv', { params: filters(), responseType: 'blob' });
+      saveBlob(res.data, 'usuarios.csv');
+    } catch (err: any) {
+      const body = await blobErrorBody(err);
+      setExportError(ERRORS[body?.error || ''] || body?.message || formatApiError(err, 'No se pudo exportar el CSV.'));
+    } finally {
+      setExporting(false);
+    }
+  };
 
   const createAgency = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError(null);
-    setCreatingAgency(true);
+    setAgencyError(null);
+    setCreating(true);
     try {
-      await api.post('/api/users', {
+      const { data } = await api.post('/api/users', {
         name: agencyForm.name.trim(),
         email: agencyForm.email.trim(),
         password: agencyForm.password,
         companyName: agencyForm.companyName.trim() || undefined,
         role: 'agency',
       });
-      setAgencyForm({ name: '', email: '', password: '', companyName: '' });
+      setAgencyOpen(false);
+      setAgencyForm(EMPTY_AGENCY);
+      setNotice(`Agencia creada: ${data?.user?.email || agencyForm.email.trim()}. Comparte la contraseña temporal por un canal seguro.`);
+      setSearch('');
+      setQ('');
       setRole('agency');
       setPage(1);
-      await queryClient.invalidateQueries({ queryKey: ['admin/users'] });
-    } catch (e: any) {
-      const code = e?.response?.data?.error;
-      setError(code === 'email_already_exists' ? 'Ese email ya existe.' : formatApiError(e, 'No se pudo crear la agencia'));
+    } catch (err: any) {
+      setAgencyError(ERRORS[err?.response?.data?.error] || formatApiError(err, 'No se pudo crear la agencia.'));
     } finally {
-      setCreatingAgency(false);
+      setCreating(false);
     }
   };
 
+  const clearFilters = () => {
+    setSearch('');
+    setQ('');
+    setRole('');
+    setPage(1);
+  };
+
+  const filtered = Boolean(q || role);
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, total);
+
   return (
-    <div style={{ padding: 24 }}>
-      <h2>Usuarios</h2>
-      <form onSubmit={createAgency} style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, margin: '12px 0 16px', background: '#fff' }}>
-        <div style={{ fontWeight: 700, marginBottom: 8 }}>Crear agencia</div>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 8 }}>
-          <input required minLength={2} placeholder="Nombre contacto" value={agencyForm.name} onChange={e => setAgencyForm({ ...agencyForm, name: e.target.value })} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '8px 12px' }} />
-          <input required type="email" placeholder="Email agencia" value={agencyForm.email} onChange={e => setAgencyForm({ ...agencyForm, email: e.target.value })} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '8px 12px' }} />
-          <input placeholder="Empresa (opcional)" value={agencyForm.companyName} onChange={e => setAgencyForm({ ...agencyForm, companyName: e.target.value })} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '8px 12px' }} />
-          <input required minLength={8} type="password" placeholder="Contraseña temporal" value={agencyForm.password} onChange={e => setAgencyForm({ ...agencyForm, password: e.target.value })} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '8px 12px' }} />
+    <div className="space-y-6 pb-10">
+      <PageHeader
+        title="Usuarios"
+        subtitle="Todas las cuentas de la plataforma, de la más reciente a la más antigua."
+        cta={
+          <Button size="sm" onClick={() => setAgencyOpen(true)}>
+            <Plus size={16} aria-hidden="true" />
+            Nueva agencia
+          </Button>
+        }
+      />
+
+      {notice && (
+        <div role="status" className="flex items-start justify-between gap-3 rounded-lg border border-[var(--ra-line)] bg-[var(--ra-paper)] p-4 text-sm">
+          <span>{notice}</span>
+          <button type="button" className="whitespace-nowrap font-semibold underline" onClick={() => setNotice(null)}>
+            Cerrar
+          </button>
         </div>
-        <button disabled={creatingAgency} style={{ marginTop: 10, borderRadius: 8, padding: '8px 12px', background: creatingAgency ? '#9ca3af' : '#111827', color: 'white', fontWeight: 600 }}>
-          {creatingAgency ? 'Creando…' : 'Crear agencia'}
-        </button>
-      </form>
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center', margin: '8px 0 12px' }}>
-        <input placeholder="Buscar por email o rol…" value={q} onChange={e => setQ(e.target.value)} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '8px 12px', width: 320 }} />
-        <select value={role} onChange={e => { setRole(e.target.value); setPage(1); }} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '8px 12px' }}>
-          <option value="">Todos</option>
-          <option value="tenant">Tenant</option>
-          <option value="landlord">Landlord</option>
-          <option value="pro">PRO</option>
-          <option value="admin">Admin</option>
-          <option value="agency">Agency</option>
-        </select>
-      </div>
-      <div style={{ marginBottom: 8 }}>
-        <button
-          className="px-3 py-1.5 rounded border border-gray-300"
-          onClick={() => {
-            const rows = pageItems.map((u:any)=>({ email: u.email, role: u.role, createdAt: u.createdAt }));
-            const header = 'email,role,createdAt\n';
-            const body = rows.map(r=>[r.email, r.role, r.createdAt?String(r.createdAt):''].join(',')).join('\n');
-            const blob = new Blob([header+body], { type: 'text/csv;charset=utf-8' });
-            const a = document.createElement('a');
-            a.href = URL.createObjectURL(blob);
-            a.download = `users_page_${data?.page||1}.csv`;
-            a.click();
-            URL.revokeObjectURL(a.href);
-          }}
-        >Exportar CSV (página)</button>
-      </div>
-      {isLoading && <div>Cargando…</div>}
-      {error && <div style={{ color: '#b91c1c' }}>{error}</div>}
-      {!isLoading && (
-        <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-          <thead>
-            <tr style={{ textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
-              <th style={{ padding: 8 }}>Email</th>
-              <th style={{ padding: 8 }}>Rol</th>
-              <th style={{ padding: 8 }}>Creado</th>
-            </tr>
-          </thead>
-          <tbody>
-            {pageItems.map(u => (
-              <tr key={u.id || u._id} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                <td style={{ padding: 8 }}>{u.email}</td>
-                <td style={{ padding: 8 }}>{u.role}</td>
-                <td style={{ padding: 8 }}>{u.createdAt ? new Date(u.createdAt).toLocaleString() : ''}</td>
-              </tr>
-            ))}
-            {pageItems.length === 0 && (
-              <tr><td colSpan={3} style={{ padding: 12 }}>No hay usuarios para esos filtros.</td></tr>
-            )}
-          </tbody>
-        </table>
       )}
-      <div style={{ display: 'flex', gap: 8, justifyContent: 'center', marginTop: 12 }}>
-        <button disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '6px 10px' }}>Anterior</button>
-        <span style={{ fontSize: 12, color: '#6B7280' }}>Página {data?.page || page} / {totalPages}</span>
-        <button disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))} style={{ border: '1px solid #d4d4d8', borderRadius: 8, padding: '6px 10px' }}>Siguiente</button>
-      </div>
+
+      <Card className="p-4">
+        <form
+          className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,14rem)_auto] sm:items-end"
+          onSubmit={(e) => {
+            e.preventDefault();
+            fetchUsers();
+          }}
+        >
+          <Input
+            label="Buscar"
+            type="search"
+            placeholder="Nombre, correo o empresa"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <Select
+            label="Rol"
+            value={role}
+            onChange={(e) => {
+              setRole(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Todos</option>
+            {Object.entries(ROLES).map(([value, { label }]) => (
+              <option key={value} value={value}>
+                {label}
+              </option>
+            ))}
+          </Select>
+          <div className="flex gap-2 sm:justify-end">
+            <Button type="submit" variant="secondary" disabled={loading}>
+              <RefreshCw size={16} aria-hidden="true" />
+              Actualizar
+            </Button>
+            <Button type="button" variant="secondary" onClick={exportCSV} disabled={total === 0 || exporting}>
+              <Download size={16} aria-hidden="true" />
+              CSV
+            </Button>
+          </div>
+        </form>
+      </Card>
+
+      {error && <ErrorCard message={error} onRetry={fetchUsers} />}
+      {exportError && <ErrorCard message={exportError} />}
+
+      {!loading && !error && items.length === 0 && (
+        <EmptyState
+          title={filtered ? 'Ninguna cuenta coincide con la búsqueda' : 'Todavía no hay cuentas'}
+          detail={filtered ? 'Prueba con otro nombre o correo, o con otro rol.' : undefined}
+          cta={
+            filtered ? (
+              <Button variant="secondary" size="sm" onClick={clearFilters}>
+                Quitar filtros
+              </Button>
+            ) : undefined
+          }
+        />
+      )}
+
+      {(loading || items.length > 0) && !error && (
+        <Card className="overflow-hidden">
+          <div className="relative overflow-x-auto">
+            <table className="min-w-full text-sm" aria-busy={loading}>
+              <thead className="border-b border-[var(--ra-line)] bg-[var(--ra-paper)] text-left text-[13px] font-semibold text-[var(--ra-muted)]">
+                <tr>
+                  {COLUMNS.map((col, idx) => (
+                    <th key={col} scope="col" className={`whitespace-nowrap px-4 py-3 ${colClass(idx)}`}>
+                      {col}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-[var(--ra-line)]">
+                {loading
+                  ? Array.from({ length: 5 }).map((_, idx) => (
+                      <tr key={idx}>
+                        {COLUMNS.map((col, idx) => (
+                          <td key={col} className={`px-4 py-4 ${colClass(idx)}`}>
+                            <div className="h-2.5 w-4/5 animate-pulse rounded-full bg-[var(--ra-paper)]" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  : items.map((u) => {
+                      const r = ROLES[u.role];
+                      const roleBadge = <Badge tone={r?.tone || 'neutral'}>{r?.label || u.role}</Badge>;
+                      const identity = u.isVerified ? (
+                        <Badge tone="success">Verificada</Badge>
+                      ) : (
+                        <span className="text-[var(--ra-muted)]">Sin verificar</span>
+                      );
+                      return (
+                        <tr key={u.id} className="align-top">
+                          <td className="px-4 py-3">
+                            <div className="font-medium">{u.name || 'Sin nombre'}</div>
+                            <div className="text-[var(--ra-muted)] [overflow-wrap:anywhere]">{u.email}</div>
+                            {u.companyName && <div className="text-xs text-[var(--ra-muted)]">{u.companyName}</div>}
+                            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs md:hidden">
+                              {roleBadge}
+                              {identity}
+                              <span className="text-[var(--ra-muted)]">Alta: {date(u.createdAt)}</span>
+                            </div>
+                          </td>
+                          <td className="hidden whitespace-nowrap px-4 py-3 md:table-cell">{roleBadge}</td>
+                          <td className="hidden whitespace-nowrap px-4 py-3 md:table-cell">{identity}</td>
+                          <td className="hidden whitespace-nowrap px-4 py-3 text-[var(--ra-muted)] md:table-cell">{date(u.createdAt)}</td>
+                        </tr>
+                      );
+                    })}
+              </tbody>
+            </table>
+          </div>
+          {!loading && items.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--ra-line)] px-4 py-3 text-sm text-[var(--ra-muted)]">
+              <span className="tabular-nums">
+                {totalPages > 1
+                  ? `${rangeStart}–${rangeEnd} de ${total.toLocaleString('es-ES')} cuentas`
+                  : `${total.toLocaleString('es-ES')} ${total === 1 ? 'cuenta' : 'cuentas'}`}
+              </span>
+              {totalPages > 1 && (
+                <nav aria-label="Paginación" className="flex items-center gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+                    Anterior
+                  </Button>
+                  <span className="tabular-nums">
+                    Página {page} de {totalPages}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                  >
+                    Siguiente
+                  </Button>
+                </nav>
+              )}
+            </div>
+          )}
+        </Card>
+      )}
+
+      <Modal open={agencyOpen} onClose={() => !creating && setAgencyOpen(false)} title="Nueva agencia">
+        <form className="space-y-4" onSubmit={createAgency}>
+          <p className="text-sm text-[var(--ra-muted)]">
+            La cuenta queda verificada. La agencia entra con este correo y la contraseña temporal, y puede cambiarla con «¿La has olvidado?» en el acceso.
+          </p>
+          <Input
+            label="Persona de contacto"
+            required
+            minLength={2}
+            autoComplete="off"
+            value={agencyForm.name}
+            onChange={(e) => setAgencyForm({ ...agencyForm, name: e.target.value })}
+          />
+          <Input
+            label="Correo de la agencia"
+            type="email"
+            required
+            autoComplete="off"
+            value={agencyForm.email}
+            onChange={(e) => setAgencyForm({ ...agencyForm, email: e.target.value })}
+          />
+          <Input
+            label="Empresa (opcional)"
+            value={agencyForm.companyName}
+            onChange={(e) => setAgencyForm({ ...agencyForm, companyName: e.target.value })}
+          />
+          <Input
+            label="Contraseña temporal"
+            type="password"
+            required
+            minLength={8}
+            autoComplete="new-password"
+            value={agencyForm.password}
+            onChange={(e) => setAgencyForm({ ...agencyForm, password: e.target.value })}
+          />
+          {agencyError && <ErrorCard message={agencyError} />}
+          <div className="flex justify-end gap-2">
+            <Button variant="secondary" onClick={() => setAgencyOpen(false)} disabled={creating}>
+              Cancelar
+            </Button>
+            <Button type="submit" disabled={creating}>
+              {creating ? 'Creando…' : 'Crear agencia'}
+            </Button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }
