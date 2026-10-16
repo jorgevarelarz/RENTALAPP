@@ -302,6 +302,9 @@ export const updateUser = async (req: Request, res: Response) => {
   }
 };
 
+// GET y PUT /api/users/me van sin requireVerified (app.ts): quien aún no ha verificado su identidad
+// también tiene que poder ver y completar su perfil, y la sesión del frontend lee de aquí si ya
+// está verificado.
 export const getMe = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
@@ -315,49 +318,51 @@ export const getMe = async (req: Request, res: Response) => {
     // requireVerified también da por verificado a quien tiene una Verification aprobada
     // aunque User.isVerified siga en false: se devuelve el estado con el que se le atiende.
     const me = toMeUser(user);
-    res.json({ ...me, isVerified: me.isVerified || (req as any).user?.isVerified === true });
+    let isVerified = me.isVerified || user.role === 'admin';
+    if (!isVerified) {
+      const verification = await Verification.findOne({ userId: String(userId) }).select('status').lean();
+      isVerified = verification?.status === 'verified';
+    }
+    res.json({ ...me, isVerified });
   } catch (error) {
     console.error('Error obteniendo perfil:', error);
     res.status(500).json({ message: 'Error al obtener perfil' });
   }
 };
 
+// Misma lista blanca que PATCH /api/users/:id para la propia cuenta (buildUserUpdate): antes se
+// escribía lo que llegase, sin tipos ni longitudes, y un valor raro daba 500.
 export const updateProfile = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
     if (!userId) {
       return res.status(403).json({ message: 'No autorizado' });
     }
+    const target = await User.findById(userId).select('email role').lean();
+    if (!target) return res.status(404).json({ message: 'Usuario no encontrado' });
 
-    const updates: Record<string, any> = {};
-    // name is tied to verification and should not be editable here
-    if (Object.prototype.hasOwnProperty.call(req.body, 'phone')) updates.phone = req.body.phone;
-    if (Object.prototype.hasOwnProperty.call(req.body, 'bio')) updates.bio = req.body.bio;
-    if (Object.prototype.hasOwnProperty.call(req.body, 'avatar')) updates.avatar = req.body.avatar;
-    if (Object.prototype.hasOwnProperty.call(req.body, 'jobTitle')) updates.jobTitle = req.body.jobTitle;
-    if (Object.prototype.hasOwnProperty.call(req.body, 'monthlyIncome')) {
-      const raw = req.body.monthlyIncome;
-      if (raw === '' || raw === null || typeof raw === 'undefined') {
-        updates.monthlyIncome = undefined;
-      } else {
-        const parsed = Number(raw);
-        updates.monthlyIncome = Number.isFinite(parsed) ? parsed : undefined;
-      }
+    let update;
+    try {
+      update = await buildUserUpdate(req.body, target, false);
+    } catch (err) {
+      if (err instanceof UserUpdateError) return res.status(400).json({ error: err.message });
+      throw err;
     }
-    if (Object.prototype.hasOwnProperty.call(req.body, 'companyName')) updates.companyName = req.body.companyName;
-    if (Object.prototype.hasOwnProperty.call(req.body, 'serviceCategory')) updates.serviceCategory = req.body.serviceCategory;
+    const ops: Record<string, unknown> = {};
+    if (Object.keys(update.$set).length) ops.$set = update.$set;
+    if (Object.keys(update.$unset).length) ops.$unset = update.$unset;
 
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { $set: updates },
-      { new: true, runValidators: true },
-    ).lean();
-
+    const user = Object.keys(ops).length
+      ? await User.findByIdAndUpdate(userId, ops, { new: true, runValidators: true }).lean()
+      : await User.findById(userId).lean();
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
     res.json(toMeUser(user));
-  } catch (error) {
+  } catch (error: any) {
+    if (error?.name === 'ValidationError' || error?.name === 'CastError') {
+      return res.status(400).json({ error: 'invalid_payload' });
+    }
     logger.error({ err: error }, 'Error actualizando perfil');
     res.status(500).json({ message: 'Error al actualizar perfil' });
   }

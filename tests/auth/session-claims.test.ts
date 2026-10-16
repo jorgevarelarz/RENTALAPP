@@ -69,21 +69,23 @@ describe('Rol y verificación leídos de la base en cada petición', () => {
   it('una verificación retirada se aplica en la siguiente petición', async () => {
     const user = await createUser('ana@example.com');
     const token = await loginToken('ana@example.com');
-    expect((await get('/api/users/me', token)).status).toBe(200);
+    expect((await get('/api/contracts', token)).status).toBe(200);
 
     await User.updateOne({ _id: user._id }, { isVerified: false });
 
-    const res = await get('/api/users/me', token);
-    expect(res.status).toBe(403);
+    // /api/users/me no exige identidad verificada (el perfil se ve antes de verificar)
+    expect((await get('/api/contracts', token)).status).toBe(403);
+    expect((await get('/api/users/me', token)).body.isVerified).toBe(false);
   });
 
   it('una verificación concedida tras el login vale sin volver a entrar', async () => {
     const user = await createUser('luis@example.com', { isVerified: false });
     const token = await loginToken('luis@example.com');
-    expect((await get('/api/users/me', token)).status).toBe(403);
+    expect((await get('/api/contracts', token)).status).toBe(403);
 
     await User.updateOne({ _id: user._id }, { isVerified: true });
 
+    expect((await get('/api/contracts', token)).status).toBe(200);
     const me = await get('/api/users/me', token);
     expect(me.status).toBe(200);
     expect(me.body.isVerified).toBe(true);

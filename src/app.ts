@@ -9,7 +9,7 @@ import path from 'path';
 import authRoutes from './routes/auth.routes';
 import propertyRoutes from './routes/property.routes';
 import contractRoutes from './routes/contract.routes';
-import userRoutes from './routes/user.routes';
+import userRoutes, { userProfileRoutes } from './routes/user.routes';
 import adminRoutes from './routes/admin.routes';
 
 import adminEarningsRoutes from './routes/admin.earnings.routes';
@@ -338,6 +338,8 @@ app.use('/api/me/tenant-pro', authenticate, tenantProMeRoutes);
 app.use('/api/appointments', authenticate, requireVerified, appointmentsFlowRoutes, serviceOfferAppointmentRoutes);
 app.use('/api/applications', authenticate, requireVerified, applicationsRoutes);
 app.use('/api/contracts', authenticate, requireVerified, contractRoutes);
+// El perfil propio no exige identidad verificada: la cuenta recién creada tiene que poder verlo.
+app.use('/api/users/me', authenticate, userProfileRoutes);
 app.use('/api/users', authenticate, requireVerified, userRoutes);
 app.use('/api/pros', authenticate, requireVerified, proRoutes);
 // Tickets necesitan usuario autenticado; permitir bypass de verificación en test si aplica

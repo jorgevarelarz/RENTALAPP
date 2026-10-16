@@ -114,8 +114,9 @@ describe('PATCH /api/users/:id con lista blanca', () => {
       .expect(200);
 
     expect(await Verification.findOne({ userId: String(target._id) }).lean()).toMatchObject({ status: 'rejected' });
-    // Las rutas con requireVerified ya no la dejan pasar
-    expect((await as('/api/users/me')).body).toEqual({ error: 'owner_not_verified' });
+    // Su perfil la da ya por no verificada y las rutas con requireVerified no la dejan pasar
+    expect((await as('/api/users/me')).body.isVerified).toBe(false);
+    expect((await as('/api/users/me/stats')).body).toEqual({ error: 'owner_not_verified' });
     expect((await as('/api/contracts')).status).toBe(403);
   });
 });
