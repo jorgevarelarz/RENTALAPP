@@ -3,8 +3,6 @@ import { z } from 'zod';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
-import { UserPolicyAcceptance } from '../models/userPolicyAcceptance.model';
-import { PolicyVersion } from '../models/policy.model';
 import { getAuditStatusStats, getAuditSummary, getWeeklyStats } from '../services/compliance.service';
 import jwt from 'jsonwebtoken';
 import { auditTrailEvents } from '../events/auditTrail.events';
@@ -16,6 +14,7 @@ import { AdminRequest } from '../models/adminRequest.model';
 import { ContractParty } from '../models/contractParty.model';
 import { buildComplianceCsv, buildComplianceQuery, getComplianceDashboard as getComplianceDashboardData, upsertTensionedArea } from '../modules/rentalPublic';
 import { ComplianceStatus } from '../modules/rentalPublic/models/complianceStatus.model';
+import { buildPolicyAcceptancesCsv, listPolicyAcceptances as listPolicyAcceptancesData, PolicyAcceptanceFilterError } from '../services/policyAcceptances.service';
 import { buildSystemEventsCsv, listSystemEvents, listSystemEventsAll } from '../services/systemEvents.service';
 import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
 import { getJwtSecret } from '../utils/getJwtSecret';
@@ -62,47 +61,24 @@ export const getStats = async (_req: Request, res: Response) => {
 
 export const listPolicyAcceptances = async (req: Request, res: Response) => {
   try {
-    const { userId, policyType, activeOnly } = req.query as {
-      userId?: string;
-      policyType?: string;
-      activeOnly?: string;
-    };
-
-    const match: any = {};
-    if (userId) match.userId = userId;
-    if (policyType) match.policyType = policyType;
-
-    let acceptances = await UserPolicyAcceptance.find(match).sort({ acceptedAt: -1 }).lean();
-
-    if (activeOnly === 'true') {
-      const now = new Date();
-      const active = await PolicyVersion.find({
-        isActive: true,
-        $or: [{ expiresAt: null }, { expiresAt: { $gt: now } }],
-      }).lean();
-      const activeMap = new Map<string, string>();
-      active.forEach(p => activeMap.set(p.policyType, p.version));
-      acceptances = acceptances.filter(a => activeMap.get(a.policyType) === a.policyVersion);
-    }
-
-    const users = await User.find({ _id: { $in: acceptances.map(a => a.userId) } })
-      .select(['email'])
-      .lean();
-    const userMap = new Map<string, any>();
-    users.forEach(u => userMap.set(String(u._id), u));
-
-    const data = acceptances.map(a => ({
-      user: { id: String(a.userId), email: userMap.get(String(a.userId))?.email ?? '' },
-      policyType: a.policyType,
-      policyVersion: a.policyVersion,
-      acceptedAt: a.acceptedAt,
-      ip: a.ip,
-      userAgent: a.userAgent,
-    }));
-
-    res.json({ data });
+    const { userId, policyType, activeOnly, page, pageSize } = req.query;
+    res.json(await listPolicyAcceptancesData({ userId, policyType, activeOnly, page, pageSize }));
   } catch (error: any) {
+    if (error instanceof PolicyAcceptanceFilterError) return res.status(400).json({ error: error.message });
     sendRouteError(res, error, 'compliance_list_failed');
+  }
+};
+
+export const exportPolicyAcceptancesCsv = async (req: Request, res: Response) => {
+  try {
+    const { userId, policyType, activeOnly } = req.query;
+    const csv = await buildPolicyAcceptancesCsv({ userId, policyType, activeOnly });
+    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    res.setHeader('Content-Disposition', 'attachment; filename="aceptaciones-politicas.csv"');
+    return res.send(csv);
+  } catch (error: any) {
+    if (error instanceof PolicyAcceptanceFilterError) return res.status(400).json({ error: error.message });
+    sendRouteError(res, error, 'compliance_export_failed');
   }
 };
 
