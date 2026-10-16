@@ -17,11 +17,21 @@ export function getApiErrorRequestId(err: any) {
   );
 }
 
+// requireVerified (backend) rechaza con estos códigos a quien aún no tiene la identidad verificada.
+// No es un fallo que reintentar ni que reportar, así que se explica sin referencia.
+const NOT_VERIFIED_CODES = new Set(['owner_not_verified', 'user_not_verified']);
+export const NOT_VERIFIED_MESSAGE = 'Necesitas verificar tu identidad para usar esta sección.';
+
+export function isNotVerifiedError(err: any) {
+  return err?.response?.status === 403 && NOT_VERIFIED_CODES.has(err?.response?.data?.error);
+}
+
 export function formatApiError(
   err: any,
   fallback = 'Error de red',
   options: { includeRequestId?: boolean } = {},
 ) {
+  if (isNotVerifiedError(err)) return NOT_VERIFIED_MESSAGE;
   const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback;
   const requestId = getApiErrorRequestId(err);
   return requestId && options.includeRequestId !== false ? `${msg} (ref: ${requestId})` : msg;

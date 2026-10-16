@@ -37,6 +37,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     const u = await apiLogin(email, password);
     setUser(u);
+    // El login solo trae User.isVerified; /api/users/me cuenta también la verificación aprobada.
+    refreshStoredUser().then((fresh) => {
+      if (fresh) setUser(fresh);
+    });
   };
 
   const logout = () => {
