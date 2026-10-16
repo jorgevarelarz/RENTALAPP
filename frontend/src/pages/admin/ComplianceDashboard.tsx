@@ -11,6 +11,7 @@ import PageHeader from '../../components/ui/PageHeader';
 import Select from '../../components/ui/Select';
 import { formatApiError } from '../../api/client';
 import { appEnv } from '../../config/env';
+import { blobErrorBody, saveBlob } from '../../utils/download';
 import type { StatusTone } from '../../utils/statusBadges';
 import {
   fetchComplianceDashboard,
@@ -65,26 +66,11 @@ const dateTime = (value?: string | Date | null) =>
 // «galicia|oleiros|centro» → «galicia · oleiros · centro»
 const areaLabel = (key?: string) => (key ? key.split('|').filter(Boolean).join(' · ') || key : '—');
 
-const readBlob = (blob: Blob) =>
-  new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ''));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsText(blob);
-  });
-
 // El CSV llega como Blob: si falla, el JSON del error viene dentro del Blob
 async function exportErrorMessage(err: any) {
-  const data = err?.response?.data;
-  if (data instanceof Blob) {
-    try {
-      const parsed = JSON.parse(await readBlob(data));
-      return ERRORS[parsed?.error] || parsed?.message || 'No se pudo exportar el CSV.';
-    } catch {
-      return 'No se pudo exportar el CSV.';
-    }
-  }
-  return ERRORS[data?.error] || formatApiError(err, 'No se pudo exportar el CSV.');
+  const body = await blobErrorBody(err);
+  if (body) return ERRORS[body.error || ''] || body.message || 'No se pudo exportar el CSV.';
+  return formatApiError(err, 'No se pudo exportar el CSV.');
 }
 
 function StatCard({ label, value }: { label: string; value: React.ReactNode }) {
@@ -186,12 +172,7 @@ export default function ComplianceDashboard() {
         dateFrom: dateFrom || undefined,
         dateTo: dateTo || undefined,
       });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'cumplimiento-rentas.csv';
-      a.click();
-      URL.revokeObjectURL(url);
+      saveBlob(blob, 'cumplimiento-rentas.csv');
     } catch (err: any) {
       setExportError(await exportErrorMessage(err));
     } finally {

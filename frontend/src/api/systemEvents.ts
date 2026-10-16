@@ -27,3 +27,13 @@ export async function fetchSystemEvents(params?: {
   const res = await api.get('/api/admin/system-events', { params });
   return res.data?.data as SystemEventsResponse;
 }
+
+export async function exportSystemEventsCsv(params?: {
+  type?: string;
+  resourceType?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}) {
+  const res = await api.get('/api/admin/system-events/export.csv', { params, responseType: 'blob' });
+  return res.data as Blob;
+}
