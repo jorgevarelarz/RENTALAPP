@@ -51,6 +51,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Portal de institución (ronda 76)**: las cuentas `institution_viewer` necesitan la identidad verificada para entrar en `/api/institution` (sin verificar responden 403 `owner_not_verified`). No era intencionado: les llegaba el `requireVerified` global de `app.ts`. En la ronda 76 se ha dejado explícito para no cambiar nada. Si un organismo público no debe pasar por la verificación, basta quitar `requireVerified` de ese montaje. Decisión tuya.
+- **Verificación de propietarios, profesionales y agencias (ronda 84)**: casi toda la API exige identidad verificada (`requireVerified`), pero la única pantalla para verificarse es `/tenant/kyc`, solo para inquilinos. Un propietario, profesional o agencia sin verificar no tiene desde la interfaz forma de hacerlo (solo el administrador, con la casilla de «Usuarios»). ¿Deben pasar por Stripe Identity como el inquilino, verificarlos el administrador a mano, o no exigírselo?
 - **Co-titulares (ronda 12), dos decisiones de producto:**
   - «Firmar como co-titular» solo cambia el estado en la base (`POST /tenants/:partyId/sign`, backend de antes); no es una firma electrónica con proveedor. ¿Vale así o el co-titular debe firmar con Firma.dev como el inquilino principal?
   - Aceptar la invitación exige tener la identidad verificada (`requireVerified` está en toda `/api`). La página lo explica y enlaza a `/tenant/kyc`, pero ¿debe poder unirse antes y verificar después?
@@ -3228,3 +3229,31 @@ Al revisar los filtros vi que `?userId[$ne]=x` ya lo corta `rejectMongoOperators
 - Pendientes anteriores: flujo manual de `/api/verification` sin pantalla, `parseDateRange` con hora local y UTC mezcladas, `pro/Profile` con el sistema 2026, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
 
 **Siguiente mejora propuesta.** Revisar qué hace el frontend con una cuenta sin verificar cuando `/api/users/me` responde 403 (cargar la sesión, perfil, KYC) y, si algo se rompe, sacar `GET /api/users/me` de `requireVerified` con su test. Si no hay nada roto: `pro/Profile` con el sistema 2026.
+
+### Ronda 84 — 2026-10-16 05:45
+
+**Qué y por qué.** Lo que proponía la ronda 83: comprobar qué ve una cuenta sin verificar cuando `/api/users/me` responde 403. Estaba roto: `GET` y `PUT /api/users/me` colgaban de `requireVerified`, así que quien acababa de registrarse (o aún no había verificado) abría «Perfil y cuenta» y solo veía el aviso «No se pudo cargar tu perfil»; no podía completar teléfono, bio ni datos de solvencia antes de verificar.
+
+1. **Perfil propio sin exigir identidad** (`src/app.ts`, `src/routes/user.routes.ts`, `src/controllers/user.controller.ts`).
+   - `/api/users/me` (GET y PUT) se monta con `authenticate` solo, antes de `/api/users`. `/me/stats` y el resto del router de usuarios siguen con `requireVerified`.
+   - `getMe` calcula `isVerified` también con una `Verification` aprobada (antes lo ponía `requireVerified` en `req.user`). Para el administrador, `true`.
+   - `PUT /me` pasa por `buildUserUpdate`, la lista blanca de la ronda 82: antes escribía lo que llegase sin tipos ni longitudes (un objeto en `bio` daba 500). Ahora 400 con el campo (`invalid_bio`, `invalid_monthlyIncome`…), `''`/`null` borran y rol, nombre, identidad y valoraciones se ignoran, como antes.
+2. **Interfaz** (`ProfilePage.tsx`). La cabecera dice «Identidad sin verificar» y, al inquilino, enlaza «Verificarla» a `/tenant/kyc`. El estado sale de `/api/users/me`, no de la sesión guardada.
+
+**Commits.**
+- `7e3189c` Usuarios: el perfil propio deja de exigir identidad verificada y PUT /me usa la lista blanca
+- `ce816ed` Interfaz: «Perfil y cuenta» dice si la identidad está sin verificar y enlaza a verificarla
+- Docs: este registro y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand`: `tests/auth/unverified-profile.test.ts` (nuevo, **3/3**: la cuenta sin verificar ve y edita su perfil, pero `/me/stats` y `/api/contracts` dan 403; la `Verification` aprobada cuenta como verificada; `PUT /me` ignora rol, nombre, identidad, `ratingAvg` y `tokenVersion` y da 400 con tipos raros). `session-claims` fallaba en 2 casos que usaban `/api/users/me` como ruta que exige verificación; ahora usan `/api/contracts` y comprueban `isVerified` en `/me`: **13/13**. `tests/admin` (8 suites), `email-case`, `session-revocation`, `change-password`, `landlordStats`, `invite-public-routes` y `route-auth-map` (4/4, vigila que `/api/users/me` siga pidiendo sesión): todo OK.
+- Frontend: `lint` sin errores, `build` OK, `npm --prefix frontend test`: **70 ficheros y 296 tests OK** (antes 294). Los dos nuevos en `ProfilePage.test.tsx`.
+- Capturas con Playwright y la API simulada (`/tmp/ra-shots84`), inquilina sin verificar a 1280 y 390 px: carga el perfil, «Inquilino · Identidad sin verificar · Verificarla», sin desbordar (ancho 1280 y 390).
+- **GitNexus.** `impact` de `getMe` y `updateProfile`: LOW, sin llamadores. `detect_changes`: riesgo bajo, ningún flujo afectado.
+
+**Qué queda.**
+- Solo el inquilino tiene pantalla para verificarse (anotado en «Para Jorge»).
+- `refreshStoredUser` conserva la rama del 403 `owner_not_verified` por compatibilidad con un backend anterior; se puede quitar cuando esto esté desplegado.
+- Pendientes anteriores: desactivar o suspender cuentas (no existe el campo), flujo manual de `/api/verification` sin pantalla, `parseDateRange` con hora local y UTC mezcladas, `pro/Profile` con el sistema 2026, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
+
+**Siguiente mejora propuesta.** Revisar qué otras pantallas de una cuenta sin verificar llaman a rutas con `requireVerified` al cargar (inicio del inquilino, mensajes, Tenant PRO) y, en vez de un error genérico, mostrar un aviso único con el enlace a verificarse. Si no hay nada que mostrar: `pro/Profile` con el sistema 2026.

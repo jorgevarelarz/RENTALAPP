@@ -1517,3 +1517,11 @@ Rules:
 - `updateUser`: `isVerified: false` also sets an approved `Verification` to `rejected` (requireVerified accepted either). Test in `tests/admin/admin.users.update.test.ts` (needs `x-user-verified: false` because tests run with `ALLOW_UNVERIFIED`).
 - Open: `/api/users` is behind `requireVerified`, so unverified accounts get 403 on `/api/users/me`.
 - Verification: tsc clean; Jest 4 suites / 18 tests; frontend lint/build OK, 69 files / 294 tests; Playwright `/tmp/ra-shots83`. Details in `docs/MEJORA-CONTINUA.md` round 83.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 84: own profile without requireVerified
+
+- `src/app.ts` mounts `userProfileRoutes` (GET/PUT `/api/users/me`) with `authenticate` only; `/me/stats` and the rest of `/api/users` keep `requireVerified`. Unverified accounts got 403 on «Perfil y cuenta».
+- `getMe` computes `isVerified` from an approved `Verification` too; `updateProfile` (PUT /me) uses `buildUserUpdate(body, target, false)` (400 `invalid_<field>`).
+- `ProfilePage` shows «Identidad sin verificar · Verificarla» (tenant → `/tenant/kyc`) from `/api/users/me`.
+- Tests: new `tests/auth/unverified-profile.test.ts`; `session-claims` and `admin.users.update` now use `/api/contracts` and `/me/stats` as verified-only routes. Frontend 70 files / 296 tests. Details in `docs/MEJORA-CONTINUA.md` round 84.
+
