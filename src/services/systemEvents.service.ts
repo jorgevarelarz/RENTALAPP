@@ -1,5 +1,6 @@
 import { SystemEvent } from '../models/systemEvent.model';
 import { csvRows } from '../utils/csv';
+import { parseDateRange } from '../utils/dateRange';
 
 export type SystemEventFilters = {
   type?: string;
@@ -15,17 +16,26 @@ function buildSystemEventsQuery(filters: SystemEventFilters) {
   if (filters.type) query.type = filters.type;
   if (filters.resourceType) query.resourceType = filters.resourceType;
   if (filters.dateFrom || filters.dateTo) {
+    // «Hasta 2026-10-12» incluye todo ese día; una fecha no válida o un rango al revés es un 400
+    const parsed = parseDateRange({ dateFrom: filters.dateFrom, dateTo: filters.dateTo });
+    if ('error' in parsed) throw new Error('invalid_date_range');
     query.createdAt = {
-      ...(filters.dateFrom ? { $gte: new Date(filters.dateFrom) } : {}),
-      ...(filters.dateTo ? { $lte: new Date(filters.dateTo) } : {}),
+      ...(parsed.from ? { $gte: parsed.from } : {}),
+      ...(parsed.to ? { $lte: parsed.to } : {}),
     };
   }
   return query;
 }
 
+// `?page=abc` daba NaN y Mongo fallaba con un 500
+function positiveInt(value: unknown, fallback: number) {
+  const n = Math.floor(Number(value));
+  return Number.isFinite(n) && n >= 1 ? n : fallback;
+}
+
 export async function listSystemEvents(filters: SystemEventFilters) {
-  const page = Math.max(1, Number(filters.page || 1));
-  const pageSize = Math.min(100, Math.max(1, Number(filters.pageSize || 25)));
+  const page = positiveInt(filters.page, 1);
+  const pageSize = Math.min(100, positiveInt(filters.pageSize, 25));
   const query = buildSystemEventsQuery(filters);
 
   const [total, items] = await Promise.all([

@@ -400,6 +400,9 @@ export const listSystemEventsAdmin = async (req: Request, res: Response) => {
     const data = await listSystemEvents({ type, resourceType, dateFrom, dateTo, page, pageSize });
     res.json({ data });
   } catch (error: any) {
+    if (error?.message === 'invalid_date_range') {
+      return res.status(400).json({ error: 'invalid_date_range' });
+    }
     sendRouteError(res, error, 'system_events_list_failed');
   }
 };
@@ -418,6 +421,9 @@ export const exportSystemEventsCsv = async (req: Request, res: Response) => {
     res.setHeader('Content-Disposition', 'attachment; filename="system-events.csv"');
     return res.send(csv);
   } catch (error: any) {
+    if (error?.message === 'invalid_date_range') {
+      return res.status(400).json({ error: 'invalid_date_range' });
+    }
     sendRouteError(res, error, 'system_events_export_failed');
   }
 };
