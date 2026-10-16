@@ -47,6 +47,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Webhooks de firma genéricos (ronda 69)**: `POST /api/contracts/signature/webhook` y `/api/contracts/:id/signature/callback` cuelgan de `app.use('/api/contracts', authenticate, requireVerified, …)`, así que en producción responden 401 a cualquier proveedor (solo `/signature/callback` y `/signature/firma` son públicos, montados antes en `app.ts`). No es un agujero (rechazan), pero son rutas que no pueden funcionar. Es el punto #9 abierto de `docs/review-firma-2026-10-05.md`: ¿se eliminan o se dejan solo para mock y tests?
 - **Búsqueda de direcciones con Nominatim (ronda 71)**: el alta de inmueble sugiere direcciones llamando a `nominatim.openstreetmap.org` desde el navegador mientras se escribe. La política de uso de Nominatim prohíbe expresamente montar un autocompletado en el cliente con su API pública. Desde la ronda 71 se busca como mucho una vez por segundo y no se repite al elegir, pero sigue siendo autocompletado. Con poco tráfico no pasará nada; al abrir conviene elegir un proveedor pensado para esto (Photon de Komoot, MapTiler, Google Places…), que implica darse de alta y quizá pagar. Decisión tuya.
 - **Invitaciones rotas en producción (ronda 75), conviene desplegarlo pronto**: en app.rentalapp.es, el propietario invitado por una agencia no puede ver la invitación ni crear su cuenta (la API responde 401 y la pantalla dice «Invitación no válida»), y el co-titular sin sesión tampoco ve la vista previa. Corregido en esta rama (`9bdbe75`) sin cambios de datos ni de entorno. Las invitaciones de agencia enviadas antes siguen valiendo si no han caducado (`INVITE_TTL_DAYS`), así que tras desplegar se pueden reenviar desde «Propietarios» o usar el mismo enlace.
+- **Tenant PRO (ronda 80), dos decisiones:** (1) aprobar exige ya una renta máxima entre 1 y 100.000 €/mes; antes se podía aprobar con 0, que en el chat cuenta como «sin dato». Si quieres aprobaciones sin cifra, hay que decidir qué significan para los anuncios «solo Tenant PRO». (2) «Eliminar documentación» desde administración borra también el historial (`auditTrail`) con los hashes, mientras que la purga automática (ronda 63) lo conserva. ¿Debe conservarlo también la manual, como prueba de lo que se revisó?
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Portal de institución (ronda 76)**: las cuentas `institution_viewer` necesitan la identidad verificada para entrar en `/api/institution` (sin verificar responden 403 `owner_not_verified`). No era intencionado: les llegaba el `requireVerified` global de `app.ts`. En la ronda 76 se ha dejado explícito para no cambiar nada. Si un organismo público no debe pasar por la verificación, basta quitar `requireVerified` de ese montaje. Decisión tuya.
@@ -3077,3 +3078,53 @@ Al revisar los filtros vi que `?userId[$ne]=x` ya lo corta `rejectMongoOperators
 - Pendientes anteriores: `AdminUsersPage` y `AdminTenantProPage` con tablas en línea, `/api/verification` en la lista de rutas públicas, `pro/Profile`, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
 
 **Siguiente mejora propuesta.** Interfaz: `AdminUsersPage` y `AdminTenantProPage` con el sistema 2026 (`PageHeader`, `Card`, `Badge`, tabla con `--ra-line`), revisadas con capturas. Si se prefiere backend: montar `/api/verification` detrás de `authenticate` y sacarla de la lista de rutas públicas.
+
+### Ronda 80 — 2026-10-16 04:50
+
+**Qué y por qué.** La ronda 79 proponía dos cosas: montar `/api/verification` detrás de `authenticate` y pasar a 2026 las pantallas de usuarios y Tenant PRO. Antes de la apariencia, la revisión de Tenant PRO destapó un flujo roto: **el administrador aprobaba la solvencia sin poder ver los justificantes**. Se guardan cifrados y no había ninguna ruta para leerlos. Por eso este lote es verificación, el backend de Tenant PRO y su pantalla. `AdminUsersPage` queda para la siguiente.
+
+1. **`/api/verification`** (`src/routes/verification.routes.ts`).
+   - `approve`, `reject` y `dev/verify` no pasaban por `authenticate`. `requireAdmin` no encontraba `req.user`, así que respondían 403 a todos, también al administrador, y el mapa de sesión las tenía como públicas.
+   - Ahora `router.use(authenticate)` va delante de todas las rutas: sin sesión, 401.
+   - Un id mal formado da 400 `invalid_user_id` y una cuenta que no existe, 404 `user_not_found`. Antes se creaba un registro suelto con `upsert`.
+   - `notes` solo admite texto, con un máximo de 1000 caracteres.
+   - Las tres rutas salen de la lista de públicas de `route-auth-map.test.ts`.
+2. **Revisión Tenant PRO, backend** (`src/routes/admin.tenantPro.routes.ts`).
+   - Nuevo `GET /api/admin/tenant-pro/:userId/docs/:docId`. Descifra al vuelo, reconoce PDF, PNG y JPEG por la cabecera y responde `inline` con `no-store` y `nosniff`. Un documento purgado da 410 `doc_purged`.
+   - Decisión validada:
+     - `decision` distinto de `approved`/`rejected` contaba como rechazo; ahora da 400 `invalid_decision`;
+     - aprobar sin renta dejaba 0 € y «mil» daba 500; ahora se exige de 1 a 100.000 (400 `invalid_max_rent`);
+     - un segundo clic reescribía la decisión ya tomada; ahora da 409 `not_pending`;
+     - un id mal formado daba 500; ahora 400.
+   - La lista de pendientes ya no envía el nombre del fichero cifrado, el hash ni el historial de purgas. Trae nombre, fecha de alta y si cada documento sigue disponible, ordenada de la más antigua a la más reciente.
+3. **«Revisión Tenant PRO», interfaz** (`AdminTenantProPage.tsx`). Antes era una tabla con estilos en línea, botones verde, rojo y negro, tipos en crudo («nomina»), «Max rent» y un panel lateral que repetía lo mismo. Ahora:
+   - cada solicitud es una `Card` con nombre, correo, fecha de alta y un aviso si falta el consentimiento;
+   - los documentos salen con su nombre en español y su fecha. «Abrir» los muestra en `ui/Modal` (PDF o imagen, con «Descargar»), y los ya borrados salen como «Eliminado»;
+   - a la derecha van «Renta máxima validada» (€/mes), Aprobar y Rechazar (pide confirmación, porque avisa por correo) y «Eliminar documentación»;
+   - aprobar sin cifra se explica sin llamar a la API, y los errores salen en español; si la solicitud ya estaba resuelta, la lista se recarga;
+   - además: `PageHeader` con «Actualizar», búsqueda por nombre o correo, `ErrorCard` con «Reintentar» y lista vacía.
+
+**Commits.**
+- `a85fdb3` Verificación: todas las rutas de /api/verification piden sesión y el administrador ya puede aprobar y rechazar
+- `655fd92` Tenant PRO: el administrador puede abrir los documentos que revisa y la decisión se valida
+- `495ecf0` Interfaz: «Revisión Tenant PRO» con el sistema 2026 y los documentos a la vista
+- Docs: este registro, la nota en `auditoria-seguridad-2026-10-05.md`, PROJECT_MEMORY y «Para Jorge»
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand`:
+  - `tests/verification`, `security/route-auth-map`, `security/route-protection` y `security/admin.errors`: **4 suites y 24 tests OK** (luego el test de verificación se reescribió en un caso y volvió a pasar, 3/3);
+  - `tests/tenantPro`: **3 suites y 12 tests OK**, entre ellos el nuevo `admin.review.test.ts` (4 casos: lista sin datos internos, documento descifrado con su tipo y 410 si se purgó, validación de la decisión con 409 al segundo clic, rechazo sin renta). El flujo antiguo con cabeceras de prueba sigue pasando.
+- Frontend: `lint` sin errores y `build` OK. `npm --prefix frontend test`: **68 ficheros y 287 tests OK** (antes 282). `AdminTenantProPage.test.tsx` es nuevo, con 5 casos.
+- Capturas con Playwright y la API simulada (`/tmp/ra-shots80`), a 1280 y 390 px, sin desbordar (ancho del documento: 1280 y 390).
+  - La primera tanda tenía «1200» de ejemplo en la renta, que parecía un valor ya escrito, y en móvil cortaba la fecha de alta. Se quitó el ejemplo y el correo y la fecha van en líneas separadas.
+  - El PDF sale en blanco en la captura porque Chromium sin interfaz no tiene visor de PDF; el `iframe` recibe el `blob:` (lo comprueba el test).
+- **GitNexus.** `impact` de `AdminTenantProPage`: LOW. `detect_changes`: riesgo bajo en los dos commits de backend. En el de interfaz, riesgo medio, solo por los tres flujos de esta pantalla (`ListPendingTenantPro`, `DecideTenantPro`, `PurgeTenantPro`).
+
+**Qué queda.**
+- `AdminUsersPage` sigue con estilos en línea, roles en inglés («Tenant», «Landlord») y un CSV montado en el navegador solo con la página visible. Además, la búsqueda no vuelve a la página 1 y un error al cargar no se muestra.
+- No hay pantalla para el flujo manual de `/api/verification` (DNI subido por el usuario). Hoy la verificación real va por `/api/kyc`; si el flujo manual no se usa, conviene retirarlo.
+- El nombre del fichero cifrado de Tenant PRO lleva el nombre original del documento (`<fecha>_<nombre>.bin`), que puede incluir el nombre de la persona. Convendría un nombre aleatorio.
+- Pendientes anteriores: CSV sin tope de filas ni cabeceras en español, `parseDateRange` con hora local y UTC mezcladas, `pro/Profile`, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
+
+**Siguiente mejora propuesta.** `AdminUsersPage` con el sistema 2026: roles en español con `Badge`, búsqueda que vuelve a la página 1 (con espera al teclear), error visible con «Reintentar» y CSV generado en el servidor con `csvRows`. Si se prefiere backend: nombre aleatorio para los ficheros de Tenant PRO.
+

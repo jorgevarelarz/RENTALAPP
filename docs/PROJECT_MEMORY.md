@@ -1489,3 +1489,10 @@ Rules:
 - `src/services/policyAcceptances.service.ts` (new): `GET /api/admin/policies/acceptances` returns `{ data, total, page, pageSize }` (activeOnly now in the Mongo query as policyType/version pairs); 400 `invalid_user_id` / `invalid_policy_type`. New `GET /api/admin/policies/acceptances/export.csv` (`csvRows`). New `tests/admin/admin.policy-acceptances.test.ts`.
 - `AdminCompliancePage` paginates (25) and downloads the server CSV; `frontend/src/utils/csv.ts` removed (no users left). Note: `rejectMongoOperators` + `hpp` already block `$` keys and query arrays globally.
 - Verification: tsc clean; Jest 4 suites / 22 tests; frontend lint/build OK, 67 files / 282 tests; Playwright `/tmp/ra-shots79`. Details in `docs/MEJORA-CONTINUA.md` round 79.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 80: /api/verification behind authenticate + Tenant PRO admin review
+
+- `src/routes/verification.routes.ts`: `router.use(authenticate)` (approve/reject/dev-verify were 403 for everyone, admin included); 400 `invalid_user_id`, 404 `user_not_found`. Removed from the public list in `route-auth-map.test.ts`. New `tests/verification/verification.routes.test.ts`.
+- `src/routes/admin.tenantPro.routes.ts`: new `GET /api/admin/tenant-pro/:userId/docs/:docId` (decrypts, sniffs PDF/PNG/JPEG, inline, no-store; 410 `doc_purged`); decision validated (400 `invalid_decision`/`invalid_max_rent` 1–100000, 409 `not_pending`, 404 `user_not_found`); pending list without `url`/`hash`/`auditTrail`, adds `name`, `createdAt`, `docs[].available`. New `tests/tenantPro/admin.review.test.ts`.
+- `AdminTenantProPage` rewritten with the 2026 system (cards, document preview modal). `services/tenantPro.ts` adds `fetchTenantProDoc` and types.
+- Verification: tsc clean; Jest 6 suites OK (see MEJORA-CONTINUA round 80); frontend lint/build OK, 68 files / 287 tests; Playwright `/tmp/ra-shots80`.
