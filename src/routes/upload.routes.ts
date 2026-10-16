@@ -70,8 +70,13 @@ const upload = multer({
 router.post('/uploads/images', authenticate as any, (req, res) => {
   upload.array('files', 6)(req as any, res as any, (err: any) => {
     if (err) {
-      const code = err?.message === 'invalid_file_type' ? 415 : 400;
-      return res.status(code).json({ error: err.message || 'upload_error' });
+      // Códigos estables en vez del texto en inglés de multer («File too large»)
+      if (err?.message === 'invalid_file_type') return res.status(415).json({ error: 'invalid_file_type' });
+      if (err?.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'file_too_large' });
+      if (err?.code === 'LIMIT_FILE_COUNT' || err?.code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(400).json({ error: 'too_many_files' });
+      }
+      return res.status(400).json({ error: 'upload_error' });
     }
     const files = ((req as any).files as Express.Multer.File[]) || [];
     void (async () => {

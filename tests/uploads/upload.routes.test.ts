@@ -19,6 +19,29 @@ describe("Uploads (validation)", () => {
     expect(res.body.error).toBe("invalid_file_type");
   });
 
+  it("answers multer limits with stable codes", async () => {
+    const big = await request(app)
+      .post("/api/uploads/images")
+      .set("x-user-id", "507f1f77bcf86cd799439011")
+      .set("x-user-role", "landlord")
+      .set("x-user-verified", "true")
+      .attach("files", Buffer.alloc(10 * 1024 * 1024 + 1), { filename: "grande.jpg", contentType: "image/jpeg" });
+    expect(big.status).toBe(413);
+    expect(big.body.error).toBe("file_too_large");
+
+    let many = request(app)
+      .post("/api/uploads/images")
+      .set("x-user-id", "507f1f77bcf86cd799439011")
+      .set("x-user-role", "landlord")
+      .set("x-user-verified", "true");
+    for (let i = 0; i < 7; i += 1) {
+      many = many.attach("files", Buffer.from("x"), { filename: `f${i}.jpg`, contentType: "image/jpeg" });
+    }
+    const tooMany = await many;
+    expect(tooMany.status).toBe(400);
+    expect(tooMany.body.error).toBe("too_many_files");
+  });
+
   it("stores images with an unguessable name and without EXIF", async () => {
     const exifBody = Buffer.concat([Buffer.from("Exif\0\0", "latin1"), Buffer.from("MM\0*\0\0\0\x08\0\0GPS-SECRETO", "latin1")]);
     const app1 = Buffer.concat([Buffer.from([0xff, 0xe1, 0, exifBody.length + 2]), exifBody]);
