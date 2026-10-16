@@ -1496,3 +1496,11 @@ Rules:
 - `src/routes/admin.tenantPro.routes.ts`: new `GET /api/admin/tenant-pro/:userId/docs/:docId` (decrypts, sniffs PDF/PNG/JPEG, inline, no-store; 410 `doc_purged`); decision validated (400 `invalid_decision`/`invalid_max_rent` 1–100000, 409 `not_pending`, 404 `user_not_found`); pending list without `url`/`hash`/`auditTrail`, adds `name`, `createdAt`, `docs[].available`. New `tests/tenantPro/admin.review.test.ts`.
 - `AdminTenantProPage` rewritten with the 2026 system (cards, document preview modal). `services/tenantPro.ts` adds `fetchTenantProDoc` and types.
 - Verification: tsc clean; Jest 6 suites OK (see MEJORA-CONTINUA round 80); frontend lint/build OK, 68 files / 287 tests; Playwright `/tmp/ra-shots80`.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 81: admin users list (escaped search, server CSV, 2026 UI)
+
+- `getAllUsers` (`src/controllers/user.controller.ts`): `q` escaped (was raw `$regex`), searches email/name/companyName accent-insensitively, sorts by `createdAt` desc, 400 `invalid_role`. New `GET /api/users/export.csv` (admin, `csvRows`, max 10k). Admin user routes wrapped in `asyncHandler`.
+- `frontend/src/pages/admin/AdminUsersPage.tsx` rewritten (PageHeader, Modal «Nueva agencia», debounced search → page 1, Spanish role badges, ErrorCard, server CSV, mobile stacked row).
+- Open: `PATCH /api/users/:id` lets admin write any body field (no whitelist).
+- Verification: tsc clean; Jest admin.users 4/4 + route-auth-map OK; frontend lint/build OK, 69 files / 292 tests; Playwright `/tmp/ra-shots81`. Details in `docs/MEJORA-CONTINUA.md` round 81.
+

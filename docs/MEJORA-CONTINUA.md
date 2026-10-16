@@ -3128,3 +3128,39 @@ Al revisar los filtros vi que `?userId[$ne]=x` ya lo corta `rejectMongoOperators
 
 **Siguiente mejora propuesta.** `AdminUsersPage` con el sistema 2026: roles en español con `Badge`, búsqueda que vuelve a la página 1 (con espera al teclear), error visible con «Reintentar» y CSV generado en el servidor con `csvRows`. Si se prefiere backend: nombre aleatorio para los ficheros de Tenant PRO.
 
+### Ronda 81 — 2026-10-16 05:04
+
+**Qué y por qué.** La ronda 80 proponía la pantalla «Usuarios» del administrador. Al revisarla salió también un fallo de backend, así que el lote son las dos mitades:
+
+1. **`GET /api/users`, backend** (`src/controllers/user.controller.ts`, `src/routes/user.routes.ts`).
+   - `q` iba a `$regex` sin escapar: «(a+)+» era un patrón y no texto, y podía bloquear Mongo (solo lo usa el administrador, pero es la misma clase de fallo que S9). Ahora se escapa y se limita a 100 caracteres.
+   - Buscaba en el correo y en el **rol**, no en el nombre. Ahora busca en correo, nombre y empresa, sin distinguir tildes («nunez» encuentra «Núñez», con `accentInsensitivePattern`).
+   - Ordenaba por valoración; ahora de la cuenta más reciente a la más antigua. Un rol que no existe da 400 `invalid_role` en vez de una lista vacía.
+   - Nuevo `GET /api/users/export.csv` (solo admin): todas las cuentas del filtro (máx. 10.000), cabeceras en español y fórmulas neutralizadas con `csvRows`. No incluye datos sensibles (ni hash ni teléfono).
+   - Listar, exportar y crear pasan por `asyncHandler`: un fallo de Mongo dejaba la petición colgada.
+2. **«Usuarios», interfaz** (`frontend/src/pages/admin/AdminUsersPage.tsx`). Antes: estilos en línea, roles en inglés, un error de carga que nunca se veía (`setError` dentro de `queryFn`), una petición por tecla sin volver a la página 1 y un CSV montado en el navegador solo con la página visible y sin neutralizar fórmulas. Ahora:
+   - `PageHeader` con «Nueva agencia», que abre `ui/Modal` con el formulario (antes ocupaba la parte de arriba de la pantalla). Al crearla, aviso con el correo y la lista filtra por agencias; el correo repetido se explica en el diálogo;
+   - filtros `Input`/`Select` con etiqueta; búsqueda por nombre, correo o empresa con espera de 300 ms y vuelta a la página 1;
+   - roles en `Badge` en español (los seis del modelo, también «Institución»), identidad Verificada/Sin verificar y fecha de alta;
+   - 25 por página con «1–25 de N», `ErrorCard` con «Reintentar», lista vacía con «Quitar filtros» y botón CSV que pide el del servidor;
+   - en móvil solo queda la columna «Usuario» y rol, identidad y alta van debajo del nombre (en la primera captura el correo se partía letra a letra).
+
+**Commits.**
+- `4182960` Usuarios: la búsqueda del administrador escapa el texto, busca por nombre y el CSV sale del servidor
+- `8ec109c` Interfaz: «Usuarios» del administrador con el sistema 2026, búsqueda que vuelve a la primera página y CSV del servidor
+- Docs: este registro, la nota en `auditoria-seguridad-2026-10-05.md` y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand`: `tests/admin/admin.users.test.ts` **4/4** (2 nuevos: búsqueda sin tildes, regex literal, orden por alta y 400 con rol desconocido; CSV con fórmula neutralizada, una fila por cuenta del filtro, 400 y 403 a quien no es admin) y `tests/security/route-auth-map.test.ts` OK (la ruta nueva responde 401 sin sesión).
+- Frontend: `lint` sin errores, `build` OK, `npm --prefix frontend test`: **69 ficheros y 292 tests OK** (antes 68 y 287). `AdminUsersPage.test.tsx` es nuevo, con 5 casos.
+- Capturas con Playwright y la API simulada (`/tmp/ra-shots81`), a 1280 y 390 px: lista, diálogo de nueva agencia y lista vacía. Ancho del documento 1280 y 390, sin desbordar.
+- **GitNexus.** `impact` de `getAllUsers` y `AdminUsersPage`: LOW (la pantalla es el único cliente de `GET /api/users`). `detect_changes`: bajo en el backend; medio en la interfaz, solo por el flujo propio `CreateAgency`.
+
+**Qué queda.**
+- `PATCH /api/users/:id` deja al administrador escribir cualquier campo del cuerpo (`role`, `isVerified`, `email` sin pasar a minúsculas ni comprobar duplicados, `ratingAvg`…). No hay pantalla que lo use para eso, pero conviene una lista blanca.
+- Desde «Usuarios» no se puede abrir el detalle de una cuenta, cambiar su rol ni desactivarla.
+- El nombre del fichero cifrado de Tenant PRO lleva el nombre original del documento (`<fecha>_<nombre>.bin`).
+- Pendientes anteriores: flujo manual de `/api/verification` sin pantalla, `parseDateRange` con hora local y UTC mezcladas, `pro/Profile`, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
+
+**Siguiente mejora propuesta.** Lista blanca en `PATCH /api/users/:id` para el administrador (nombre, empresa, teléfono; correo normalizado y sin duplicados con `emailInUse`; `role` e `isVerified` fuera o con validación explícita) con su test, y nombre aleatorio para los ficheros cifrados de Tenant PRO.
+
