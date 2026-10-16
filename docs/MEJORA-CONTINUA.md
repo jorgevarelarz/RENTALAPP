@@ -51,7 +51,7 @@ Decisiones que el trabajador no toma y que siguen abiertas:
 - **Contratos fuera de Madrid, Galicia y Cataluña (ronda 21)**: el catálogo de cláusulas solo tiene esas tres comunidades (`src/policies/clauses/catalog.v1.ts`). Para un inmueble de cualquier otra, el asistente avisa y no deja crear el contrato. Ampliarlo exige el texto legal de la fianza de cada comunidad. De paso: la cláusula de Madrid cita el «IVIMA», que desde 2017 es la Agencia de Vivienda Social; conviene revisar ese texto.
 - **DNI de las partes en el contrato (ronda 21)**: el asistente pedía DNI/NIF del casero y del inquilino, pero el backend no los guardaba ni los ponía en el PDF. Se han quitado del formulario. Si el contrato debe identificarlos, hay que decidir de dónde salen (¿perfil verificado, KYC, Firma.dev?).
 - **Portal de institución (ronda 76)**: las cuentas `institution_viewer` necesitan la identidad verificada para entrar en `/api/institution` (sin verificar responden 403 `owner_not_verified`). No era intencionado: les llegaba el `requireVerified` global de `app.ts`. En la ronda 76 se ha dejado explícito para no cambiar nada. Si un organismo público no debe pasar por la verificación, basta quitar `requireVerified` de ese montaje. Decisión tuya.
-- **Verificación de propietarios, profesionales y agencias (ronda 84)**: casi toda la API exige identidad verificada (`requireVerified`), pero la única pantalla para verificarse es `/tenant/kyc`, solo para inquilinos. Un propietario, profesional o agencia sin verificar no tiene desde la interfaz forma de hacerlo (solo el administrador, con la casilla de «Usuarios»). ¿Deben pasar por Stripe Identity como el inquilino, verificarlos el administrador a mano, o no exigírselo?
+- **Verificación de propietarios, profesionales y agencias (ronda 84)**: casi toda la API exige identidad verificada (`requireVerified`), pero la única pantalla para verificarse es `/tenant/kyc`, solo para inquilinos. Un propietario, profesional o agencia sin verificar no tiene desde la interfaz forma de hacerlo (solo el administrador, con la casilla de «Usuarios»). ¿Deben pasar por Stripe Identity como el inquilino, verificarlos el administrador a mano, o no exigírselo? **Ampliado en la ronda 85:** tampoco el inquilino tiene un trámite real. `/api/kyc` (Stripe Identity) es un stub que no llama a Stripe ni marca a nadie como verificado, y `/tenant/kyc` era un texto fijo. Hoy la única forma de verificar una cuenta es la casilla del administrador en «Usuarios». La pantalla y el aviso de la app lo dicen así («por ahora la verificación la hace el equipo de RentalApp»). Activar Stripe Identity de verdad (alta, coste por verificación, webhook) es decisión tuya; mientras tanto, cada alta nueva necesita que alguien la verifique a mano para poder pedir visitas.
 - **Co-titulares (ronda 12), dos decisiones de producto:**
   - «Firmar como co-titular» solo cambia el estado en la base (`POST /tenants/:partyId/sign`, backend de antes); no es una firma electrónica con proveedor. ¿Vale así o el co-titular debe firmar con Firma.dev como el inquilino principal?
   - Aceptar la invitación exige tener la identidad verificada (`requireVerified` está en toda `/api`). La página lo explica y enlaza a `/tenant/kyc`, pero ¿debe poder unirse antes y verificar después?
@@ -3257,3 +3257,38 @@ Al revisar los filtros vi que `?userId[$ne]=x` ya lo corta `rejectMongoOperators
 - Pendientes anteriores: desactivar o suspender cuentas (no existe el campo), flujo manual de `/api/verification` sin pantalla, `parseDateRange` con hora local y UTC mezcladas, `pro/Profile` con el sistema 2026, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
 
 **Siguiente mejora propuesta.** Revisar qué otras pantallas de una cuenta sin verificar llaman a rutas con `requireVerified` al cargar (inicio del inquilino, mensajes, Tenant PRO) y, en vez de un error genérico, mostrar un aviso único con el enlace a verificarse. Si no hay nada que mostrar: `pro/Profile` con el sistema 2026.
+
+### Ronda 85 — 2026-10-16 06:00
+
+**Qué y por qué.** Lo que proponía la ronda 84: ver qué encuentra una cuenta sin verificar en las pantallas que llaman a rutas con `requireVerified`. Estaba mal en tres sitios:
+- todas las pantallas que usan `formatApiError` enseñaban el código en crudo: «owner_not_verified (ref: …)» en rojo, empezando por el inicio del inquilino nada más registrarse;
+- la cabecera sondeaba `/api/chat` cada 30 s y recibía 403 cada vez;
+- `/tenant/kyc`, adonde enlaza «Perfil y cuenta» para verificarse, era un texto fijo sin tildes («Completa tu proceso KYC desde el modulo…») y sin nada detrás. Revisando `/api/kyc` resultó que Stripe Identity es un stub: no hay trámite propio para nadie, solo la casilla del administrador.
+
+1. **Errores y sesión** (`frontend/src/api/client.ts`, `context/AuthContext.tsx`).
+   - `formatApiError` traduce los 403 `owner_not_verified`/`user_not_verified` a «Necesitas verificar tu identidad para usar esta sección.», sin referencia. Nuevo `isNotVerifiedError`. El resto de errores sale igual.
+   - Tras el login se pide `/api/users/me`: la respuesta del login solo trae `User.isVerified`, y una cuenta con la `Verification` aprobada salía como no verificada hasta recargar.
+2. **Interfaz** (`layout/AppShell.tsx`, `pages/tenant/TenantHome.tsx`, `pages/tenant/Kyc.tsx`, `index.css`).
+   - Aviso único bajo las migas para cualquier cuenta sin verificar (no al administrador ni en `/tenant/kyc`): «Tu identidad está sin verificar» y lo que no puede hacer. Al inquilino, «Ver qué falta» a `/tenant/kyc`. Tokens `--ra-*`, icono `ShieldCheck` y, en móvil, el botón baja debajo del texto.
+   - Sin verificar no se sondean los mensajes y el inicio del inquilino no pide los contratos (sale «Aún no tienes un alquiler activo», sin error).
+   - `/tenant/kyc` con `PageHeader`, `Card` y `Badge`: estado Verificada / Sin verificar, qué falta, que por ahora la verificación la hace el equipo y qué se puede hacer mientras tanto (buscar pisos, favoritos y perfil, que solo piden sesión), con enlaces.
+   - El aviso no promete «verifícate en minutos con tu DNI», porque ese trámite no existe (anotado en «Para Jorge»).
+
+**Commits.**
+- `859da75` Sesión: el rechazo por identidad sin verificar se explica en español y el login lee el estado real
+- `5ccd5f5` Interfaz: aviso único de identidad sin verificar y «Verificación de identidad» que dice la verdad
+- Docs: este registro, «Para Jorge» (nota de la ronda 84 ampliada) y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- Backend: sin cambios en esta ronda (ni `tsc` ni Jest).
+- Frontend: `lint` sin errores, `build` OK, `npm --prefix frontend test`: **71 ficheros y 302 tests OK** (antes 70 y 296). Nuevos: `client.test.ts` (1), `AppShell.test.tsx` (2: aviso y enlace del inquilino sin sondear mensajes; propietario sin enlace y nada con la identidad verificada), `TenantHome.test.tsx` (1: sin verificar no pide contratos ni muestra error) y `Kyc.test.tsx` (2, nuevo).
+- Capturas con Playwright y la API simulada (`/tmp/ra-shots85`, contratos respondiendo 403 `owner_not_verified`), inquilina sin verificar en `/tenant` y `/tenant/kyc` a 1280 y 390 px: aviso arriba, inicio sin error rojo, ancho del documento 1280 y 390 sin desbordar.
+- **GitNexus.** `impact` de `formatApiError`: **CRITICAL** (13 llamadores directos, 12 flujos), por ser el formateador común; el cambio solo afecta a esos dos códigos 403 y la suite entera pasa. `AppShell` y `AuthProvider`: LOW. `detect_changes`: crítico por el mismo motivo; flujos tocados `AppShell → ListConversations`, `TenantHome` y los de `formatApiError`.
+
+**Qué queda.**
+- No hay trámite de verificación para nadie (Stripe Identity es un stub). Decisión de Jorge, en «Para Jorge».
+- Otras pantallas que no usan `formatApiError` (unas 30 leen `data.error` directamente) pueden seguir mostrando el código en crudo; el aviso de arriba ya explica la causa.
+- `KycCameraCapture.tsx` es un componente de relleno que nadie usa.
+- Pendientes anteriores: suspender cuentas, flujo manual de `/api/verification` sin pantalla, `parseDateRange` con hora local y UTC mezcladas, `pro/Profile` con el sistema 2026, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
+
+**Siguiente mejora propuesta.** Pasar las pantallas que muestran `err.response.data.error` en crudo a `formatApiError` (o a mensajes propios en español), empezando por las del inquilino (solicitudes, pagos, incidencias) y con un test por pantalla. Si se prefiere apariencia: `pro/Profile` con el sistema 2026.

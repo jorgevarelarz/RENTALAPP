@@ -1525,3 +1525,10 @@ Rules:
 - `ProfilePage` shows «Identidad sin verificar · Verificarla» (tenant → `/tenant/kyc`) from `/api/users/me`.
 - Tests: new `tests/auth/unverified-profile.test.ts`; `session-claims` and `admin.users.update` now use `/api/contracts` and `/me/stats` as verified-only routes. Frontend 70 files / 296 tests. Details in `docs/MEJORA-CONTINUA.md` round 84.
 
+### 2026-10-16 - Claude Code (autonomous worker) - Round 85: unverified-account UX
+
+- `formatApiError` maps 403 `owner_not_verified`/`user_not_verified` to a Spanish message without request id (`isNotVerifiedError`, `NOT_VERIFIED_MESSAGE` exported). `AuthContext.login` refreshes from `/api/users/me` after login.
+- `AppShell`: `VerificationNotice` for non-admin accounts with `isVerified === false` (tenant → «Ver qué falta» `/tenant/kyc`); `useUnread` skips polling when unverified. `TenantHome` skips `listContracts` when unverified.
+- `/tenant/kyc` (`pages/tenant/Kyc.tsx`) rewritten: status badge + honest explanation. `/api/kyc` Stripe Identity provider is a stub; only the admin checkbox verifies accounts (noted for Jorge).
+- Verification: frontend lint/build OK, 71 files / 302 tests; Playwright `/tmp/ra-shots85`. Backend untouched. Details in `docs/MEJORA-CONTINUA.md` round 85.
+
