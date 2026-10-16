@@ -12,16 +12,7 @@ import Select from '../../components/ui/Select';
 import { api, formatApiError } from '../../api/client';
 import { blobErrorBody, saveBlob } from '../../utils/download';
 import type { StatusTone } from '../../utils/statusBadges';
-
-type AdminUser = {
-  id: string;
-  name?: string;
-  email: string;
-  role: string;
-  isVerified?: boolean;
-  companyName?: string;
-  createdAt?: string;
-};
+import AdminUserDialog, { type AdminUser } from './AdminUserDialog';
 
 // Los roles del modelo (user.model.ts)
 const ROLES: Record<string, { label: string; tone: StatusTone }> = {
@@ -63,6 +54,7 @@ export default function AdminUsersPage() {
   const [agencyError, setAgencyError] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [editing, setEditing] = useState<AdminUser | null>(null);
 
   // Se busca al dejar de teclear, y siempre desde la primera página
   useEffect(() => {
@@ -155,7 +147,7 @@ export default function AdminUsersPage() {
     <div className="space-y-6 pb-10">
       <PageHeader
         title="Usuarios"
-        subtitle="Todas las cuentas de la plataforma, de la más reciente a la más antigua."
+        subtitle="Todas las cuentas de la plataforma, de la más reciente a la más antigua. Pulsa un nombre para editar la cuenta."
         cta={
           <Button size="sm" onClick={() => setAgencyOpen(true)}>
             <Plus size={16} aria-hidden="true" />
@@ -268,7 +260,14 @@ export default function AdminUsersPage() {
                       return (
                         <tr key={u.id} className="align-top">
                           <td className="px-4 py-3">
-                            <div className="font-medium">{u.name || 'Sin nombre'}</div>
+                            <button
+                              type="button"
+                              className="text-left font-medium underline-offset-2 hover:underline focus-visible:underline"
+                              aria-label={`Editar la cuenta de ${u.name || u.email}`}
+                              onClick={() => setEditing(u)}
+                            >
+                              {u.name || 'Sin nombre'}
+                            </button>
                             <div className="text-[var(--ra-muted)] [overflow-wrap:anywhere]">{u.email}</div>
                             {u.companyName && <div className="text-xs text-[var(--ra-muted)]">{u.companyName}</div>}
                             <div className="mt-2 flex flex-wrap items-center gap-2 text-xs md:hidden">
@@ -315,6 +314,17 @@ export default function AdminUsersPage() {
           )}
         </Card>
       )}
+
+      <AdminUserDialog
+        user={editing}
+        roleLabel={(value) => ROLES[value]?.label || value}
+        onClose={() => setEditing(null)}
+        onSaved={(saved) => {
+          setEditing(null);
+          setItems((list) => list.map((item) => (item.id === saved.id ? saved : item)));
+          setNotice(`Cuenta guardada: ${saved.email}.`);
+        }}
+      />
 
       <Modal open={agencyOpen} onClose={() => !creating && setAgencyOpen(false)} title="Nueva agencia">
         <form className="space-y-4" onSubmit={createAgency}>

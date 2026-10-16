@@ -4,16 +4,17 @@ import { MemoryRouter } from 'react-router-dom';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminUsersPage from '../AdminUsersPage';
 
-const { getMock, postMock, saveMock, blobErrorMock } = vi.hoisted(() => ({
+const { getMock, postMock, patchMock, saveMock, blobErrorMock } = vi.hoisted(() => ({
   getMock: vi.fn(),
   postMock: vi.fn(),
+  patchMock: vi.fn(),
   saveMock: vi.fn(),
   blobErrorMock: vi.fn(),
 }));
 
 vi.mock('../../../api/client', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../../../api/client')>()),
-  api: { get: getMock, post: postMock },
+  api: { get: getMock, post: postMock, patch: patchMock },
 }));
 
 vi.mock('../../../utils/download', () => ({ saveBlob: saveMock, blobErrorBody: blobErrorMock }));
@@ -24,6 +25,7 @@ const CSV = '/api/users/export.csv';
 const users = [
   { id: 'u1', name: 'Laura Martín', email: 'laura@example.com', role: 'landlord', isVerified: true, createdAt: '2026-10-12T10:00:00.000Z' },
   { id: 'u2', name: 'Inmo Norte', email: 'inmo@example.com', role: 'agency', isVerified: false, companyName: 'Inmo Norte SL' },
+  { id: 'u3', name: 'Admin', email: 'admin@example.com', role: 'admin', isVerified: true },
 ];
 
 const renderPage = () =>
@@ -37,9 +39,10 @@ describe('AdminUsersPage', () => {
   beforeEach(() => {
     getMock.mockReset();
     postMock.mockReset();
+    patchMock.mockReset();
     saveMock.mockReset();
     blobErrorMock.mockReset();
-    getMock.mockResolvedValue({ data: { items: users, total: 2, page: 1, limit: 25 } });
+    getMock.mockResolvedValue({ data: { items: users, total: 3, page: 1, limit: 25 } });
   });
 
   it('muestra nombre, rol en español e identidad', async () => {
@@ -53,7 +56,7 @@ describe('AdminUsersPage', () => {
     expect(within(agency).getAllByText('Agencia')).toHaveLength(2);
     expect(within(agency).getAllByText('Sin verificar')).toHaveLength(2);
     expect(within(agency).getByText('Inmo Norte SL')).toBeInTheDocument();
-    expect(screen.getByText('2 cuentas')).toBeInTheDocument();
+    expect(screen.getByText('3 cuentas')).toBeInTheDocument();
     expect(screen.queryByText(/Landlord|Tenant/)).not.toBeInTheDocument();
     expect(getMock).toHaveBeenCalledWith(LIST, { params: { page: 1, limit: 25 } });
   });
@@ -80,7 +83,7 @@ describe('AdminUsersPage', () => {
 
   it('el CSV lo pide al servidor con los filtros', async () => {
     getMock.mockImplementation((url: string) =>
-      url === CSV ? Promise.resolve({ data: new Blob(['x']) }) : Promise.resolve({ data: { items: users, total: 2, page: 1, limit: 25 } }),
+      url === CSV ? Promise.resolve({ data: new Blob(['x']) }) : Promise.resolve({ data: { items: users, total: 3, page: 1, limit: 25 } }),
     );
     renderPage();
     await screen.findByText('laura@example.com');
@@ -115,5 +118,46 @@ describe('AdminUsersPage', () => {
     });
     await waitFor(() => expect(getMock).toHaveBeenLastCalledWith(LIST, { params: { role: 'agency', page: 1, limit: 25 } }));
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('edita una cuenta desde su ficha y envía solo lo que cambia', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar la cuenta de Inmo Norte' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).getByRole('button', { name: 'Guardar cambios' })).toBeDisabled();
+
+    fireEvent.change(within(dialog).getByLabelText('Correo'), { target: { value: 'Laura@Example.com' } });
+    fireEvent.change(within(dialog).getByLabelText('Rol'), { target: { value: 'landlord' } });
+    fireEvent.click(within(dialog).getByLabelText(/Identidad verificada/));
+    patchMock.mockRejectedValueOnce({ response: { status: 409, data: { error: 'email_already_exists' } } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    expect(await within(dialog).findByText('Ya hay otra cuenta con ese correo.')).toBeInTheDocument();
+    expect(patchMock).toHaveBeenLastCalledWith('/api/users/u2', { email: 'Laura@Example.com', role: 'landlord', isVerified: true });
+
+    fireEvent.change(within(dialog).getByLabelText('Correo'), { target: { value: 'inmo@example.com' } });
+    patchMock.mockResolvedValueOnce({
+      data: { id: 'u2', name: 'Inmo Norte', email: 'inmo@example.com', role: 'landlord', isVerified: true, companyName: 'Inmo Norte SL' },
+    });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    expect(await screen.findByText('Cuenta guardada: inmo@example.com.')).toBeInTheDocument();
+    expect(patchMock).toHaveBeenLastCalledWith('/api/users/u2', { role: 'landlord', isVerified: true });
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const row = screen.getByText('inmo@example.com').closest('tr')!;
+    expect(within(row).getAllByText('Propietario')).toHaveLength(2);
+    expect(within(row).getAllByText('Verificada')).toHaveLength(2);
+  });
+
+  it('el rol de un administrador no se puede cambiar desde la ficha', async () => {
+    renderPage();
+    fireEvent.click(await screen.findByRole('button', { name: 'Editar la cuenta de Admin' }));
+    const dialog = screen.getByRole('dialog');
+    expect(within(dialog).queryByLabelText('Rol')).not.toBeInTheDocument();
+    expect(within(dialog).getByText('Las cuentas de administración e institución no cambian de rol.')).toBeInTheDocument();
+
+    fireEvent.change(within(dialog).getByLabelText('Nombre'), { target: { value: 'Admin RentalApp' } });
+    patchMock.mockResolvedValueOnce({ data: { ...users[2], name: 'Admin RentalApp' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() => expect(patchMock).toHaveBeenCalledWith('/api/users/u3', { name: 'Admin RentalApp' }));
+    expect(await screen.findByText('Admin RentalApp')).toBeInTheDocument();
   });
 });
