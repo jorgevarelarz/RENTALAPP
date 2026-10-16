@@ -3,6 +3,7 @@ import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
 import { bearer } from '../utils/sessionToken';
 import { User } from '../../src/models/user.model';
+import { Verification } from '../../src/models/verification.model';
 
 const ADMIN_ID = '507f1f77bcf86cd799439000';
 
@@ -96,5 +97,25 @@ describe('PATCH /api/users/:id con lista blanca', () => {
     expect(
       (await request(app).patch('/api/users/507f1f77bcf86cd799439999').set('Authorization', admin).send({ phone: '1' })).status,
     ).toBe(404);
+  });
+
+  it('retirar la identidad cierra también la verificación aprobada, que si no seguiría dejando pasar', async () => {
+    const target = await createTarget({ isVerified: true });
+    await Verification.create({ userId: String(target._id), status: 'verified', method: 'dni' });
+    const user = await bearer(String(target._id), 'tenant');
+    // En tests ALLOW_UNVERIFIED da por verificada la sesión; la cabecera deja decidir a la base
+    const as = (url: string) => request(app).get(url).set('Authorization', user).set('x-user-verified', 'false');
+    expect((await as('/api/users/me')).body.isVerified).toBe(true);
+
+    await request(app)
+      .patch(`/api/users/${target._id}`)
+      .set('Authorization', await bearer(ADMIN_ID, 'admin'))
+      .send({ isVerified: false })
+      .expect(200);
+
+    expect(await Verification.findOne({ userId: String(target._id) }).lean()).toMatchObject({ status: 'rejected' });
+    // Las rutas con requireVerified ya no la dejan pasar
+    expect((await as('/api/users/me')).body).toEqual({ error: 'owner_not_verified' });
+    expect((await as('/api/contracts')).status).toBe(403);
   });
 });

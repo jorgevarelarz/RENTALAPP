@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { User } from '../models/user.model';
+import { Verification } from '../models/verification.model';
 import { Payment } from '../models/payment.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
@@ -282,6 +283,14 @@ export const updateUser = async (req: Request, res: Response) => {
       ? await User.findByIdAndUpdate(id, ops, { new: true, runValidators: true }).lean()
       : await User.findById(id).lean();
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    // requireVerified también deja pasar a quien tiene una Verification aprobada: retirar la
+    // identidad tiene que cerrarla, o la cuenta seguiría entrando como verificada.
+    if (update.$set.isVerified === false) {
+      await Verification.updateOne(
+        { userId: String(id), status: 'verified' },
+        { $set: { status: 'rejected', notes: 'Verificación retirada por administración' } },
+      );
+    }
     res.json(isSelf ? toMeUser(user) : toPublicUser(user));
   } catch (error: any) {
     if (error?.name === 'ValidationError' || error?.name === 'CastError') {
