@@ -15,6 +15,8 @@ function labelFor(path: string): string {
   if (item?.label) return item.label;
   if (path === '/contracts/new') return 'Nuevo contrato';
   if (path === '/tickets/new') return 'Comunicar una avería';
+  if (path === '/admin/compliance/policies') return 'Políticas';
+  if (path === '/admin/compliance/audit-trails') return 'Pistas de firma';
   // Fichas: sin el ID interno a la vista, el título ya está en la cabecera de la página.
   if (/^\/contracts\/[a-z0-9]+\/signed$/i.test(path)) return 'Contrato firmado';
   if (/^\/contracts\/[a-z0-9]+$/i.test(path)) return 'Contrato';
