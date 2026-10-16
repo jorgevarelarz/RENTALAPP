@@ -3040,3 +3040,40 @@ Descarté guardar el mensaje de la solicitud antes del login: el campo solo apar
 - Pendientes anteriores: `AdminUsersPage`/`AdminTenantProPage` con tablas en línea, `/api/verification` en la lista de rutas públicas, `pro/Profile`, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
 
 **Siguiente mejora propuesta.** Paginar `GET /api/admin/policies/acceptances` (con total) y mover su CSV al servidor con `csvRow`, para que la pantalla no cargue todas las aceptaciones de golpe. Si se prefiere interfaz: `AdminUsersPage` y `AdminTenantProPage` con el sistema 2026.
+
+### Ronda 79 — 2026-10-16 04:35
+
+**Qué y por qué.** Lo que proponía la ronda 78. «Aceptación de políticas» (`/admin/compliance/policies`) era la única pantalla de administración que cargaba todo sin paginar y montaba el CSV en el navegador. Con muchos usuarios (cada uno acepta tres o cuatro políticas por versión) la respuesta crecía sin límite, y el CSV solo podía salir de lo cargado.
+
+1. **API paginada** (`src/services/policyAcceptances.service.ts`, nuevo; el controlador solo lo llama).
+   - «Solo versiones vigentes» se filtraba en memoria después de traer todas las aceptaciones. Ahora va en la consulta, como pares política/versión vigentes, así que se puede paginar. Si no hay ninguna versión vigente, la lista sale vacía sin consultar.
+   - Responde `{ data, total, page, pageSize }`; `data` sigue siendo la lista, así que quien leyera `data` no se rompe. `?page=abc` vuelve a 1 y 25, y el máximo es 100 por página.
+   - Un `userId` mal formado daba 500 (CastError) y una política que no existe, una lista vacía sin más. Ahora dan 400 `invalid_user_id` e `invalid_policy_type`.
+2. **CSV desde el servidor**: `GET /api/admin/policies/acceptances/export.csv`, con los mismos filtros, todas las filas y `csvRows` (fórmulas neutralizadas). Mantiene las cabeceras que tenía el CSV del navegador.
+3. **Pantalla.**
+   - Pide páginas de 25 y muestra «1–25 de N aceptaciones» con Anterior y Siguiente, igual que «Eventos del sistema». Al cambiar el filtro vuelve a la primera página.
+   - El botón CSV descarga el del servidor. Si falla, explica el error que viene dentro del Blob.
+   - Se quita `frontend/src/utils/csv.ts`, que se creó en la ronda 78 solo para esta pantalla y ya no tenía uso. La nota de la auditoría de seguridad lo recoge.
+
+Al revisar los filtros vi que `?userId[$ne]=x` ya lo corta `rejectMongoOperators` (400 `invalid_input`) y que `hpp` reduce las listas a un solo valor. No había inyección; la validación nueva solo cubre ids mal formados y políticas desconocidas.
+
+**Commits.**
+- `6a4f2cc` Políticas: las aceptaciones se paginan en el servidor y el CSV sale de la API
+- `1354ff8` Interfaz: «Aceptación de políticas» pagina con el total del servidor y descarga el CSV de la API
+- Docs: este registro, la nota de la auditoría de seguridad y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand`:
+  - `tests/admin/admin.policy-acceptances.test.ts` es nuevo y pasa **5/5**. Comprueba que solo entra el administrador (también al CSV); el total y la paginación; «solo vigentes» en la consulta, sin colar la v1.0 de otra política; el filtro por usuario; `page=abc`; la lista vacía sin versiones vigentes; los 400; y que el CSV trae todas las filas del filtro con `=HYPERLINK` neutralizado.
+  - `admin.compliance`, `security/admin.errors` y `security/route-auth-map`: OK (la ruta nueva del CSV da 401 sin sesión, como exige el mapa). En total, 4 suites y 22 tests. La primera tanda tuvo un fallo en el test nuevo: esperaba mi código de error y respondía antes `rejectMongoOperators`. Se corrigió el test, no el código.
+- Frontend: `lint` sin errores y `build` OK. `npm --prefix frontend test`: **67 ficheros y 282 tests OK** (antes 280). `AdminCompliancePage.test.tsx` pasa de 3 a 5 casos: CSV pedido al servidor con los filtros, error del CSV leído del Blob, y paginación con vuelta a la página 1 al cambiar el filtro.
+- Capturas con Playwright y la API simulada (137 aceptaciones), en `/tmp/ra-shots79`, a 1280 y 390 px: pie con «1–25 de 137 aceptaciones» y «Página 1 de 6». El ancho del documento mide 1280 y 390 (sin desbordar).
+- **GitNexus.** `impact` de `listPolicyAcceptances` y `AdminCompliancePage`: LOW. `detect_changes`: riesgo bajo, sin flujos afectados.
+
+**Qué queda.**
+- El CSV de aceptaciones, el de eventos y el de cumplimiento no tienen tope de filas (el de pistas de firma corta en 5000). Con cientos de miles de filas convendría transmitirlos por partes (stream).
+- Los CSV siguen con cabeceras en inglés.
+- `parseDateRange` mezcla hora local y UTC (ronda 78).
+- Pendientes anteriores: `AdminUsersPage` y `AdminTenantProPage` con tablas en línea, `/api/verification` en la lista de rutas públicas, `pro/Profile`, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
+
+**Siguiente mejora propuesta.** Interfaz: `AdminUsersPage` y `AdminTenantProPage` con el sistema 2026 (`PageHeader`, `Card`, `Badge`, tabla con `--ra-line`), revisadas con capturas. Si se prefiere backend: montar `/api/verification` detrás de `authenticate` y sacarla de la lista de rutas públicas.

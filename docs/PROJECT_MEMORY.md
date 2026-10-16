@@ -1483,3 +1483,9 @@ Rules:
 - `AdminCompliancePage` built its CSV client-side without formula neutralisation (User-Agent is user-controlled): now `frontend/src/utils/csv.ts` (mirror of backend `utils/csv.ts`). `frontend/src/utils/download.ts` (`saveBlob`, `blobErrorBody`) shared with `ComplianceDashboard` and `SystemEvents`.
 - `SystemEvents` and `AdminCompliancePage` rewritten with PageHeader/Card/Select/Badge/Modal; all 4 event types and cookies_policy in filters; breadcrumbs «Políticas»/«Pistas de firma». Gotcha: a `sr-only` `<th>` inside `overflow-x-auto` widens the page on mobile unless the scroll container is `relative`.
 - Verification: tsc clean; Jest 3/3; frontend lint/build OK, 67 files / 280 tests; Playwright `/tmp/ra-shots78`. Details in `docs/MEJORA-CONTINUA.md` round 78.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 79: policy acceptances paginated server-side + server CSV
+
+- `src/services/policyAcceptances.service.ts` (new): `GET /api/admin/policies/acceptances` returns `{ data, total, page, pageSize }` (activeOnly now in the Mongo query as policyType/version pairs); 400 `invalid_user_id` / `invalid_policy_type`. New `GET /api/admin/policies/acceptances/export.csv` (`csvRows`). New `tests/admin/admin.policy-acceptances.test.ts`.
+- `AdminCompliancePage` paginates (25) and downloads the server CSV; `frontend/src/utils/csv.ts` removed (no users left). Note: `rejectMongoOperators` + `hpp` already block `$` keys and query arrays globally.
+- Verification: tsc clean; Jest 4 suites / 22 tests; frontend lint/build OK, 67 files / 282 tests; Playwright `/tmp/ra-shots79`. Details in `docs/MEJORA-CONTINUA.md` round 79.
