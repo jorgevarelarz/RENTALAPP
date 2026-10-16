@@ -9,8 +9,7 @@ import ErrorCard from '../../components/ui/ErrorCard';
 import PageHeader from '../../components/ui/PageHeader';
 import Select from '../../components/ui/Select';
 import { api as axios, formatApiError } from '../../api/client';
-import { csvRows } from '../../utils/csv';
-import { saveBlob } from '../../utils/download';
+import { blobErrorBody, saveBlob } from '../../utils/download';
 
 type Acceptance = {
   user: { id: string; email: string };
@@ -29,6 +28,13 @@ const POLICY_LABELS: Record<string, string> = {
   data_processing: 'Tratamiento de datos',
 };
 
+const PAGE_SIZE = 25;
+
+const ERRORS: Record<string, string> = {
+  invalid_policy_type: 'Esa política no existe.',
+  invalid_user_id: 'El identificador de usuario no es válido.',
+};
+
 const COLUMNS = ['Usuario', 'Política', 'Aceptada', 'IP', 'Navegador'];
 
 const dateTime = (value?: string) =>
@@ -36,36 +42,60 @@ const dateTime = (value?: string) =>
 
 export default function AdminCompliancePage() {
   const [data, setData] = useState<Acceptance[]>([]);
+  const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [policyType, setPolicyType] = useState('');
   const [activeOnly, setActiveOnly] = useState(true);
+  const [page, setPage] = useState(1);
+
+  const filters = useCallback(() => {
+    const params: Record<string, string | boolean> = {};
+    if (policyType) params.policyType = policyType;
+    if (activeOnly) params.activeOnly = true;
+    return params;
+  }, [policyType, activeOnly]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const params: Record<string, string | boolean> = {};
-      if (policyType) params.policyType = policyType;
-      if (activeOnly) params.activeOnly = true;
-      const res = await axios.get('/api/admin/policies/acceptances', { params });
+      const res = await axios.get('/api/admin/policies/acceptances', {
+        params: { ...filters(), page, pageSize: PAGE_SIZE },
+      });
       setData(res.data?.data || []);
+      setTotal(res.data?.total ?? 0);
     } catch (err: any) {
-      setError(formatApiError(err, 'No se pudieron cargar las aceptaciones.'));
+      setError(ERRORS[err?.response?.data?.error] || formatApiError(err, 'No se pudieron cargar las aceptaciones.'));
     } finally {
       setLoading(false);
     }
-  }, [policyType, activeOnly]);
+  }, [filters, page]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  const exportCSV = () => {
-    const header = ['userId', 'email', 'policyType', 'policyVersion', 'acceptedAt', 'ip', 'userAgent'];
-    const rows = data.map((d) => [d.user.id, d.user.email, d.policyType, d.policyVersion, d.acceptedAt, d.ip || '', d.userAgent || '']);
-    saveBlob(new Blob([csvRows([header, ...rows])], { type: 'text/csv;charset=utf-8;' }), 'aceptaciones-politicas.csv');
+  // El CSV lo genera el servidor con todas las filas del filtro, no solo la página visible
+  const exportCSV = async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const res = await axios.get('/api/admin/policies/acceptances/export.csv', { params: filters(), responseType: 'blob' });
+      saveBlob(res.data, 'aceptaciones-politicas.csv');
+    } catch (err: any) {
+      const body = await blobErrorBody(err);
+      setExportError(ERRORS[body?.error || ''] || body?.message || formatApiError(err, 'No se pudo exportar el CSV.'));
+    } finally {
+      setExporting(false);
+    }
   };
+
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, total);
 
   return (
     <div className="space-y-6 pb-10">
@@ -94,7 +124,10 @@ export default function AdminCompliancePage() {
             fetchData();
           }}
         >
-          <Select label="Política" value={policyType} onChange={(e) => setPolicyType(e.target.value)}>
+          <Select label="Política" value={policyType} onChange={(e) => {
+              setPolicyType(e.target.value);
+              setPage(1);
+            }}>
             <option value="">Todas</option>
             {Object.entries(POLICY_LABELS).map(([value, label]) => (
               <option key={value} value={value}>
@@ -103,7 +136,13 @@ export default function AdminCompliancePage() {
             ))}
           </Select>
           <label className="flex min-h-[44px] items-center gap-2 text-sm">
-            <input type="checkbox" checked={activeOnly} onChange={(e) => setActiveOnly(e.target.checked)} />
+            <input
+              type="checkbox"
+              checked={activeOnly} onChange={(e) => {
+                setActiveOnly(e.target.checked);
+                setPage(1);
+              }}
+            />
             Solo versiones vigentes
           </label>
           <div className="flex gap-2 sm:justify-end">
@@ -111,7 +150,7 @@ export default function AdminCompliancePage() {
               <RefreshCw size={16} aria-hidden="true" />
               Actualizar
             </Button>
-            <Button type="button" variant="secondary" onClick={exportCSV} disabled={data.length === 0}>
+            <Button type="button" variant="secondary" onClick={exportCSV} disabled={total === 0 || exporting}>
               <Download size={16} aria-hidden="true" />
               CSV
             </Button>
@@ -120,6 +159,7 @@ export default function AdminCompliancePage() {
       </Card>
 
       {error && <ErrorCard message={error} onRetry={fetchData} />}
+      {exportError && <ErrorCard message={exportError} />}
 
       {!loading && !error && data.length === 0 && (
         <EmptyState
@@ -131,7 +171,14 @@ export default function AdminCompliancePage() {
           }
           cta={
             activeOnly ? (
-              <Button variant="secondary" size="sm" onClick={() => setActiveOnly(false)}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => {
+                  setActiveOnly(false);
+                  setPage(1);
+                }}
+              >
                 Ver también versiones anteriores
               </Button>
             ) : undefined
@@ -186,8 +233,30 @@ export default function AdminCompliancePage() {
             </table>
           </div>
           {!loading && data.length > 0 && (
-            <div className="border-t border-[var(--ra-line)] px-4 py-3 text-sm text-[var(--ra-muted)] tabular-nums">
-              {data.length.toLocaleString('es-ES')} {data.length === 1 ? 'aceptación' : 'aceptaciones'}
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--ra-line)] px-4 py-3 text-sm text-[var(--ra-muted)]">
+              <span className="tabular-nums">
+                {totalPages > 1
+                  ? `${rangeStart}–${rangeEnd} de ${total.toLocaleString('es-ES')} aceptaciones`
+                  : `${total.toLocaleString('es-ES')} ${total === 1 ? 'aceptación' : 'aceptaciones'}`}
+              </span>
+              {totalPages > 1 && (
+                <nav aria-label="Paginación" className="flex items-center gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+                    Anterior
+                  </Button>
+                  <span className="tabular-nums">
+                    Página {page} de {totalPages}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                  >
+                    Siguiente
+                  </Button>
+                </nav>
+              )}
             </div>
           )}
         </Card>
