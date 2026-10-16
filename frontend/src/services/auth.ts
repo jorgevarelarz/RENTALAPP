@@ -85,7 +85,8 @@ export async function refreshStoredUser(): Promise<User | null> {
       ...(data.tenantPro ? { tenantPro: data.tenantPro } : {}),
     };
   } catch (err: any) {
-    // requireVerified responde 403 owner_not_verified a quien ya no está verificado.
+    // /api/users/me ya no pasa por requireVerified; se mantiene por si un backend anterior
+    // responde 403 owner_not_verified a quien no está verificado.
     if (err?.response?.status !== 403 || err?.response?.data?.error !== "owner_not_verified") return null;
     fields = { isVerified: false };
   }

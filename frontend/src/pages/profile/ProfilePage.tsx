@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import ProBadge from '../../components/ProBadge';
 import Card from '../../components/ui/Card';
@@ -166,6 +167,8 @@ export default function ProfilePage() {
 
   if (loading) return <div className="flex justify-center p-10"><Spinner /></div>;
   if (!profile) return <div>No se encontró el usuario.</div>;
+  // /api/users/me responde también a quien aún no ha verificado y trae el estado al día.
+  const verified = profile.isVerified ?? Boolean(user?.isVerified);
   const memberSince = profile.createdAt
     ? new Date(profile.createdAt).toLocaleDateString('es-ES', { month: 'long', year: 'numeric' })
     : '';
@@ -211,7 +214,21 @@ export default function ProfilePage() {
                 <p className="mt-1 text-sm text-gray-600 [overflow-wrap:anywhere]">
                   {profile.role === 'pro' && formData.companyName && <>{formData.name} · </>}
                   {roleLabel(profile.role, formData.serviceCategory)}
-                  {user?.isVerified && <span className="font-medium text-emerald-700"> · Identidad verificada</span>}
+                  {verified ? (
+                    <span className="font-medium text-emerald-700"> · Identidad verificada</span>
+                  ) : (
+                    <>
+                      {' · Identidad sin verificar'}
+                      {profile.role === 'tenant' && (
+                        <>
+                          {' · '}
+                          <Link to="/tenant/kyc" className="font-medium text-[var(--ra-blue)] hover:underline">
+                            Verificarla
+                          </Link>
+                        </>
+                      )}
+                    </>
+                  )}
                 </p>
                 <p className="text-sm text-gray-500 mt-0.5 [overflow-wrap:anywhere]">{profile.email}</p>
                 {isTenantPro && (
