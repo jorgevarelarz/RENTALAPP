@@ -11,7 +11,7 @@ const LAURA = '507f1f77bcf86cd799439010';
 const PDF = Buffer.from('%PDF-1.4\n%prueba\n');
 
 async function seedPending() {
-  const file = encryptAndSaveTP('nomina.pdf', PDF);
+  const file = encryptAndSaveTP(PDF);
   const user: any = await User.create({
     _id: LAURA,
     name: 'Laura Martín',

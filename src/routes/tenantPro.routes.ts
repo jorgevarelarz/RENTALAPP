@@ -61,7 +61,7 @@ router.post(
     });
   },
   asyncHandler(async (req, res) => {
-    const fileUpload = (req as any).file as { originalname: string; buffer: Buffer } | undefined;
+    const fileUpload = (req as any).file as { buffer: Buffer } | undefined;
     if (!fileUpload) return res.status(400).json({ code: 'file_required', message: 'Archivo requerido' });
     const type = ((req as any).body?.type) as string | undefined;
     if (!type || !['nomina', 'contrato', 'renta', 'autonomo', 'otros'].includes(type)) {
@@ -73,7 +73,7 @@ router.post(
       return res.status(409).json({ error: 'consent required' });
     }
     const hash = crypto.createHash('sha256').update(fileUpload.buffer).digest('hex');
-    const file = encryptAndSaveTP(fileUpload.originalname, fileUpload.buffer);
+    const file = encryptAndSaveTP(fileUpload.buffer);
     u.tenantPro.status = 'pending';
     u.tenantPro.docs = u.tenantPro.docs || [];
     u.tenantPro.docs.push({

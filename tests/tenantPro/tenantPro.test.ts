@@ -111,12 +111,14 @@ describe('Tenant PRO flows', () => {
       .set('x-user-id', tenantId.toString())
       .set('x-user-role', 'tenant')
       .field('type', 'nomina')
-      .attach('file', Buffer.from('hello'), 'test.pdf')
+      .attach('file', Buffer.from('hello'), 'nomina_lucia_perez.pdf')
       .expect(200);
 
     const pending: any = await User.findById(tenantId).lean();
     expect(pending?.tenantPro?.status).toBe('pending');
     expect(pending?.tenantPro?.docs?.length).toBe(1);
+    // En disco, nombre aleatorio: nada del nombre original del fichero
+    expect(pending.tenantPro.docs[0].url).toMatch(/^[0-9a-f]{32}\.bin$/);
 
     await request(app)
       .post(`/api/admin/tenant-pro/${tenantId.toString()}/decision`)
@@ -133,7 +135,7 @@ describe('Tenant PRO flows', () => {
 
   it('purges documents after TTL with retention job', async () => {
     const tenantId = new mongoose.Types.ObjectId();
-    const file = encryptAndSaveTP('ttl.txt', Buffer.from('ttl'));
+    const file = encryptAndSaveTP(Buffer.from('ttl'));
 
     await User.create({
       _id: tenantId,
@@ -166,8 +168,8 @@ describe('Tenant PRO flows', () => {
 
   it('purges only expired documents, keeps an audit entry and survives a missing file', async () => {
     const day = 24 * 60 * 60 * 1000;
-    const oldFile = encryptAndSaveTP('old.txt', Buffer.from('old'));
-    const freshFile = encryptAndSaveTP('fresh.txt', Buffer.from('fresh'));
+    const oldFile = encryptAndSaveTP(Buffer.from('old'));
+    const freshFile = encryptAndSaveTP(Buffer.from('fresh'));
     const mixed = await User.create({
       name: 'Mixed',
       email: 'mixed@example.com',
@@ -214,7 +216,7 @@ describe('Tenant PRO flows', () => {
 
   it('honours TENANT_PRO_DOCS_TTL_DAYS and ignores invalid values', async () => {
     const day = 24 * 60 * 60 * 1000;
-    const file = encryptAndSaveTP('ttl30.txt', Buffer.from('x'));
+    const file = encryptAndSaveTP(Buffer.from('x'));
     await User.create({
       name: 'Short',
       email: 'short@example.com',
