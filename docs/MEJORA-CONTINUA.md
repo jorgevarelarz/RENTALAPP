@@ -3198,3 +3198,33 @@ Al revisar los filtros vi que `?userId[$ne]=x` ya lo corta `rejectMongoOperators
 - Pendientes anteriores: flujo manual de `/api/verification` sin pantalla, `parseDateRange` con hora local y UTC mezcladas, `pro/Profile`, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
 
 **Siguiente mejora propuesta.** Interfaz: ficha de la cuenta en «Usuarios» (`ui/Modal` desde la fila) con nombre, correo, rol e identidad editables a través de este `PATCH`, con los errores en español y captura con Playwright. Si se prefiere otra cosa: `pro/Profile` con el sistema 2026.
+
+### Ronda 83 — 2026-10-16 05:29
+
+**Qué y por qué.** Lo que proponía la ronda 82: desde «Usuarios» el administrador veía las cuentas pero no podía abrir ninguna, así que para corregir un correo, cambiar un rol o marcar la identidad había que ir a la base. Al montar la casilla de identidad salió un fallo de backend: retirarla no servía de nada en algunas cuentas.
+
+1. **Ficha de la cuenta, interfaz** (`frontend/src/pages/admin/AdminUserDialog.tsx`, nuevo; `AdminUsersPage.tsx`).
+   - El nombre de cada fila es un botón («Editar la cuenta de …») que abre `ui/Modal` con el nombre de la cuenta como título y la fecha de alta.
+   - Campos: nombre, correo, empresa, rol e «Identidad verificada» (casilla con explicación). El rol solo ofrece inquilino, propietario, profesional y agencia, los que admite la API. En una cuenta de administración o institución se muestra el rol como texto y se explica que no cambia.
+   - Se envía solo lo que cambia (un correo con otras mayúsculas no cuenta). «Guardar cambios» está desactivado si no hay cambios.
+   - Errores en español: correo repetido, rol bloqueado, nombre vacío, cuenta que ya no existe…
+   - Al guardar, la fila se actualiza sin recargar la lista y sale el aviso «Cuenta guardada: …».
+2. **Retirar la identidad, backend** (`src/controllers/user.controller.ts`, `updateUser`). `requireVerified` deja pasar a quien tiene `isVerified` **o** una `Verification` con `status: 'verified'` (flujo de DNI). Si el administrador quitaba `isVerified` a una cuenta así, la cuenta seguía entrando como verificada. Ahora `isVerified: false` pasa también esa `Verification` a `rejected`, con la nota «Verificación retirada por administración». Marcar como verificada no toca la `Verification`.
+
+**Commits.**
+- `aef6388` Interfaz: ficha editable de cada cuenta en «Usuarios» del administrador
+- `8c0ddc5` Usuarios: retirar la identidad desde administración cierra también la verificación aprobada
+- Docs: este registro, la nota en `auditoria-seguridad-2026-10-05.md` y PROJECT_MEMORY
+
+**Verificación (resultados reales).**
+- Backend: `npx tsc --noEmit` sin errores. Jest `--runInBand`: `admin.users.update`, `admin.users`, `tests/verification` y `auth/session-revocation`, **4 suites y 18 tests OK**. El caso nuevo (cuenta con `Verification` aprobada: tras retirar la identidad, `/api/users/me` y `/api/contracts` dan 403 y la verificación queda `rejected`) **falla sin el cambio** y pasa con él. En tests, `ALLOW_UNVERIFIED` da por verificada cualquier sesión, así que el caso manda `x-user-verified: false` para que decidan la base y la `Verification`.
+- Frontend: `lint` sin errores, `build` OK, `npm --prefix frontend test`: **69 ficheros y 294 tests OK** (antes 292). Dos casos nuevos en `AdminUsersPage.test.tsx`: editar con 409 y reintento enviando solo lo que cambia, con la fila actualizada; y la ficha de un administrador sin selector de rol.
+- Capturas con Playwright y la API simulada (`/tmp/ra-shots83`), a 1280 y 390 px: ficha de una agencia con el rol cambiado y ficha de un administrador. Ancho del documento 1280 y 390, sin desbordar. En móvil el diálogo sale como hoja inferior y cabe entero.
+- **GitNexus.** `impact` de `AdminUsersPage` y de `updateUser`: LOW. `detect_changes`: riesgo bajo y ningún flujo afectado en los dos commits. El índice es del repo canónico y en el de backend atribuye las líneas a `getLandlordStats` por desfase; el cambio real está en `updateUser`.
+
+**Qué queda.**
+- `/api/users` está montado con `requireVerified`, así que una cuenta sin verificar recibe 403 en `GET /api/users/me` (y en `PATCH /api/users/me`). Es así desde antes; conviene comprobar que la pantalla de verificación y el perfil no dependen de `/me` para quien aún no ha verificado.
+- No hay forma de desactivar o suspender una cuenta (no existe el campo).
+- Pendientes anteriores: flujo manual de `/api/verification` sin pantalla, `parseDateRange` con hora local y UTC mezcladas, `pro/Profile` con el sistema 2026, `.auth-input` frente a `.ra-input` y fotos externas en los anuncios.
+
+**Siguiente mejora propuesta.** Revisar qué hace el frontend con una cuenta sin verificar cuando `/api/users/me` responde 403 (cargar la sesión, perfil, KYC) y, si algo se rompe, sacar `GET /api/users/me` de `requireVerified` con su test. Si no hay nada roto: `pro/Profile` con el sistema 2026.

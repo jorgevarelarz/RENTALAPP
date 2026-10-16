@@ -1510,3 +1510,10 @@ Rules:
 - `updateUser` (`src/controllers/user.controller.ts`) now uses `buildUserUpdate`: self → phone/bio/avatar/jobTitle/monthlyIncome/companyName/serviceCategory (typed, trimmed, `null`/`''` unsets); admin also name, email (normalized, 409 on duplicate via `findUserByEmail`), role only among tenant/landlord/pro/agency (`role_locked` for admin/institution targets), boolean `isVerified`. 400 `invalid_user_id`. New `tests/admin/admin.users.update.test.ts` (5).
 - `encryptAndSaveTP(buf)` (signature changed, no filename) writes `<32 hex>.bin`; `readDecryptedTP` uses `path.basename`. Old files keep their names and still read.
 - Verification: tsc clean; Jest admin.users.update 5/5, admin.users, session-revocation, tenantPro (3 suites), route-auth-map OK. Frontend untouched. Details in `docs/MEJORA-CONTINUA.md` round 82.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 83: admin account dialog + revoking verification closes approved Verification
+
+- New `frontend/src/pages/admin/AdminUserDialog.tsx` (exports `AdminUser`): name button in each `AdminUsersPage` row opens a Modal to edit name/email/companyName/role (only tenant/landlord/pro/agency; admin/institution shown read-only)/isVerified via `PATCH /api/users/:id`, sending only changed fields; row updated in place.
+- `updateUser`: `isVerified: false` also sets an approved `Verification` to `rejected` (requireVerified accepted either). Test in `tests/admin/admin.users.update.test.ts` (needs `x-user-verified: false` because tests run with `ALLOW_UNVERIFIED`).
+- Open: `/api/users` is behind `requireVerified`, so unverified accounts get 403 on `/api/users/me`.
+- Verification: tsc clean; Jest 4 suites / 18 tests; frontend lint/build OK, 69 files / 294 tests; Playwright `/tmp/ra-shots83`. Details in `docs/MEJORA-CONTINUA.md` round 83.
