@@ -15,6 +15,8 @@ export function passwordPolicyError(password: string): string | null {
 export type User = {
   _id: string;
   email: string;
+  name?: string;
+  phone?: string;
   role: "tenant" | "landlord" | "pro" | "admin" | "agency";
   isVerified?: boolean;
   tenantPro?: {
@@ -80,6 +82,8 @@ export async function refreshStoredUser(): Promise<User | null> {
     if (!data) return null;
     fields = {
       ...(data.email ? { email: data.email } : {}),
+      ...(typeof data.name === "string" ? { name: data.name } : {}),
+      ...(typeof data.phone === "string" ? { phone: data.phone } : {}),
       ...(data.role ? { role: data.role } : {}),
       ...(typeof data.isVerified === "boolean" ? { isVerified: data.isVerified } : {}),
       ...(data.tenantPro ? { tenantPro: data.tenantPro } : {}),
@@ -119,4 +123,9 @@ export async function changePassword(currentPassword: string, password: string):
   const next: User = { ...current, token: data.token };
   setStoredUser(next);
   return next;
+}
+
+/** Nombre de pila para saludar. Sin nombre guardado no se inventa uno a partir del correo. */
+export function firstNameOf(user?: Pick<User, "name"> | null): string {
+  return (user?.name || "").trim().split(/\s+/)[0] || "";
 }

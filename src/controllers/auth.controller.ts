@@ -43,7 +43,7 @@ export const register = async (req: Request, res: Response) => {
     const token = signAuthToken(user);
     res.status(201).json({
       token,
-      user: { _id: user._id, email: user.email, role: user.role, isVerified },
+      user: { _id: user._id, email: user.email, role: user.role, name: user.name, isVerified },
     });
   } catch (error) {
     res.status(400).json({ error: 'Error al registrar' });
@@ -76,7 +76,7 @@ export const login = async (req: Request, res: Response) => {
     const token = signAuthToken(user);
     res.json({
       token,
-      user: { _id: user._id, email: user.email, role: user.role, isVerified },
+      user: { _id: user._id, email: user.email, role: user.role, name: user.name, isVerified },
     });
   } catch (error) {
     res.status(500).json({ message: 'Error del servidor' });

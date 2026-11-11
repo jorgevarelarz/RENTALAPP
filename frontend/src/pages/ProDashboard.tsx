@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { ChevronRight } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import { firstNameOf } from '../services/auth';
 import { getMyProProfile } from '../services/pro';
 import { getProSummary } from '../services/tickets';
 import Card from '../components/ui/Card';
@@ -58,7 +59,7 @@ function ProfileCard() {
 const ProDashboard: React.FC = () => {
   const { user } = useAuth();
   const { data: summary, isLoading, isError } = useQuery({ queryKey: ['pro/summary'], queryFn: getProSummary });
-  const firstName = (user as any)?.name?.split?.(' ')?.[0] || user?.email?.split?.('@')?.[0] || '';
+  const firstName = firstNameOf(user);
 
   const todo = summary
     ? [

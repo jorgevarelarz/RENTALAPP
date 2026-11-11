@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { firstNameOf } from '../../services/auth';
 import Card from '../../components/ui/Card';
 import { AlertCircle, ChevronRight, Clock3, Heart, ShieldCheck } from 'lucide-react';
 import OnboardingChecklist from '../../components/OnboardingChecklist';
@@ -89,10 +90,7 @@ export default function TenantHome() {
     error: '',
   });
 
-  const firstName =
-    (user as any)?.name?.split?.(' ')?.[0] ||
-    user?.email?.split?.('@')?.[0] ||
-    'Inquilino';
+  const firstName = firstNameOf(user);
 
   useEffect(() => {
     let active = true;
@@ -149,7 +147,7 @@ export default function TenantHome() {
     <div className="space-y-8 pb-10">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Hola, {firstName}</h1>
+          <h1 className="text-3xl font-bold text-gray-900">{firstName ? `Hola, ${firstName}` : 'Tu alquiler'}</h1>
           <p className="mt-1 text-gray-500">Tu alquiler, tus pagos y tus solicitudes, en un mismo sitio.</p>
         </div>
         <Link to="/properties" className={`${secondaryLink} self-start md:self-auto`}>
@@ -157,7 +155,18 @@ export default function TenantHome() {
         </Link>
       </div>
 
-      <OnboardingChecklist role="tenant" />
+      <OnboardingChecklist
+        items={[
+          { label: 'Verificar tu identidad', to: '/tenant/kyc', done: user?.isVerified === true },
+          { label: 'Acreditar tu solvencia (Tenant PRO)', to: '/tenant-pro', done: user?.tenantPro?.status === 'verified' },
+          {
+            label: 'Guardar un piso que te guste',
+            to: '/properties',
+            done: Boolean(summary.favorites) || summary.contracts.length > 0,
+          },
+          { label: 'Completar tu perfil', to: '/profile', done: Boolean(user?.name && user?.phone) },
+        ]}
+      />
 
       {summary.error && (
         <div className="flex items-start gap-3 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">

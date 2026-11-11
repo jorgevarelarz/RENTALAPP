@@ -15,6 +15,7 @@ import ApplicantsModal from '../components/ApplicantsModal';
 import { AlertTriangle, ChevronRight, Plus, Home, Image as ImageIcon, Users } from 'lucide-react';
 import { toAbsoluteUrl } from '../utils/media';
 import OnboardingChecklist from '../components/OnboardingChecklist';
+import { getPayoutStatus } from '../services/connect';
 import { buildLandlordAlerts, estimateMonthlyRent, propertyPhotoCount } from '../utils/landlordDashboard';
 import { getContractActionSummary } from '../utils/contractWorkflow';
 
@@ -61,6 +62,8 @@ const LandlordDashboard: React.FC = () => {
   const [rentedByProperty, setRentedByProperty] = useState<Record<string, { tenantName?: string; endDate?: string }>>({});
   const [stats, setStats] = useState<any>(null);
   const [statsLoading, setStatsLoading] = useState(true);
+  // null = todavía no se sabe (o no se pudo consultar): ese paso no se enseña como pendiente sin saberlo
+  const [payoutReady, setPayoutReady] = useState<boolean | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProperty, setEditingProperty] = useState<any | null>(null);
   const [showApplicantsFor, setShowApplicantsFor] = useState<any>(null);
@@ -117,6 +120,12 @@ const LandlordDashboard: React.FC = () => {
       return next;
     }, { replace: true });
   }, [applicantsParam, mineLoaded, mine, setSearchParams]);
+
+  useEffect(() => {
+    getPayoutStatus()
+      .then((status) => setPayoutReady(Boolean(status.ready)))
+      .catch(() => setPayoutReady(null));
+  }, []);
 
   useEffect(() => {
     userService
@@ -206,7 +215,14 @@ const LandlordDashboard: React.FC = () => {
         </Button>
       </div>
 
-      <OnboardingChecklist role="landlord" />
+      <OnboardingChecklist
+        items={[
+          ...(payoutReady === null ? [] : [{ label: 'Activar tus cobros', to: '/landlord/payments', done: payoutReady }]),
+          { label: 'Publicar un inmueble', to: '/landlord', done: mine.some((p) => p.status === 'active') },
+          { label: 'Preparar un contrato', to: '/contracts/new', done: actionContracts.length > 0 },
+          { label: 'Completar tu perfil', to: '/profile', done: Boolean(user?.name && user?.phone) },
+        ]}
+      />
 
       {landlordAlerts.length > 0 && (
         <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
