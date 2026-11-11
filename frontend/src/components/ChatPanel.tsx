@@ -3,6 +3,14 @@ import { ensureConversation, getMessages, sendMessage, markRead, type Message } 
 import { useAuth } from '../context/AuthContext';
 import { api as axios } from '../api/client';
 import { toAbsoluteUrl } from '../utils/media';
+import { apiErrorText } from '../utils/apiErrors';
+
+// Códigos de POST /api/uploads/images
+const UPLOAD_ERRORS: Record<string, string> = {
+  invalid_file_type: 'Solo se pueden adjuntar fotos JPG, PNG o WebP y PDF.',
+  file_too_large: 'El archivo pasa de 10 MB.',
+  too_many_files: 'Adjunta como mucho 6 archivos a la vez.',
+};
 
 export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'contract'|'appointment'; refId: string }) {
   const [conversationId, setConversationId] = useState<string>('');
@@ -89,7 +97,7 @@ export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'co
       if (urls.length > 0) setAttachmentUrl(urls[0]);
       else setUploadError('No se devolvió URL');
     } catch (e: any) {
-      setUploadError(e?.response?.data?.error || e?.message || 'Error subiendo archivo');
+      setUploadError(apiErrorText(e, 'No se pudo subir el archivo.', UPLOAD_ERRORS));
     } finally {
       setUploading(false);
     }

@@ -1,3 +1,5 @@
+import { NOT_VERIFIED_MESSAGE, isNotVerifiedError } from './apiErrors';
+
 export type TenantApplicationStatus = 'pending' | 'proposed' | 'scheduled' | 'rejected';
 
 export interface TenantApplication {
@@ -119,4 +121,6 @@ export const VISIT_ERRORS: Record<string, string> = {
 };
 
 export const visitError = (error: any) =>
-  VISIT_ERRORS[error?.response?.data?.error] || 'No se pudo guardar. Inténtalo de nuevo.';
+  isNotVerifiedError(error)
+    ? NOT_VERIFIED_MESSAGE
+    : VISIT_ERRORS[error?.response?.data?.error] || 'No se pudo guardar. Inténtalo de nuevo.';

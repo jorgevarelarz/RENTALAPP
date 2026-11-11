@@ -1,5 +1,7 @@
 /** Textos de las incidencias: servicio, historial y fechas en español. */
 
+import { NOT_VERIFIED_MESSAGE, isNotVerifiedError } from './apiErrors';
+
 export const SERVICE_LABELS: Record<string, string> = {
   plumbing: 'Fontanería',
   electricity: 'Electricidad',
@@ -150,6 +152,8 @@ const ERROR_TEXTS: Record<string, string> = {
   invalid_description: 'Describe la avería (hasta 2.000 caracteres).',
   invalid_photos: 'Alguna foto no es válida. Quítala y vuelve a subirla.',
   invalid_file_type: 'Solo se admiten fotos JPG, PNG o WebP.',
+  file_too_large: 'Cada foto puede ocupar como mucho 10 MB.',
+  too_many_files: 'Sube como mucho 6 fotos.',
   contract_not_active: 'Solo se pueden comunicar averías de un contrato activo.',
   contract_not_owned: 'Ese contrato no es tuyo.',
   missing_policy_acceptance: 'Antes tienes que aceptar las condiciones del servicio y el tratamiento de datos.',
@@ -166,6 +170,7 @@ const ERROR_TEXTS: Record<string, string> = {
 };
 
 export function getTicketErrorText(err: any, fallback = 'No se pudo completar la acción.') {
+  if (isNotVerifiedError(err)) return NOT_VERIFIED_MESSAGE;
   const code = err?.response?.data?.error;
   return (code && ERROR_TEXTS[code]) || fallback;
 }

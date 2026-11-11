@@ -1,5 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { appEnv } from '../config/env';
+import { NOT_VERIFIED_MESSAGE, isNotVerifiedError } from '../utils/apiErrors';
 
 const API_BASE = appEnv.apiUrl;
 
@@ -17,14 +18,7 @@ export function getApiErrorRequestId(err: any) {
   );
 }
 
-// requireVerified (backend) rechaza con estos códigos a quien aún no tiene la identidad verificada.
-// No es un fallo que reintentar ni que reportar, así que se explica sin referencia.
-const NOT_VERIFIED_CODES = new Set(['owner_not_verified', 'user_not_verified']);
-export const NOT_VERIFIED_MESSAGE = 'Necesitas verificar tu identidad para usar esta sección.';
-
-export function isNotVerifiedError(err: any) {
-  return err?.response?.status === 403 && NOT_VERIFIED_CODES.has(err?.response?.data?.error);
-}
+export { NOT_VERIFIED_MESSAGE, isNotVerifiedError, apiErrorText } from '../utils/apiErrors';
 
 export function formatApiError(
   err: any,

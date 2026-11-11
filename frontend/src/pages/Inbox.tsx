@@ -7,6 +7,7 @@ import EmptyState from '../components/ui/EmptyState';
 import PageHeader from '../components/ui/PageHeader';
 import { useNavigate } from 'react-router-dom';
 import { toAbsoluteUrl } from '../utils/media';
+import { apiErrorText } from '../utils/apiErrors';
 
 export default function Inbox() {
   const [items, setItems] = useState<Conversation[]>([]);
@@ -31,7 +32,7 @@ export default function Inbox() {
         const data = await listConversations({ page: 1, limit: 50, kind: 'direct' });
         setItems(data);
       } catch (e: any) {
-        setErr(e?.response?.data?.error || e?.message || 'Error al cargar conversaciones');
+        setErr(apiErrorText(e, 'No se pudieron cargar las conversaciones.'));
       } finally {
         setLoading(false);
       }
@@ -45,7 +46,7 @@ export default function Inbox() {
         const data = await listRelatedUsers();
         setRelated(data);
       } catch (e: any) {
-        setErr(e?.response?.data?.error || e?.message || 'Error al cargar usuarios');
+        setErr(apiErrorText(e, 'No se pudo cargar la lista de contactos.'));
       }
     })();
   }, [showNew]);

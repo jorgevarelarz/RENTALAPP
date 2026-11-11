@@ -11,7 +11,7 @@
     { "label": "Contratos", "path": "/contracts" },
     { "label": "Pagos", "path": "/tenant/payments" },
     { "label": "Mis incidencias", "path": "/tickets" },
-    { "label": "Verificación KYC", "path": "/tenant/kyc" },
+    { "label": "Verificación de identidad", "path": "/tenant/kyc" },
     { "label": "Tenant PRO", "path": "/tenant-pro" },
     { "label": "Perfil y cuenta", "path": "/profile" }
   ],

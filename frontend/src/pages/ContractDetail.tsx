@@ -12,6 +12,7 @@ import ContractReceiptsCard from '../components/contracts/ContractReceiptsCard';
 import { ContractStatusBadge } from '../components/ContractStatusBadge';
 import { getContractActionSummary } from '../utils/contractWorkflow';
 import type { PaymentDispute } from '../types/contract';
+import { apiErrorText } from '../utils/apiErrors';
 import { CheckCircle2, Circle, Clock3, Download, PenTool, Wallet } from 'lucide-react';
 
 const secondaryButton =
@@ -28,11 +29,6 @@ const euros = (value?: number) =>
   typeof value === 'number' && Number.isFinite(value)
     ? value.toLocaleString('es-ES', { style: 'currency', currency: 'EUR' })
     : '—';
-
-function apiErrorMessage(error: any, fallback: string) {
-  const message = error?.response?.data?.error;
-  return typeof message === 'string' && message ? message : fallback;
-}
 
 // Mismos estados finales que el backend (`CLOSED_DISPUTE_STATUSES`).
 const CLOSED_DISPUTE_STATUSES = ['won', 'lost', 'warning_closed'];
@@ -187,7 +183,7 @@ export default function ContractDetail() {
       if (!sessionUrl) throw new Error('No se recibió la URL de pago');
       window.location.assign(sessionUrl);
     } catch (error) {
-      push({ title: apiErrorMessage(error, 'No se pudo iniciar el pago de la fianza'), tone: 'error' });
+      push({ title: apiErrorText(error, 'No se pudo iniciar el pago de la fianza'), tone: 'error' });
       setPayingDeposit(false);
     }
   };
