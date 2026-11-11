@@ -81,6 +81,8 @@ export const createPaymentIntent = async (
     paymentMethodTypes?: string[];
     confirm?: boolean;
     metadata?: Record<string, any>;
+    /** Destino y comisión del cobro (rentas: ver services/rentCharge.service). */
+    split?: Pick<Stripe.PaymentIntentCreateParams, 'transfer_data' | 'application_fee_amount'>;
   },
 ) => {
   return stripe.paymentIntents.create({
@@ -90,6 +92,7 @@ export const createPaymentIntent = async (
     payment_method_types: options?.paymentMethodTypes || ['sepa_debit'],
     confirm: options?.confirm ?? true,
     metadata: options?.metadata,
+    ...options?.split,
   });
 };
 

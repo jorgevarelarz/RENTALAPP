@@ -2,6 +2,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { connectLandlord } from '../utils/connect';
 import { User } from '../../src/models/user.model';
 import { Contract } from '../../src/models/contract.model';
 import { RentPayment } from '../../src/models/rentPayment.model';
@@ -57,6 +58,8 @@ describe('Recibos de renta: meses del contrato y generación diaria', () => {
     const intent = (async () => ({ id: 'pi_period', client_secret: 'pi_period_secret', status: 'requires_payment_method' })) as any;
     createIntent = jest.spyOn(paymentStripe.paymentIntents, 'create').mockImplementation(intent);
     jest.spyOn(stripe.paymentIntents, 'create').mockImplementation(intent);
+    // Los cobros de renta exigen que el propietario tenga su cuenta de cobros conectada.
+    await connectLandlord(landlordId);
   });
 
   afterEach(async () => {

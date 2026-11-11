@@ -10,6 +10,7 @@ import { ensureCanReadContract, isActiveCoTenant } from '../utils/contractAccess
 import { describeReceipt, renderReceiptPdf } from '../services/rentReceiptPdf';
 import { logger } from '../utils/logger';
 import { sendRouteError } from '../utils/routeError';
+import { RENT_CHARGE_MESSAGES, isRentChargeError, rentChargeSplit } from '../services/rentCharge.service';
 
 /**
  * GET /api/payments/:id/receipt.pdf — recibo de una renta o fianza cobrada.
@@ -157,22 +158,28 @@ export const payReceipt = async (req: Request, res: Response) => {
 
     let paymentIntent;
     try {
+      const amountCents = Math.round(payment.amount * 100);
+      // Un recibo de renta va a la cuenta del propietario; la plataforma retiene su comisión.
+      const split = payment.type === 'rent' && contract ? await rentChargeSplit(contract, amountCents) : null;
       paymentIntent = await stripe.paymentIntents.create({
-        amount: Math.round(payment.amount * 100),
+        amount: amountCents,
         currency: String(payment.currency || 'eur').toLowerCase(),
         customer: contract?.stripeCustomerId,
         automatic_payment_methods: { enabled: true },
         metadata: {
+          ...split?.metadata,
           contractId: contract?._id?.toString() || '',
           paymentId: payment._id.toString(),
           type: payment.type,
         },
+        ...split?.params,
       });
     } catch (err) {
       await Payment.updateOne(
         { _id: payment._id, status: 'processing', stripePaymentIntentId: null },
         { $set: { status: claimed.status === 'failed' ? 'failed' : 'pending' } },
       );
+      if (isRentChargeError(err)) return res.status(err.status).json({ error: err.code, message: RENT_CHARGE_MESSAGES[err.code] });
       throw err;
     }
 

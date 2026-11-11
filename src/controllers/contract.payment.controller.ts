@@ -17,6 +17,7 @@ import { billableRent, checkRentPeriod, isValidRentPeriod, rentPeriodOf } from '
 import { initiatePaymentAction } from '../services/contract.actions';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 import { sendRouteError } from '../utils/routeError';
+import { isRentChargeError, rentChargeSplit } from '../services/rentCharge.service';
 
 export const initiatePayment = async (req: Request, res: Response) => {
   try {
@@ -142,10 +143,13 @@ export const createRentPaymentIntent = async (req: Request, res: Response) => {
 
     let paymentIntent;
     try {
+      // La renta va a la cuenta del propietario; la plataforma retiene su comisión.
+      const split = await rentChargeSplit(contract, amountCents);
       paymentIntent = await stripe.paymentIntents.create({
         amount: amountCents,
         currency: 'eur',
         metadata: {
+          ...split.metadata,
           type: 'rent',
           contractId: String(contract._id),
           payerId: String(userId),
@@ -153,9 +157,11 @@ export const createRentPaymentIntent = async (req: Request, res: Response) => {
           rentPaymentId: String(rentPayment._id),
         },
         automatic_payment_methods: { enabled: true },
+        ...split.params,
       });
     } catch (err) {
       await releaseRentClaim(rentPayment._id as Types.ObjectId, attempt.previousStatus);
+      if (isRentChargeError(err)) return res.status(err.status).json({ error: err.code });
       throw err;
     }
     await attachRentIntent(rentPayment._id as Types.ObjectId, paymentIntent.id, userId);
@@ -243,15 +249,19 @@ export const payRentForPeriod = async (req: Request, res: Response) => {
     const rentPayment = attempt.rentPayment;
     let intent;
     try {
+      const split = await rentChargeSplit(contract, Math.round(rent * 100));
       intent = await createPaymentIntent(contract.stripeCustomerId, rent, contract.currency || 'eur', {
         metadata: {
+          ...split.metadata,
           rentPaymentId: String(rentPayment._id),
           contractId: String(contract._id),
           period,
         },
+        split: split.params,
       });
     } catch (err) {
       await releaseRentClaim(rentPayment._id as Types.ObjectId, attempt.previousStatus);
+      if (isRentChargeError(err)) return res.status(err.status).json({ error: err.code });
       throw err;
     }
     await attachRentIntent(rentPayment._id as Types.ObjectId, intent.id, userId);

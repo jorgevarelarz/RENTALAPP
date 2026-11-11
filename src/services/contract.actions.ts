@@ -15,6 +15,7 @@ import { sendContractCreatedEmail } from '../utils/email';
 import { normalizeRegion, resolveClauses, type ClauseInput, type ResolvedClause } from './clauses.service';
 import { evaluateAndPersist } from '../modules/rentalPublic';
 import { getNextSigningStatus, normalizeContractStatus } from '../domain/contracts/status';
+import { isRentChargeError, rentChargeSplit } from './rentCharge.service';
 
 const httpError = (message: string, status: number) => Object.assign(new Error(message), { status });
 
@@ -340,8 +341,18 @@ export const initiatePaymentAction = async (
   // El importe es siempre la renta del contrato: el que manda el cliente se ignora
   const payAmount = contract.rent;
 
-  // Crear el intento de pago
-  const paymentIntent = await createPaymentIntent(customerId, payAmount, 'eur');
+  // Crear el intento de pago: la renta va a la cuenta del propietario
+  let split;
+  try {
+    split = await rentChargeSplit(contract, Math.round(payAmount * 100));
+  } catch (err) {
+    if (isRentChargeError(err)) throw httpError(err.code, err.status);
+    throw err;
+  }
+  const paymentIntent = await createPaymentIntent(customerId, payAmount, 'eur', {
+    metadata: { ...split.metadata, contractId: String(contract._id) },
+    split: split.params,
+  });
 
   await recordContractHistory(contract.id, 'paymentInitiated', `Pago iniciado por €${payAmount}`);
 

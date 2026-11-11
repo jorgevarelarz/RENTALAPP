@@ -2,6 +2,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { connectLandlord } from '../utils/connect';
 import { rentPeriodOf } from '../../src/utils/rentPeriod';
 import { User } from '../../src/models/user.model';
 import { Property } from '../../src/models/property.model';
@@ -55,6 +56,7 @@ describe('Co-tenants flows', () => {
   };
 
   const makeContract = async (landlordId: string, tenantId: string, propertyId: string) => {
+    await connectLandlord(landlordId);
     return Contract.create({
       landlord: new mongoose.Types.ObjectId(landlordId),
       tenant: new mongoose.Types.ObjectId(tenantId),

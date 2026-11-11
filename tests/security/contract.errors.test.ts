@@ -2,6 +2,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { connectLandlord } from '../utils/connect';
 import { User } from '../../src/models/user.model';
 import { Contract } from '../../src/models/contract.model';
 import { stripe as paymentStripe } from '../../src/utils/payment';
@@ -44,6 +45,8 @@ describe('Errores de contratos y pagos', () => {
       stripeCustomerId: 'cus_err_1',
     });
     contractId = String(contract._id);
+    // Los cobros de renta exigen que el propietario tenga su cuenta de cobros conectada.
+    await connectLandlord(landlordId);
   });
 
   it('un fallo de Stripe al iniciar el pago da 500 con código fijo', async () => {

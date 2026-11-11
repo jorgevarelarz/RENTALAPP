@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Download, TrendingUp, Users, FileSignature } from 'lucide-react';
 import { getEarningsSummary, listEarnings, downloadInvoice, type AgencyEarningsSummary } from '../../services/agency';
+import PayoutAccountCard from '../../components/payments/PayoutAccountCard';
 
 const eur = (cents: number) => (cents / 100).toLocaleString('es-ES', { style: 'currency', currency: 'EUR' });
 
@@ -39,6 +40,9 @@ export default function AgencyHome() {
           <Download size={15} /> Autofactura del mes
         </button>
       </div>
+
+      {/* Sin cuenta conectada las comisiones no se pueden transferir: se avisa mientras falte. */}
+      <PayoutAccountCard audience="agency" hideWhenReady />
 
       <div className="grid sm:grid-cols-3 gap-4">
         <div className="rounded-xl border border-gray-200 bg-white p-5">

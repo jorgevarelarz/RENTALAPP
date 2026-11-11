@@ -2,6 +2,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { connectLandlord } from '../utils/connect';
 import { User } from '../../src/models/user.model';
 import { Contract } from '../../src/models/contract.model';
 import { RentPayment } from '../../src/models/rentPayment.model';
@@ -55,6 +56,8 @@ describe('Pagos sin cobros duplicados', () => {
       client_secret: `${id}_secret`,
       status: 'requires_payment_method',
     })) as any);
+    // Los cobros de renta exigen que el propietario tenga su cuenta de cobros conectada.
+    await connectLandlord(landlordId);
   });
 
   afterEach(async () => {

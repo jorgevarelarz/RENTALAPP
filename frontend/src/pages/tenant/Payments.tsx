@@ -7,6 +7,7 @@ import PaymentModal from '../../components/payments/PaymentModal';
 import { useToast } from '../../context/ToastContext';
 import PageHeader from '../../components/ui/PageHeader';
 import StatusBadge from '../../components/ui/StatusBadge';
+import { apiErrorText } from '../../utils/apiErrors';
 
 type PaymentItem = {
   _id: string;
@@ -75,8 +76,9 @@ export default function Payments() {
       const resp = await payReceipt(token, paymentId);
       if (!resp.clientSecret) throw new Error('missing_client_secret');
       setPayData({ clientSecret: resp.clientSecret, amount: resp.amount || 0, concept: paymentTitle(payment) });
-    } catch {
-      push({ title: 'No se pudo iniciar el pago. Vuelve a intentarlo en un momento.', tone: 'error' });
+    } catch (err) {
+      // 409 owner_not_connected / owner_payouts_disabled traen la explicación del servidor.
+      push({ title: apiErrorText(err, 'No se pudo iniciar el pago. Vuelve a intentarlo en un momento.'), tone: 'error' });
     } finally {
       setBusyId(null);
     }

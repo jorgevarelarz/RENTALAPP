@@ -2,6 +2,7 @@ import request from 'supertest';
 import mongoose from 'mongoose';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { connectLandlord } from '../utils/connect';
 import { User } from '../../src/models/user.model';
 import { Contract } from '../../src/models/contract.model';
 import { Property } from '../../src/models/property.model';
@@ -56,6 +57,8 @@ describe('Avisos de cobro de renta y fianza (webhook de Stripe)', () => {
       id,
       receipt_url: `https://pay.stripe.com/receipts/${id}`,
     })) as any);
+    // Los cobros de renta exigen que el propietario tenga su cuenta de cobros conectada.
+    await connectLandlord(landlordId);
   });
 
   afterEach(async () => {

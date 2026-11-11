@@ -301,13 +301,14 @@ app.get('/api/ready', (_req, res) => res.redirect(301, '/ready'));
 app.get('/metrics', metricsHandler);
 
 // Stripe Connect redirects (avoid 404 when APP_URL points to backend)
-app.get('/connect/return', (_req, res) => {
+const connectReturnPath = (panel: unknown) => (panel === 'agency' ? '/agency' : '/landlord/payments');
+app.get('/connect/return', (req, res) => {
   const target = process.env.FRONTEND_URL || 'http://localhost:3001';
-  res.redirect(302, `${target}/landlord/payments?connect=success`);
+  res.redirect(302, `${target}${connectReturnPath(req.query.panel)}?connect=success`);
 });
-app.get('/connect/refresh', (_req, res) => {
+app.get('/connect/refresh', (req, res) => {
   const target = process.env.FRONTEND_URL || 'http://localhost:3001';
-  res.redirect(302, `${target}/landlord/payments?connect=retry`);
+  res.redirect(302, `${target}${connectReturnPath(req.query.panel)}?connect=retry`);
 });
 
 // Public routes

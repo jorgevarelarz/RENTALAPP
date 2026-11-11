@@ -22,6 +22,7 @@ import { PartnerEarning } from '../models/partnerEarning.model';
 import { Property } from '../models/property.model';
 import { calcPartnerShareCents, parsePositiveInt } from '../utils/partnerEarnings';
 import { getAgencySharePct } from '../services/agencyShare.service';
+import { markSignFeeCollected } from '../services/rentCharge.service';
 import { CLOSED_DISPUTE_STATUSES, type PaymentDispute } from '../models/paymentDispute.schema';
 
 const r = Router();
@@ -322,6 +323,7 @@ r.post('/stripe/webhook', express.raw({ type: 'application/json' }), async (req,
 
         if (contractId) {
           await Contract.findByIdAndUpdate(contractId, { lastPaidAt: new Date(), paymentRef: intent.id });
+          await markSignFeeCollected(contractId, intent.metadata);
         }
         if (contractId || payment?.contract) {
           const contractRef = contractId || String(payment.contract);
