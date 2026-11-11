@@ -127,7 +127,7 @@ export default function AdminHome() {
         <StatCard
           label="Usuarios"
           value={loading ? '...' : formatNumber(stats?.users?.total)}
-          hint={`${formatNumber(stats?.users?.tenants)} tenants · ${formatNumber(stats?.users?.landlords)} landlords`}
+          hint={`${formatNumber(stats?.users?.tenants)} inquilinos · ${formatNumber(stats?.users?.landlords)} propietarios`}
         />
         <StatCard
           label="Propiedades"

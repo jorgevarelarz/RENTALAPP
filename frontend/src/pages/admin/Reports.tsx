@@ -104,7 +104,7 @@ export default function AdminReports() {
       </div>
 
       <section className="grid gap-3 md:grid-cols-4">
-        <Metric icon={<Users size={18} />} label="Usuarios" value={loading ? '...' : stats?.users?.total || 0} detail={`${stats?.users?.tenants || 0} tenants · ${stats?.users?.landlords || 0} propietarios`} />
+        <Metric icon={<Users size={18} />} label="Usuarios" value={loading ? '...' : stats?.users?.total || 0} detail={`${stats?.users?.tenants || 0} inquilinos · ${stats?.users?.landlords || 0} propietarios`} />
         <Metric icon={<BarChart3 size={18} />} label="Propiedades" value={loading ? '...' : stats?.properties || 0} detail="Inventario total" />
         <Metric icon={<FileCheck2 size={18} />} label="Contratos" value={loading ? '...' : stats?.contracts?.total || 0} detail={`${activationRate}% activos/completados`} />
         <Metric icon={<Receipt size={18} />} label="Comisión" value={loading ? '...' : eur(Number(earnings?.totals?.fee || 0))} detail={`Bruto ${eur(Number(earnings?.totals?.gross || 0))}`} />

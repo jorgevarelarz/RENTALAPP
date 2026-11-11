@@ -20,7 +20,7 @@
     { "label": "Mis propiedades", "path": "/owner/properties" },
     { "label": "Contratos", "path": "/contracts" },
     { "label": "Pagos", "path": "/landlord/payments" },
-    { "label": "Incidencias de mis propiedades", "path": "/landlord/issues" },
+    { "label": "Incidencias", "path": "/landlord/issues" },
     { "label": "Profesionales", "path": "/pros" },
     { "label": "Visitas", "path": "/landlord/showings" },
     { "label": "Servicios", "path": "/landlord/services" },

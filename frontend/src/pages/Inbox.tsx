@@ -8,6 +8,7 @@ import PageHeader from '../components/ui/PageHeader';
 import { useNavigate } from 'react-router-dom';
 import { toAbsoluteUrl } from '../utils/media';
 import { apiErrorText } from '../utils/apiErrors';
+import { systemMessageLabel } from '../utils/chatSystem';
 
 export default function Inbox() {
   const [items, setItems] = useState<Conversation[]>([]);
@@ -62,30 +63,9 @@ export default function Inbox() {
     return '#';
   };
 
-  const systemLabel = (code?: string) => {
-    const map: Record<string, string> = {
-      TICKET_OPENED: 'Incidencia creada',
-      CLOSE_REQUESTED: 'Solicitud de cierre',
-      CLOSED_BY_TENANT: 'Incidencia cerrada',
-      PAYMENT_SUCCEEDED: 'Pago realizado',
-      PAYMENT_FAILED: 'Pago fallido',
-      PAYMENT_PROCESSING: 'Pago en proceso',
-      APPOINTMENT_CONFIRMED: 'Cita confirmada',
-      APPOINTMENT_REJECTED: 'Cita rechazada',
-      APPOINTMENT_CANCELLED: 'Cita cancelada',
-      APPOINTMENT_RESCHEDULED: 'Cita reprogramada',
-      SLOT_PROPOSED: 'Propuesta de cita',
-      SERVICE_OFFERED: 'Presupuesto enviado',
-      OFFER_ACCEPTED: 'Presupuesto aceptado',
-      OFFER_REJECTED: 'Presupuesto rechazado',
-      SERVICE_DONE: 'Trabajo finalizado',
-    };
-    return code ? map[code] || `Evento: ${code}` : 'Evento del sistema';
-  };
-
   const lastPreview = (c: Conversation) => {
     if (!c.lastMessage) return '';
-    if (c.lastMessage.type === 'system') return systemLabel(c.lastMessage.systemCode);
+    if (c.lastMessage.type === 'system') return systemMessageLabel(c.lastMessage.systemCode);
     if (c.lastMessage.attachmentUrl) return '📎 Archivo adjunto';
     return c.lastMessage.body || '';
   };

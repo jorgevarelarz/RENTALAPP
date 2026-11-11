@@ -193,7 +193,8 @@ const LandlordDashboard: React.FC = () => {
 
   const activeProps = mine.filter(p => p.status === 'active' && !rentedByProperty[String(p._id)]).length;
   const draftProps = mine.filter(p => p.status !== 'active').length;
-  const landlordAlerts = buildLandlordAlerts(mine);
+  // Un piso ya alquilado no necesita avisos de anuncio (fotos, precio, «sin contactos»).
+  const landlordAlerts = buildLandlordAlerts(mine.filter(p => !rentedByProperty[String(p._id)]));
   const nextActions = actionContracts
     .map((contract: any) => ({
       id: contract._id,

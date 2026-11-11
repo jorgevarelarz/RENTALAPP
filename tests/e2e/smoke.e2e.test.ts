@@ -12,6 +12,7 @@ import { RentPayment } from "../../src/models/rentPayment.model";
 import { runRentGeneration } from "../../src/jobs/rentGeneration.job";
 import { stripe } from "../../src/utils/stripe";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
+import { connectLandlord } from '../utils/connect';
 import * as emailUtils from "../../src/utils/email";
 
 const PASSWORD = "Passw0rd!";
@@ -242,11 +243,16 @@ jest.setTimeout(180_000);
     const createIntent = jest.spyOn(stripe.paymentIntents, 'create').mockResolvedValue({
       id: 'pi_e2e_rent', client_secret: 'pi_e2e_rent_secret', status: 'requires_payment_method',
     } as any);
+    // Sin cuenta de cobros del propietario la renta no se puede pagar.
+    await request(app).post(`/api/contracts/${contractId}/pay-rent`).set(asUser(tenantToken)).send().expect(409);
+    const account = await connectLandlord(String(landlord._id), { accountId: 'acct_e2e_owner' });
     try {
       const started = await request(app).post(`/api/contracts/${contractId}/pay-rent`)
         .set(asUser(tenantToken)).send().expect(200);
       expect(started.body).toMatchObject({ amount: 750, clientSecret: 'pi_e2e_rent_secret' });
-      expect(createIntent).toHaveBeenCalledWith(expect.objectContaining({ amount: 75000, currency: 'eur' }));
+      expect(createIntent).toHaveBeenCalledWith(expect.objectContaining({
+        amount: 75000, currency: 'eur', transfer_data: { destination: 'acct_e2e_owner' },
+      }));
       const params = createIntent.mock.calls[0][0]!;
       const payload = JSON.stringify({
         id: 'evt_e2e_rent', type: 'payment_intent.succeeded',
@@ -264,6 +270,7 @@ jest.setTimeout(180_000);
       expect(createIntent).toHaveBeenCalledTimes(1);
     } finally {
       createIntent.mockRestore();
+      account.mockRestore();
     }
   });
 

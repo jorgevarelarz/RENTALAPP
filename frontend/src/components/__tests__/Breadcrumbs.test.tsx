@@ -50,7 +50,7 @@ describe('Breadcrumbs', () => {
     it('el casero vuelve a las incidencias de sus propiedades', () => {
       asRole('landlord');
       at('/tickets/66f1a2b3c4d5e6f7a8b9c0d1');
-      expect(screen.getByRole('link', { name: 'Incidencias de mis propiedades' })).toHaveAttribute('href', '/landlord/issues');
+      expect(screen.getByRole('link', { name: 'Incidencias' })).toHaveAttribute('href', '/landlord/issues');
       expect(screen.getByText('Incidencia')).toBeInTheDocument();
     });
 

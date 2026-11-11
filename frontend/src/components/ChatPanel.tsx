@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import { api as axios } from '../api/client';
 import { toAbsoluteUrl } from '../utils/media';
 import { apiErrorText } from '../utils/apiErrors';
+import { systemMessageLabel } from '../utils/chatSystem';
 
 // Códigos de POST /api/uploads/images
 const UPLOAD_ERRORS: Record<string, string> = {
@@ -147,6 +148,22 @@ export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'co
       >
         {messages.map((m) => {
           const mine = m.senderId === myId;
+          // Un aviso automático no es un mensaje de nadie: va centrado, sin globo.
+          if (m.type === 'system') {
+            return (
+              <div key={m._id} className="flex justify-center">
+                <p className="rounded-full bg-white/80 px-3 py-1 text-center text-xs text-gray-600">
+                  {systemMessageLabel(m.systemCode)}
+                  {m.createdAt && (
+                    <span className="text-gray-400">
+                      {' · '}
+                      {new Date(m.createdAt).toLocaleString('es-ES', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  )}
+                </p>
+              </div>
+            );
+          }
           return (
             <div key={m._id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
               <div
@@ -154,9 +171,7 @@ export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'co
                   mine ? 'bg-green-100 text-gray-900' : 'bg-white text-gray-900'
                 }`}
               >
-                {m.type === 'system' ? (
-                  <em className="text-xs text-gray-500">[{m.systemCode}]</em>
-                ) : (
+                {(
                   <>
                     {m.body && <div className="whitespace-pre-wrap">{m.body}</div>}
                     {(m as any).attachmentUrl && (
@@ -183,7 +198,7 @@ export default function ChatPanel({ kind, refId }: { kind: 'direct'|'ticket'|'co
                   </>
                 )}
                 <div className={`mt-1 text-[11px] ${mine ? 'text-green-700' : 'text-gray-500'} text-right`}>
-                  {m.createdAt ? new Date(m.createdAt).toLocaleTimeString() : ''}
+                  {m.createdAt ? new Date(m.createdAt).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' }) : ''}
                 </div>
               </div>
             </div>

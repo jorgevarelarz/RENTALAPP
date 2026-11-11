@@ -229,6 +229,13 @@ app.use(rejectMongoOperators);
 // Contract PDFs must go through authenticated contract routes, not public static files.
 app.use('/uploads/contracts', (_req, res) => res.status(404).json({ error: 'not_found' }));
 // Serve non-sensitive uploaded files
+// En desarrollo el frontend va en otro puerto y la política por defecto (same-origin) bloquea las fotos.
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/uploads', (_req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  });
+}
 app.use('/uploads', express.static('uploads'));
 
 const tenantProLimiter = rateLimit({
