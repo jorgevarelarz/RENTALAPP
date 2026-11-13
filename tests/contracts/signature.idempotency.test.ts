@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../../src/app";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
+import { seedContractParties, LANDLORD_ID } from "../utils/contractParties";
 
 describe("Signature callback idempotency", () => {
   let id: string;
@@ -13,7 +14,8 @@ describe("Signature callback idempotency", () => {
   afterEach(clearDb);
 
   beforeEach(async () => {
-    const res = await request(app).post("/api/contracts").send({
+    await seedContractParties();
+    const res = await request(app).post("/api/contracts").set("x-user-id", LANDLORD_ID).send({
       landlord: "507f1f77bcf86cd799439011",
       tenant: "507f1f77bcf86cd799439012",
       property: "507f1f77bcf86cd799439013",
@@ -23,7 +25,7 @@ describe("Signature callback idempotency", () => {
       startDate: "2025-10-01",
       endDate: "2026-09-30",
       clauses: [{ id: "duracion_prorroga", params: { mesesIniciales: 12, mesesProrroga: 12 } }],
-    });
+    }).expect(201);
     id = res.body.contract._id;
   });
 

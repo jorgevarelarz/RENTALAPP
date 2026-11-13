@@ -6,6 +6,8 @@ dist*/
 .env.staging
 .env.production
 .env.valeris
+# Docker lo cargaría solo en cualquier `docker compose up`; el de desarrollo es docker-compose.dev.yml
+docker-compose.override.yml
 .DS_Store
 storage/contracts-audit/*.pdf
 storage/contracts-signed/*.pdf

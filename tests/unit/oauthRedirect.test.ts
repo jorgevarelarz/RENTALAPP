@@ -18,4 +18,10 @@ describe('sanitizeOAuthRedirect', () => {
     expect(sanitizeOAuthRedirect('/\\evil.com')).toBe('/tenant');
     expect(sanitizeOAuthRedirect('/\\\\evil.com', 'landlord')).toBe('/landlord');
   });
+
+  it('rejects control characters that browsers strip from URLs', () => {
+    expect(sanitizeOAuthRedirect('/\t/evil.com')).toBe('/tenant');
+    expect(sanitizeOAuthRedirect('/\n/evil.com')).toBe('/tenant');
+    expect(sanitizeOAuthRedirect('/%09/evil.com')).toBe('/%09/evil.com'); // codificado, el navegador no lo decodifica en el path
+  });
 });

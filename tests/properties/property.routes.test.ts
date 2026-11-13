@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../../src/app";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
+import { Property } from "../../src/models/property.model";
 
 describe("Properties (minimal)", () => {
   const ownerId = "507f1f77bcf86cd799439011";
@@ -119,8 +120,138 @@ describe("Properties (minimal)", () => {
     expect(res.body.items.length).toBeGreaterThan(0);
   });
 
+  it("search by city ignores case but needs the whole name", async () => {
+    const ids = async (qs: string) =>
+      (await request(app).get("/api/properties?" + qs).expect(200)).body.items.map((p: any) => p._id);
+    expect(await ids("city=" + encodeURIComponent("a coruña"))).toContain(pid);
+    expect(await ids("city=" + encodeURIComponent(" A CORUÑA "))).toContain(pid);
+    expect(await ids("city=Coru")).toHaveLength(0);
+    // Los caracteres de regex se buscan como texto
+    expect(await ids("city=" + encodeURIComponent(".*"))).toHaveLength(0);
+  });
+
+  it("search by city and text ignores accents", async () => {
+    const ids = async (qs: string) =>
+      (await request(app).get("/api/properties?" + qs).expect(200)).body.items.map((p: any) => String(p._id));
+    const base = {
+      owner: ownerId, address: "C/ Mayor 1", location: { type: "Point", coordinates: [-4.7, 40.65] },
+      price: 600, deposit: 600, sizeM2: 50, rooms: 1, bathrooms: 1,
+      availableFrom: new Date("2025-10-01"), status: "active",
+    };
+    const avila = await Property.create({ ...base, title: "Piso en Ávila", region: "castilla-y-leon", city: "Ávila" });
+    const hosp = await Property.create({ ...base, title: "Piso", region: "cataluna", city: "L’Hospitalet de Llobregat" });
+
+    expect(await ids("city=" + encodeURIComponent("a coruna"))).toContain(pid);
+    expect(await ids("city=" + encodeURIComponent("A CORUNA"))).toContain(pid);
+    expect(await ids("city=avila")).toEqual([String(avila._id)]);
+    expect(await ids("city=" + encodeURIComponent("ÁVILA"))).toContain(String(avila._id));
+    expect(await ids("city=" + encodeURIComponent("àvila"))).toContain(String(avila._id));
+    expect(await ids("city=" + encodeURIComponent("l'hospitalet de llobregat"))).toEqual([String(hosp._id)]);
+    expect(await ids("q=coruna")).toContain(pid);
+    expect(await ids("q=" + encodeURIComponent("piso en avila"))).toEqual([String(avila._id)]);
+    // Sin tildes no significa parecido: otra vocal no vale
+    expect(await ids("city=evila")).toHaveLength(0);
+  });
+
+  it("sorts by views for «Populares»", async () => {
+    const other = await Property.create({
+      owner: ownerId, title: "Piso visitado", address: "C/ Real 9", region: "galicia", city: "Lugo",
+      location: { type: "Point", coordinates: [-7.55, 43.01] }, price: 700, deposit: 700, sizeM2: 50,
+      rooms: 1, bathrooms: 1, availableFrom: new Date("2025-10-01"), status: "active", viewsCount: 50,
+    });
+    await Property.updateOne({ _id: pid }, { viewsCount: 5 });
+    const res = await request(app).get("/api/properties?sort=viewsCount&dir=desc").expect(200);
+    const order = res.body.items.map((p: any) => String(p._id));
+    expect(order.indexOf(String(other._id))).toBeLessThan(order.indexOf(pid));
+    const asc = await request(app).get("/api/properties?sort=viewsCount&dir=asc").expect(200);
+    const ascOrder = asc.body.items.map((p: any) => String(p._id));
+    expect(ascOrder.indexOf(pid)).toBeLessThan(ascOrder.indexOf(String(other._id)));
+  });
+
+  it("anonymous search never lists drafts and treats q as plain text", async () => {
+    const draft = await request(app)
+      .post("/api/properties")
+      .set("x-user-id", ownerId)
+      .set("x-user-role", "landlord")
+      .set("x-user-verified", "true")
+      .send({
+        owner: ownerId, title: "Borrador oculto", address: "C/ Real 2",
+        region: "galicia", city: "A Coruña", location: { lng: -8.409, lat: 43.362 },
+        price: 800, deposit: 800, sizeM2: 60, rooms: 2, bathrooms: 1, furnished: false,
+        petsAllowed: false, availableFrom: "2025-10-01",
+        images: ["https://cdn/y1.jpg", "https://cdn/y2.jpg", "https://cdn/y3.jpg"],
+      })
+      .expect(201);
+    const drafts = await request(app).get("/api/properties?status=draft").expect(200);
+    expect(drafts.body.items).toHaveLength(0);
+    await request(app).get(`/api/properties/${draft.body._id}`).expect(404);
+    // Una regex patológica se busca como texto literal en vez de ejecutarse
+    const res = await request(app).get("/api/properties?q=" + encodeURIComponent("^(a+)+$")).expect(200);
+    expect(res.body.items).toHaveLength(0);
+    await request(app).get("/api/properties?q=" + encodeURIComponent("[")).expect(200);
+  });
+
+  it("a stale or invalid token on public search is treated as anonymous", async () => {
+    const res = await request(app)
+      .get("/api/properties")
+      .set("Authorization", "Bearer token-caducado")
+      .expect(200);
+    expect(res.body.items.every((p: any) => p.status === "active")).toBe(true);
+  });
+
   it("favorite/unfavorite", async () => {
     await request(app).post(`/api/properties/${pid}/favorite`).send().expect(200);
     await request(app).delete(`/api/properties/${pid}/favorite`).send().expect(200);
+  });
+
+  describe("fotos del anuncio", () => {
+    const base = {
+      owner: ownerId,
+      title: "Piso con fotos propias",
+      address: "C/ Real 5",
+      region: "galicia",
+      city: "A Coruña",
+      location: { lng: -8.409, lat: 43.362 },
+      price: 700,
+      deposit: 700,
+      sizeM2: 60,
+      rooms: 2,
+      bathrooms: 1,
+      furnished: false,
+      petsAllowed: false,
+      availableFrom: "2025-10-01",
+    };
+    const post = (images: string[]) =>
+      request(app)
+        .post("/api/properties")
+        .set("x-user-id", ownerId)
+        .set("x-user-role", "landlord")
+        .set("x-user-verified", "true")
+        .send({ ...base, images });
+
+    it("acepta las rutas /uploads/… que devuelve la subida sin APP_URL", async () => {
+      const images = ["/uploads/a1b2c3.jpg", "/uploads/d4e5f6.webp", "/uploads/0a9b8c.png"];
+      const res = await post(images).expect(201);
+      expect(res.body.images).toEqual(images);
+    });
+
+    it.each([
+      ["javascript:alert(1)"],
+      ["data:image/png;base64,AAAA"],
+      ["/uploads/../app.ts"],
+      ["/otra/ruta.jpg"],
+    ])("rechaza %s", async (bad) => {
+      await post(["https://cdn/x1.jpg", "https://cdn/x2.jpg", bad]).expect(400);
+    });
+
+    it("al editar, tampoco admite javascript:", async () => {
+      await request(app)
+        .put(`/api/properties/${pid}`)
+        .set("x-user-id", ownerId)
+        .set("x-user-role", "landlord")
+        .set("x-user-verified", "true")
+        .send({ images: ["javascript:alert(1)"] })
+        .expect(400);
+    });
   });
 });

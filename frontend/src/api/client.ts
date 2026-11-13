@@ -1,5 +1,6 @@
 import axios, { type InternalAxiosRequestConfig } from 'axios';
 import { appEnv } from '../config/env';
+import { NOT_VERIFIED_MESSAGE, isNotVerifiedError } from '../utils/apiErrors';
 
 const API_BASE = appEnv.apiUrl;
 
@@ -17,11 +18,14 @@ export function getApiErrorRequestId(err: any) {
   );
 }
 
+export { NOT_VERIFIED_MESSAGE, isNotVerifiedError, apiErrorText } from '../utils/apiErrors';
+
 export function formatApiError(
   err: any,
   fallback = 'Error de red',
   options: { includeRequestId?: boolean } = {},
 ) {
+  if (isNotVerifiedError(err)) return NOT_VERIFIED_MESSAGE;
   const msg = err?.response?.data?.message || err?.response?.data?.error || err?.message || fallback;
   const requestId = getApiErrorRequestId(err);
   return requestId && options.includeRequestId !== false ? `${msg} (ref: ${requestId})` : msg;
@@ -51,21 +55,34 @@ api?.interceptors?.request?.use?.((config: InternalAxiosRequestConfig) => {
   return config;
 });
 
-// Response: toast errors globally (excluding auth endpoints)
-// eslint-disable-next-line @typescript-eslint/ban-ts-comment
-// @ts-ignore
-api?.interceptors?.response?.use?.(
-  (res) => res,
-  (err) => {
-    try {
-      const url = err?.config?.url || '';
-      if (!/\/api\/auth\//.test(url)) {
-        // Lazy require to avoid circular deps
-        require('react-hot-toast').toast.error(formatApiError(err));
-      }
-    } catch {}
-    return Promise.reject(err);
+// Códigos con los que el backend (auth.middleware.ts) rechaza un token: caducado, mal formado o
+// de una sesión cerrada (p. ej. tras restablecer la contraseña). Sin sesión válida no hay nada
+// que reintentar: se borra la sesión guardada y se vuelve al login con un aviso.
+const SESSION_LOST_CODES = new Set(['session_expired', 'invalid_token']);
+
+export function handleSessionLost(err: any): boolean {
+  if (err?.response?.status !== 401 || !SESSION_LOST_CODES.has(err?.response?.data?.code)) return false;
+  if (typeof window === 'undefined' || !localStorage.getItem('user')) return false;
+  localStorage.removeItem('user');
+  try {
+    delete (api.defaults.headers.common as any).Authorization;
+  } catch {}
+  const { pathname, search } = window.location;
+  if (pathname !== '/login') {
+    const redirect = encodeURIComponent(pathname + search);
+    window.location.assign(`/login?session=expired&redirect=${redirect}`);
   }
+  return true;
+}
+
+// eslint-disable-next-line @typescript-eslint/ban-ts-comment
+// @ts-ignore - api puede ser un mock parcial en tests
+api?.interceptors?.response?.use?.(
+  (res: any) => res,
+  (err: any) => {
+    handleSessionLost(err);
+    return Promise.reject(err);
+  },
 );
 
 export default api;

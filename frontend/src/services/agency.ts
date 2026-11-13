@@ -14,6 +14,8 @@ export type LandlordInviteItem = {
   landlordEmail: string;
   propertyAddress?: string;
   status: 'invited' | 'accepted' | 'expired';
+  /** El último correo con el enlace no salió. */
+  emailFailed?: boolean;
   createdAt: string;
   acceptedAt?: string;
   steps: {
@@ -36,11 +38,52 @@ export type AgencyEarningsSummary = {
 
 export async function createLandlordInvite(input: LandlordInviteInput) {
   const { data } = await client.post('/api/agency/landlords/invite', input);
-  return data.invite as { id: string; inviteUrl: string; landlordEmail: string };
+  return { ...data.invite, emailStatus: data.emailStatus } as LandlordInviteResult;
+}
+
+/** Resultado del envío ('not_configured' = servidor sin SMTP); un backend antiguo no lo manda. */
+export type LandlordInviteResult = {
+  id: string;
+  landlordEmail: string;
+  status: string;
+  expiresAt: string;
+  emailStatus?: 'sent' | 'not_configured' | 'failed';
+};
+
+/** Enlace nuevo para una invitación sin aceptar (vigente o caducada); el anterior deja de valer. */
+export async function resendLandlordInvite(id: string) {
+  const { data } = await client.post(`/api/agency/landlords/invites/${encodeURIComponent(id)}/resend`);
+  return { ...data.invite, emailStatus: data.emailStatus } as LandlordInviteResult;
 }
 
 export async function listLandlordInvites(): Promise<LandlordInviteItem[]> {
   const { data } = await client.get('/api/agency/landlords');
+  return data.items || [];
+}
+
+export type AgencyPropertyItem = {
+  id: string;
+  title?: string;
+  address?: string;
+  city?: string;
+  region?: string;
+  status: 'draft' | 'active' | 'archived';
+  ownerId?: string;
+  ownerName?: string;
+  /** 'manage': la gestiona la agencia; 'status_only': traspasada al propietario, solo el resumen. */
+  agencyAccess: 'manage' | 'status_only';
+  agencyTransferredAt?: string;
+  hasActiveContract: boolean;
+  lastPaidAt?: string;
+  /** Solo mientras la gestiona. */
+  price?: number;
+  deposit?: number;
+  openApplications?: number;
+  updatedAt?: string;
+};
+
+export async function listAgencyProperties(): Promise<AgencyPropertyItem[]> {
+  const { data } = await client.get('/api/agency/properties');
   return data.items || [];
 }
 

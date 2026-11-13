@@ -1,9 +1,11 @@
 import React, { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { AlertCircle, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, Eye, EyeOff, Info } from "lucide-react";
 import { useAuth } from "../../context/AuthContext";
 import { formatApiError } from "../../api/client";
 import SocialAuthButtons from "../../components/SocialAuthButtons";
+import { safeInternalPath } from "../../services/coTenants";
+import { INVALID_CREDENTIALS_MESSAGE } from "../../services/auth";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -15,11 +17,12 @@ export default function LoginPage() {
   const nav = useNavigate();
   const loc = useLocation();
   const sp = new URLSearchParams(loc.search);
-  const next = sp.get('redirect') || (loc.state as any)?.from || "/";
+  const next = safeInternalPath(sp.get('redirect') || (loc.state as any)?.from, "/");
   const oauthError = sp.get('oauth_error');
   const socialError = oauthError === 'access_failed'
     ? 'No se pudo completar el acceso con Google o Apple. Inténtalo de nuevo.'
     : null;
+  const sessionExpired = sp.get('session') === 'expired';
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -39,6 +42,12 @@ export default function LoginPage() {
     <>
       <h1 className="auth-title">Inicia sesión</h1>
       <p className="auth-subtitle">Gestiona propiedades, contratos e incidencias en un único lugar.</p>
+      {sessionExpired && !err && (
+        <div className="auth-alert auth-alert--info" role="status">
+          <Info size={17} className="auth-alert-icon" />
+          <span>Tu sesión ha caducado o se cerró al cambiar la contraseña. Vuelve a entrar para continuar.</span>
+        </div>
+      )}
       <SocialAuthButtons mode="login" redirect={next} />
       <form className="auth-form" onSubmit={submit} noValidate>
         <label className="auth-label" htmlFor="email">
@@ -89,7 +98,12 @@ export default function LoginPage() {
         {(err || socialError) && (
           <div className="auth-alert" role="alert">
             <AlertCircle size={17} className="auth-alert-icon" />
-            <span>{err || socialError}</span>
+            <span>
+              {err || socialError}
+              {err === INVALID_CREDENTIALS_MESSAGE && (
+                <>. Si creaste la cuenta con Google o Apple, entra con ese botón.</>
+              )}
+            </span>
           </div>
         )}
         <button type="submit" className="auth-button" disabled={loading}>
@@ -98,7 +112,7 @@ export default function LoginPage() {
         </button>
       </form>
       <div className="auth-footer">
-        ¿No tienes cuenta? <Link to="/register" className="auth-link">Crea una gratis</Link>
+        ¿No tienes cuenta? <Link to={next !== "/" ? `/register?redirect=${encodeURIComponent(next)}` : "/register"} className="auth-link">Crea una gratis</Link>
       </div>
     </>
   );

@@ -1,6 +1,7 @@
 import { Types } from 'mongoose';
 import { Contract } from '../models/contract.model';
 import { Property } from '../models/property.model';
+import { ContractParty } from '../models/contractParty.model';
 
 export type AuthUserLike = {
   id?: string;
@@ -65,3 +66,17 @@ export async function ensureCanReadContract(params: {
   throw err;
 }
 
+
+/**
+ * Co-titular que ya aceptó la invitación (o firmó). Solo da acceso de lectura (detalle y PDF);
+ * el resto de acciones sobre el contrato siguen en `ensureCanReadContract`.
+ */
+export async function isActiveCoTenant(contractId: unknown, userId: string | undefined): Promise<boolean> {
+  if (!userId || !Types.ObjectId.isValid(userId) || !Types.ObjectId.isValid(String(contractId))) return false;
+  return !!(await ContractParty.exists({
+    contractId: String(contractId),
+    role: 'TENANT',
+    userId,
+    status: { $in: ['JOINED', 'SIGNED'] },
+  }));
+}

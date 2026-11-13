@@ -146,8 +146,11 @@ const userSchema = new Schema(
     referredByAgencyId: { type: Schema.Types.ObjectId, ref: 'User', index: true },
     stripeCustomerId: { type: String },
     // Password reset support
-    resetToken: { type: String },
-    resetTokenExp: { type: Date },
+    // Hash SHA-256 del token de recuperación (nunca el token en claro).
+    resetToken: { type: String, select: false },
+    resetTokenExp: { type: Date, select: false },
+    // Versión de sesión: va en el JWT (`tv`). Subirla invalida todas las sesiones abiertas.
+    tokenVersion: { type: Number, default: 0 },
     institutionScope: { type: institutionScopeSchema, default: undefined },
   },
   { timestamps: true },

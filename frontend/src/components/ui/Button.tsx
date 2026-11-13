@@ -1,31 +1,30 @@
 import React from 'react';
 
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
+export type ButtonSize = 'sm' | 'md' | 'lg';
+
 type Props = React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
-  size?: 'sm' | 'md' | 'lg';
+  variant?: ButtonVariant;
+  size?: ButtonSize;
   className?: string;
 };
 
-const Button: React.FC<Props> = ({ variant = 'primary', size = 'md', children, className, style, ...rest }) => {
-  const base: React.CSSProperties = {
-    border: '1px solid var(--border)',
-    borderRadius: 8,
-    padding: size === 'sm' ? '6px 10px' : size === 'lg' ? '12px 16px' : '10px 14px',
-    cursor: 'pointer',
-    fontWeight: 600,
-  };
-  const variants: Record<string, React.CSSProperties> = {
-    primary: { background: 'var(--primary)', color: 'white', borderColor: 'transparent' },
-    secondary: { background: 'var(--card)', color: 'var(--fg)' },
-    ghost: { background: 'transparent', color: 'var(--fg)' },
-    danger: { background: '#ef4444', color: 'white', borderColor: 'transparent' },
-    outline: { background: 'transparent', color: 'var(--fg)' },
-  };
-  return (
-    <button className={className} style={{ ...base, ...variants[variant], ...style }} {...rest}>
-      {children}
-    </button>
-  );
-};
+/**
+ * Clases del botón (sistema 2026, `.ra-btn*` en index.css). Sirve también para dar
+ * aspecto de botón a un `<Link>` sin meter un `<button>` dentro de un enlace.
+ * `outline` es un alias de `secondary`.
+ */
+export function buttonClassName(variant: ButtonVariant = 'primary', size: ButtonSize = 'md', className?: string) {
+  const tone = variant === 'outline' ? 'secondary' : variant;
+  return ['ra-btn', `ra-btn-${tone}`, size !== 'md' ? `ra-btn-${size}` : '', className ?? '']
+    .filter(Boolean)
+    .join(' ');
+}
+
+const Button: React.FC<Props> = ({ variant = 'primary', size = 'md', type = 'button', children, className, ...rest }) => (
+  <button type={type} className={buttonClassName(variant, size, className)} {...rest}>
+    {children}
+  </button>
+);
 
 export default Button;

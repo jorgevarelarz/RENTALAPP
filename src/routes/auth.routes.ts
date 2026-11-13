@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response, Router } from 'express';
 import { body } from 'express-validator';
-import { register, login, requestPasswordReset, resetPassword } from '../controllers/auth.controller';
+import { register, login, requestPasswordReset, resetPassword, changePassword } from '../controllers/auth.controller';
+import { authenticate } from '../middleware/auth.middleware';
 import { validate } from '../middleware/validate';
 import { asyncHandler } from '../utils/asyncHandler';
 import {
@@ -9,6 +10,12 @@ import {
   listOAuthProviders,
   startOAuth,
 } from '../controllers/oauth.controller';
+
+// Misma política que la invitación de agencia (agencyInvite.controller.ts). bcrypt solo usa
+// los primeros 72 bytes; el máximo evita hashear cuerpos enormes.
+const PASSWORD_MIN = 8;
+const PASSWORD_MAX = 200;
+const newPassword = () => body('password').isString().isLength({ min: PASSWORD_MIN, max: PASSWORD_MAX });
 
 const router = Router();
 router.get('/oauth/providers', asyncHandler(listOAuthProviders));
@@ -35,7 +42,7 @@ router.post(
   [
     body('name').isString().notEmpty(),
     body('email').isEmail(),
-    body('password').isLength({ min: 6 }),
+    newPassword(),
     body('role').isIn(['landlord', 'tenant', 'pro']),
   ],
   validate,
@@ -55,8 +62,16 @@ router.post(
 );
 router.post(
   '/reset',
-  [body('token').isString().notEmpty(), body('password').isLength({ min: 6 })],
+  [body('token').isString().notEmpty(), newPassword()],
   validate,
   asyncHandler(resetPassword),
+);
+// Sin requireVerified: cambiar la contraseña no depende de haber verificado la identidad.
+router.post(
+  '/change-password',
+  authenticate,
+  [body('currentPassword').isString().notEmpty().isLength({ max: PASSWORD_MAX }), newPassword()],
+  validate,
+  asyncHandler(changePassword),
 );
 export default router;

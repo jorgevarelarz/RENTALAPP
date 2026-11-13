@@ -73,6 +73,62 @@ describe('OAuth account handling', () => {
     expect((linked as any).socialAuth.apple.subject).toBe('apple-sub-1');
   });
 
+  it('anula la contraseña de una cuenta sin correo verificado al vincular el proveedor', async () => {
+    // Alguien registra la cuenta con el email de la víctima y una contraseña que conoce.
+    const preCreated = await User.create({
+      name: 'Atacante',
+      email: 'victim@example.com',
+      passwordHash: await bcrypt.hash('attacker-pass', 10),
+      role: 'tenant',
+      resetToken: 'pending-hash',
+      resetTokenExp: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const linked = await resolveSocialUser(
+      {
+        provider: 'google',
+        subject: 'victim-google-sub',
+        email: 'victim@example.com',
+        emailVerified: true,
+      },
+      'login',
+      'tenant',
+    );
+
+    expect(String(linked._id)).toBe(String(preCreated._id));
+    const stored = await User.findById(preCreated._id)
+      .select('+passwordHash +resetToken +resetTokenExp')
+      .lean();
+    expect(stored?.passwordHash).toBeUndefined();
+    expect((stored as any)?.resetToken).toBeUndefined();
+    expect((stored as any)?.resetTokenExp).toBeUndefined();
+    expect(stored?.emailVerifiedAt).toBeInstanceOf(Date);
+  });
+
+  it('conserva la contraseña si el correo ya estaba verificado', async () => {
+    const existing = await User.create({
+      name: 'Verificado',
+      email: 'verified@example.com',
+      passwordHash: await bcrypt.hash('own-pass', 10),
+      role: 'landlord',
+      emailVerifiedAt: new Date('2026-01-01'),
+    });
+
+    await resolveSocialUser(
+      {
+        provider: 'google',
+        subject: 'verified-google-sub',
+        email: 'verified@example.com',
+        emailVerified: true,
+      },
+      'login',
+      'landlord',
+    );
+
+    const stored = await User.findById(existing._id).select('+passwordHash').lean();
+    expect(await bcrypt.compare('own-pass', stored!.passwordHash as string)).toBe(true);
+  });
+
   it('does not create an unknown account from the login screen', async () => {
     await expect(resolveSocialUser(
       {

@@ -2,7 +2,9 @@ import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { authenticate } from '../middleware/auth.middleware';
+import { stripImageMetadata } from '../utils/stripImageMetadata';
 
 const router = Router();
 
@@ -45,7 +47,8 @@ async function detectFileType(filePath: string): Promise<{ mime: string; ext: st
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOAD_DIR),
   filename: (_req, file, cb) => {
-    const name = `${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    // Nombre imposible de adivinar: los ficheros se sirven sin autenticación
+    const name = crypto.randomBytes(16).toString('hex');
     cb(null, name);
   },
 });
@@ -67,8 +70,13 @@ const upload = multer({
 router.post('/uploads/images', authenticate as any, (req, res) => {
   upload.array('files', 6)(req as any, res as any, (err: any) => {
     if (err) {
-      const code = err?.message === 'invalid_file_type' ? 415 : 400;
-      return res.status(code).json({ error: err.message || 'upload_error' });
+      // Códigos estables en vez del texto en inglés de multer («File too large»)
+      if (err?.message === 'invalid_file_type') return res.status(415).json({ error: 'invalid_file_type' });
+      if (err?.code === 'LIMIT_FILE_SIZE') return res.status(413).json({ error: 'file_too_large' });
+      if (err?.code === 'LIMIT_FILE_COUNT' || err?.code === 'LIMIT_UNEXPECTED_FILE') {
+        return res.status(400).json({ error: 'too_many_files' });
+      }
+      return res.status(400).json({ error: 'upload_error' });
     }
     const files = ((req as any).files as Express.Multer.File[]) || [];
     void (async () => {
@@ -77,12 +85,23 @@ router.post('/uploads/images', authenticate as any, (req, res) => {
         for (const file of files) {
           const detected = await detectFileType(file.path);
           if (!detected || !ALLOWED_MIME.has(detected.mime) || !ALLOWED_EXT.has(detected.ext)) {
-            await fs.promises.unlink(file.path);
+            // Fuera también el resto del lote: nada a medias en /uploads
+            await Promise.all([
+              ...files.map(f => fs.promises.rm(f.path, { force: true })),
+              ...renamed.map(n => fs.promises.rm(path.join(UPLOAD_DIR, n), { force: true })),
+            ]);
             return res.status(415).json({ error: 'invalid_file_type' });
           }
           const targetName = `${path.basename(file.path)}.${detected.ext}`;
           const targetPath = path.join(UPLOAD_DIR, targetName);
-          await fs.promises.rename(file.path, targetPath);
+          if (detected.ext === 'pdf') {
+            await fs.promises.rename(file.path, targetPath);
+          } else {
+            // Sin EXIF (GPS, cámara, fecha), XMP ni comentarios
+            const original = await fs.promises.readFile(file.path);
+            await fs.promises.writeFile(targetPath, stripImageMetadata(original, detected.ext));
+            await fs.promises.unlink(file.path);
+          }
           renamed.push(targetName);
         }
         const base = process.env.APP_URL?.replace(/\/$/, '') || '';

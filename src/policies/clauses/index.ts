@@ -10,6 +10,23 @@ type ClauseDef = {
 };
 type Catalog = Record<string, ClauseDef>;
 
+/**
+ * La región del inmueble es texto libre («Comunidad de Madrid», «Cataluña», «A Coruña, Galicia»…);
+ * el catálogo solo conoce `madrid`, `galicia` y `catalunya`. Devuelve la clave o null si no encaja.
+ * Misma regla que `contractRegion` del asistente (frontend/src/pages/contracts/contractDraft.ts).
+ */
+export function contractRegionKey(region?: string): string | null {
+  const r = String(region || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+  if (!r) return null;
+  if (r.includes("madrid")) return "madrid";
+  if (r.includes("galicia") || r.includes("galiza")) return "galicia";
+  if (r.includes("catalu") || r.includes("catalonia")) return "catalunya";
+  return null;
+}
+
 /** Une base + cláusulas autonómicas según region */
 export function getCatalogByRegion(region?: string): Catalog {
   const base: Catalog = CLAUSES_BASE as any;

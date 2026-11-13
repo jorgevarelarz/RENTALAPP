@@ -12,11 +12,8 @@ export default function CookiesPage() {
           body: (
             <ul>
               <li>
-                <strong>Sesión</strong> (localStorage: token, user): mantiene tu sesión iniciada de forma segura. Se
+                <strong>Sesión</strong> (localStorage: user): mantiene tu sesión iniciada de forma segura. Se
                 elimina al cerrar sesión.
-              </li>
-              <li>
-                <strong>Preferencias</strong> (localStorage: theme): recuerda si prefieres el tema claro u oscuro.
               </li>
               <li>
                 <strong>Aceptación de políticas</strong> (localStorage: policy_version_*): registra qué versión de la

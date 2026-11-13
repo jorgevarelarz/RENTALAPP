@@ -8,7 +8,7 @@ import { User } from '../../src/models/user.model';
 jest.mock('../../src/utils/stripe', () => {
   const create = jest.fn().mockResolvedValue({ id: 'pi_123', status: 'succeeded' });
   const list = jest.fn().mockResolvedValue({ data: [{ id: 'pm_123' }] });
-  const retrieve = jest.fn().mockResolvedValue({ charges_enabled: true });
+  const retrieve = jest.fn().mockResolvedValue({ charges_enabled: true, capabilities: { transfers: 'active' } });
   return {
     stripe: {
       paymentIntents: { create },
@@ -66,6 +66,13 @@ describe('Pay rent with saved method', () => {
 
     expect(res.body.success).toBe(true);
     expect(res.body.status).toBe('succeeded');
+
+    // La renta va al propietario y la plataforma retiene su comisión; al inquilino no se le suma nada.
+    const { stripe } = jest.requireMock('../../src/utils/stripe');
+    const params = stripe.paymentIntents.create.mock.calls[0][0];
+    expect(params.amount).toBe(70000);
+    expect(params.transfer_data).toEqual({ destination: 'acct_123' });
+    expect(params.metadata).toMatchObject({ kind: 'rent', contractId: String(contract._id) });
   });
 
   it('returns 400 if tenant has no saved method', async () => {

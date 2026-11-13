@@ -1,9 +1,15 @@
 import { Request, Response } from 'express';
 import { User } from '../models/user.model';
+import { Verification } from '../models/verification.model';
 import { Payment } from '../models/payment.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
 import bcrypt from 'bcryptjs';
+import { Types } from 'mongoose';
+import { emailInUse, findUserByEmail, normalizeEmail } from '../utils/userEmail';
+import { logger } from '../utils/logger';
+import { csvRows } from '../utils/csv';
+import { accentInsensitivePattern, escapeRegExp } from '../utils/searchRegex';
 
 const toPublicUser = (u: any) => ({
   id: String(u._id),
@@ -24,6 +30,7 @@ const toMeUser = (u: any) => ({
   name: u.name,
   email: u.email,
   role: u.role,
+  isVerified: Boolean(u.isVerified),
   phone: u.phone,
   avatar: u.avatar,
   bio: u.bio,
@@ -47,27 +54,52 @@ const toMeUser = (u: any) => ({
     : undefined,
 });
 
+export const USER_ROLES = ['landlord', 'tenant', 'admin', 'pro', 'agency', 'institution_viewer'] as const;
+const CSV_MAX_ROWS = 10000;
+
+class UserFilterError extends Error {}
+
+// `q` iba a $regex sin escapar (un «(a+)+$» bloqueaba Mongo) y buscaba en el rol, no en el nombre;
+// un rol inexistente daba lista vacía en vez de avisar.
+function buildUsersQuery(raw: Record<string, unknown>) {
+  const query: Record<string, unknown> = {};
+  const role = typeof raw.role === 'string' ? raw.role : '';
+  if (role) {
+    if (!(USER_ROLES as readonly string[]).includes(role)) throw new UserFilterError('invalid_role');
+    query.role = role;
+  }
+  const term = typeof raw.q === 'string' ? raw.q.trim().slice(0, 100) : '';
+  if (term) {
+    const pattern = escapeRegExp(term);
+    query.$or = [
+      { email: { $regex: pattern, $options: 'i' } },
+      { name: { $regex: accentInsensitivePattern(term), $options: 'i' } },
+      { companyName: { $regex: accentInsensitivePattern(term), $options: 'i' } },
+    ];
+  }
+  return query;
+}
+
 /**
- * Retrieve a list of all users. The password hash is excluded for security.
+ * Lista de usuarios para el administrador, de la cuenta más reciente a la más antigua.
+ * El hash de la contraseña no sale (toPublicUser).
  */
 export const getAllUsers = async (req: Request, res: Response) => {
-  const { q = '', role = '', page = '1', limit = '10' } = (req.query || {}) as any;
+  const { page = '1', limit = '10' } = (req.query || {}) as any;
   const pg = Math.max(1, parseInt(String(page)) || 1);
   const lim = Math.min(100, Math.max(1, parseInt(String(limit)) || 10));
 
-  const query: any = {};
-  if (role) query.role = role;
-  if (q) {
-    const term = String(q).trim();
-    if (term) query.$or = [
-      { email: { $regex: term, $options: 'i' } },
-      { role: { $regex: term, $options: 'i' } },
-    ];
+  let query: Record<string, unknown>;
+  try {
+    query = buildUsersQuery(req.query || {});
+  } catch (error) {
+    if (error instanceof UserFilterError) return res.status(400).json({ error: error.message });
+    throw error;
   }
 
   const [items, total] = await Promise.all([
     User.find(query)
-      .sort({ ratingAvg: -1, reviewCount: -1, createdAt: -1 })
+      .sort({ createdAt: -1, _id: -1 })
       .skip((pg - 1) * lim)
       .limit(lim)
       .lean(),
@@ -75,6 +107,35 @@ export const getAllUsers = async (req: Request, res: Response) => {
   ]);
 
   res.json({ items: items.map(toPublicUser), total, page: pg, limit: lim });
+};
+
+/** CSV con todos los usuarios del filtro (máx. 10.000), con fórmulas neutralizadas. */
+export const exportUsersCsv = async (req: Request, res: Response) => {
+  let query: Record<string, unknown>;
+  try {
+    query = buildUsersQuery(req.query || {});
+  } catch (error) {
+    if (error instanceof UserFilterError) return res.status(400).json({ error: error.message });
+    throw error;
+  }
+  const users = await User.find(query)
+    .select(['name', 'email', 'role', 'companyName', 'isVerified', 'createdAt'])
+    .sort({ createdAt: -1, _id: -1 })
+    .limit(CSV_MAX_ROWS)
+    .lean();
+  const header = ['id', 'nombre', 'email', 'rol', 'empresa', 'verificado', 'alta'];
+  const rows = users.map((u: any) => [
+    String(u._id),
+    u.name,
+    u.email,
+    u.role,
+    u.companyName ?? '',
+    u.isVerified ? 'sí' : 'no',
+    u.createdAt ? new Date(u.createdAt).toISOString() : '',
+  ]);
+  res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition', 'attachment; filename="usuarios.csv"');
+  res.send(csvRows([header, ...rows]));
 };
 
 export const createUser = async (req: Request, res: Response) => {
@@ -93,8 +154,7 @@ export const createUser = async (req: Request, res: Response) => {
     return res.status(400).json({ error: 'invalid_payload' });
   }
 
-  const exists = await User.findOne({ email }).select('_id').lean();
-  if (exists) return res.status(409).json({ error: 'email_already_exists' });
+  if (await emailInUse(email)) return res.status(409).json({ error: 'email_already_exists' });
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await User.create({
@@ -109,9 +169,87 @@ export const createUser = async (req: Request, res: Response) => {
   res.status(201).json({ user: toPublicUser(user) });
 };
 
+// Campos que cada cuenta puede cambiar de sí misma con PATCH /api/users/:id (igual que PUT /me).
+const SELF_EDITABLE = ['phone', 'bio', 'avatar', 'jobTitle', 'monthlyIncome', 'companyName', 'serviceCategory'] as const;
+// Roles que el administrador puede asignar: los mismos con los que puede crear cuentas.
+const ASSIGNABLE_ROLES = ['tenant', 'landlord', 'pro', 'agency'];
+const TEXT_LIMITS: Record<string, number> = { name: 120, phone: 40, avatar: 2048, jobTitle: 120, companyName: 200 };
+
+class UserUpdateError extends Error {}
+
 /**
- * Update user information by id. This allows updating the name, email or role.
- * Password updates should be handled via a dedicated endpoint (not implemented).
+ * Traduce el cuerpo a { $set, $unset } con lista blanca. El administrador puede además cambiar
+ * nombre, correo (normalizado y sin duplicados), rol (entre los asignables) e identidad
+ * verificada; nunca valoraciones, tokens, Stripe ni Tenant PRO. Los campos desconocidos se ignoran.
+ */
+async function buildUserUpdate(body: any, target: any, isAdmin: boolean) {
+  const $set: Record<string, unknown> = {};
+  const $unset: Record<string, ''> = {};
+  const has = (key: string) => Object.prototype.hasOwnProperty.call(body ?? {}, key);
+
+  const text = (key: string, required = false) => {
+    const raw = body[key];
+    if (raw === null || raw === '') {
+      if (required) throw new UserUpdateError(`invalid_${key}`);
+      $unset[key] = '';
+      return;
+    }
+    if (typeof raw !== 'string') throw new UserUpdateError(`invalid_${key}`);
+    const value = raw.trim();
+    if ((required && !value) || value.length > (TEXT_LIMITS[key] ?? 1000)) throw new UserUpdateError(`invalid_${key}`);
+    if (value) $set[key] = value;
+    else $unset[key] = '';
+  };
+
+  for (const key of SELF_EDITABLE) {
+    if (!has(key)) continue;
+    if (key === 'monthlyIncome') {
+      const raw = body.monthlyIncome;
+      if (raw === null || raw === '') {
+        $unset.monthlyIncome = '';
+        continue;
+      }
+      const n = Number(raw);
+      if (typeof raw === 'boolean' || !Number.isFinite(n) || n < 0) throw new UserUpdateError('invalid_monthlyIncome');
+      $set.monthlyIncome = n;
+    } else if (key === 'serviceCategory') {
+      if (typeof body.serviceCategory !== 'string') throw new UserUpdateError('invalid_serviceCategory');
+      $set.serviceCategory = body.serviceCategory; // el enum lo valida runValidators
+    } else {
+      text(key);
+    }
+  }
+
+  if (!isAdmin) return { $set, $unset };
+
+  if (has('name')) text('name', true);
+  if (has('email')) {
+    const email = normalizeEmail(body.email);
+    if (!email || email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      throw new UserUpdateError('invalid_email');
+    }
+    if (email !== target.email) {
+      const other = await findUserByEmail(email, '_id');
+      if (other && String(other._id) !== String(target._id)) throw new UserUpdateError('email_already_exists');
+      $set.email = email;
+    }
+  }
+  if (has('role') && body.role !== target.role) {
+    // Las cuentas de administración e institución no se convierten desde aquí, ni se crean.
+    if (!ASSIGNABLE_ROLES.includes(body.role)) throw new UserUpdateError('invalid_role');
+    if (!ASSIGNABLE_ROLES.includes(target.role)) throw new UserUpdateError('role_locked');
+    $set.role = body.role;
+  }
+  if (has('isVerified')) {
+    if (typeof body.isVerified !== 'boolean') throw new UserUpdateError('invalid_isVerified');
+    $set.isVerified = body.isVerified;
+  }
+  return { $set, $unset };
+}
+
+/**
+ * PATCH /api/users/:id. Cada cuenta puede editar sus datos de perfil; el administrador, además,
+ * los de cualquier cuenta y nombre, correo, rol e identidad verificada (ver buildUserUpdate).
  */
 export const updateUser = async (req: Request, res: Response) => {
   try {
@@ -123,44 +261,50 @@ export const updateUser = async (req: Request, res: Response) => {
     if (!isAdmin && !isSelf) {
       return res.status(403).json({ error: 'No autorizado' });
     }
+    if (!Types.ObjectId.isValid(id)) return res.status(400).json({ error: 'invalid_user_id' });
 
-    let updates: any = { ...req.body };
-    // Prevent changing sensitive fields directly via this endpoint
-    delete updates.passwordHash;
-    delete updates.resetToken;
-    delete updates.resetTokenExp;
-    delete updates.stripeAccountId;
-    delete updates.stripeCustomerId;
-    delete updates.tenantPro;
+    const target = await User.findById(id).select('email role').lean();
+    if (!target) return res.status(404).json({ error: 'Usuario no encontrado' });
 
-    if (!isAdmin) {
-      const allowed = [
-        'phone',
-        'bio',
-        'avatar',
-        'jobTitle',
-        'monthlyIncome',
-        'companyName',
-        'serviceCategory',
-      ];
-      const filtered: any = {};
-      for (const key of allowed) {
-        if (Object.prototype.hasOwnProperty.call(updates, key)) {
-          filtered[key] = updates[key];
-        }
+    let update;
+    try {
+      update = await buildUserUpdate(req.body, target, isAdmin);
+    } catch (err) {
+      if (err instanceof UserUpdateError) {
+        return res.status(err.message === 'email_already_exists' ? 409 : 400).json({ error: err.message });
       }
-      updates = filtered;
+      throw err;
     }
+    const ops: Record<string, unknown> = {};
+    if (Object.keys(update.$set).length) ops.$set = update.$set;
+    if (Object.keys(update.$unset).length) ops.$unset = update.$unset;
 
-    const user = await User.findByIdAndUpdate(id, updates, { new: true, runValidators: true }).lean();
+    const user = Object.keys(ops).length
+      ? await User.findByIdAndUpdate(id, ops, { new: true, runValidators: true }).lean()
+      : await User.findById(id).lean();
     if (!user) return res.status(404).json({ error: 'Usuario no encontrado' });
+    // requireVerified también deja pasar a quien tiene una Verification aprobada: retirar la
+    // identidad tiene que cerrarla, o la cuenta seguiría entrando como verificada.
+    if (update.$set.isVerified === false) {
+      await Verification.updateOne(
+        { userId: String(id), status: 'verified' },
+        { $set: { status: 'rejected', notes: 'Verificación retirada por administración' } },
+      );
+    }
     res.json(isSelf ? toMeUser(user) : toPublicUser(user));
   } catch (error: any) {
-    console.error(error);
+    if (error?.name === 'ValidationError' || error?.name === 'CastError') {
+      return res.status(400).json({ error: 'invalid_payload' });
+    }
+    if (error?.code === 11000) return res.status(409).json({ error: 'email_already_exists' });
+    logger.error({ err: error }, 'Error al actualizar el usuario');
     res.status(500).json({ error: 'Error al actualizar el usuario' });
   }
 };
 
+// GET y PUT /api/users/me van sin requireVerified (app.ts): quien aún no ha verificado su identidad
+// también tiene que poder ver y completar su perfil, y la sesión del frontend lee de aquí si ya
+// está verificado.
 export const getMe = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
@@ -171,50 +315,55 @@ export const getMe = async (req: Request, res: Response) => {
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
-    res.json(toMeUser(user));
+    // requireVerified también da por verificado a quien tiene una Verification aprobada
+    // aunque User.isVerified siga en false: se devuelve el estado con el que se le atiende.
+    const me = toMeUser(user);
+    let isVerified = me.isVerified || user.role === 'admin';
+    if (!isVerified) {
+      const verification = await Verification.findOne({ userId: String(userId) }).select('status').lean();
+      isVerified = verification?.status === 'verified';
+    }
+    res.json({ ...me, isVerified });
   } catch (error) {
     console.error('Error obteniendo perfil:', error);
     res.status(500).json({ message: 'Error al obtener perfil' });
   }
 };
 
+// Misma lista blanca que PATCH /api/users/:id para la propia cuenta (buildUserUpdate): antes se
+// escribía lo que llegase, sin tipos ni longitudes, y un valor raro daba 500.
 export const updateProfile = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
     if (!userId) {
       return res.status(403).json({ message: 'No autorizado' });
     }
+    const target = await User.findById(userId).select('email role').lean();
+    if (!target) return res.status(404).json({ message: 'Usuario no encontrado' });
 
-    const updates: Record<string, any> = {};
-    // name is tied to verification and should not be editable here
-    if (Object.prototype.hasOwnProperty.call(req.body, 'phone')) updates.phone = req.body.phone;
-    if (Object.prototype.hasOwnProperty.call(req.body, 'bio')) updates.bio = req.body.bio;
-    if (Object.prototype.hasOwnProperty.call(req.body, 'avatar')) updates.avatar = req.body.avatar;
-    if (Object.prototype.hasOwnProperty.call(req.body, 'jobTitle')) updates.jobTitle = req.body.jobTitle;
-    if (Object.prototype.hasOwnProperty.call(req.body, 'monthlyIncome')) {
-      const raw = req.body.monthlyIncome;
-      if (raw === '' || raw === null || typeof raw === 'undefined') {
-        updates.monthlyIncome = undefined;
-      } else {
-        const parsed = Number(raw);
-        updates.monthlyIncome = Number.isFinite(parsed) ? parsed : undefined;
-      }
+    let update;
+    try {
+      update = await buildUserUpdate(req.body, target, false);
+    } catch (err) {
+      if (err instanceof UserUpdateError) return res.status(400).json({ error: err.message });
+      throw err;
     }
-    if (Object.prototype.hasOwnProperty.call(req.body, 'companyName')) updates.companyName = req.body.companyName;
-    if (Object.prototype.hasOwnProperty.call(req.body, 'serviceCategory')) updates.serviceCategory = req.body.serviceCategory;
+    const ops: Record<string, unknown> = {};
+    if (Object.keys(update.$set).length) ops.$set = update.$set;
+    if (Object.keys(update.$unset).length) ops.$unset = update.$unset;
 
-    const user = await User.findByIdAndUpdate(
-      userId,
-      { $set: updates },
-      { new: true, runValidators: true },
-    ).lean();
-
+    const user = Object.keys(ops).length
+      ? await User.findByIdAndUpdate(userId, ops, { new: true, runValidators: true }).lean()
+      : await User.findById(userId).lean();
     if (!user) {
       return res.status(404).json({ message: 'Usuario no encontrado' });
     }
     res.json(toMeUser(user));
-  } catch (error) {
-    console.error('Error actualizando perfil:', error);
+  } catch (error: any) {
+    if (error?.name === 'ValidationError' || error?.name === 'CastError') {
+      return res.status(400).json({ error: 'invalid_payload' });
+    }
+    logger.error({ err: error }, 'Error actualizando perfil');
     res.status(500).json({ message: 'Error al actualizar perfil' });
   }
 };
@@ -222,15 +371,16 @@ export const updateProfile = async (req: Request, res: Response) => {
 export const getLandlordStats = async (req: Request, res: Response) => {
   try {
     const userId = (req as any).user?.id;
-    const userObjectId = (req as any).user?._id;
-    if (!userId) {
+    if (!userId || !Types.ObjectId.isValid(String(userId))) {
       return res.status(403).json({ message: 'No autorizado' });
     }
+    // aggregate() no convierte tipos: req.user lleva el id como texto.
+    const userObjectId = new Types.ObjectId(String(userId));
 
     const earningsAgg = await Payment.aggregate([
       {
         $match: {
-          payee: userObjectId || userId,
+          payee: userObjectId,
           status: 'succeeded',
         },
       },
@@ -257,7 +407,7 @@ export const getLandlordStats = async (req: Request, res: Response) => {
       payee: userId,
       status: 'succeeded',
     })
-      .sort({ paidAt: -1 })
+      .sort({ paidAt: -1, createdAt: -1 })
       .limit(5)
       .populate({
         path: 'contract',
@@ -284,7 +434,7 @@ export const getLandlordStats = async (req: Request, res: Response) => {
       recentPayments: recentPayments.map((p: any) => ({
         id: p._id,
         amount: p.amount,
-        date: p.paidAt,
+        date: p.paidAt || p.createdAt,
         concept: p.concept,
         propertyName: p.contract?.property?.title || p.contract?.property?.address || 'Propiedad',
       })),

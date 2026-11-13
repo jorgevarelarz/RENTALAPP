@@ -15,6 +15,9 @@ import { sendContractCreatedEmail } from '../utils/email';
 import { normalizeRegion, resolveClauses, type ClauseInput, type ResolvedClause } from './clauses.service';
 import { evaluateAndPersist } from '../modules/rentalPublic';
 import { getNextSigningStatus, normalizeContractStatus } from '../domain/contracts/status';
+import { isRentChargeError, rentChargeSplit } from './rentCharge.service';
+
+const httpError = (message: string, status: number) => Object.assign(new Error(message), { status });
 
 interface CreateContractParams {
   tenantId: mongoose.Types.ObjectId | string;
@@ -198,18 +201,19 @@ export const createContractAction = async (params: CreateContractParams) => {
 };
 
 export const signContractAction = async (contractId: string, user: { id: string; role: string }) => {
+  if (!mongoose.isValidObjectId(contractId)) throw httpError('Contrato no encontrado', 404);
   const contract = await Contract.findById(contractId);
   if (!contract) {
-    throw new Error('Contrato no encontrado');
+    throw httpError('Contrato no encontrado', 404);
   }
 
   // Validar que el contrato se pueda firmar
   if (['active', 'terminated'].includes(normalizeContractStatus(contract.status))) {
-    throw new Error(`No se puede firmar un contrato en estado ${contract.status}`);
+    throw httpError(`No se puede firmar un contrato en estado ${contract.status}`, 409);
   }
 
   if (!user) {
-    throw new Error('Autenticación requerida');
+    throw httpError('Autenticación requerida', 401);
   }
 
   let actionLabel = '';
@@ -223,7 +227,7 @@ export const signContractAction = async (contractId: string, user: { id: string;
     });
     if (!party) {
       if (String(contract.tenant) !== String(user.id)) {
-        throw new Error('No estás autorizado para firmar este contrato');
+        throw httpError('No estás autorizado para firmar este contrato', 403);
       }
       contract.signedByTenant = true;
       actionLabel = 'signedByTenant';
@@ -240,7 +244,7 @@ export const signContractAction = async (contractId: string, user: { id: string;
       }
     } else {
       if (party.status === 'SIGNED') {
-        throw new Error('Este inquilino ya ha firmado el contrato');
+        throw httpError('Este inquilino ya ha firmado el contrato', 409);
       }
       party.status = 'SIGNED';
       party.signedAt = new Date();
@@ -249,12 +253,12 @@ export const signContractAction = async (contractId: string, user: { id: string;
     }
   } else if (user.role === 'landlord') {
     if (contract.signedByLandlord) {
-      throw new Error('El arrendador ya ha firmado este contrato');
+      throw httpError('El arrendador ya ha firmado este contrato', 409);
     }
     contract.signedByLandlord = true;
     actionLabel = 'signedByLandlord';
   } else {
-    throw new Error('Rol no autorizado para firmar');
+    throw httpError('Rol no autorizado para firmar', 403);
   }
 
   const tenants = await ContractParty.find({ contractId: contract._id, role: 'TENANT' });
@@ -299,13 +303,14 @@ export const initiatePaymentAction = async (
   amount: number | undefined,
   user: { id: string; role: string },
 ) => {
+  if (!mongoose.isValidObjectId(contractId)) throw httpError('Contrato no encontrado', 404);
   const contract = await Contract.findById(contractId);
   if (!contract) {
-    throw new Error('Contrato no encontrado');
+    throw httpError('Contrato no encontrado', 404);
   }
 
   if (user.role !== 'tenant' || String(contract.tenant) !== user.id) {
-    throw new Error('Solo el inquilino puede iniciar pagos');
+    throw httpError('Solo el inquilino puede iniciar pagos', 403);
   }
 
   let customerId = contract.stripeCustomerId;
@@ -313,7 +318,7 @@ export const initiatePaymentAction = async (
   // Si no hay cliente de Stripe, intentar crearlo con el IBAN encriptado
   if (!customerId) {
     if (!contract.ibanEncrypted) {
-      throw new Error('El contrato no tiene un IBAN asociado y no existe cliente de pago');
+      throw httpError('El contrato no tiene un IBAN asociado y no existe cliente de pago', 409);
     }
     let iban: string;
     try {
@@ -333,10 +338,21 @@ export const initiatePaymentAction = async (
     await contract.save();
   }
 
-  const payAmount = typeof amount === 'number' && amount > 0 ? amount : contract.rent;
+  // El importe es siempre la renta del contrato: el que manda el cliente se ignora
+  const payAmount = contract.rent;
 
-  // Crear el intento de pago
-  const paymentIntent = await createPaymentIntent(customerId, payAmount, 'eur');
+  // Crear el intento de pago: la renta va a la cuenta del propietario
+  let split;
+  try {
+    split = await rentChargeSplit(contract, Math.round(payAmount * 100));
+  } catch (err) {
+    if (isRentChargeError(err)) throw httpError(err.code, err.status);
+    throw err;
+  }
+  const paymentIntent = await createPaymentIntent(customerId, payAmount, 'eur', {
+    metadata: { ...split.metadata, contractId: String(contract._id) },
+    split: split.params,
+  });
 
   await recordContractHistory(contract.id, 'paymentInitiated', `Pago iniciado por €${payAmount}`);
 

@@ -13,6 +13,7 @@ export interface IServiceOffer extends Document {
   status: 'proposed'| 'accepted' | 'rejected' | 'scheduled' | 'payment_pending' | 'paid' | 'confirmed' | 'done' | 'cancelled';
   ticketId?: string;
   appointmentId?: string;
+  paymentIntentId?: string;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -30,6 +31,8 @@ const ServiceOfferSchema = new Schema<IServiceOffer>({
   status: { type: String, default: 'proposed' },
   ticketId: String,
   appointmentId: String,
+  // Intento de cobro vigente: el webhook solo confirma la oferta con este intento.
+  paymentIntentId: String,
 }, { timestamps: true });
 
 ServiceOfferSchema.index({ conversationId: 1, createdAt: -1 });

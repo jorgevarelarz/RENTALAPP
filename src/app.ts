@@ -9,7 +9,7 @@ import path from 'path';
 import authRoutes from './routes/auth.routes';
 import propertyRoutes from './routes/property.routes';
 import contractRoutes from './routes/contract.routes';
-import userRoutes from './routes/user.routes';
+import userRoutes, { userProfileRoutes } from './routes/user.routes';
 import adminRoutes from './routes/admin.routes';
 
 import adminEarningsRoutes from './routes/admin.earnings.routes';
@@ -28,7 +28,7 @@ import contractPaymentsRoutes from './routes/contract.payments.routes';
 import stripeWebhookRoutes from './routes/stripe.webhook';
 import identityRoutes from './routes/identity.routes';
 import chatRoutes from './routes/chat.routes';
-import serviceOfferRoutes from './routes/serviceOffers.routes';
+import serviceOfferRoutes, { serviceOfferAppointmentRoutes } from './routes/serviceOffers.routes';
 import demoContractRoutes from './routes/demoContract.routes';
 import { errorHandler } from './middleware/errorHandler';
 import appointmentsFlowRoutes from './routes/appointments.routes';
@@ -41,10 +41,11 @@ import tenantProRoutes from './routes/tenantPro.routes';
 import tenantProMeRoutes from './routes/tenantPro.me';
 import adminTenantProRoutes from './routes/admin.tenantPro.routes';
 import institutionRoutes from './routes/institution.routes';
-import { purgeOldTenantProDocs } from './jobs/tenantProRetention';
+import { startTenantProRetentionJob } from './jobs/tenantProRetention';
 import { startContractActivationJob } from './jobs/contractActivation.job';
 import { startRentGenerationJob } from './jobs/rentGeneration.job';
 import { startLauUpdateJob } from './jobs/lauUpdate.job';
+import { startEscrowRecoveryJob } from './jobs/escrowRecovery.job';
 import applicationsRoutes from './routes/applications.routes';
 import invitesRoutes from './routes/invites.routes';
 import meRoutes from './routes/me.routes';
@@ -53,16 +54,19 @@ import aiRoutes from './routes/ai.routes';
 import assistantRoutes from './routes/assistant.routes';
 import agencyRoutes from './routes/agency.routes';
 import { getInviteByToken, acceptInvite } from './controllers/agencyInvite.controller';
+import { getInvitePreview } from './controllers/contract.cotenant.controller';
 import { asyncHandler } from './utils/asyncHandler';
 import testingInboundRoutes from './routes/testingInbound.routes';
 
 import helmet from 'helmet';
 import hpp from 'hpp';
 import rateLimit from 'express-rate-limit';
+import { createAiRateLimiter } from './middleware/aiRateLimit';
 import { requestId } from './middleware/requestId';
+import { rejectMongoOperators } from './middleware/rejectMongoOperators';
 import { adminRateLimit } from './middleware/adminRateLimit';
 import { loadEnv } from './config/env';
-import { metricsMiddleware, metricsHandler } from './metrics';
+import { metricsMiddleware, metricsHandler, pathWithoutQuery } from './metrics';
 import { firmaWebhook, signatureWebhook } from './controllers/contract.signature.controller';
 import { authorizeRoles } from './middleware/role.middleware';
 import { loadInstitutionScope } from './middleware/institutionScope';
@@ -149,10 +153,14 @@ if (process.env.NODE_ENV !== 'test') {
   startContractActivationJob();
   startRentGenerationJob();
   startLauUpdateJob();
+  startEscrowRecoveryJob();
+  startTenantProRetentionJob();
 }
 
 if (process.env.NODE_ENV !== 'test') {
-  app.use(morgan('dev'));
+  // Igual que 'dev', pero sin la query (códigos OAuth, tokens)
+  morgan.token('path', (req: any) => pathWithoutQuery(req.originalUrl || req.url));
+  app.use(morgan(':method :path :status :response-time ms - :res[content-length]'));
 }
 
 // Stripe webhook BEFORE JSON parser (uses express.raw)
@@ -216,9 +224,18 @@ app.use(express.json({
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 // Proteger contra HTTP Parameter Pollution en query; no tocar body JSON para evitar falsos positivos
 app.use(hpp({ checkBody: false, checkQuery: true }));
+// Sin operadores de Mongo en query ni cuerpo (?status[$ne]=x, {"email":{"$gt":""}})
+app.use(rejectMongoOperators);
 // Contract PDFs must go through authenticated contract routes, not public static files.
 app.use('/uploads/contracts', (_req, res) => res.status(404).json({ error: 'not_found' }));
 // Serve non-sensitive uploaded files
+// En desarrollo el frontend va en otro puerto y la política por defecto (same-origin) bloquea las fotos.
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/uploads', (_req, res, next) => {
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  });
+}
 app.use('/uploads', express.static('uploads'));
 
 const tenantProLimiter = rateLimit({
@@ -248,6 +265,8 @@ app.use('/api/tenant-pro', tenantProLimiter);
 app.use('/api/auth/login', authLimiter);
 app.use('/api/auth/register', authLimiter);
 app.use('/api/auth/request-reset', authLimiter);
+app.use('/api/auth/reset', authLimiter);
+app.use('/api/auth/change-password', authLimiter);
 app.use('/api/auth/oauth', oauthLimiter);
 
 const tenantProConsentVersion = process.env.TENANT_PRO_CONSENT_VERSION || 'v1';
@@ -275,7 +294,7 @@ app.get('/api/legal/privacy-policy', (_req, res) => {
 });
 
 app.get('/health', (_req, res) =>
-  res.json({ ok: true, env: process.env.NODE_ENV, mongo: { state: mongoose.connection.readyState } }),
+  res.json({ ok: true, mongo: { state: mongoose.connection.readyState } }),
 );
 app.get('/ready', (_req, res) => {
   if (mongoose.connection.readyState !== 1) {
@@ -289,13 +308,14 @@ app.get('/api/ready', (_req, res) => res.redirect(301, '/ready'));
 app.get('/metrics', metricsHandler);
 
 // Stripe Connect redirects (avoid 404 when APP_URL points to backend)
-app.get('/connect/return', (_req, res) => {
+const connectReturnPath = (panel: unknown) => (panel === 'agency' ? '/agency' : '/landlord/payments');
+app.get('/connect/return', (req, res) => {
   const target = process.env.FRONTEND_URL || 'http://localhost:3001';
-  res.redirect(302, `${target}/landlord/payments?connect=success`);
+  res.redirect(302, `${target}${connectReturnPath(req.query.panel)}?connect=success`);
 });
-app.get('/connect/refresh', (_req, res) => {
+app.get('/connect/refresh', (req, res) => {
   const target = process.env.FRONTEND_URL || 'http://localhost:3001';
-  res.redirect(302, `${target}/landlord/payments?connect=retry`);
+  res.redirect(302, `${target}${connectReturnPath(req.query.panel)}?connect=retry`);
 });
 
 // Public routes
@@ -311,39 +331,49 @@ app.use('/api/policies', policyRoutes);
 app.use('/api', uploadRoutes);
 app.use('/api', demoContractRoutes);
 app.use('/api', notifyRoutes);
-app.use('/api', authenticate, postsignRouter);
-app.use('/api', tenantProRoutes);
-app.use('/api', tenantProMeRoutes);
-app.use('/api', requireVerified, appointmentsFlowRoutes);
-app.use('/api', applicationsRoutes);
+// Invitaciones de agencia a propietarios: acceso público por token (el invitado aún no tiene cuenta).
+// Invitación de co-titular: vista previa pública.
+app.get('/api/agency-invites/:token', asyncHandler(getInviteByToken));
+app.post('/api/agency-invites/:token/accept', authLimiter, asyncHandler(acceptInvite));
+app.get('/api/invites/preview', asyncHandler(getInvitePreview));
 
-// Protected routes (verified users)
+// Protected routes. Cada router privado va con su prefijo: nunca app.use('/api', authenticate, …),
+// porque ese middleware corre en toda petición /api que llegue hasta él y deja detrás de la sesión
+// cualquier ruta pública montada después (ronda 75). tests/security/route-auth-map.test.ts lo vigila.
+app.use('/api/postsign', authenticate, postsignRouter);
+app.use('/api/tenant-pro', authenticate, tenantProRoutes);
+app.use('/api/me/tenant-pro', authenticate, tenantProMeRoutes);
+app.use('/api/appointments', authenticate, requireVerified, appointmentsFlowRoutes, serviceOfferAppointmentRoutes);
+app.use('/api/applications', authenticate, requireVerified, applicationsRoutes);
 app.use('/api/contracts', authenticate, requireVerified, contractRoutes);
+// El perfil propio no exige identidad verificada: la cuenta recién creada tiene que poder verlo.
+app.use('/api/users/me', authenticate, userProfileRoutes);
 app.use('/api/users', authenticate, requireVerified, userRoutes);
 app.use('/api/pros', authenticate, requireVerified, proRoutes);
 // Tickets necesitan usuario autenticado; permitir bypass de verificación en test si aplica
 app.use('/api/tickets', authenticate, requireVerified, ticketRoutes);
 app.use('/api/reviews', authenticate, requireVerified, reviewRoutes);
 app.use('/api/chat', authenticate, requireVerified, chatRoutes);
-app.use('/api/ai', authenticate, requireVerified, aiRoutes);
-app.use('/api/assistant', authenticate, requireVerified, assistantRoutes);
+const aiLimiter = createAiRateLimiter();
+app.use('/api/ai', authenticate, requireVerified, aiLimiter, aiRoutes);
+app.use('/api/assistant', authenticate, requireVerified, aiLimiter, assistantRoutes);
 // Contract-specific payments under /api/contracts require verificación
 app.use('/api/contracts', authenticate, requireVerified, contractPaymentsRoutes);
 app.use('/api/agency', authenticate, requireVerified, agencyRoutes);
-// Invitaciones de agencia a propietarios: acceso público por token (el invitado aún no tiene cuenta).
-app.get('/api/agency-invites/:token', asyncHandler(getInviteByToken));
-app.post('/api/agency-invites/:token/accept', authLimiter, asyncHandler(acceptInvite));
-app.use('/api', paymentsRoutes);
-app.use('/api', authenticate, requireVerified, connectRoutes);
-app.use('/api', authenticate, requireVerified, serviceOfferRoutes);
-app.use('/api/invites', authenticate, invitesRoutes);
+app.use('/api/payments', authenticate, requireVerified, paymentsRoutes);
+app.use('/api/connect', authenticate, requireVerified, connectRoutes);
+app.use('/api/service-offers', authenticate, requireVerified, serviceOfferRoutes);
+// requireVerified en invitaciones e institución: ya se les aplicaba a través del antiguo
+// app.use('/api', requireVerified, appointmentsFlowRoutes); se mantiene tal cual.
+app.use('/api/invites', authenticate, requireVerified, invitesRoutes);
 app.use('/api/me', authenticate, requireVerified, meRoutes);
-app.use('/api', authenticate, requireVerified, taxReportRoutes);
+app.use('/api/tax', authenticate, requireVerified, taxReportRoutes);
 
 // Institution portal (read-only)
 app.use(
   '/api/institution',
   authenticate,
+  requireVerified,
   authorizeRoles('institution_viewer'),
   loadInstitutionScope,
   institutionRoutes,

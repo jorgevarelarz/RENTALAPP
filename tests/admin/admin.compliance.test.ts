@@ -1,7 +1,7 @@
 import request from 'supertest';
-import jwt from 'jsonwebtoken';
 import { app } from '../../src/app';
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
+import { sessionToken } from '../utils/sessionToken';
 import { Types } from 'mongoose';
 import { UserPolicyAcceptance } from '../../src/models/userPolicyAcceptance.model';
 import { PolicyVersion } from '../../src/models/policy.model';
@@ -9,7 +9,7 @@ import { ComplianceStatus } from '../../src/modules/rentalPublic/models/complian
 
 const JWT_SECRET = process.env.JWT_SECRET || 'insecure';
 
-const signToken = (payload: any) => jwt.sign(payload, JWT_SECRET);
+const signToken = sessionToken;
 
 describe('Admin compliance API', () => {
   beforeAll(async () => {
@@ -24,7 +24,7 @@ describe('Admin compliance API', () => {
       .set('Authorization', 'Bearer invalid')
       .expect(401);
 
-    const userToken = signToken({ _id: '507f1f77bcf86cd799439030', role: 'tenant' });
+    const userToken = await signToken({ _id: '507f1f77bcf86cd799439030', role: 'tenant' });
     await request(app)
       .get('/api/admin/policies/acceptances')
       .set('Authorization', `Bearer ${userToken}`)
@@ -32,7 +32,7 @@ describe('Admin compliance API', () => {
   });
 
   it('returns acceptances with filters and activeOnly', async () => {
-    const adminToken = signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
+    const adminToken = await signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
     await PolicyVersion.create({ policyType: 'terms_of_service', version: 'v1.0', isActive: true });
     await PolicyVersion.create({ policyType: 'data_processing', version: 'v2.0', isActive: true });
     await PolicyVersion.create({ policyType: 'terms_of_service', version: 'v0.9', isActive: false });
@@ -73,7 +73,7 @@ describe('Admin compliance API', () => {
   });
 
   it('rejects invalid date ranges for compliance dashboard', async () => {
-    const adminToken = signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
+    const adminToken = await signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
 
     await request(app)
       .get('/api/admin/compliance/dashboard?dateFrom=invalid-date')
@@ -89,7 +89,7 @@ describe('Admin compliance API', () => {
   });
 
   it('rejects invalid date ranges for compliance export', async () => {
-    const adminToken = signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
+    const adminToken = await signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
 
     await request(app)
       .get('/api/admin/compliance/dashboard/export.csv?dateFrom=invalid-date')
@@ -105,7 +105,7 @@ describe('Admin compliance API', () => {
   });
 
   it('exports compliance CSV with data rows', async () => {
-    const adminToken = signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
+    const adminToken = await signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
     const propertyId = new Types.ObjectId();
     await ComplianceStatus.create({
       contract: new Types.ObjectId(),
@@ -129,5 +129,34 @@ describe('Admin compliance API', () => {
 
     expect(res.text).toContain('property_id,areaKey,previousRent,newRent,status,checkedAt');
     expect(res.text).toContain(String(propertyId));
+  });
+  it('counts compliant and non-compliant over the whole filter, not the page', async () => {
+    const adminToken = await signToken({ _id: '507f1f77bcf86cd799439000', role: 'admin', isVerified: true });
+    const statuses = ['compliant', 'compliant', 'compliant', 'risk', 'risk', 'non_compliant'];
+    await ComplianceStatus.create(
+      statuses.map((status, idx) => ({
+        contract: new Types.ObjectId(),
+        property: new Types.ObjectId(),
+        status,
+        severity: status === 'compliant' ? 'info' : status === 'risk' ? 'warning' : 'critical',
+        checkedAt: new Date(Date.UTC(2025, 0, 1 + idx)),
+        previousRent: 900,
+        newRent: 1000,
+        meta: { areaKey: 'galicia|oleiros|' },
+      })),
+    );
+
+    const all = await request(app)
+      .get('/api/admin/compliance/dashboard?pageSize=2')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(all.body.data.items).toHaveLength(2);
+    expect(all.body.data.totals).toEqual({ evaluated: 6, risk: 2, compliant: 3, nonCompliant: 1 });
+
+    const onlyCompliant = await request(app)
+      .get('/api/admin/compliance/dashboard?status=compliant')
+      .set('Authorization', `Bearer ${adminToken}`)
+      .expect(200);
+    expect(onlyCompliant.body.data.totals).toEqual({ evaluated: 3, risk: 0, compliant: 3, nonCompliant: 0 });
   });
 });

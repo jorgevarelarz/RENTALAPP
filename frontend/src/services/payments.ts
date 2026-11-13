@@ -24,3 +24,11 @@ export const payReceipt = async (token: string, id: string) => {
   );
   return res.data as { clientSecret?: string; amount?: number; currency?: string };
 };
+
+export const downloadReceipt = async (token: string, id: string) => {
+  const res = await axios.get(`/api/payments/${id}/receipt.pdf`, {
+    headers: { Authorization: `Bearer ${token}` },
+    responseType: 'blob',
+  });
+  return res.data as Blob;
+};

@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../../src/app";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
+import { seedContractParties, LANDLORD_ID } from "../utils/contractParties";
 
 describe("POST /api/contracts", () => {
   beforeAll(connectDb);
@@ -8,6 +9,7 @@ describe("POST /api/contracts", () => {
   afterEach(clearDb);
 
   it("crea contrato y genera pdfHash", async () => {
+    await seedContractParties();
     const payload = {
       landlord: "507f1f77bcf86cd799439011",
       tenant: "507f1f77bcf86cd799439012",
@@ -23,7 +25,7 @@ describe("POST /api/contracts", () => {
       ]
     };
 
-    const res = await request(app).post("/api/contracts").send(payload).expect(201);
+    const res = await request(app).post("/api/contracts").set("x-user-id", LANDLORD_ID).send(payload).expect(201);
 
     expect(res.body.contract.region).toBe("galicia");
     expect(res.body.contract.pdfHash).toMatch(/^[a-f0-9]{64}$/);

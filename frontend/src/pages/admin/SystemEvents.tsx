@@ -1,37 +1,125 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchSystemEvents, type SystemEventItem, type SystemEventsResponse } from '../../api/systemEvents';
+import { Download, RefreshCw } from 'lucide-react';
+import Badge from '../../components/ui/Badge';
+import Button, { buttonClassName } from '../../components/ui/Button';
+import Card from '../../components/ui/Card';
+import EmptyState from '../../components/ui/EmptyState';
+import ErrorCard from '../../components/ui/ErrorCard';
+import Input from '../../components/ui/Input';
+import Modal from '../../components/ui/Modal';
+import PageHeader from '../../components/ui/PageHeader';
+import Select from '../../components/ui/Select';
+import { formatApiError } from '../../api/client';
+import {
+  exportSystemEventsCsv,
+  fetchSystemEvents,
+  type SystemEventItem,
+  type SystemEventsResponse,
+} from '../../api/systemEvents';
+import { blobErrorBody, saveBlob } from '../../utils/download';
+import type { StatusTone } from '../../utils/statusBadges';
 
-const TYPE_OPTIONS = [
-  { value: '', label: 'Todos' },
-  { value: 'COMPLIANCE_RISK_CREATED', label: 'COMPLIANCE_RISK_CREATED' },
-  { value: 'ADMIN_RATE_LIMIT_HIT', label: 'ADMIN_RATE_LIMIT_HIT' },
-];
-
-const RESOURCE_OPTIONS = [
-  { value: '', label: 'Todos' },
-  { value: 'contract', label: 'contract' },
-  { value: 'admin', label: 'admin' },
-];
-
-const emptyResponse: SystemEventsResponse = {
-  items: [],
-  total: 0,
-  page: 1,
-  pageSize: 25,
+// Tipos que escribe hoy el backend (complianceValidation, adminRateLimit, property.controller, retención)
+const EVENT_TYPES: Record<string, { label: string; tone: StatusTone }> = {
+  COMPLIANCE_RISK_CREATED: { label: 'Renta en riesgo', tone: 'warning' },
+  LISTING_PRICE_LIMIT_EXCEEDED: { label: 'Precio por encima del límite', tone: 'warning' },
+  ADMIN_RATE_LIMIT_HIT: { label: 'Límite de peticiones', tone: 'danger' },
+  SYSTEM_EVENTS_RETENTION_RUN: { label: 'Limpieza de eventos', tone: 'neutral' },
 };
+
+const RESOURCES: Record<string, string> = {
+  contract: 'Contrato',
+  property: 'Inmueble',
+  admin: 'Administración',
+  system: 'Sistema',
+};
+
+const ERRORS: Record<string, string> = {
+  invalid_date_range: 'Revisa las fechas: «Desde» tiene que ser anterior a «Hasta».',
+};
+
+const PAGE_SIZE = 25;
+const COLUMNS = ['Evento', 'Recurso', 'Fecha'];
+
+const emptyResponse: SystemEventsResponse = { items: [], total: 0, page: 1, pageSize: PAGE_SIZE };
+
+const dateTime = (value?: string | null) =>
+  value ? new Date(value).toLocaleString('es-ES', { dateStyle: 'medium', timeStyle: 'short' }) : '—';
+
+const eventType = (type: string) => EVENT_TYPES[type] || { label: type, tone: 'neutral' as StatusTone };
+
+const requestIdOf = (item: SystemEventItem) => {
+  const id = (item.payload as any)?.requestId;
+  return typeof id === 'string' && id ? id : null;
+};
+
+// Contratos e inmuebles tienen ficha; el resto se enseña tal cual
+function ResourceCell({ item }: { item: SystemEventItem }) {
+  const label = item.resourceType ? RESOURCES[item.resourceType] || item.resourceType : '—';
+  const id = item.resourceId;
+  const href =
+    id && item.resourceType === 'contract' ? `/contracts/${id}` : id && item.resourceType === 'property' ? `/properties/${id}` : null;
+  return (
+    <>
+      <div>{label}</div>
+      {id && (
+        <div className="max-w-[12rem] truncate font-mono text-xs text-[var(--ra-muted)]" title={id}>
+          {href ? (
+            <Link to={href} className="underline-offset-2 hover:underline" onClick={(e) => e.stopPropagation()}>
+              {id}
+            </Link>
+          ) : (
+            id
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
+function CopyButton({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <Button
+      type="button"
+      variant="secondary"
+      size="sm"
+      onClick={async (e) => {
+        e.stopPropagation();
+        try {
+          await navigator.clipboard.writeText(value);
+          setCopied(true);
+          setTimeout(() => setCopied(false), 1500);
+        } catch {
+          // Sin permiso de portapapeles no hay nada que hacer: el ID está a la vista
+        }
+      }}
+    >
+      {copied ? 'Copiado' : 'Copiar'}
+    </Button>
+  );
+}
 
 export default function SystemEvents() {
   const [data, setData] = useState<SystemEventsResponse>(emptyResponse);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [typeFilter, setTypeFilter] = useState('');
   const [resourceType, setResourceType] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [page, setPage] = useState(1);
-  const pageSize = 25;
   const [selected, setSelected] = useState<SystemEventItem | null>(null);
+
+  const filters = {
+    type: typeFilter || undefined,
+    resourceType: resourceType || undefined,
+    dateFrom: dateFrom || undefined,
+    dateTo: dateTo || undefined,
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -39,7 +127,7 @@ export default function SystemEvents() {
     try {
       const response = await fetchSystemEvents({
         page,
-        pageSize,
+        pageSize: PAGE_SIZE,
         type: typeFilter || undefined,
         resourceType: resourceType || undefined,
         dateFrom: dateFrom || undefined,
@@ -47,11 +135,11 @@ export default function SystemEvents() {
       });
       setData(response || emptyResponse);
     } catch (err: any) {
-      setError(err?.message || 'Error cargando eventos');
+      setError(ERRORS[err?.response?.data?.error] || formatApiError(err, 'No se pudieron cargar los eventos.'));
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, typeFilter, resourceType, dateFrom, dateTo]);
+  }, [page, typeFilter, resourceType, dateFrom, dateTo]);
 
   useEffect(() => {
     fetchData();
@@ -61,260 +149,206 @@ export default function SystemEvents() {
     setPage(1);
   }, [typeFilter, resourceType, dateFrom, dateTo]);
 
-  const totalPages = Math.max(1, Math.ceil((data.total || 0) / pageSize));
-  const rangeStart = data.total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const rangeEnd = Math.min(page * pageSize, data.total || 0);
+  const total = data.total || 0;
+  const rows = data.items || [];
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const rangeEnd = Math.min(page * PAGE_SIZE, total);
+  const hasFilters = Boolean(typeFilter || resourceType || dateFrom || dateTo);
 
-  const rows = useMemo(() => data.items || [], [data.items]);
-
-  const renderRequestId = (item: SystemEventItem) => {
-    const payload = item.payload as any;
-    return payload?.requestId || '-';
+  const clearFilters = () => {
+    setTypeFilter('');
+    setResourceType('');
+    setDateFrom('');
+    setDateTo('');
   };
 
-  const copyRequestId = async (requestId: string) => {
-    if (!requestId || requestId === '-') return;
+  const handleExport = async () => {
+    setExporting(true);
+    setExportError(null);
     try {
-      await navigator.clipboard.writeText(requestId);
-    } catch (err) {
-      console.error('Clipboard error', err);
+      saveBlob(await exportSystemEventsCsv(filters), 'eventos-del-sistema.csv');
+    } catch (err: any) {
+      const body = await blobErrorBody(err);
+      setExportError(ERRORS[body?.error || ''] || body?.message || formatApiError(err, 'No se pudo exportar el CSV.'));
+    } finally {
+      setExporting(false);
     }
   };
 
+  const selectedRequestId = selected ? requestIdOf(selected) : null;
+
   return (
-    <div style={{ padding: 24, display: 'grid', gap: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-        <h2 style={{ margin: 0 }}>System Events</h2>
-        <Link to="/admin/compliance" className="px-3 py-1.5 rounded border border-gray-300">
-          Volver a compliance
-        </Link>
-      </div>
+    <div className="space-y-6 pb-10">
+      <PageHeader
+        title="Eventos del sistema"
+        subtitle="Avisos automáticos: rentas en riesgo, precios por encima del límite y peticiones bloqueadas."
+        cta={
+          <Link to="/admin/compliance" className={buttonClassName('secondary', 'sm', 'whitespace-nowrap')}>
+            Cumplimiento
+          </Link>
+        }
+      />
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          Type:
-          <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)} style={selectStyle}>
-            {TYPE_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
+      <Card className="p-4">
+        <form
+          className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[repeat(4,minmax(0,1fr))_auto]"
+          onSubmit={(e) => {
+            e.preventDefault();
+            fetchData();
+          }}
+        >
+          <Select label="Evento" value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)}>
+            <option value="">Todos</option>
+            {Object.entries(EVENT_TYPES).map(([value, { label }]) => (
+              <option key={value} value={value}>
+                {label}
               </option>
             ))}
-          </select>
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          Resource:
-          <select value={resourceType} onChange={e => setResourceType(e.target.value)} style={selectStyle}>
-            {RESOURCE_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
+          </Select>
+          <Select label="Recurso" value={resourceType} onChange={(e) => setResourceType(e.target.value)}>
+            <option value="">Todos</option>
+            {Object.entries(RESOURCES).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
               </option>
             ))}
-          </select>
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          Date from:
-          <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={inputStyle} />
-        </label>
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          Date to:
-          <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={inputStyle} />
-        </label>
-        <button className="px-3 py-1.5 rounded border border-gray-300" onClick={fetchData}>
-          Refrescar
-        </button>
-      </div>
+          </Select>
+          <Input label="Desde" type="date" value={dateFrom} max={dateTo || undefined} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input label="Hasta" type="date" value={dateTo} min={dateFrom || undefined} onChange={(e) => setDateTo(e.target.value)} />
+          <div className="flex items-end gap-2">
+            <Button type="submit" variant="secondary" disabled={loading}>
+              <RefreshCw size={16} aria-hidden="true" />
+              Actualizar
+            </Button>
+            <Button type="button" variant="secondary" onClick={handleExport} disabled={exporting}>
+              <Download size={16} aria-hidden="true" />
+              {exporting ? 'Exportando…' : 'CSV'}
+            </Button>
+          </div>
+        </form>
+        {exportError && <p role="alert" className="ra-field-error mt-3">{exportError}</p>}
+      </Card>
 
-      {loading && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
-                <th style={cellStyle}>Type</th>
-                <th style={cellStyle}>Resource</th>
-                <th style={cellStyle}>Resource ID</th>
-                <th style={cellStyle}>Created At</th>
-                <th style={cellStyle}>Request ID</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Array.from({ length: 4 }).map((_, idx) => (
-                <tr key={idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
-                  {Array.from({ length: 5 }).map((__, cellIdx) => (
-                    <td key={cellIdx} style={cellStyle}>
-                      <div style={loadingPill} />
-                    </td>
+      {error && <ErrorCard message={error} onRetry={fetchData} />}
+
+      {!loading && !error && rows.length === 0 && (
+        <EmptyState
+          title={hasFilters ? 'Ningún evento coincide con los filtros' : 'Todavía no hay eventos'}
+          detail={hasFilters ? undefined : 'Aquí aparecerán los avisos que genera la plataforma por sí sola.'}
+          cta={hasFilters ? <Button variant="secondary" size="sm" onClick={clearFilters}>Quitar filtros</Button> : undefined}
+        />
+      )}
+
+      {(loading || rows.length > 0) && !error && (
+        <Card className="overflow-hidden">
+          {/* relative: el <th> sr-only es absoluto y, sin esto, ensancha la página en móvil */}
+          <div className="relative overflow-x-auto">
+            <table className="min-w-full text-sm" aria-busy={loading}>
+              <thead className="border-b border-[var(--ra-line)] bg-[var(--ra-paper)] text-left text-[13px] font-semibold text-[var(--ra-muted)]">
+                <tr>
+                  {COLUMNS.map((col) => (
+                    <th key={col} scope="col" className="whitespace-nowrap px-4 py-3">
+                      {col}
+                    </th>
                   ))}
+                  <th scope="col" className="px-4 py-3">
+                    <span className="sr-only">Acciones</span>
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {error && <div style={{ color: '#b91c1c' }}>{error}</div>}
-      {!loading && !error && rows.length === 0 && <div>No hay eventos aun.</div>}
-
-      {!loading && rows.length > 0 && (
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ textAlign: 'left', borderBottom: '1px solid #e5e7eb' }}>
-                <th style={cellStyle}>Type</th>
-                <th style={cellStyle}>Resource</th>
-                <th style={cellStyle}>Resource ID</th>
-                <th style={cellStyle}>Created At</th>
-                <th style={cellStyle}>Request ID</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map(item => (
-                <tr
-                  key={item._id}
-                  style={{ borderBottom: '1px solid #f1f5f9', cursor: 'pointer' }}
-                  onClick={() => setSelected(item)}
-                >
-                  <td style={cellStyle}>{item.type}</td>
-                  <td style={cellStyle}>{item.resourceType || '-'}</td>
-                  <td style={cellStyle}>{item.resourceId || '-'}</td>
-                  <td style={cellStyle}>{new Date(item.createdAt).toLocaleString()}</td>
-                  <td style={cellStyle}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span>{renderRequestId(item)}</span>
-                      <button
-                        className="px-2 py-1 rounded border border-gray-300"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          copyRequestId(renderRequestId(item));
-                        }}
-                      >
-                        Copiar
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
-
-      {!loading && rows.length > 0 && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-          <div style={{ fontSize: 13, color: '#6b7280' }}>
-            {rangeStart}-{rangeEnd} de {data.total || 0}
+              </thead>
+              <tbody className="divide-y divide-[var(--ra-line)]">
+                {loading
+                  ? Array.from({ length: 4 }).map((_, idx) => (
+                      <tr key={idx}>
+                        {[...COLUMNS, ''].map((col) => (
+                          <td key={col} className="px-4 py-4">
+                            <div className="h-2.5 w-4/5 animate-pulse rounded-full bg-[var(--ra-paper)]" />
+                          </td>
+                        ))}
+                      </tr>
+                    ))
+                  : rows.map((item) => {
+                      const kind = eventType(item.type);
+                      return (
+                        <tr key={item._id} className="align-top">
+                          <td className="px-4 py-3">
+                            <Badge tone={kind.tone}>{kind.label}</Badge>
+                          </td>
+                          <td className="px-4 py-3">
+                            <ResourceCell item={item} />
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-[var(--ra-muted)]">{dateTime(item.createdAt)}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right">
+                            <Button variant="secondary" size="sm" onClick={() => setSelected(item)}>
+                              Ver detalle
+                            </Button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+              </tbody>
+            </table>
           </div>
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              className="px-3 py-1.5 rounded border border-gray-300"
-              onClick={() => setPage(p => Math.max(1, p - 1))}
-              disabled={page <= 1}
-            >
-              Anterior
-            </button>
-            <span style={{ fontSize: 13, color: '#6b7280', alignSelf: 'center' }}>
-              Pagina {page} / {totalPages}
-            </span>
-            <button
-              className="px-3 py-1.5 rounded border border-gray-300"
-              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              disabled={page >= totalPages}
-            >
-              Siguiente
-            </button>
-          </div>
-        </div>
-      )}
-
-      {selected && (
-        <div style={modalOverlay} onClick={() => setSelected(null)}>
-          <div style={modalBody} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>System Event</h3>
-              <button className="px-2 py-1 rounded border border-gray-300" onClick={() => setSelected(null)}>
-                Cerrar
-              </button>
+          {!loading && total > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--ra-line)] px-4 py-3 text-sm text-[var(--ra-muted)]">
+              <span className="tabular-nums">
+                {rangeStart}–{rangeEnd} de {total.toLocaleString('es-ES')}
+              </span>
+              {totalPages > 1 && (
+                <nav aria-label="Paginación" className="flex items-center gap-2">
+                  <Button variant="secondary" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
+                    Anterior
+                  </Button>
+                  <span className="tabular-nums">
+                    Página {page} de {totalPages}
+                  </span>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={page >= totalPages}
+                  >
+                    Siguiente
+                  </Button>
+                </nav>
+              )}
             </div>
-            <div style={{ marginTop: 12, display: 'grid', gap: 6, fontSize: 14 }}>
-              <div><strong>Type:</strong> {selected.type}</div>
-              <div><strong>Resource:</strong> {selected.resourceType || '-'}</div>
-              <div><strong>Resource ID:</strong> {selected.resourceId || '-'}</div>
-              <div><strong>Created At:</strong> {new Date(selected.createdAt).toLocaleString()}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <strong>Request ID:</strong>
-                <span>{renderRequestId(selected)}</span>
-                <button
-                  className="px-2 py-1 rounded border border-gray-300"
-                  onClick={() => copyRequestId(renderRequestId(selected))}
-                >
-                  Copiar
-                </button>
-              </div>
-            </div>
-            <pre style={codeBlock}>
-              {JSON.stringify(selected.payload || {}, null, 2)}
-            </pre>
-          </div>
-        </div>
+          )}
+        </Card>
       )}
+
+      <Modal open={Boolean(selected)} onClose={() => setSelected(null)} title={selected ? eventType(selected.type).label : undefined}>
+        {selected && (
+          <div className="space-y-4 text-sm">
+            <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
+              <dt className="text-[var(--ra-muted)]">Tipo</dt>
+              <dd className="font-mono text-xs leading-5">{selected.type}</dd>
+              <dt className="text-[var(--ra-muted)]">Recurso</dt>
+              <dd>
+                <ResourceCell item={selected} />
+              </dd>
+              <dt className="text-[var(--ra-muted)]">Fecha</dt>
+              <dd>{dateTime(selected.createdAt)}</dd>
+              {selectedRequestId && (
+                <>
+                  <dt className="text-[var(--ra-muted)]">ID de petición</dt>
+                  <dd className="flex items-center gap-2">
+                    <span className="break-all font-mono text-xs">{selectedRequestId}</span>
+                    <CopyButton value={selectedRequestId} />
+                  </dd>
+                </>
+              )}
+            </dl>
+            <div>
+              <p className="mb-1 text-[13px] font-semibold text-[var(--ra-muted)]">Datos del evento</p>
+              <pre className="max-h-80 overflow-auto rounded-xl border border-[var(--ra-line)] bg-[var(--ra-paper)] p-3 font-mono text-xs leading-5">
+                {JSON.stringify(selected.payload || {}, null, 2)}
+              </pre>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 }
-
-const selectStyle: React.CSSProperties = {
-  border: '1px solid #d4d4d8',
-  borderRadius: 8,
-  padding: '6px 10px',
-};
-
-const inputStyle: React.CSSProperties = {
-  border: '1px solid #d4d4d8',
-  borderRadius: 8,
-  padding: '6px 10px',
-};
-
-const cellStyle: React.CSSProperties = {
-  padding: 10,
-  borderBottom: '1px solid #f1f5f9',
-  fontSize: 14,
-};
-
-const loadingPill: React.CSSProperties = {
-  height: 10,
-  width: '80%',
-  background: '#e5e7eb',
-  borderRadius: 999,
-};
-
-const modalOverlay: React.CSSProperties = {
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  bottom: 0,
-  background: 'rgba(15, 23, 42, 0.4)',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  padding: 16,
-  zIndex: 50,
-};
-
-const modalBody: React.CSSProperties = {
-  background: 'white',
-  borderRadius: 12,
-  padding: 16,
-  width: 'min(720px, 92vw)',
-  boxShadow: '0 20px 45px rgba(15, 23, 42, 0.25)',
-  display: 'grid',
-  gap: 12,
-};
-
-const codeBlock: React.CSSProperties = {
-  background: '#0f172a',
-  color: '#e2e8f0',
-  padding: 12,
-  borderRadius: 8,
-  fontSize: 12,
-  maxHeight: 320,
-  overflow: 'auto',
-};

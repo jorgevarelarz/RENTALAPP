@@ -1,11 +1,15 @@
 import React, { useEffect, useState } from 'react';
-import { CheckCircle2, Circle, Copy, Plus, X } from 'lucide-react';
+import { CheckCircle2, Circle, Plus, X } from 'lucide-react';
 import {
   createLandlordInvite,
   listLandlordInvites,
+  resendLandlordInvite,
   type LandlordInviteItem,
+  type LandlordInviteResult,
 } from '../../services/agency';
 import { formatApiError } from '../../api/client';
+import Badge from '../../components/ui/Badge';
+import type { StatusTone } from '../../utils/statusBadges';
 
 const STEP_LABELS: Array<{ key: keyof LandlordInviteItem['steps']; label: string }> = [
   { key: 'accountCreated', label: 'Cuenta creada' },
@@ -14,14 +18,32 @@ const STEP_LABELS: Array<{ key: keyof LandlordInviteItem['steps']; label: string
   { key: 'hasActiveContract', label: 'Contrato activo' },
 ];
 
+const RESEND_ERRORS: Record<string, string> = {
+  resend_too_soon: 'Ya se envió hace poco. Podrás reenviarla dentro de unos minutos.',
+  invite_not_pending: 'Ese propietario ya activó su cuenta.',
+  landlord_already_exists: 'Ese email ya tiene cuenta en RentalApp.',
+  landlord_already_invited: 'Otro colaborador ya invitó a ese propietario.',
+};
+
+/** Un backend antiguo no manda emailStatus: se da por enviado. */
+const delivered = (r: LandlordInviteResult) => r.emailStatus === undefined || r.emailStatus === 'sent';
+
+type Notice = { tone: 'success' | 'warning' | 'error'; text: React.ReactNode };
+
+const NOTICE_CLS: Record<Notice['tone'], string> = {
+  success: 'border-emerald-200 bg-emerald-50 text-emerald-800',
+  warning: 'border-amber-200 bg-amber-50 text-amber-800',
+  error: 'border-red-200 bg-red-50 text-red-700',
+};
+
 function StatusBadge({ status }: { status: LandlordInviteItem['status'] }) {
-  const map = {
-    invited: ['Invitado', 'bg-amber-50 text-amber-700 border-amber-200'],
-    accepted: ['Activo', 'bg-emerald-50 text-emerald-700 border-emerald-200'],
-    expired: ['Caducada', 'bg-gray-100 text-gray-500 border-gray-200'],
-  } as const;
-  const [label, cls] = map[status] || map.invited;
-  return <span className={`inline-flex px-2 py-0.5 rounded-full text-xs font-semibold border ${cls}`}>{label}</span>;
+  const map: Record<LandlordInviteItem['status'], [string, StatusTone]> = {
+    invited: ['Invitado', 'warning'],
+    accepted: ['Activo', 'success'],
+    expired: ['Caducada', 'neutral'],
+  };
+  const [label, tone] = map[status] || map.invited;
+  return <Badge tone={tone}>{label}</Badge>;
 }
 
 export default function AgencyLandlords() {
@@ -31,8 +53,27 @@ export default function AgencyLandlords() {
   const [form, setForm] = useState({ landlordName: '', landlordEmail: '', landlordPhone: '', propertyAddress: '' });
   const [submitting, setSubmitting] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [lastInviteUrl, setLastInviteUrl] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
+  const [notice, setNotice] = useState<Notice | null>(null);
+  const [resending, setResending] = useState<string | null>(null);
+
+  const sentNotice = (result: LandlordInviteResult, resent: boolean): Notice =>
+    delivered(result)
+      ? {
+          tone: 'success',
+          text: (
+            <>
+              Invitación {resent ? 'reenviada' : 'enviada'} a <strong className="font-semibold">{result.landlordEmail}</strong>. El enlace de activación solo le llega a esa dirección y caduca en 30 días.
+            </>
+          ),
+        }
+      : {
+          tone: 'warning',
+          text: (
+            <>
+              Invitación guardada, pero el correo a <strong className="font-semibold">{result.landlordEmail}</strong> no salió. Reenvíala desde la lista en unos minutos.
+            </>
+          ),
+        };
 
   const load = async () => {
     try {
@@ -54,7 +95,7 @@ export default function AgencyLandlords() {
         landlordPhone: form.landlordPhone || undefined,
         propertyAddress: form.propertyAddress || undefined,
       });
-      setLastInviteUrl(invite.inviteUrl);
+      setNotice(sentNotice(invite, false));
       setForm({ landlordName: '', landlordEmail: '', landlordPhone: '', propertyAddress: '' });
       setShowForm(false);
       await load();
@@ -71,8 +112,17 @@ export default function AgencyLandlords() {
     }
   };
 
-  const copyLink = async (url: string) => {
-    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch {}
+  const resend = async (item: LandlordInviteItem) => {
+    setResending(item.id);
+    try {
+      setNotice(sentNotice(await resendLandlordInvite(item.id), true));
+      await load();
+    } catch (e: any) {
+      const code = e?.response?.data?.error;
+      setNotice({ tone: 'error', text: RESEND_ERRORS[code] || formatApiError(e, 'No se pudo reenviar la invitación') });
+    } finally {
+      setResending(null);
+    }
   };
 
   return (
@@ -85,19 +135,16 @@ export default function AgencyLandlords() {
           </p>
         </div>
         <button
-          onClick={() => { setShowForm(true); setErr(null); }}
+          onClick={() => { setShowForm(true); setErr(null); setNotice(null); }}
           className="inline-flex items-center gap-2 bg-gray-950 text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-800"
         >
           <Plus size={16} /> Dar de alta propietario
         </button>
       </div>
 
-      {lastInviteUrl && (
-        <div className="flex items-center justify-between gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-          <span>Invitación enviada por email. También puedes compartir el enlace directamente.</span>
-          <button onClick={() => copyLink(lastInviteUrl)} className="inline-flex items-center gap-1.5 font-semibold hover:underline shrink-0">
-            <Copy size={14} /> {copied ? 'Copiado' : 'Copiar enlace'}
-          </button>
+      {notice && (
+        <div role={notice.tone === 'error' ? 'alert' : 'status'} className={`rounded-lg border px-4 py-3 text-sm ${NOTICE_CLS[notice.tone]}`}>
+          {notice.text}
         </div>
       )}
 
@@ -159,6 +206,20 @@ export default function AgencyLandlords() {
                 </div>
                 <p className="text-sm text-gray-500 truncate">{item.landlordEmail}</p>
                 {item.propertyAddress && <p className="text-xs text-gray-400 truncate">{item.propertyAddress}</p>}
+                {item.status !== 'accepted' && (
+                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
+                    {item.emailFailed && <span className="font-medium text-amber-700">No se pudo enviar el correo</span>}
+                    <button
+                      type="button"
+                      onClick={() => resend(item)}
+                      disabled={resending === item.id}
+                      aria-label={`Reenviar invitación a ${item.landlordEmail}`}
+                      className="font-semibold text-[var(--ra-blue)] hover:underline disabled:cursor-default disabled:text-gray-400 disabled:no-underline"
+                    >
+                      {resending === item.id ? 'Enviando…' : 'Reenviar invitación'}
+                    </button>
+                  </div>
+                )}
               </div>
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 md:ml-auto">
                 {STEP_LABELS.map(({ key, label }) => {

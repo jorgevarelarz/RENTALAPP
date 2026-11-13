@@ -5,6 +5,7 @@ import { recordContractHistory } from '../utils/history';
 import { sendRentReminderEmail, sendContractRenewalNotification } from '../utils/notification';
 // @ts-ignore
 import { ensureCanReadContract } from '../utils/contractAccess';
+import { sendRouteError } from '../utils/routeError';
 
 export const sendRentReminder = async (req: Request, res: Response) => {
   try {
@@ -20,9 +21,7 @@ export const sendRentReminder = async (req: Request, res: Response) => {
     await recordContractHistory(contract.id, 'rentReminderSent', 'Recordatorio de renta enviado');
     res.json({ message: 'Recordatorio de renta enviado' });
   } catch (error: any) {
-    console.error(error);
-    const status = error?.status || 500;
-    res.status(status).json({ error: status === 403 ? 'forbidden' : 'Error enviando recordatorio', details: error.message });
+    sendRouteError(res, error, 'rent_reminder_failed');
   }
 };
 
@@ -44,8 +43,6 @@ export const sendRenewalNotification = async (req: Request, res: Response) => {
     await recordContractHistory(contract.id, 'renewalNoticeSent', 'Notificación de renovación enviada');
     res.json({ message: 'Notificaciones de renovación enviadas' });
   } catch (error: any) {
-    console.error(error);
-    const status = error?.status || 500;
-    res.status(status).json({ error: status === 403 ? 'forbidden' : 'Error enviando notificaciones', details: error.message });
+    sendRouteError(res, error, 'renewal_notice_failed');
   }
 };

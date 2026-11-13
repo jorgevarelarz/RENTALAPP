@@ -1,6 +1,7 @@
 // src/controllers/policy.controller.ts
 import { Request, Response } from 'express';
 import { PolicyService } from '../services/policy.service';
+import { sendRouteError } from '../utils/routeError';
 
 export class PolicyController {
   static async createVersion(req: Request, res: Response) {
@@ -16,8 +17,13 @@ export class PolicyController {
       );
       res.status(201).json({ success: true, data: policy });
     } catch (error: any) {
-      const code = error.code === 11000 ? 409 : 400;
-      res.status(code).json({ success: false, error: error.message });
+      if (error?.code === 11000) {
+        return res.status(409).json({ success: false, error: 'policy_version_exists' });
+      }
+      if (error?.name === 'ValidationError') {
+        return res.status(400).json({ success: false, error: 'invalid_policy' });
+      }
+      sendRouteError(res, error, 'policy_create_failed');
     }
   }
 
@@ -26,7 +32,7 @@ export class PolicyController {
       const policies = await PolicyService.getActiveVersions();
       res.json({ success: true, data: policies });
     } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
+      sendRouteError(res, error, 'policy_list_failed');
     }
   }
 
@@ -57,7 +63,7 @@ export class PolicyController {
       if (error.message?.includes('already accepted')) {
         return res.status(400).json({ success: false, error: error.message });
       }
-      res.status(400).json({ success: false, error: error.message });
+      sendRouteError(res, error, 'policy_accept_failed');
     }
   }
 
@@ -69,7 +75,7 @@ export class PolicyController {
       const acceptances = await PolicyService.getUserAcceptances(userId);
       res.json({ success: true, data: acceptances });
     } catch (error: any) {
-      res.status(500).json({ success: false, error: error.message });
+      sendRouteError(res, error, 'policy_acceptances_failed');
     }
   }
 }

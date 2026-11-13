@@ -15,6 +15,7 @@ const ResetPassword = lazy(() => import("./pages/auth/ResetPassword"));
 const RegisterPage = lazy(() => import("./pages/auth/RegisterPage"));
 const OAuthCallbackPage = lazy(() => import("./pages/auth/OAuthCallbackPage"));
 const ForbiddenPage = lazy(() => import("./pages/system/ForbiddenPage"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 const PropertiesList = lazy(() => import("./pages/properties/PropertiesList"));
 const PropertyDetail = lazy(() => import("./pages/properties/PropertyDetail"));
 const FavoritesPage = lazy(() => import("./pages/properties/FavoritesPage"));
@@ -68,7 +69,9 @@ const AssistantPage = lazy(() => import("./pages/Assistant"));
 const InboundTestingPage = lazy(() => import("./pages/testing/InboundTestingPage"));
 const AgencyHome = lazy(() => import("./pages/agency/AgencyHome"));
 const AgencyLandlords = lazy(() => import("./pages/agency/AgencyLandlords"));
+const AgencyProperties = lazy(() => import("./pages/agency/AgencyProperties"));
 const InviteAccept = lazy(() => import("./pages/InviteAccept"));
+const CoTenantInviteAccept = lazy(() => import("./pages/CoTenantInviteAccept"));
 
 function RouteFallback() {
   return <div className="p-6 text-sm text-gray-500">Cargando...</div>;
@@ -113,13 +116,13 @@ export default function AppRoutes() {
               <Route path="/landlord/showings" element={withProtected(<LandlordShowings />, ["landlord"])} />
               <Route path="/admin" element={withProtected(<AdminHome />, ["admin"])} />
               <Route path="/tenant-pro" element={withProtected(<TenantProPage />, ["tenant"])} />
-              <Route path="/contracts" element={withProtected(<MyContracts />, ["tenant", "landlord", "admin"])} />
-              <Route path="/contracts/:id" element={withProtected(<ContractDetail />, ["tenant", "landlord", "admin"])} />
+              <Route path="/contracts" element={withProtected(<MyContracts />, ["tenant", "landlord", "agency", "admin"])} />
+              <Route path="/contracts/:id" element={withProtected(<ContractDetail />, ["tenant", "landlord", "agency", "admin"])} />
               <Route path="/contracts/:id/signed" element={<ServiceUpsell />} />
               <Route path="/me/favorites" element={withProtected(<FavoritesPage />, ["tenant", "landlord", "admin"])} />
-              <Route path="/contracts/new" element={withProtected(<ContractWizard />, ["landlord", "admin"])} />
+              <Route path="/contracts/new" element={withProtected(<ContractWizard />, ["landlord", "agency", "admin"])} />
               <Route path="/tickets" element={withProtected(<TicketsList />)} />
-              <Route path="/tickets/new" element={withProtected(<TicketCreatePage />, ["tenant", "landlord", "admin"])} />
+              <Route path="/tickets/new" element={withProtected(<TicketCreatePage />, ["tenant"])} />
               <Route path="/tickets/:id" element={withProtected(<TicketDetail />)} />
               <Route path="/owner/properties" element={withProtected(<LandlordDashboard />, ["landlord"])} />
               <Route path="/pro" element={withProtected(<ProDashboard />, ["pro"])} />
@@ -142,11 +145,12 @@ export default function AppRoutes() {
               <Route path="/admin/system-events" element={withProtected(<SystemEvents />, ["admin"])} />
               <Route path="/agency" element={withProtected(<AgencyHome />, ["agency"])} />
               <Route path="/agency/landlords" element={withProtected(<AgencyLandlords />, ["agency"])} />
-              <Route path="/pros" element={<ProList />} />
-              <Route path="/pros/:id" element={<ProDetail />} />
+              <Route path="/agency/properties" element={withProtected(<AgencyProperties />, ["agency"])} />
+              <Route path="/pros" element={withProtected(<ProList />)} />
+              <Route path="/pros/:id" element={withProtected(<ProDetail />)} />
               <Route path="/profile" element={withProtected(<ProfilePage />)} />
               <Route path="/403" element={<ForbiddenPage />} />
-              <Route path="*" element={<div style={{ padding: 24 }}>404</div>} />
+              <Route path="*" element={<NotFound />} />
             </Route>
 
             <Route element={<AuthLayout />}>
@@ -156,6 +160,7 @@ export default function AppRoutes() {
               <Route path="/forgot-password" element={<ForgotPassword />} />
               <Route path="/reset" element={<ResetPassword />} />
               <Route path="/invite/:token" element={<InviteAccept />} />
+              <Route path="/invites/accept" element={<CoTenantInviteAccept />} />
             </Route>
           </Routes>
         </Suspense>

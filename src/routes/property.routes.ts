@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate } from '../middleware/auth.middleware';
+import { authenticate, optionalAuthenticate } from '../middleware/auth.middleware';
 import { authorizeRoles } from '../middleware/role.middleware';
 import { assertRole } from '../middleware/assertRole';
 import { validate } from '../middleware/validate';
@@ -37,11 +37,14 @@ r.get(
   asyncHandler(ctrl.listMyFavorites),
 );
 
-r.get('/properties/:id', asyncHandler(ctrl.getById));
-r.get('/properties', asyncHandler(ctrl.search));
+r.get('/properties/mine', ...assertRole('landlord', 'agency', 'admin'), asyncHandler(ctrl.listMine));
+
+// Públicas: el anónimo solo ve anuncios activos; con sesión, también los propios
+r.get('/properties/:id', optionalAuthenticate, asyncHandler(ctrl.getById));
+r.get('/properties', optionalAuthenticate, asyncHandler(ctrl.search));
 
 r.post('/properties/:id/apply', ...assertRole('tenant', 'admin'), asyncHandler(ctrl.apply));
-r.get('/properties/:id/applications', authenticate, authorizeRoles('landlord', 'admin'), asyncHandler(ctrl.listApplications));
+r.get('/properties/:id/applications', authenticate, authorizeRoles('landlord', 'agency', 'admin'), asyncHandler(ctrl.listApplications));
 
 r.post('/properties/:id/subscribe-price', authenticate, asyncHandler(ctrl.subscribePriceAlert));
 r.delete('/properties/:id/subscribe-price', authenticate, asyncHandler(ctrl.unsubscribePriceAlert));

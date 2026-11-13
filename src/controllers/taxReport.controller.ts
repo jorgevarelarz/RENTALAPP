@@ -4,6 +4,8 @@ import PlatformEarning from '../models/platformEarning.model';
 import ServiceOffer from '../models/serviceOffer.model';
 import { calcPlatformFeeOnRent } from '../utils/rentFees';
 import PDFDocument from 'pdfkit';
+import { csvRows } from '../utils/csv';
+import { sendRouteError } from '../utils/routeError';
 
 type TaxReportItem = {
   date: string;
@@ -195,7 +197,7 @@ export async function getTaxReport(req: Request, res: Response) {
       items,
     });
   } catch (error: any) {
-    res.status(500).json({ error: error?.message || 'tax_report_failed' });
+    sendRouteError(res, error, 'tax_report_failed');
   }
 }
 
@@ -234,10 +236,9 @@ export async function exportTaxReportCsv(req: Request, res: Response) {
       ]),
     ];
 
-    res.send(lines.map(r => r.map((v: unknown) => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n'));
+    res.send(csvRows(lines));
   } catch (error: any) {
-    const status = error?.status || 500;
-    res.status(status).json({ error: error?.message || 'tax_report_export_failed' });
+    sendRouteError(res, error, 'tax_report_export_failed');
   }
 }
 
@@ -291,7 +292,6 @@ export async function exportTaxReportPdf(req: Request, res: Response) {
     res.setHeader('Content-Disposition', 'attachment; filename="tax-report.pdf"');
     res.send(buffer);
   } catch (error: any) {
-    const status = error?.status || 500;
-    res.status(status).json({ error: error?.message || 'tax_report_export_failed' });
+    sendRouteError(res, error, 'tax_report_export_failed');
   }
 }

@@ -10,6 +10,13 @@ interface PolicyModalProps {
   title?: string;
 }
 
+// Páginas legales del SPA (AppRoutes); la política de datos forma parte de la de privacidad
+const legalPaths: Record<string, string> = {
+  privacy_policy: '/legal/privacidad',
+  terms_of_service: '/legal/terminos',
+  data_processing: '/legal/privacidad',
+};
+
 const typeLabels: Record<string, string> = {
   privacy_policy: 'Política de Privacidad',
   terms_of_service: 'Términos de Servicio',
@@ -23,7 +30,7 @@ export default function PolicyModal({ isOpen, onClose, policyTypes, pendingType,
 
   const label = typeLabels[pendingType ?? 'privacy_policy'] || 'Política';
   const policyTitle = title || `Debes aceptar ${label}`;
-  const legalHref = pendingType ? `/api/legal/${pendingType.replace('_', '-')}` : undefined;
+  const legalHref = pendingType ? legalPaths[pendingType] : undefined;
 
   const handleAccept = () => {
     acceptPolicy();

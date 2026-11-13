@@ -33,19 +33,22 @@ const Dropzone: React.FC<Props> = ({ onFiles, label = 'Arrastra y suelta imágen
       role="button"
       aria-label="Subir imágenes"
       tabIndex={0}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') inputRef.current?.click(); }}
-      className={className}
-      style={{
-        padding: 16,
-        borderRadius: 12,
-        cursor: 'pointer',
-        textAlign: 'center',
-        color: 'var(--muted)',
-        ...style,
-        background: over ? 'rgba(79,70,229,0.08)' : style?.background,
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault(); // Espacio haría scroll de la página
+          inputRef.current?.click();
+        }
       }}
+      data-over={over || undefined}
+      className={[
+        'cursor-pointer rounded-xl p-4 text-center text-[var(--ra-muted)] outline-none',
+        'focus-visible:ring-2 focus-visible:ring-[var(--ra-blue)] focus-visible:ring-offset-2',
+        'data-[over=true]:border-[var(--ra-blue)] data-[over=true]:bg-[rgba(67,104,255,.08)]',
+        className,
+      ].filter(Boolean).join(' ')}
+      style={style}
     >
-      <input ref={inputRef} type="file" multiple accept="image/*" style={{ display: 'none' }} onChange={onChoose} />
+      <input ref={inputRef} type="file" multiple accept="image/*" hidden onChange={onChoose} />
       {label}
     </div>
   );

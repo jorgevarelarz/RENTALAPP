@@ -3,7 +3,7 @@ import { api as axios } from '../../api/client';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { useDebouncedValue } from '../../hooks/useDebouncedValue';
-import toast from 'react-hot-toast';
+import { useToast } from '../../context/ToastContext';
 import {
   ResponsiveContainer,
   LineChart,
@@ -59,6 +59,9 @@ export default function AdminAuditDashboard() {
   const lastSseRefreshAtRef = useRef<number>(0);
   const [weekly, setWeekly] = useState<WeeklyPoint[]>([]);
   const [weeksRange, setWeeksRange] = useState(8);
+  // Progreso de la descarga del ZIP (null: no se está exportando)
+  const [zipProgress, setZipProgress] = useState<number | null>(null);
+  const { push } = useToast();
 
   const debouncedUserId = useDebouncedValue(userId, 400);
   const debouncedDateFrom = useDebouncedValue(dateFrom, 400);
@@ -183,40 +186,19 @@ export default function AdminAuditDashboard() {
   const exportZip = async () => {
     const selectedIds = Object.keys(selected).filter(k => selected[k]);
     if (selectedIds.length === 0) {
-      toast.error('Selecciona al menos un contrato');
+      push({ title: 'Selecciona al menos un contrato', tone: 'error' });
       return;
     }
 
-    const toastId = 'zip-export';
-    let progressValue = 0;
-    const renderToast = () =>
-      toast.custom(
-        () => (
-          <div style={{ background: 'white', border: '1px solid #e5e7eb', padding: 12, borderRadius: 12, width: 320 }}>
-            <div style={{ fontWeight: 700 }}>Exportando ZIP…</div>
-            <div style={{ marginTop: 8, height: 8, background: '#f3f4f6', borderRadius: 999 }}>
-              <div style={{ height: 8, width: `${progressValue}%`, background: '#1d4ed8', borderRadius: 999 }} />
-            </div>
-            <div style={{ marginTop: 6, fontSize: 12, opacity: 0.7 }}>{progressValue}%</div>
-          </div>
-        ),
-        { id: toastId, duration: Infinity },
-      );
-
-    renderToast();
+    setZipProgress(0);
     try {
       const res = await axios.get('/api/admin/compliance/audit-trails/export', {
         params: { format: 'zip', contractIds: selectedIds.join(',') },
         responseType: 'blob',
         onDownloadProgress: (evt: any) => {
-          if (evt.total) {
-            progressValue = Math.min(100, Math.round((evt.loaded / evt.total) * 100));
-            renderToast();
-          }
+          if (evt.total) setZipProgress(Math.min(100, Math.round((evt.loaded / evt.total) * 100)));
         },
       });
-      toast.dismiss(toastId);
-      toast.success('ZIP descargado');
       const blob = new Blob([res.data], { type: 'application/zip' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -224,9 +206,11 @@ export default function AdminAuditDashboard() {
       a.download = 'audit-trails.zip';
       a.click();
       URL.revokeObjectURL(url);
+      push({ title: 'ZIP descargado', tone: 'success' });
     } catch (e: any) {
-      toast.dismiss(toastId);
-      toast.error(e?.message || 'Error exportando ZIP');
+      push({ title: e?.message || 'No se pudo exportar el ZIP', tone: 'error' });
+    } finally {
+      setZipProgress(null);
     }
   };
 
@@ -264,8 +248,8 @@ export default function AdminAuditDashboard() {
         </div>
         <button onClick={fetchData}>Refrescar</button>
         <button onClick={exportCsv}>Exportar CSV</button>
-        <button onClick={exportZip} disabled={Object.keys(selected).filter(k => selected[k]).length === 0}>
-          Exportar ZIP
+        <button onClick={exportZip} disabled={zipProgress !== null || Object.keys(selected).filter(k => selected[k]).length === 0}>
+          {zipProgress === null ? 'Exportar ZIP' : `Exportando ZIP… ${zipProgress} %`}
         </button>
         <button onClick={selectAllOnPage} disabled={data.length === 0}>Seleccionar página</button>
         <button onClick={clearSelection} disabled={Object.keys(selected).length === 0}>Limpiar selección</button>

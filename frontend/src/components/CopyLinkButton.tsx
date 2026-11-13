@@ -1,6 +1,8 @@
 import React from 'react';
+import { useToast } from '../context/ToastContext';
 
 export default function CopyLinkButton({ label = 'Copiar enlace' }: { label?: string }) {
+  const { push } = useToast();
   const onCopy = async () => {
     try {
       const url = window.location.href;
@@ -10,9 +12,9 @@ export default function CopyLinkButton({ label = 'Copiar enlace' }: { label?: st
         const ta = document.createElement('textarea');
         ta.value = url; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
       }
-      try { require('react-hot-toast').toast.success('Enlace copiado'); } catch {}
+      push({ title: 'Enlace copiado', tone: 'success' });
     } catch (e) {
-      try { require('react-hot-toast').toast.error('No se pudo copiar'); } catch {}
+      push({ title: 'No se pudo copiar el enlace', tone: 'error' });
     }
   };
   return (

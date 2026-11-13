@@ -4,6 +4,7 @@ import { Client, Issuer, generators } from 'openid-client';
 import { User } from '../models/user.model';
 import { OAuthLoginCode } from '../models/oauthLoginCode.model';
 import { getJwtSecret } from '../utils/getJwtSecret';
+import { findUserByEmail } from '../utils/userEmail';
 
 export type OAuthProvider = 'google' | 'apple';
 export type OAuthMode = 'login' | 'register';
@@ -39,6 +40,9 @@ export function sanitizeOAuthRedirect(value: unknown, role: PublicRole = 'tenant
   // Browsers normalise backslashes to slashes, so "/\evil.com" resolves as the
   // protocol-relative "//evil.com". Reject both separators after the leading slash.
   if (typeof value !== 'string' || !value.startsWith('/') || /^\/[/\\]/.test(value)) return fallback;
+  // Los navegadores ignoran tabuladores y saltos de línea en URLs: "/\t/evil.com" acaba siendo
+  // "//evil.com". Cualquier carácter de control o barra invertida invalida el destino.
+  if (/[\u0000-\u001f\u007f\\]/.test(value)) return fallback;
   return value;
 }
 
@@ -210,7 +214,7 @@ export async function resolveSocialUser(
     throw new Error('El proveedor no confirmó un correo electrónico');
   }
 
-  user = await User.findOne({ email: profile.email });
+  user = await findUserByEmail(profile.email);
   if (!user && mode === 'login') {
     throw new OAuthAccountNotFoundError('No existe una cuenta vinculada');
   }
@@ -227,7 +231,19 @@ export async function resolveSocialUser(
       throw new Error('El correo ya está vinculado a otra identidad');
     }
     user.set(`socialAuth.${profile.provider}`, identity);
-    if (!(user as any).emailVerifiedAt) (user as any).emailVerifiedAt = new Date();
+    if (!(user as any).emailVerifiedAt) {
+      // El registro con contraseña no verifica el correo: alguien pudo crear la cuenta con el
+      // email de la víctima antes de que esta entrara con Google o Apple. Al confirmar el
+      // proveedor que el correo es suyo, se anulan la contraseña y cualquier enlace de
+      // recuperación previos para que quien la creó no conserve el acceso.
+      // Si la contraseña era del propio titular, puede recuperarla con "He olvidado mi contraseña".
+      user.set('passwordHash', undefined);
+      user.set('resetToken', undefined);
+      user.set('resetTokenExp', undefined);
+      // Y se cierran las sesiones que ya tuviera abiertas con esa contraseña (A3).
+      user.set('tokenVersion', (Number((user as any).tokenVersion) || 0) + 1);
+      (user as any).emailVerifiedAt = new Date();
+    }
     if (!user.avatar && profile.avatar) user.avatar = profile.avatar;
     await user.save();
     return user;

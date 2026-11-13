@@ -1,4 +1,5 @@
 import { Schema, model, Document, Types } from 'mongoose';
+import { paymentDisputeSchema, type PaymentDispute } from './paymentDispute.schema';
 import { ALL_CONTRACT_STATUSES, type PersistedContractStatus } from '../domain/contracts/status';
 
 /**
@@ -44,6 +45,8 @@ export interface IContract extends Document {
     envelopeId?: string;
     status?: 'none' | 'created' | 'sent' | 'completed' | 'declined' | 'error';
     updatedAt?: Date;
+    /** Bloqueo mientras se crea el sobre de firma (evita sobres duplicados). */
+    lockedAt?: Date;
     events?: { at: Date; type: string; meta?: Record<string, unknown> }[];
     providerEventId?: string;
     pdfUrl?: string;
@@ -69,6 +72,15 @@ export interface IContract extends Document {
    */
   depositPaid?: boolean;
   depositPaidAt?: Date;
+  /** Última sesión de Stripe Checkout de la fianza; se reutiliza mientras siga abierta. */
+  depositCheckoutSessionId?: string;
+  /** PaymentIntent del Checkout de la fianza, para reconocer sus devoluciones y disputas. */
+  depositPaymentIntentId?: string;
+  /** Euros de la fianza devueltos en Stripe (también parciales); `depositRefundedAt` solo si es total. */
+  depositAmountRefunded?: number;
+  depositRefundedAt?: Date;
+  /** Disputa (contracargo) abierta sobre el cobro de la fianza. */
+  depositDispute?: PaymentDispute;
   history?: {
     ts: Date;
     actorId?: string;
@@ -125,6 +137,7 @@ const contractSchema = new Schema<IContract>(
       envelopeId: { type: String },
       status: { type: String, enum: ['none', 'created', 'sent', 'completed', 'declined', 'error'], default: 'none' },
       updatedAt: { type: Date },
+      lockedAt: { type: Date },
       recipientUrls: {
         landlordUrl: { type: String },
         tenantUrl: { type: String },
@@ -160,6 +173,11 @@ const contractSchema = new Schema<IContract>(
     // Deposit paid flag and timestamp
     depositPaid: { type: Boolean, default: false },
     depositPaidAt: { type: Date },
+    depositCheckoutSessionId: { type: String, select: false },
+    depositPaymentIntentId: { type: String, index: { sparse: true } },
+    depositAmountRefunded: { type: Number },
+    depositRefundedAt: { type: Date },
+    depositDispute: { type: paymentDisputeSchema, default: undefined },
     signFeeCollected: { type: Boolean, default: false },
     signFeeCollectedAt: { type: Date },
     history: {
@@ -183,5 +201,7 @@ contractSchema.index({ landlord: 1 });
 contractSchema.index({ tenant: 1 });
 contractSchema.index({ agencyId: 1 });
 contractSchema.index({ refAgencyId: 1, status: 1 });
+contractSchema.index({ property: 1, status: 1 });
+contractSchema.index({ status: 1 });
 
 export const Contract = model<IContract>('Contract', contractSchema);

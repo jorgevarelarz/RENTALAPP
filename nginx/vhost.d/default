@@ -1,3 +1,9 @@
+# Los PDFs de contratos llevan datos personales: nunca se sirven en estático
+# (Express también los bloquea; ^~ gana a las demás location de /uploads/)
+location ^~ /uploads/contracts/ {
+    return 404;
+}
+
 location /uploads/ {
     alias /uploads/;
     autoindex off;

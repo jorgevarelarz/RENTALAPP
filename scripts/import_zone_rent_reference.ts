@@ -1,6 +1,6 @@
 import fs from 'fs';
 import mongoose from 'mongoose';
-import { PROVINCE_REGION, ZoneRentReference, placeNameVariants, regionKeysFor, zoneAreaKey } from '../src/modules/rentalPublic/models/zoneRentReference.model';
+import { PROVINCE_REGION, REGION_ALIASES, ZoneRentReference, normalizePlaceName, placeNameVariants, regionKeysFor, zoneAreaKey } from '../src/modules/rentalPublic/models/zoneRentReference.model';
 
 /**
  * Imports municipal reference rents from a simple CSV (no embedded commas):
@@ -37,6 +37,13 @@ export function parseReferences(csv: string, source: string, effectiveFrom: Date
     throw new Error('CSV header must contain: region, city, pricePerM2');
   }
 
+  // Compara sin tildes ni guiones y acepta alias ("Castilla y León", "Comunidad de Madrid")
+  const regionMatchesProvince = (region: string, ineCode: string) => {
+    const expected = PROVINCE_REGION[ineCode.slice(0, 2)];
+    if (!expected) return false;
+    return [normalizePlaceName(expected), ...(REGION_ALIASES[expected] || [])].includes(normalizePlaceName(region));
+  };
+
   const seen = new Set<string>();
   return rows.map((row, index) => {
     const cells = splitCsvLine(row);
@@ -46,7 +53,7 @@ export function parseReferences(csv: string, source: string, effectiveFrom: Date
     const ineCode = codeIdx >= 0 ? cells[codeIdx] : undefined;
     const sampleSize = sampleIdx >= 0 ? Number(cells[sampleIdx]) : undefined;
     if (cells.length !== columns.length || !region || !city || !Number.isFinite(pricePerM2) || pricePerM2 <= 0 ||
-        (codeIdx >= 0 && (!ineCode || !/^\d{5}$/.test(ineCode) || PROVINCE_REGION[ineCode.slice(0, 2)] !== region)) ||
+        (codeIdx >= 0 && (!ineCode || !/^\d{5}$/.test(ineCode) || !regionMatchesProvince(region, ineCode))) ||
         (sampleSize !== undefined && (!Number.isInteger(sampleSize) || sampleSize <= 0))) {
       throw new Error(`Invalid reference at CSV row ${index + 2}`);
     }

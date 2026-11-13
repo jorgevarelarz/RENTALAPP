@@ -1,6 +1,6 @@
 import React from 'react';
 import Badge from './ui/Badge';
-import { getStatusLabel, getStatusTone, STATUS_TONE_STYLES } from '../utils/statusBadges';
+import { getStatusLabel, getStatusTone } from '../utils/statusBadges';
 
 type ContractStatus =
   | 'draft'
@@ -16,7 +16,6 @@ type ContractStatus =
 interface Props {
   status: ContractStatus;
   className?: string;
-  style?: React.CSSProperties;
 }
 
 const CONTRACT_BADGE_LABELS: Record<string, string> = {
@@ -25,20 +24,13 @@ const CONTRACT_BADGE_LABELS: Record<string, string> = {
   proposed: 'Visita propuesta',
   scheduled: 'Visita agendada',
   rejected: 'Rechazada',
-  pending_signature: 'Pendiente firma',
-  signing: 'Pendiente firma',
+  pending_signature: 'Pendiente de firma',
+  signing: 'Pendiente de firma',
   signed: 'Firmado',
 };
 
-export const ContractStatusBadge: React.FC<Props> = ({ status, className, style }) => {
-  const tone = STATUS_TONE_STYLES[getStatusTone(status)];
-
-  return (
-    <Badge
-      className={className}
-      style={{ ...tone, ...style }}
-    >
-      {CONTRACT_BADGE_LABELS[status] || getStatusLabel(status)}
-    </Badge>
-  );
-};
+export const ContractStatusBadge: React.FC<Props> = ({ status, className }) => (
+  <Badge tone={getStatusTone(status)} className={className}>
+    {CONTRACT_BADGE_LABELS[status] || getStatusLabel(status)}
+  </Badge>
+);

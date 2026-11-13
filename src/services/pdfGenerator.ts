@@ -1,5 +1,6 @@
 import PDFDocument from 'pdfkit';
 import fs from 'fs';
+import os from 'os';
 import path from 'path';
 
 export const generateContractPdfFile = (contract: any): Promise<string> => {
@@ -7,7 +8,8 @@ export const generateContractPdfFile = (contract: any): Promise<string> => {
     try {
       const doc = new PDFDocument({ margin: 50 });
       const filename = `contract-${contract._id || contract.id}.pdf`;
-      const uploadsDir = path.join(process.cwd(), 'uploads');
+      // Fuera de /uploads (público): el PDF lleva nombres y DNI y solo se usa para enviarlo a firmar
+      const uploadsDir = path.join(os.tmpdir(), 'rentalapp-contracts');
       const filePath = path.join(uploadsDir, filename);
 
       if (!fs.existsSync(uploadsDir)) {

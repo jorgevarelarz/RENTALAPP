@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import mongoose from 'mongoose';
 import ServiceOffer from '../models/serviceOffer.model';
 import Conversation from '../models/conversation.model';
 import Message from '../models/message.model';
@@ -9,8 +10,11 @@ import { stripe } from '../utils/stripe';
 import PlatformEarning from '../models/platformEarning.model';
 import { Contract } from '../models/contract.model';
 import { User } from '../models/user.model';
+import { sendRouteError } from '../utils/routeError';
 
 const r = Router();
+// Reprogramar y cancelar citas de un servicio: app.ts lo monta en /api/appointments.
+export const serviceOfferAppointmentRoutes = Router();
 
 async function publishSystem(conversationId: string, senderId: string, systemCode: string, payload?: any) {
   await Message.create({ conversationId, senderId, type: 'system', systemCode, payload, readBy: [] });
@@ -32,7 +36,7 @@ async function ensureContractConversation(contractId: string): Promise<string> {
   return conv.id;
 }
 
-r.post('/service-offers', async (req, res) => {
+r.post('/', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { conversationId, serviceKey, title, description, amount, currency = 'EUR', ticketId } = req.body || {};
@@ -48,11 +52,11 @@ r.post('/service-offers', async (req, res) => {
     await publishSystem(conversationId, userId, 'SERVICE_OFFERED', { offerId: offer.id, amount });
     res.status(201).json(offer);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
-r.post('/service-offers/:offerId/decision', async (req, res) => {
+r.post('/:offerId/decision', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { offerId } = req.params;
@@ -71,11 +75,11 @@ r.post('/service-offers/:offerId/decision', async (req, res) => {
     }
     res.json(offer);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
-r.post('/service-offers/:offerId/schedule', async (req, res) => {
+r.post('/:offerId/schedule', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { offerId } = req.params;
@@ -105,67 +109,84 @@ r.post('/service-offers/:offerId/schedule', async (req, res) => {
     }
     res.json({ offer, appointment });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
-r.post('/service-offers/:offerId/accept-slot', async (req, res) => {
+const STALE_CLAIM_MS = 5 * 60 * 1000;
+
+// El propietario acepta la cita y paga. Aquí solo se crea el cobro: la oferta queda en
+// `payment_pending` y es el webhook `payment_intent.succeeded` quien la confirma y
+// registra la ganancia, una sola vez.
+r.post('/:offerId/accept-slot', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { offerId } = req.params;
-    const { paymentMethod = 'card', customerId } = req.body || {};
+    const paymentMethod = req.body?.paymentMethod === 'sepa' ? 'sepa_debit' : 'card';
     const offer = await ServiceOffer.findById(offerId);
     if (!offer) throw Object.assign(new Error('Offer not found'), { status: 404 });
     if (offer.ownerId !== userId) throw Object.assign(new Error('Forbidden'), { status: 403 });
+
+    // Ya hay un cobro abierto: se reanuda en lugar de crear otro.
+    if (offer.status === 'payment_pending' && offer.paymentIntentId) {
+      const current = await stripe.paymentIntents.retrieve(offer.paymentIntentId);
+      if (current.status !== 'canceled') {
+        return res.json({ offer, paymentIntent: { id: current.id, client_secret: current.client_secret, status: current.status } });
+      }
+    }
+    const resumable = offer.status === 'scheduled' || offer.status === 'payment_pending';
+    if (!resumable) throw Object.assign(new Error('Offer is not awaiting payment'), { status: 409 });
+
     const fee = calcServiceFee(offer.amount);
     const pro = await User.findById(offer.proId).lean();
     const destination = pro?.stripeAccountId;
     if (!destination) throw Object.assign(new Error('Pro missing stripe account'), { status: 400 });
-    const paymentIntent = await stripe.paymentIntents.create({
-      amount: Math.round(offer.amount * 100),
-      currency: offer.currency,
-      payment_method_types: [paymentMethod],
-      customer: customerId,
-      application_fee_amount: Math.round(fee.fee * 100),
-      transfer_data: { destination },
-      metadata: { offerId: offer.id },
-    });
-    offer.status = paymentMethod === 'sepa' ? 'payment_pending' : 'paid';
-    await offer.save();
-    await publishSystem(offer.conversationId, userId, paymentMethod === 'sepa' ? 'PAYMENT_PROCESSING' : 'PAYMENT_SUCCEEDED', { offerId });
-    if (paymentMethod !== 'sepa') {
-      offer.status = 'confirmed';
-      await offer.save();
-      if (offer.appointmentId) {
-        await Appointment.findByIdAndUpdate(offer.appointmentId, { status: 'confirmed' });
-      }
-      // conversation pro<->tenant
-      if (offer.appointmentId) {
-        const appointment = await Appointment.findById(offer.appointmentId).lean();
-        if (appointment) {
-          let aConv = await Conversation.findOne({ kind: 'appointment', refId: offer.appointmentId });
-          if (!aConv) {
-            aConv = await Conversation.create({ kind: 'appointment', refId: offer.appointmentId, participants: [appointment.proId, appointment.tenantId], meta: { appointmentId: offer.appointmentId, proUserId: appointment.proId, tenantId: appointment.tenantId, ownerId: appointment.ownerId, ticketId: appointment.ticketId }, unread: {} });
-          }
-          await publishSystem(aConv.id, userId, 'APPOINTMENT_CONFIRMED', { offerId });
-        }
-      }
-      if (offer.ticketId) {
-        const conv = await Conversation.findById(offer.conversationId);
-        if (conv?.meta?.contractId) {
-          const contractConvId = await ensureContractConversation(conv.meta.contractId);
-          await publishSystem(contractConvId, userId, 'APPOINTMENT_CONFIRMED', { offerId });
-        }
-      }
-      await PlatformEarning.create({ kind: 'service', offerId, proId: offer.proId, serviceKey: offer.serviceKey, gross: fee.gross, fee: fee.fee, netToPro: fee.netToPro, currency: offer.currency, paymentRef: paymentIntent.id });
+    const owner = mongoose.isValidObjectId(userId) ? await User.findById(userId).select('stripeCustomerId').lean() : null;
+
+    // Reclamo atómico: solo una petición pasa de `scheduled` a `payment_pending`.
+    // Un intento cancelado o un reclamo abandonado (sin intento) se pueden retomar.
+    const claimed = await ServiceOffer.findOneAndUpdate(
+      {
+        _id: offer._id,
+        ownerId: userId,
+        $or: [
+          { status: 'scheduled' },
+          { status: 'payment_pending', paymentIntentId: offer.paymentIntentId || '__none__' },
+          { status: 'payment_pending', paymentIntentId: null, updatedAt: { $lt: new Date(Date.now() - STALE_CLAIM_MS) } },
+        ],
+      },
+      { $set: { status: 'payment_pending' }, $unset: { paymentIntentId: 1 } },
+      { new: true },
+    );
+    if (!claimed) throw Object.assign(new Error('Payment already in progress'), { status: 409 });
+
+    let paymentIntent;
+    try {
+      paymentIntent = await stripe.paymentIntents.create({
+        amount: Math.round(offer.amount * 100),
+        currency: offer.currency,
+        payment_method_types: [paymentMethod],
+        ...(owner?.stripeCustomerId ? { customer: owner.stripeCustomerId } : {}),
+        application_fee_amount: Math.round(fee.fee * 100),
+        transfer_data: { destination },
+        metadata: { offerId: offer.id },
+      });
+    } catch (err) {
+      await ServiceOffer.updateOne({ _id: offer._id, status: 'payment_pending', paymentIntentId: null }, { status: 'scheduled' });
+      throw err;
     }
-    res.json({ offer, paymentIntent });
+    claimed.paymentIntentId = paymentIntent.id;
+    await claimed.save();
+    res.json({
+      offer: claimed,
+      paymentIntent: { id: paymentIntent.id, client_secret: paymentIntent.client_secret, status: paymentIntent.status },
+    });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
-r.post('/appointments/:id/reschedule', async (req, res) => {
+serviceOfferAppointmentRoutes.post('/:id/reschedule', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
@@ -191,11 +212,11 @@ r.post('/appointments/:id/reschedule', async (req, res) => {
     }
     res.json(a);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
-r.post('/appointments/:id/cancel', async (req, res) => {
+serviceOfferAppointmentRoutes.post('/:id/cancel', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { id } = req.params;
@@ -217,11 +238,11 @@ r.post('/appointments/:id/cancel', async (req, res) => {
     }
     res.json(a);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 
-r.post('/service-offers/:offerId/complete', async (req, res) => {
+r.post('/:offerId/complete', async (req, res) => {
   try {
     const userId = getUserId(req);
     const { offerId } = req.params;
@@ -235,7 +256,7 @@ r.post('/service-offers/:offerId/complete', async (req, res) => {
     await publishSystem(offer.conversationId, userId, 'SERVICE_DONE', { offerId, invoiceUrl });
     res.json(offer);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message });
+    sendRouteError(res, err, 'service_offer_failed');
   }
 });
 

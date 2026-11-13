@@ -15,11 +15,21 @@ beforeAll(async () => {
 });
 
 describe('AI routes', () => {
-  it('returns health status', async () => {
-    const res = await request(app).get('/api/ai/health?test=true');
+  it('returns health status for an admin running the live test', async () => {
+    const res = await request(app).get('/api/ai/health?test=true').set('x-user-role', 'admin');
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
     expect(res.body.model).toBe('gemini-flash-latest');
+  });
+
+  it('forbids the live model test to non-admins', async () => {
+    const res = await request(app).get('/api/ai/health?test=true').set('x-user-role', 'landlord');
+    expect(res.status).toBe(403);
+  });
+
+  it('allows the basic health check to any verified user', async () => {
+    const res = await request(app).get('/api/ai/health').set('x-user-role', 'tenant');
+    expect(res.status).toBe(200);
   });
 
   it('generates a description', async () => {

@@ -1,6 +1,7 @@
 import React from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { roleHome } from "../utils/roleHome";
 
 type Props = {
   roles: Array<"tenant" | "landlord" | "pro" | "admin" | "agency">;
@@ -12,14 +13,7 @@ export default function RoleGuard({ roles, children }: Props) {
 
   if (!user) return <Navigate to="/login" replace />;
   if (!roles.includes(user.role)) {
-    const home: Record<string, string> = {
-      tenant: '/tenant',
-      landlord: '/landlord',
-      pro: '/pro',
-      admin: '/admin',
-      agency: '/agency',
-    };
-    return <Navigate to={home[user.role] || '/'} replace />;
+    return <Navigate to={roleHome(user.role)} replace />;
   }
 
   return children;
