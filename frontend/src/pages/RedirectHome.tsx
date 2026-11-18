@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LandingPage from './LandingPage';
+import { roleHome } from '../utils/roleHome';
 
 export default function RedirectHome() {
   const { user } = useAuth();
@@ -9,19 +10,7 @@ export default function RedirectHome() {
 
   useEffect(() => {
     if (user) {
-      const path =
-        user.role === 'tenant'
-          ? '/tenant'
-          : user.role === 'landlord'
-          ? '/landlord'
-          : user.role === 'pro'
-          ? '/pro'
-          : user.role === 'admin'
-          ? '/admin'
-          : user.role === 'agency'
-          ? '/agency'
-          : '/properties';
-      nav(path, { replace: true });
+      nav(roleHome(user.role, '/properties'), { replace: true });
     }
   }, [user, nav]);
 

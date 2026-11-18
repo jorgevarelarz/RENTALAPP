@@ -1,11 +1,11 @@
-import LegalLayout, { LEGAL_CONTACT_EMAIL, LEGAL_OWNER } from './LegalLayout';
+import LegalLayout, { LEGAL_CONTACT_EMAIL, LEGAL_NIF, LEGAL_OWNER } from './LegalLayout';
 
 export default function TermsPage() {
   return (
     <LegalLayout
       title="Términos y condiciones de uso"
-      updated="6 de julio de 2026"
-      intro={`Estos términos regulan el uso de la plataforma app.rentalapp.es, operada por ${LEGAL_OWNER}. Al crear una cuenta aceptas estas condiciones; léelas antes de usar el servicio.`}
+      updated="15 de octubre de 2026"
+      intro={`Estos términos regulan el uso de la plataforma app.rentalapp.es, operada por ${LEGAL_OWNER} (NIF ${LEGAL_NIF}). Al crear una cuenta aceptas estas condiciones; léelas antes de usar el servicio.`}
       sections={[
         {
           title: 'Qué es RentalApp',

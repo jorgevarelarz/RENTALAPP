@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { Property } from '../models/property.model';
 import { UserFavorite } from '../models/userFavorite.model';
 import { AlertSubscription } from '../models/alertSubscription.model';
@@ -10,12 +11,25 @@ import { SystemEvent } from '../models/systemEvent.model';
 import { emitSystemEvent } from '../events/system.events';
 import { recordFunnelEvent } from '../services/funnelEvents.service';
 import { suggestRent } from '../services/rentSuggestion.service';
+import { isManagingAgency } from '../utils/propertyAccess';
+import { notifyApplication } from '../services/applicationNotice.service';
+import { accentInsensitivePattern } from '../utils/searchRegex';
 
 const tensionedAreaDateQuery = (changeDate: Date) => ({
   active: true,
   effectiveFrom: { $lte: changeDate },
   $or: [{ effectiveTo: { $exists: false } }, { effectiveTo: null }, { effectiveTo: { $gte: changeDate } }],
 });
+
+// Las suscripciones guardan el usuario; el aviso va a su email.
+async function subscriberEmails(propertyId: string, type: 'price' | 'availability') {
+  const subs = await AlertSubscription.find({ propertyId, type }).select('userId').lean();
+  if (subs.length === 0) return [];
+  const users = await User.find({ _id: { $in: subs.map((s) => s.userId) } })
+    .select('email')
+    .lean();
+  return users.map((u) => u.email).filter((email): email is string => Boolean(email));
+}
 
 const isGeoPoint = (value: any): value is { type: 'Point'; coordinates: [number, number] } =>
   value?.type === 'Point' &&
@@ -169,16 +183,14 @@ export async function update(req: Request, res: Response) {
     prevAvailableFrom !== updatedAvailableFrom || prevAvailableTo !== updatedAvailableTo;
 
   if (priceChanged) {
-    const subs = await AlertSubscription.find({ propertyId: id, type: 'price' });
-    for (const s of subs) {
-      await sendPriceAlert(String(s.userId), updated);
+    for (const email of await subscriberEmails(id, 'price')) {
+      await sendPriceAlert(email, updated);
     }
   }
 
   if (availabilityChanged) {
-    const subs = await AlertSubscription.find({ propertyId: id, type: 'availability' });
-    for (const s of subs) {
-      await sendAvailabilityAlert(String(s.userId), updated);
+    for (const email of await subscriberEmails(id, 'availability')) {
+      await sendAvailabilityAlert(email, updated);
     }
   }
 
@@ -260,10 +272,66 @@ export async function handoffToOwner(req: Request, res: Response) {
   res.json({ ok: true, propertyId: String(p._id), agencyAccess: p.agencyAccess, transferredAt: p.agencyTransferredAt });
 }
 
+const SORTABLE_FIELDS = new Set(['createdAt', 'price', 'sizeM2', 'rooms', 'availableFrom', 'viewsCount']);
+
+/** Quién ve qué: admin todo; con sesión, los activos y los propios; anónimo, solo los activos. */
+const visibilityFilter = (req: Request): Record<string, unknown> | null => {
+  const user: any = (req as any).user;
+  if (user?.role === 'admin') return null;
+  const userId = user?.id || user?._id;
+  if (!userId) return { status: 'active' };
+  return { $or: [{ status: 'active' }, { owner: userId }, { agencyId: userId }] };
+};
+
+// Campos internos del anuncio: quién lo gestiona y su historial no son para cualquiera que lo vea
+const PRIVATE_PROPERTY_FIELDS = ['owner', 'agencyId', 'refAgencyId', 'agencyAccess', 'agencyTransferredAt', 'history'];
+
+const viewerId = (req: Request) => String((req as any).user?.id || (req as any).user?._id || '');
+
+const canManageProperty = (req: Request, p: any) => {
+  if ((req as any).user?.role === 'admin') return true;
+  const userId = viewerId(req);
+  return !!userId && (String(p.owner) === userId || String(p.agencyId || '') === userId);
+};
+
+const toPropertyView = (req: Request, p: any) => {
+  const o = typeof p?.toObject === 'function' ? p.toObject() : { ...p };
+  if (canManageProperty(req, p)) return o;
+  for (const field of PRIVATE_PROPERTY_FIELDS) delete o[field];
+  return o;
+};
+
 export async function getById(req: Request, res: Response) {
+  if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(404).json({ error: 'not_found' });
   const p = await Property.findById(req.params.id);
   if (!p) return res.status(404).json({ error: 'not_found' });
-  res.json(p);
+  const mine = canManageProperty(req, p);
+  if (p.status !== 'active' && !mine) return res.status(404).json({ error: 'not_found' });
+
+  const view: any = toPropertyView(req, p);
+  view._mine = mine;
+  const userId = viewerId(req);
+  if (userId && Types.ObjectId.isValid(userId)) {
+    const [fav, application] = await Promise.all([
+      UserFavorite.exists({ userId, propertyId: p._id }),
+      (req as any).user?.role === 'tenant'
+        ? Application.findOne({ propertyId: p._id, tenantId: userId }).select('status visitDate proposedDate proposedBy message createdAt').lean()
+        : null,
+    ]);
+    view._liked = !!fav;
+    if (application) {
+      const a: any = application;
+      view._application = {
+        status: a.status,
+        createdAt: a.createdAt,
+        visitDate: a.visitDate,
+        proposedDate: a.proposedDate,
+        proposedBy: a.proposedBy,
+        message: a.message,
+      };
+    }
+  }
+  res.json(view);
 }
 
 export async function search(req: Request, res: Response) {
@@ -293,7 +361,10 @@ export async function search(req: Request, res: Response) {
   } = req.query as any;
 
   if (region) q.region = String(region).toLowerCase();
-  if (city) q.city = city;
+  // Valores de query forzados a string: ?city[$regex]=. no debe llegar como operador.
+  // La ciudad entera, sin distinguir mayúsculas ni tildes: «a coruna» encuentra «A Coruña»
+  const cityText = city ? accentInsensitivePattern(String(city).trim().slice(0, 100)) : '';
+  if (cityText) q.city = { $regex: `^${cityText}$`, $options: 'i' };
   if (priceMin || priceMax) q.price = { ...(priceMin ? { $gte: +priceMin } : {}), ...(priceMax ? { $lte: +priceMax } : {}) };
   if (roomsMin || roomsMax) q.rooms = { ...(roomsMin ? { $gte: +roomsMin } : {}), ...(roomsMax ? { $lte: +roomsMax } : {}) };
   if (bathMin) q.bathrooms = { $gte: +bathMin };
@@ -306,16 +377,23 @@ export async function search(req: Request, res: Response) {
     q.onlyTenantPro = ['true', '1', 'yes', 'on'].includes(String(onlyProParam).toLowerCase());
   }
   if (status) q.status = String(status);
+  const and: Record<string, unknown>[] = [];
+  const visibility = visibilityFilter(req);
+  if (visibility) and.push(visibility);
   if (text) {
-    const safe = String(text).trim();
+    // Texto escapado, acotado y sin distinguir tildes: sin escapar, ?q=(a+)+$ es una regex arbitraria contra toda la colección
+    const safe = accentInsensitivePattern(String(text).trim().slice(0, 100));
     if (safe) {
-      q.$or = [
-        { title: { $regex: safe, $options: 'i' } },
-        { city: { $regex: safe, $options: 'i' } },
-        { address: { $regex: safe, $options: 'i' } },
-      ];
+      and.push({
+        $or: [
+          { title: { $regex: safe, $options: 'i' } },
+          { city: { $regex: safe, $options: 'i' } },
+          { address: { $regex: safe, $options: 'i' } },
+        ],
+      });
     }
   }
+  if (and.length) q.$and = and;
 
   let geo: any = {};
   if (nearLng && nearLat && maxKm) {
@@ -329,9 +407,10 @@ export async function search(req: Request, res: Response) {
     };
   }
 
-  const sortSpec: [string, 1 | -1][] = [[String(sort), String(dir).toLowerCase() === 'asc' ? 1 : -1]];
-  const pg = Math.max(1, parseInt(String(page)));
-  const lim = Math.min(50, Math.max(1, parseInt(String(limit))));
+  const sortField = SORTABLE_FIELDS.has(String(sort)) ? String(sort) : 'createdAt';
+  const sortSpec: [string, 1 | -1][] = [[sortField, String(dir).toLowerCase() === 'asc' ? 1 : -1]];
+  const pg = Math.max(1, parseInt(String(page)) || 1);
+  const lim = Math.min(50, Math.max(1, parseInt(String(limit)) || 20));
 
   const hasGeo = Boolean((geo as any).location);
   if (hasGeo) {
@@ -350,7 +429,7 @@ export async function search(req: Request, res: Response) {
     meta: { city, region, priceMin, priceMax, roomsMin, roomsMax, onlyTenantPro: onlyProParam, total },
   });
 
-  res.json({ items, page: pg, limit: lim, total });
+  res.json({ items: items.map((p) => toPropertyView(req, p)), page: pg, limit: lim, total });
 }
 
 export async function favorite(req: Request, res: Response) {
@@ -378,11 +457,33 @@ export async function listMyFavorites(req: Request, res: Response) {
     .sort({ createdAt: -1 })
     .populate('propertyId')
     .lean();
+  // Un guardado que su dueño ha retirado o devuelto a borrador deja de verse, como en la ficha
   const items = rows
     .map((row: any) => row.propertyId)
-    .filter(Boolean)
-    .map((p: any) => ({ ...p, _liked: true }));
+    .filter((p: any) => p && (p.status === 'active' || canManageProperty(req, p)))
+    .map((p: any) => ({ ...toPropertyView(req, p), _liked: true }));
   res.json({ items });
+}
+
+const MINE_STATUSES = new Set(['draft', 'active', 'archived']);
+
+// Inmuebles que gestiona quien pide (dueño o agencia), con borradores y retirados, paginados
+export async function listMine(req: Request, res: Response) {
+  const userId = viewerId(req);
+  if (!Types.ObjectId.isValid(userId)) return res.status(401).json({ error: 'unauthorized' });
+  const { status, page = '1', limit = '50' } = req.query as any;
+  const q: any = { $or: [{ owner: userId }, { agencyId: userId }] };
+  if (status !== undefined) {
+    if (!MINE_STATUSES.has(String(status))) return res.status(400).json({ error: 'invalid_status' });
+    q.status = String(status);
+  }
+  const pg = Math.max(1, parseInt(String(page)) || 1);
+  const lim = Math.min(100, Math.max(1, parseInt(String(limit)) || 50));
+  const [items, total] = await Promise.all([
+    Property.find(q).sort({ createdAt: -1, _id: -1 }).skip((pg - 1) * lim).limit(lim),
+    Property.countDocuments(q),
+  ]);
+  res.json({ items: items.map((p) => toPropertyView(req, p)), page: pg, limit: lim, total });
 }
 
 export async function subscribePriceAlert(req: Request, res: Response) {
@@ -400,13 +501,36 @@ export async function unsubscribePriceAlert(req: Request, res: Response) {
 }
 
 export async function countView(req: Request, res: Response) {
-  await Property.findByIdAndUpdate(req.params.id, { $inc: { viewsCount: 1 } });
+  if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(404).json({ error: 'not_found' });
+  // Solo cuentan las visitas a anuncios publicados
+  const r = await Property.updateOne({ _id: req.params.id, status: 'active' }, { $inc: { viewsCount: 1 } });
+  if (!r.matchedCount) return res.status(404).json({ error: 'not_found' });
   res.json({ ok: true });
 }
 
+export const APPLICATION_MESSAGE_MAX = 1000;
+
+// Mensaje opcional del inquilino al solicitar visita: texto plano, sin caracteres de control
+// (salvo saltos de línea), sin más de una línea en blanco seguida y recortado
+export function cleanApplicationMessage(raw: unknown): { message?: string; error?: string } {
+  if (raw === undefined || raw === null) return {};
+  if (typeof raw !== 'string') return { error: 'invalid_message' };
+  const message = raw
+    .replace(/\r\n?/g, '\n')
+    .replace(/[\u0000-\u0009\u000B-\u001F\u007F]/g, '')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (message.length > APPLICATION_MESSAGE_MAX) return { error: 'message_too_long' };
+  return message ? { message } : {};
+}
+
 export async function apply(req: Request, res: Response) {
+  if (!Types.ObjectId.isValid(String(req.params.id))) return res.status(404).json({ error: 'not_found' });
+  const { message, error: messageError } = cleanApplicationMessage(req.body?.message);
+  if (messageError) return res.status(400).json({ error: messageError, max: APPLICATION_MESSAGE_MAX });
   const property = await Property.findById(req.params.id);
-  if (!property) return res.status(404).json({ error: 'not_found' });
+  // Un borrador o un anuncio retirado no admite solicitudes (y para quien no lo gestiona, no existe)
+  if (!property || property.status !== 'active') return res.status(404).json({ error: 'not_found' });
 
   if (property.onlyTenantPro) {
     const required = property.requiredTenantProMaxRent || property.price;
@@ -438,6 +562,7 @@ export async function apply(req: Request, res: Response) {
     propertyId: property._id,
     tenantId: userId,
     status: 'pending',
+    ...(message ? { message } : {}),
   });
 
   await recordFunnelEvent(req, 'application', {
@@ -447,10 +572,13 @@ export async function apply(req: Request, res: Response) {
   });
 
   res.json({ ok: true, propertyId: property._id, applicationId: app._id });
+  // Aviso al propietario y a su agencia gestora; no retrasa la respuesta y nunca lanza
+  void notifyApplication('received', app._id, userId);
 }
 
 export async function listApplications(req: Request, res: Response) {
   const { id } = req.params;
+  if (!Types.ObjectId.isValid(String(id))) return res.status(404).json({ error: 'not_found' });
   const property = await Property.findById(id);
   if (!property) return res.status(404).json({ error: 'not_found' });
 
@@ -458,11 +586,11 @@ export async function listApplications(req: Request, res: Response) {
   const userId = user?._id || user?.id;
   const isOwner = userId && String(userId) === String(property.owner);
   const isAdmin = user?.role === 'admin';
-  if (!isOwner && !isAdmin) return res.status(403).json({ error: 'forbidden' });
+  if (!isOwner && !isAdmin && !isManagingAgency(user, property)) return res.status(403).json({ error: 'forbidden' });
 
   const apps = await Application.find({ propertyId: property._id })
     .sort({ createdAt: -1 })
-    .populate('tenantId', 'name email tenantPro')
+    .populate('tenantId', 'name email tenantPro.status tenantPro.maxRent tenantPro.isActive')
     .lean();
 
   const items = apps.map((a: any) => ({
@@ -477,7 +605,10 @@ export async function listApplications(req: Request, res: Response) {
       _id: a.tenantId._id,
       name: a.tenantId.name,
       email: a.tenantId.email,
-      tenantPro: a.tenantId.tenantPro,
+      // Solo el resultado de la verificación; los documentos y la auditoría no son para el arrendador
+      tenantPro: a.tenantId.tenantPro
+        ? { status: a.tenantId.tenantPro.status, maxRent: a.tenantId.tenantPro.maxRent, isActive: a.tenantId.tenantPro.isActive }
+        : undefined,
     } : undefined,
   }));
 

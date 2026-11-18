@@ -946,3 +946,594 @@ Rules:
   - Signature anchors `[[firma_*]]` are only printed in the PDF sent to Firma.dev, not in draft downloads.
   - Frontend-only analytics dropped (nothing consumed them; backend already records funnel events).
 - Tests added: `tests/contracts/signature.firma.test.ts` (HMAC verification, public reachability, completion → signed + PDF hash, replay idempotency, retry after failed download, legacy `signing`, one envelope per contract).
+
+### 2026-10-05 - Claude Code - Review of the Firma.dev merge + fixes, and improvement audit
+
+- Status: fixes done on branch `claude/practical-planck-wizknd` (not merged). **Backend tests could not run in the cloud session** (its network blocks the MongoDB binary download for `mongodb-memory-server`); `tsc` is clean, including the new tests. Run `npx jest tests/contracts/signature.firma.test.ts tests/contracts/contracts.signature.test.ts --runInBand` locally or in CI before merging.
+- Decision (Jorge): the signature provider is Firma.dev. The API key goes in the `FIRMA_API_KEY` env var on the server, never in the repo; `FIRMA_WEBHOOK_SECRET` is also needed.
+- Review of `7051df5`: 15 findings, 14 fixed. Details and status in `docs/review-firma-2026-10-05.md`. Main ones:
+  - `signature/init` was missing a party check and leaked the tenant's link;
+  - a signed contract could be re-signed;
+  - a late Firma event undid `completed`;
+  - webhook with no try/catch;
+  - duplicate envelopes on concurrent calls (now locked with `signature.lockedAt`);
+  - duplicated audit trail on retries.
+- Still open: #9 (generic HMAC webhook; decide whether to remove it now that Firma has its own).
+- Files touched:
+  - `src/services/signature.service.ts`
+  - `src/controllers/contract.signature.controller.ts`
+  - `src/controllers/contract.controller.ts`
+  - `src/signature/firma.ts`
+  - `src/utils/pdfGenerator.ts`
+  - `src/models/contract.model.ts` (`signature.lockedAt`)
+  - `scripts/import_zone_rent_reference.ts`
+  - `tests/contracts/signature.firma.test.ts`
+  - `tests/contracts/contracts.signature.test.ts`
+- Improvement audit (cleanup, scalability, frontend; three read-only agents): backlog in `docs/auditoria-mejoras-2026-10-05.md`, not started. Quick wins first: broken `/tickets/*` pages (missing NotificationsProvider), Mongo indexes for payments/tickets/history/contracts, a TTL on SystemEvent, and checking that `storage/` is mounted as a volume in the production compose.
+- GitNexus: no index in the cloud checkout, so `impact`/`detect_changes` were not run. Callers were checked with grep instead (`ensureFirmaSignature` ← `createSigningSession`, `initSignature`; `initSignature` ← `initiateSignature`, `requestSignature`; `getSignatureStatus` ← `getSignature`).
+
+### 2026-10-05 - Claude Code - Audit quick wins: frontend toasts/links + Mongo indexes
+
+- Status: done on `claude/practical-planck-wizknd`. The list of what was done and what is left is at the end of `docs/auditoria-mejoras-2026-10-05.md`.
+- Files touched:
+  - frontend: `src/utils/notify.tsx`, `src/index.tsx`, `src/api/client.ts`, `src/components/CopyLinkButton.tsx`, `src/components/PolicyModal.tsx`, `src/hooks/usePolicyAcceptance.ts` (+ its test), `src/pages/tickets/TicketCreatePage.tsx`
+  - backend models: `payment`, `ticket`, `history`, `contract` (indexes only)
+  - `docker-compose.yml` (storage volume)
+- Verification: frontend `npm run build` (tsc + vite) OK; `npm test` 15 files / 30 tests passed. Backend `tsc` clean. Backend Jest still cannot run in the cloud session (MongoDB download blocked).
+- Next: the backend should notify the owner on ticket creation; decide the SystemEvent TTL; unify the toast systems; the dead-code cleanup listed in the audit.
+
+### 2026-10-05 - Claude Code - Security audit (5 agents) + first batch of fixes
+
+- Status: 15 critical/high findings fixed on `claude/practical-planck-wizknd` (PR #46). The full list, with what is done and what is left, is in `docs/auditoria-seguridad-2026-10-05.md`.
+- Fixed:
+  - ticket escrow released by anyone, and with no ownership checks on any ticket route;
+  - anyone could publish or expire legal policies;
+  - anyone could terminate or activate other people's contracts;
+  - contract responses leaked the other party's signing link and the IBAN;
+  - public property search: unescaped regex (ReDoS) and drafts visible to everyone;
+  - DNI contract PDF left behind in `/uploads`;
+  - landlords received the full Tenant PRO file of each applicant;
+  - OAuth open redirect;
+  - client-chosen payment amount.
+- Waiting on Jorge's decision:
+  - P1: `/pay-rent` resolves to the flow that does not pay out to the landlord;
+  - D2: user files committed to git, including a real iPhone photo;
+  - the escrow redesign for real Stripe.
+- Verification: `tsc` clean for src and the touched tests. Backend Jest only runs in CI. New tests: `tests/escrow/ticket.access.test.ts`, plus cases in lifecycle, policies, property routes and oauthRedirect.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 1: account security
+
+- Branch `claude/mejora-continua` (worktree, on top of PR #46). Round log: `docs/MEJORA-CONTINUA.md`.
+- Fixed A1 (OAuth pre-created account takeover: linking a provider to an account with no `emailVerifiedAt` now clears password and reset token) and the password reset flow (link built with `FRONTEND_URL` via new `src/utils/frontendUrl.ts` instead of `https://frontend/reset`; token stored as SHA-256 with `select:false`).
+- Files: `src/services/oauth.service.ts`, `src/controllers/auth.controller.ts`, `src/controllers/oauth.controller.ts`, `src/utils/frontendUrl.ts`, `src/models/user.model.ts`, `tests/auth/*`, `tests/e2e/smoke.e2e.test.ts`.
+- Verification: tsc clean; Jest `tests/auth` 12/12, oauthRedirect 4/4, e2e smoke 9/9 (all `--runInBand`); frontend build + 30 tests OK.
+- Deploy note: production needs `FRONTEND_URL` set for the reset link.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 2: duplicate charges (P3, P4)
+
+- Rent (`/pay-rent`, `/payments/:period/pay`) and receipts (`/api/payments/:id/pay`): atomic claim before creating the PaymentIntent, resume of the open intent, claim released if Stripe fails. Retry after a failed payment reuses the month's `Payment`. New `src/services/rentPaymentAttempt.service.ts`.
+- Stripe webhook: `payment_failed`/`processing` only touch the current intent and never a `PAID` receipt.
+- Deposit: open Checkout session reused (`contract.depositCheckoutSessionId`, idempotency key), return URLs built server-side from `FRONTEND_URL`.
+- Files: `src/controllers/contract.payment.controller.ts`, `src/controllers/payment.controller.ts`, `src/routes/stripe.webhook.ts`, `src/utils/deposit.ts`, `src/models/contract.model.ts`, `frontend/src/services/contracts.ts`, `tests/contracts/payments.duplicates.test.ts`.
+- Verification: tsc clean; Jest `tests/contracts` + `tests/jobs` 57/57, e2e smoke 9/9 (`--runInBand`); frontend build + 30 tests OK.
+- Deploy note: `DEPOSIT_SUCCESS_URL`/`DEPOSIT_CANCEL_URL`, if set in production, override the new URLs.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 3: deposit payment UI
+
+- `ContractDetail`: tenant "Pagar fianza" button (POST `/contracts/:id/deposit` → Stripe Checkout), return notices for `?deposit=success|cancel`, real `rent`/`deposit` amounts (was reading missing `rentAmount`/`depositAmount` → "undefined €"), property city/address, fake Wikimedia signature image removed, "Firmar contrato" label.
+- Files: `frontend/src/pages/ContractDetail.tsx`, its two tests, `frontend/src/components/dashboard/ActiveContractWidget.tsx`.
+- Verification: frontend build OK, 34/34 tests; Playwright screenshots with mocked API.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 4: agency invites (A4) + accept-slot (P2)
+
+- A4: the agency no longer receives `inviteUrl`; the token travels only in the landlord's email, is stored as SHA-256 (`select:false`; legacy 48-hex plaintext tokens still accepted), and accepting sets `emailVerifiedAt`. Invite email HTML escaped via new `src/utils/escapeHtml.ts`. Frontend "Copiar enlace" removed.
+- P2: `accept-slot` only creates the PaymentIntent (atomic `scheduled → payment_pending`, resume, rollback); the Stripe webhook confirms the offer and records the `PlatformEarning` once, for the current `paymentIntentId`; `payment_failed` → `scheduled`.
+- Files: `src/controllers/agencyInvite.controller.ts`, `src/models/agencyInvite.model.ts`, `src/utils/escapeHtml.ts`, `src/routes/serviceOffers.routes.ts`, `src/models/serviceOffer.model.ts`, `src/routes/stripe.webhook.ts`, `frontend/src/pages/agency/AgencyLandlords.tsx`, `frontend/src/services/agency.ts`, `tests/agency/agencyReferral.test.ts`, `tests/chat/serviceOffer.payment.test.ts`.
+- Verification: tsc clean; Jest (`--runInBand`) agency 11/11, contracts+chat+escrow+jobs 75/75, e2e smoke 9/9; frontend build + 34 tests OK.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 5: Docker hardening (D1, D3) + CSV formula injection
+
+- D3: `.dockerignore` excludes root `.env`/`.env.*`, `uploads`, `storage` (frontend `.env*` kept on purpose: Vite reads public `VITE_*` vars at build time).
+- D1: `docker-compose.override.yml` renamed to `docker-compose.dev.yml` (must be passed with `-f`); override name added to `.gitignore`; README updated. Production uses `-f docker-compose.valeris.yml`, unaffected.
+- CSV: new `src/utils/csv.ts` (`csvCell`/`csvRow`/`csvRows`) prefixes formula-like cells with `'` (negative numbers untouched); used by all seven CSV exporters.
+- Files: `.dockerignore`, `.gitignore`, `README.md`, `docker-compose.dev.yml`, `src/utils/csv.ts`, the seven exporters, `tests/unit/csv.test.ts`, `tests/contracts/earnings.export.test.ts`, `docs/auditoria-seguridad-2026-10-05.md`.
+- Verification: tsc clean; Jest (`--runInBand`) 8 suites / 24 tests OK; `docker compose config` and a throwaway context build checked; frontend build + 34 tests OK.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 6: landlord dashboard
+
+- Backend: `getLandlordStats` matched `payee` with a string id inside `aggregate()` (no casting), so landlord earnings were always 0 €; now cast to `ObjectId`. Recent payments without `paidAt` fall back to `createdAt` (dashboard showed "Invalid Date").
+- Frontend `LandlordDashboard`: duplicate counters row removed, es-ES currency, quick links fixed (no longer to public `/properties`), plural/accents in alerts (`utils/landlordDashboard.ts`), inline icon on "Nueva propiedad".
+- Files: `src/controllers/user.controller.ts`, `tests/contracts/landlordStats.test.ts`, `frontend/src/pages/LandlordDashboard.tsx`, `frontend/src/utils/landlordDashboard.ts`, `frontend/src/pages/__tests__/LandlordDashboard.test.tsx`.
+- Verification: tsc clean; Jest contracts+auth 68/68 (`--runInBand`); frontend build + 35 tests OK; Playwright screenshots 1280/390 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 7: email HTML escaping, price alerts, reviews
+
+- `utils/email.ts`: every template escapes user data with `escapeHtml`; links via `frontendUrl()`; es-ES amounts/dates.
+- Property price/availability alerts were sent to the user id as if it were an address; now resolved to the subscriber's email.
+- `POST /api/reviews`: `relatedId` must be a signed contract between both parties (matching `roleContext`) or a paid/done service offer / closed ticket of the pro; duplicate → 409.
+- Files: `src/utils/email.ts`, `src/controllers/property.controller.ts`, `src/routes/review.routes.ts`, `tests/unit/email.escape.test.ts`, `tests/reviews/review.relation.test.ts`, `tests/properties/property.alerts.test.ts`, `docs/auditoria-seguridad-2026-10-05.md`.
+- Verification: tsc clean; Jest (`--runInBand`) new/updated 11/11, properties+contracts+security+chat+escrow 105/106 (one intermittent failure in untouched `payments.duplicates`, passes 3/3 alone), e2e smoke 9/9; frontend build + 35 tests OK.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 8: tenant home, "Mensajes", contract wizard
+
+- `TenantHome`: colored shortcut tiles and blue hero removed; new "Tu alquiler" card (rent/deposit es-ES, status, next step, "Pagar fianza" link); in-progress count now uses real statuses (`draft`, `generated`, `pending_signature`, `signing`).
+- "Inbox"/"Conversaciones" → "Mensajes" (header, nav, Inbox title). `ContractWizard`: padding, € inputs fixed (icon overlapped), "año(s)", accents, es-ES review. Breadcrumbs: "Nuevo contrato", "Incidencia #".
+- Files: `frontend/src/pages/tenant/TenantHome.tsx` (+test), `frontend/src/layout/AppShell.tsx`, `frontend/src/config/nav.config.json`, `frontend/src/pages/Inbox.tsx`, `frontend/src/pages/contracts/ContractWizard.tsx`, `frontend/src/components/Breadcrumbs.tsx`.
+- Verification: frontend build + 37 tests OK; Playwright screenshots 1280/390 px. Open: no navigation on mobile (<1024 px).
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 9: AI rate limit, output caps, admin-only health test
+
+- `/api/ai` + `/api/assistant` share a per-user limiter (30 / 15 min, `AI_RATE_LIMIT_MAX`; in-memory) in `src/middleware/aiRateLimit.ts`; 429 body `{ error: <Spanish message>, code: 'too_many_requests' }`.
+- `getGeminiModel(apiKey, maxOutputTokens)` in `src/services/ai.service.ts` is the only Gemini factory (also used by `assistant.service.ts`): `maxOutputTokens` + 30 s timeout. `GET /api/ai/health?test=true` → 403 for non-admins.
+- Files: `src/app.ts`, `src/middleware/aiRateLimit.ts`, `src/services/ai.service.ts`, `src/services/assistant.service.ts`, `src/controllers/ai.controller.ts`, `src/__tests__/ai.routes.test.ts`, `src/__tests__/ai.limits.test.ts`, `docs/auditoria-seguridad-2026-10-05.md`.
+- Verification: tsc clean; Jest (`--runInBand`) `src/__tests__` 30/30, e2e smoke 9/9; frontend build + 37 tests OK.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 10: mobile navigation
+
+- `AppShell`: below `lg` a menu button in the header opens a left `Drawer` with the same links (`NavSections`, shared with the desktop side nav), unread dot + count, user email; closes on link/route change/Escape. `useUnread` now polls once (was twice). `/agency` home link gets `end`.
+- `components/ui/Drawer`: closed panel is `visibility:hidden` + `aria-hidden` (links were tabbable off-screen); focus moves into the panel, Tab is trapped, focus returns to the opener; optional `label` prop.
+- Files: `frontend/src/layout/AppShell.tsx`, `frontend/src/layout/__tests__/AppShell.test.tsx`, `frontend/src/components/ui/Drawer.tsx`, `frontend/src/index.css`.
+- Verification: frontend build + 39 tests OK; Playwright screenshots 390/1280 px and keyboard focus check.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 11: observability hardening, co-tenant link
+
+- `/metrics` requires `Authorization: Bearer <METRICS_TOKEN>` (404 when unset); `/health` no longer returns `env`; request logs (structured + morgan) drop the query string (`pathWithoutQuery` in `src/metrics.ts`); `/api/kyc/webhook` without `STRIPE_IDENTITY_WEBHOOK_SECRET` → 503 in production. Co-tenant invite link via `frontendUrl()`.
+- Open: frontend has no `/invites/accept` route (co-tenant email link 404s) and no co-tenant UI.
+- Files: `src/metrics.ts`, `src/app.ts`, `src/routes/identity.routes.ts`, `src/controllers/contract.cotenant.controller.ts`, `src/__tests__/observability.test.ts`, `tests/contracts/contract.cotenant.test.ts`, `.env.example`, `docs/auditoria-seguridad-2026-10-05.md`.
+- Verification: tsc clean; Jest (`--runInBand`) 10 suites / 43 tests OK, e2e health+smoke 10/10; frontend build + 39 tests OK.
+
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 12: co-tenant invite flow end to end
+
+- Backend: public `GET /api/invites/preview?token=` (email, property, inviter, expired; mounted before the authenticated `/api` routers); `POST /api/invites/accept` returns `contractId`; `getContract`/`getContractPDF` allow a JOINED/SIGNED co-tenant via `isActiveCoTenant` (`src/utils/contractAccess.ts`; `ensureCanReadContract` unchanged on purpose); PDF access errors → 403/404 instead of 500.
+- Frontend: `/invites/accept` page (`pages/CoTenantInviteAccept.tsx`), `components/contracts/CoTenantsCard.tsx` in `ContractDetail` (status list, invite, "Firmar como co-titular"); sign/pay-deposit buttons only for the principal tenant; login/register `?redirect=` restricted to internal paths (`safeInternalPath` in `services/coTenants.ts`), register prefills `?email=`.
+- Open for Jorge: co-tenant "signature" is only a status flip (no e-signature provider); accepting requires verified identity. "Mis contratos" doesn't list co-tenant contracts yet.
+- Verification: tsc clean; Jest (`--runInBand`) tests/contracts 58/58, src/__tests__ 37/37, e2e smoke 9/9; frontend build + 49 tests OK; Playwright screenshots 390/1280 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 13: login enumeration, password policy, reset rate limit
+
+- `login` returns `INVALID_CREDENTIALS` for unknown / social-only / wrong password and always runs one bcrypt (dummy hash). Register + reset: password 8–200 (`newPassword()` in `src/routes/auth.routes.ts`); `/api/auth/reset` behind `authLimiter`. Reset expired-token error now user-facing Spanish.
+- Frontend: `passwordPolicyError` / `PASSWORD_MIN_LENGTH` / `INVALID_CREDENTIALS_MESSAGE` in `services/auth.ts`; register + reset check before submit; login adds the Google/Apple hint only on credential errors; `ResetPassword` uses `auth-alert` and a "Contraseña actualizada" end state.
+- Files: `src/controllers/auth.controller.ts`, `src/routes/auth.routes.ts`, `src/app.ts`, `tests/auth/login-policy.test.ts`, `tests/auth/reset.test.ts`, `frontend/src/services/auth.ts`, `frontend/src/pages/auth/{LoginPage,RegisterPage,ResetPassword}.tsx`, `frontend/src/pages/auth/__tests__/passwordPolicy.test.tsx`.
+- Verification: tsc clean; Jest (`--runInBand`) tests/auth 16/16, src/__tests__+tests/security 48/48, e2e smoke 9/9; frontend build + 54 tests OK; Playwright screenshots 390/1280 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 14: co-tenant contracts in "Mis contratos"
+
+- Backend: `GET /api/contracts?include=cotenant` adds contracts where the user is a JOINED/SIGNED co-tenant; every item carries `myRole` (`landlord`/`tenant`/`cotenant`). Opt-in so ticket creation etc. are unchanged. `status` filter accepted only as string.
+- Frontend: `MyContracts` rewritten (list card, "Co-titular" tag, status group filter with counts, "Invitaciones pendientes" from `/api/me/invites` — no accept button, the email token is the proof of email ownership); `TenantHome` includes co-tenant contracts but hides "Pagar fianza" for them; `AppShell` hides the KYC badge below `sm`. `listMyCoTenantInvites` in `services/coTenants.ts`, `myRole` in `types/contract.ts`.
+- Verification: tsc clean; Jest (`--runInBand`) contract.cotenant 8/8; frontend build + 60 tests OK; Playwright screenshots 390/1280 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 15: JWT revocation (A3)
+
+- `User.tokenVersion` (default 0); every session JWT is signed by `signAuthToken` (`src/utils/authToken.ts`) with `tv`. `authenticate` (now async) loads `tokenVersion` and answers 401 `{ code: 'session_expired' }` on mismatch; bad/expired JWT → 401 `{ code: 'invalid_token' }`. Tokens without `tv` count as 0 (no migration). Skipped when Mongo is not connected or the user does not exist (unchanged behaviour). `optionalAuthenticate` treats a revoked token as anonymous.
+- `tokenVersion` is bumped by `resetPassword` and by the A1 password wipe in `resolveSocialUser`; `updateUser` ignores it.
+- Frontend: `handleSessionLost` (axios response interceptor in `api/client.ts`) clears the stored user on those two codes and goes to `/login?session=expired&redirect=…`; `LoginPage` shows a neutral notice (`auth-alert--info`).
+- Files: `src/utils/authToken.ts`, `src/middleware/auth.middleware.ts`, `src/models/user.model.ts`, `src/controllers/{auth,oauth,agencyInvite,user}.controller.ts`, `src/services/oauth.service.ts`, `tests/auth/session-revocation.test.ts`, `frontend/src/api/client.ts`, `frontend/src/api/__tests__/sessionLost.test.ts`, `frontend/src/pages/auth/LoginPage.tsx`, `frontend/src/pages/auth/__tests__/passwordPolicy.test.tsx`, `frontend/src/index.css`.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 16: co-tenant invite email and resend
+
+- Bug fix: `getContractParties` crashed (500) whenever a pending invite without `userId` existed (`String(undefined)` in the user lookup); the "Co-titulares" card showed nothing.
+- `coTenantInviteEmail` / `sendCoTenantInviteEmail` (`src/utils/email.ts`): inviter, property, expiry, all escaped. `POST /api/contracts/:id/tenants/:partyId/resend` (principal tenant, INVITED only, new token, 10-min cooldown while still valid → 429 `resend_too_soon`). `/parties` returns `expiresAt`/`expired` for invites.
+- Frontend: `CoTenantsCard` shows expiry / "Invitación caducada" and "Reenviar invitación"; `resendCoTenantInvite` in `services/coTenants.ts`.
+- Verification: tsc clean; Jest (`--runInBand`) contract.cotenant 11/11, unit coTenantInviteEmail 3/3 (payments.duplicates flaky in batch, 7/7 alone); frontend build + 69 tests OK; Playwright screenshots 390/1280 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 17: KYC open redirect, role/isVerified from DB
+
+- `POST /api/kyc/start`: `returnUrl` sanitised by `kycReturnUrl` (`src/routes/identity.routes.ts`): internal paths only, built with `frontendUrl()`, same-origin check; fallback `/tenant/kyc`.
+- `authenticate`: the `tokenVersion` lookup (`loadSessionUser`) now also loads `role` and `isVerified`, which override the JWT claims when the user exists (token values kept for unknown ids / no Mongo).
+- Files: `src/routes/identity.routes.ts`, `src/middleware/auth.middleware.ts`, `tests/auth/session-claims.test.ts`.
+- Verification: tsc clean; full Jest `--runInBand` 65 suites / 260 tests OK; tests/auth 34/34; e2e 10/10; frontend build + 69 tests OK.
+
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 18: email delivery result (P0-07) + agency invite resend
+
+- `deliverEmail`/`sendEmail`/`sendCoTenantInviteEmail` return `EmailDelivery` (`'sent' | 'not_configured' | 'failed'`), never throw. Co-tenant: `ContractParty.inviteEmailStatus`, `emailStatus` in invite/resend responses, `emailFailed` in `/parties`, no resend cooldown when last email failed. Agency: `AgencyInvite.emailStatus/emailSentAt`, send is awaited, `emailFailed` in list, new `POST /api/agency/landlords/invites/:id/resend`; agency routes wrapped in `asyncHandler`.
+- Frontend: `emailNotDelivered` in `services/coTenants.ts`; `CoTenantsCard` and `AgencyLandlords` warn when the email didn't go out; "Reenviar invitación" in agency list. Password reset intentionally unchanged (enumeration).
+- Verification: tsc clean; full Jest `--runInBand --forceExit` 67 suites / 278 tests; frontend build + 73 tests; Playwright 1280/390 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 19: session refresh on start + cancel co-tenant invite
+
+- Frontend `refreshStoredUser` (`services/auth.ts`), called by `AuthProvider` on mount: GET `/api/users/me`, merges `email/role/isVerified/tenantPro` into the stored user (token untouched); 403 `owner_not_verified` → `isVerified:false`; skips if the stored session changed meanwhile. `/api/users/me` now returns `isVerified` (effective: DB flag or approved `Verification`).
+- `POST /api/contracts/:id/tenants/:partyId/cancel` (`cancelCoTenantInvite`): principal tenant only, INVITED only → `REMOVED`, token/expiry cleared; same email can be re-invited. `CoTenantsCard`: "Cancelar invitación" with inline confirmation.
+- Verification: tsc clean; Jest `--runInBand --forceExit` tests/auth + tests/contracts 22 suites / 99 tests; frontend build + 81 tests; Playwright 390/1280 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 20: contract creation authz (A2) + flaky payments test
+
+- `create` (`src/controllers/contract.controller.ts`) runs `checkContractParties`: property must exist (404), actor must be owner / managing agency (`agencyAccess: 'manage'`) / admin (403), body `landlord` must be the property owner, tenant an existing other user (400). IDs lowercased by zod. `WizardStep3Review` maps these codes to Spanish messages.
+- Tests creating contracts now seed parties via `tests/utils/contractParties.ts` and send `x-user-id`. `payments.duplicates` awaits `RentPayment.init()/Payment.init()` (flaky because the unique index wasn't built yet).
+- Verification: tsc clean; Jest `--runInBand` 7 contract-creating suites 32/32, new authz suite 9/9, full suite 288/289 (payments.duplicates, fixed → 7/7 ×3); e2e 10/10; frontend build + 83 tests (AppShell timing flake under load, 2/2 alone).
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 21: contract wizard fixed and redone
+
+- The routed `/contracts/new` (`ContractWizard.tsx`) posted `propertyId/tenantId/rentAmount/...`; `POST /api/contracts` requires `landlord/tenant/property/region/rent/deposit/startDate/endDate/clauses` → always 400. New `pages/contracts/contractDraft.ts` (`buildContractPayload`, `contractRegion` free text → `madrid|galicia|catalunya`, `contractCreateError`). Wizard: 3 steps (Condiciones, Cláusulas, Revisar), loads the property for owner/region, blocks unsupported regions, navigates to `/contracts/:id`. Dead old wizard (`WizardStep1-3`, `ClausesStep`) deleted.
+- Verification: tsc clean; Jest `create-contract.authz` 10/10 (new: exact wizard body → 201); frontend build + 90 tests; Playwright 390/1280 px.
+
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 22: case-insensitive account email + deleted-user tokens
+
+- New `src/utils/userEmail.ts` (`normalizeEmail`, `findUserByEmail` exact-lowercase then collation strength 2 fallback for legacy mixed-case, `emailInUse`). Used by `register` (stores lowercase, rejects case-variant duplicates), `login`, `requestPasswordReset`, `resolveSocialUser`, admin `createUser`, agency invite existence checks.
+- `authenticate`/`loadSessionUser`: token of a user that no longer exists → 401 `session_expired`. Tests that sign JWTs must seed the user: use `tests/utils/sessionToken.ts` (`sessionToken`, `bearer`).
+- Verification: tsc clean; full Jest `--runInBand --forceExit` 69 suites / 296 tests; e2e 10/10; frontend build + 90 tests.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 23: contract region from property + applicants modal fixes
+
+- `POST /api/contracts`: region derived from the property via `contractRegionKey` (`src/policies/clauses/index.ts`, same rule as frontend `contractRegion`); body `region` optional, mismatch → 400 `region_mismatch`; authz check (A2) now runs before clause validation.
+- `ApplicantsModal`: no fake applicant on load error (error + retry), visit date sent as ISO (`datetime-local` was stored as UTC, 2 h late), propose/accept errors shown; `proposeVisit` rejects invalid dates with 400 `invalid_visit_date`.
+- Files: `src/controllers/contract.controller.ts`, `src/controllers/application.controller.ts`, `src/policies/clauses/index.ts`, `frontend/src/components/ApplicantsModal.tsx`, `frontend/src/pages/contracts/contractDraft.ts`, tests `tests/contracts/create-contract.authz.test.ts`, `tests/contracts/contract.integration.test.ts`, `tests/applications/visit-proposal.test.ts`, `frontend/src/components/__tests__/ApplicantsModal.test.tsx`.
+- Verification: tsc clean; Jest `--runInBand` tests/contracts 80/80, applications 4/4, agencyReferral 14/14, e2e 10/10; frontend build + 94 tests; Playwright 390/1280 px.
+
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 24: rent periods + resilient rent job
+
+- New `src/utils/rentPeriod.ts` (`rentPeriodOf` Europe/Madrid, `checkRentPeriod` start month..current month, `billableRent`). `payRentForPeriod` now requires contract `active|signed` (400 `contract_not_active`) and period in range (400 `period_before_start|period_in_future`); `/pay-rent` rejects contracts not started yet. `runRentGeneration(now?)`: per-contract atomic upsert + isolated errors, no 0 € receipts, returns `{period, created, failed}`. Receipts after `endDate` intentionally unchanged (LAU prórroga → decision for Jorge).
+- Verification: tsc clean; Jest `--runInBand` tests/contracts 19 suites / 87 tests (new `rent-periods.test.ts` 7), e2e 10/10; frontend build + 94 tests.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 25: change password from the account + profile page restyle
+
+- `POST /api/auth/change-password` (`changePassword`, `authenticate` only, `authLimiter`): requires `currentPassword` (400 `wrong_password`), new password policy, 400 `same_password`, 400 `password_not_set` for Google/Apple-only accounts; bumps `tokenVersion` (other sessions closed), clears reset token, returns a new `token`; fire-and-forget notice email.
+- Frontend: `changePassword` in `services/auth.ts` and `AuthContext` (stores the new token); `pages/profile/ChangePasswordCard.tsx`; `ProfilePage` without gradient banner/uppercase badges, accents fixed.
+- Verification: tsc clean; Jest `--runInBand` tests/auth 7 suites / 45 tests (new `change-password.test.ts` 5); frontend build + 98 tests (new `ChangePasswordCard.test.tsx` 4); Playwright 390/1280 px.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 26: Stripe refunds + receipt URL
+
+- `src/routes/stripe.webhook.ts`: new `charge.refunded` (full → `Payment.status='refunded'` + `amountRefunded/refundedAt`, `RentPayment.status='REFUNDED'` (new enum value, `refundedAt`); partial → `amountRefunded` only; contract history `paymentRefunded|paymentPartiallyRefunded`). Late `succeeded/processing/payment_failed` don't overwrite refunded. `chargeReceipt()` reads `latest_charge` (API 2022-11-15 has no `intent.charges`) → `receiptUrl` + `stripeChargeId`.
+- `claimRentPayment` returns `{kind:'refunded'}`; `/pay-rent` and `/payments/:period/pay` → 409 `rent_refunded`.
+- Verification: tsc clean; Jest `--runInBand` contracts+chat+escrow 26 suites / 110 tests (new `payments.refunds.test.ts` 5); e2e 10/10; frontend build + 98 tests.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 28: reset timing + managing agency contracts
+
+- `src/controllers/auth.controller.ts`: `requestPasswordReset` answers `{ok:true}` first; lookup/token/email run in exported `issuePasswordReset` (not awaited) → no timing enumeration. Tests wait for the background `sendEmail`.
+- `getContract` no longer 403s the managing agency after letting it through; `getContractParties` allows the managing agency read-only (`isManagingAgency` + contract `agencyId`).
+- Frontend: `/contracts` and `/contracts/:id` allow `agency`; agency nav gets «Contratos»; `MyContracts` keeps all items for agency/admin (was filtering to contracts where the user is a party → always empty) and shows «Propietario · Inquilino»; `getContractActionSummary` draft text for agency.
+- Verification: tsc clean; Jest `--runInBand` auth 46, e2e 10, contracts+agency 113; frontend build + 102 tests; Playwright `/tmp/ra-shots28`.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 29: ContractDetail restyle
+
+- `frontend/src/pages/ContractDetail.tsx`: render only (logic unchanged). Header = property title + `ContractStatusBadge` + address, no ID/colour band; actions full-width on mobile; «Siguiente paso»; timeline as progress line (`ol`, `aria-current`); «Condiciones»/«Partes» as `dl`; preview in sans, no italic/watermark; not-found card with link to `/contracts`. `CoTenantsCard` title restyled.
+- Tests mock `Link` from react-router-dom now.
+- Verification: frontend build + 104 tests (2 new in `ContractDetail.test.tsx`); Playwright `/tmp/ra-shots29` (tenant/agency, 390/1280, no horizontal overflow).
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 30: deposit refunds + Stripe disputes
+
+- `depositToEscrow` sets `payment_intent_data.metadata` (`contractId`, `deposit`, `type:'deposit'`); `checkout.session.completed` stores `Contract.depositPaymentIntentId`.
+- `charge.refunded` on a deposit (lookup: `depositPaymentIntentId` → charge metadata → `checkout.sessions.list({payment_intent})` for old deposits) sets `depositAmountRefunded`/`depositRefundedAt` + history `depositRefunded|depositPartiallyRefunded`; `depositPaid` untouched.
+- `charge.dispute.created|updated|closed` store `dispute` (shared `src/models/paymentDispute.schema.ts`) on `Payment`, `RentPayment` or `Contract.depositDispute`; history `paymentDisputed|paymentDisputeClosed`; payment statuses unchanged; closed disputes not reopened.
+- Verification: tsc clean; Jest `--runInBand` contracts+chat+escrow+agency 29 suites / 136 tests (new `payments.disputes.test.ts` 5), e2e 10/10; frontend build + 104 tests.
+
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 31: deposit refund + dispute notice in ContractDetail
+
+- `getContract` adds `rentDisputes` (RentPayments with `dispute`: `period`, `amount` + dispute fields).
+- `ContractDetail`: «Fianza devuelta» row in «Condiciones» (amount + date, or «(parcial)»), deposit timeline step shows refund; amber notice for open disputes (deposit or rent; closed statuses `won|lost|warning_closed` hidden). `types/contract.ts` gains `PaymentDispute`, `depositAmountRefunded`, `depositRefundedAt`, `depositDispute`, `rentDisputes`.
+- `getContractActionSummary`: role-aware plain texts (tenant «Paga la fianza», «Revisa y firma el contrato»; signed+paid «Se activa solo el <inicio>»); draft `blockedReason` null; label «En borrador».
+- Verification: tsc clean; Jest `--runInBand` 3 suites / 21 tests; frontend build + 107 tests; Playwright `/tmp/ra-shots31`.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 32: PII out of logs
+
+- `src/utils/logger.ts`: pino `redact` on `to|email|phone|phoneNumber|iban` (+ `*.key`) with censor masking (`a***@domain`, `***456`, `ES91****1332`), `password|passwordHash|token|authorization|cookie` → `[oculto]`; `err` serializer and log message scrubbed (`scrubPii`). New `src/utils/redact.ts`. Exported `loggerOptions` for tests.
+- `errorHandler` logs path without query; signature webhook without ID logs body keys only; `user.controller` update errors go through logger.
+- Verification: tsc clean; Jest `--runInBand` unit+auth+contracts+src/__tests__ 46 suites / 215 tests (new `tests/unit/logRedaction.test.ts` 3), e2e 10/10; frontend build + 107 tests.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 33: Mongo operators rejected + status badge
+
+- New `src/middleware/rejectMongoOperators.ts` (after parsers/hpp in `app.ts`): 400 `invalid_input` when query or JSON body has a key starting with `$` (any depth). Webhooks mounted earlier are unaffected. Not `mongoose sanitizeFilter` (would wrap our own `$in/$or`).
+- Frontend `Badge`/`StatusBadge`/`.badge`: pill, sentence case, no uppercase/tracking. `getStatusLabel` translates ticket/payment statuses (`in_progress` → «En curso"…) and capitalises unknown ones; «Pendiente de firma».
+- Verification: tsc clean; full Jest `--runInBand` 77 suites / 343 tests (only the adapted cotenant case failed, now 14/14); new `tests/security/mongoOperators.test.ts` 5; frontend build + 111 tests (new `statusBadges.test.ts`); Playwright `/tmp/ra-shots33`.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 34: upload hardening
+
+- `upload.routes`: file name `crypto.randomBytes(16).hex`; images go through new `src/utils/stripImageMetadata.ts` (JPEG drops APP1/APP13/COM keeping a minimal EXIF with Orientation; PNG drops eXIf/tEXt/iTXt/zTXt/tIME; WebP drops EXIF/XMP + VP8X flags; unknown → unchanged); a 415 deletes the whole batch.
+- Chat `POST /:id/messages`: `attachmentUrl` must pass new `src/utils/uploadUrl.ts` `isOwnUploadUrl` (`<base>/<safe-name>`, bases `/uploads`, `APP_URL/uploads`, `FRONTEND_URL/uploads`, `UPLOADS_BASE_URL`). Any external URL now 400 `attachment_domain_not_allowed`.
+- Verification: tsc clean; Jest `--runInBand` uploads+chat+new unit 6 suites / 25 tests, unit+security+e2e 14 / 58, e2e config 10/10; frontend build + 111 tests.
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 35: ticket flow fixed + Incidencias UI
+
+- Backend `ticket.routes`: `/resolve` requires `awaiting_validation`; `/complete` requires `escrowId` and status in `WORK_STATUSES` (`awaiting_schedule|scheduled|in_progress`); `GET /:id` adds `appointment {start,end,status}` and `pro.displayName`. `appointments.routes`: propose requires paid ticket in `awaiting_schedule|scheduled`; accept/reject require `proposed` (409 `appointment_not_proposed`); accept only moves `awaiting_schedule|scheduled` → `scheduled`.
+- Frontend: `TicketDetail` actions per role from real statuses (validate/resolve via new `validateTicket`/`resolveTicket`; removed nonexistent `closeTicket`/`openDispute`); `TicketsList` card rows + status chips; new `utils/tickets.ts` (service/history labels, es-ES dates, next step, error texts).
+- Verification: tsc clean; Jest `--runInBand` ticket.access 4, escrow.policy 1, appointments 3, recovery 6, rbac 8, e2e 10/10; frontend build + 114 tests; Playwright `/tmp/ra-shots35`.
+
+
+### 2026-10-11 - Claude Code (autonomous worker) - Round 36: ticket creation validated + «Comunicar una avería» UI
+
+- `POST /api/tickets`: `service` must be in pro catalog (`plumbing|electricity|appliances|locksmith|cleaning|painting|others`, 400 `invalid_service`), trimmed `title` ≤120 / `description` ≤2000 required (400 `invalid_title|invalid_description`), contract `active` (409 `contract_not_active`). After responding, emails owner via new `sendTicketOpenedEmail` (`utils/email.ts`).
+- Frontend `TicketCreatePage` rewritten (single contract preselected, service chips, Spanish errors via `getTicketErrorText`, navigate to ticket). `/tickets/new` tenant-only. `utils/tickets.ts` gains `TICKET_SERVICES` and new labels.
+- Verification: tsc clean; Jest `--runInBand` escrow 3 suites / 13, rbac 8, e2e 10/10; frontend build + 117 tests; Playwright `/tmp/ra-shots36`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 38: rent receipt PDFs (LAU 17.4)
+
+- New `GET /api/payments/:id/receipt.pdf` (`payment.controller.downloadReceipt`, `services/rentReceiptPdf.ts` with pure `describeReceipt` + `renderReceiptPdf`): only `succeeded` rent/deposit Payments; payer, payee, active co-tenant or `ensureCanReadContract` readers; others 404; 409 `receipt_not_paid|receipt_refunded`.
+- Frontend `pages/tenant/Payments.tsx` restyled (2026 list), «Descargar recibo» via `services/payments.downloadReceipt`, pending first, «Pagar ahora» only for the payer.
+- Verification: tsc clean; Jest `--runInBand` payments.receipt 4, duplicates+refunds 12; frontend build + 123 tests; Playwright `/tmp/ra-shots38`.
+
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 39: landlord receipts in contract detail
+
+- `GET /api/contracts/:id/payments` (`contract.earnings.controller.getContractPayments`): only `succeeded` rent/deposit, projected fields (no Stripe ids/payer/dispute), sorted by `paidAt`, active co-tenant allowed, 404 `contract_not_found` for missing/invalid id.
+- Frontend: new `components/contracts/ContractReceiptsCard` («Cobros y recibos», 6 latest + «Ver los N anteriores», «Recibo PDF») in `ContractDetail` when signed; `utils/payments.ts` (`paymentTitle`, `saveReceiptPdf`) shared with tenant `Payments`. `Breadcrumbs` no longer shows Mongo id suffixes.
+- Verification: tsc clean; Jest `--runInBand` payments.history 3; frontend build + 130 tests; Playwright `/tmp/ra-shots39`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 40: deposit Payment on Checkout
+
+- `checkout.session.completed` (deposit) now upserts a `Payment` `type:'deposit'` via new `services/depositPayment.service.recordDepositPayment` (idempotent by `stripePaymentIntentId`, `paidAt` = `contract.depositPaidAt`), so the deposit has a receipt PDF and shows in contract/tenant payment lists. `charge.refunded` and disputes on a deposit `Payment` still update `contract.depositAmountRefunded/depositRefundedAt/depositDispute`.
+- New `scripts/backfill_deposit_payments.ts` (dry-run unless `--apply`) for deposits paid before; not run anywhere (Jorge).
+- Verification: tsc clean; Jest `--runInBand` payments.disputes 7, deposit.backfill 1, refunds/receipt/history/duplicates/serviceOffer/webhook OK, e2e 10/10. Frontend untouched.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 41: server-side ticket search + mobile ticket detail order
+
+- `GET /api/tickets/my/{tenant,owner,pro}` share `listMine(field)`: `q` (escaped title regex or Spanish service label, accent-insensitive, ≤100 chars), `status` validated against model statuses (400 `invalid_status`; non-string `q` 400 `invalid_query`). Removed dead nested `publishSystem` copy.
+- Frontend `TicketsList` sends debounced `q` to the server (page reset, `keepPreviousData`); `TicketDetail` mobile order: actions, description, history, chat (`contents` wrappers).
+- Verification: tsc clean; Jest `--runInBand` ticket.list 5, escrow 19, security 16, e2e 10/10; frontend build + 132 tests; Playwright `/tmp/ra-shots41`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 42: payment notices (tenant receipt + landlord collected)
+
+- New `services/paymentNotice.service.notifyPaymentSucceeded` + `utils/email.paymentNoticeEmail` (replaces `sendPaymentReceiptEmail`): payer gets receipt email (link `/tenant/payments` for rent/deposit), landlord gets «Cobro recibido» (link `/contracts/:id`) for rent/deposit. Fire-and-forget, never throws.
+- Webhook `payment_intent.succeeded`: notifies only on first transition to `succeeded`; redelivery keeps `paidAt`, only refreshes charge/receiptUrl. Deposit notifies when `recordDepositPayment` creates the Payment. `rentReceiptPdf` exports `receiptConcept`/`rentPeriodLabel`.
+- Verification: tsc clean; Jest `--runInBand` payments.notice 3, email.escape 6, tests/contracts+unit+webhook 160, e2e 10/10. Frontend untouched.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 43: pro quotes/billing server-side + 2026 UI
+
+- New `GET /api/tickets/my/pro/summary` (aggregate: toQuote/awaitingApproval/approved/quotedTotal; pending/released count+total = quote + approved extra) and `GET /api/tickets/my/pro/billing.csv` (Spanish headers, BOM, `csvRow`). `/my/*` lists accept comma-separated `status` (each validated).
+- Frontend `pages/pro/Quotes.tsx` + `Billing.tsx` rebuilt on new `components/pro/ProTicketList` (server pagination/search/status chips with counts) and `utils/proTickets`; they previously used `limit:100` (server max 50) and nonexistent statuses `done`/`awaiting_approval`.
+- Fixed race in `tests/escrow/ticket.access.test.ts` (owner account created after ticket → notify email sometimes missing).
+- Verification: tsc clean; Jest `--runInBand` tests/escrow 23; frontend build + 135 tests; Playwright `/tmp/ra-shots43`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 44: pro profile security + pro home/profile UI
+
+- `POST /api/pros` now `authorizeRoles('pro')` (any verified tenant/landlord could create an active public pro profile and be assigned tickets); validated/cleaned `displayName` (2-80), `city` (2-60), `services` (known keys, unique, `basePrice` number 0-100000), optional boolean `active` (400 `invalid_*`); `GET /:id` invalid ObjectId → 404; 500s no longer leak `err.message`.
+- `GET /api/tickets/my/pro/summary` adds `work: { toSchedule, inProgress, awaitingValidation }`.
+- Frontend: `ProDashboard` rebuilt (2026: «Lo que te toca», owner-pending line, cobros, profile card/CTA); `pages/pro/Profile.tsx` is the real form (`services/pro.getMyProProfile|saveProProfile`, old `upsertPro/getMyPro` removed); `ProDetail` Spanish services with «desde»; Breadcrumbs `/pros`; pro entry removed from `OnboardingChecklist`.
+- Verification: tsc clean; Jest `--runInBand` security+escrow+auth-hardening 52; frontend build + 140 tests; Playwright `/tmp/ra-shots44`.
+
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 45: pro directory + pro picker on tickets
+
+- `POST /api/tickets/:id/assign` requires the profile's user to have `role:'pro'` (404 otherwise); non-string `proId` 400 `invalid_pro`, malformed 404; `loadTicketFor` 404 on malformed ticket id. `GET /api/tickets/:id` adds `propertyCity` and `pro.profileId`. `GET /api/pros` city match is case/accent-insensitive; unknown `service` 400.
+- Frontend: `ProList` rebuilt (2026, server filters + pagination), landlord nav «Profesionales», `/pros*` routes protected; new `components/pro/ProPicker` in `TicketDetail` (property city first, «Buscar en todas las ciudades»); `utils/pros.ts`.
+- Verification: tsc clean; Jest `--runInBand` escrow+security 54, e2e 10/10; frontend build + 143 tests; Playwright `/tmp/ra-shots45`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 46: no internal messages in 500s + ticket breadcrumb by role
+
+- New `src/utils/routeError.ts` `sendRouteError(res, err, code)`: deliberate 4xx keep their message; anything else is logged (method, path, user, err) and answered with a fixed code. Applied to ticket, chat, review, serviceOffers, appointments, verification, identity `/start`, invites routes. Controllers (`contract*`, `payment`, `admin`, `policy`) still pending.
+- Frontend `Breadcrumbs`: `/tickets/:id` parent crumb is `/landlord/issues` for landlords and `/pro/tickets` for pros.
+- Verification: tsc clean; Jest `--runInBand` 14 suites/73; e2e 10/10; frontend build + 145 tests.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 48: pro reviews end to end
+
+- `review.routes` `refreshRating` recomputes ratingAvg/reviewCount from the Review collection (old read-modify-write lost concurrent reviews); non-string `comment` 400, trimmed. New `GET /api/pros/:id/reviews` (paginated, author «Laura M.» via exported `reviewerLabel`, no ids/emails). `GET /api/tickets/:id` adds `proReview: { canReview, mine }` for owner/opener of a closed ticket with pro.
+- Frontend: `services/reviews.ts`, `components/pro/{Stars,ProReviewForm,ProReviews}.tsx`; review form in closed `TicketDetail`, «Opiniones» in `ProDetail`.
+- Verification: tsc clean; Jest `--runInBand` reviews 11 + escrow/security/chat 75; frontend build + 149 tests; Playwright `/tmp/ra-shots48`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 49: last internal messages out of 500s + review privacy
+
+- `sendRouteError` now in `admin.controller` (12 catches; stats no longer return `details`), `policy.controller` (duplicate version 409 `policy_version_exists`, ValidationError 400 `invalid_policy`), `taxReport.controller`, `institution.controller`, `requireVerified` (`verification_check_failed`).
+- `exportAuditTrails`: non-ObjectId `contractIds` → 400 `invalid_contract_id` (ids were joined into a file path: traversal); catch ends the response if the zip already started.
+- `GET /api/reviews/user/:userId` returns `{id, roleContext, score, comment, createdAt, author}` (author via `reviewerLabel` from `pro.routes`), no `fromUserId`/`relatedId`.
+- Verification: tsc clean; new `tests/security/admin.errors.test.ts` (7); Jest `--runInBand` 56 suites/252; frontend build + 149 tests.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 50: public listing page + property privacy
+
+- `property.controller`: `toPropertyView` strips `owner/agencyId/refAgencyId/agencyAccess/agencyTransferredAt/history` for non-managers in `getById` and `search`; `getById` adds `_mine`, `_liked`, `_application` (tenant); malformed id 404 on get/apply/view; `apply` and `countView` 404 unless `status:'active'`.
+- Frontend: `PropertyDetail` rebuilt (2026) with `components/property/PropertyGallery` (portal viewer) and `utils/propertyDetail`; `Modal` effect only when open, `onClose` via ref (closed modals locked body scroll; open ones stole focus on every render).
+- Verification: tsc clean; Jest `--runInBand` 10 suites/58 (new `tests/properties/property.view.test.ts`); e2e 10/10; frontend build + 164 tests; Playwright `/tmp/ra-shots50`.
+- Next: `LandlordDashboard` loads `/api/properties?limit=200` (server max 50, all listings) and filters by owner client-side → needs `/api/properties/mine`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 51: landlord's own listings + favorites privacy + PropertyCard 2026
+
+- New `GET /api/properties/mine` (`listMine`, landlord/agency/admin): owner or agencyId = me, all statuses, paginated (≤100), `status` validated. `listMyFavorites` goes through `toPropertyView` and drops non-active listings the viewer doesn't manage.
+- Frontend: `listMyProperties()` pages through `/mine`; `LandlordDashboard` uses it (was public search limit 200 → server max 50 + client filter). `PropertyCard` rebuilt (2026, `formatRent`/`propertyFacts`, no placeholder image). `Breadcrumbs` skips `/me`.
+- Verification: tsc clean; Jest `--runInBand` properties 26 + rbac/agency/tenantPro 34 (new `tests/properties/property.mine.test.ts`); frontend build + 169 tests; Playwright `/tmp/ra-shots51`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 52: message when requesting a visit
+
+- `property.controller`: `apply` accepts optional `message` via exported `cleanApplicationMessage` (string only, control chars stripped, ≤2 consecutive newlines, trimmed, max `APPLICATION_MESSAGE_MAX` 1000 → 400 `invalid_message`/`message_too_long` before creating). `_application.message` in `getById`; `listMyApplications` returns `message`; `listApplications` malformed id → 404.
+- Frontend: `applyToProperty(id, message?)`; `PropertyDetail` textarea in `ApplyBlock` (tenant signed in), «Tu mensaje» after sending; mobile sticky button scrolls/focuses the field instead of applying.
+- Verification: tsc clean; Jest `--runInBand` 9 suites/42 (new `tests/properties/property.apply.test.ts`); frontend build + 171 tests; Playwright `/tmp/ra-shots52`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 53: tenant applications page + visit date checks
+
+- `application.controller`: `proposeVisit` 400 `visit_date_in_past` (1 min slack), 409 `application_closed` if rejected; `acceptProposedVisit` 409 `proposed_date_passed`, `application_closed`; malformed id 404 on both.
+- Frontend: `pages/tenant/Applications.tsx` rebuilt (2026) with `utils/tenantApplications.ts` (`applicationStatus`, `canAccept`, `canPropose`, `localDateTimeMin`, `visitError`); tenant counter-proposal now sent as ISO (was zone-less → stored 2 h late). `ApplicantsModal` maps the new codes, `min` on its picker.
+- Verification: tsc clean; Jest `--runInBand` 10 suites/60; frontend build + 177 tests (new `pages/tenant/__tests__/Applications.test.tsx`); Playwright `/tmp/ra-shots53`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 54: application and visit email notices
+
+- New `services/applicationNotice.service.ts` `notifyApplication('received'|'proposed'|'scheduled', appId, actorId)` (fire-and-forget, never throws): new application → owner + managing agency (`agencyAccess:'manage'`) with message/Tenant PRO; propose/accept → the other side. Template `applicationNoticeEmail` + `visitDateLabel` (Europe/Madrid) in `utils/email.ts`.
+- Frontend: `LandlordDashboard` and `AgencyProperties` open `ApplicantsModal` from `?solicitudes=<propertyId>` (email link), then drop the param.
+- Verification: tsc clean; Jest `--runInBand` 13 suites/74 (new `tests/applications/application.notice.test.ts`, 7); frontend build + 180 tests.
+
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 55: favorites page 2026 + tenant home favorites count
+
+- `TenantHome` counted favorites from `localStorage` (`utils/favorites`, never written anymore → always 0); now `listMyFavorites()` in parallel with contracts, `null` → «–» on failure. Deleted dead `pages/Favorites.tsx` and `utils/favorites.ts`.
+- `pages/properties/FavoritesPage.tsx` rebuilt (2026): `savedCountLabel`, SkeletonGrid while loading, load error + «Reintentar» (was swallowed → "nothing saved"), remove with «Deshacer» (re-favorite, same position), failed removal restores card + error.
+- Verification: backend untouched; frontend build + 188 tests (new `pages/properties/__tests__/FavoritesPage.test.tsx`); Playwright `/tmp/ra-shots55`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 56: rescheduling a scheduled visit
+
+- `proposeVisit`: proposing over a future `visitDate` is a change request (status `proposed`, `visitDate` kept until accepted, then replaced); same time → 400 `same_visit_date`. `notifyApplication` passes `previousDate` (future `visitDate`) → email «Cambio de visita: …».
+- Frontend: `utils/tenantApplications` `upcomingVisit`, `canPropose` allows future `scheduled`, change texts; `Applications.tsx` «Cambiar fecha»/«Proponer cambio» with note; `ApplicantsModal` and `propertyDetail.applicationText` show both dates.
+- Verification: tsc clean; Jest `--runInBand` tests/applications 20; frontend build + 191 tests; Playwright `/tmp/ra-shots56`.
+
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 57: listing states + clear filters fix
+
+- Bug: «Borrar filtros» (empty state and FilterBar funnel) called `setFilters({})`, which merges → nothing cleared. New `clearFilters()` in `usePropertyFilters`; `FilterBar` takes `onClear` and is keyed on `location.search` so its inputs follow the URL. Failed favorite in the list now reverts the heart + toast.
+- `EmptyState`, `SkeletonGrid` (mirrors PropertyCard), `SkeletonDetail` (mirrors PropertyDetail), `ErrorCard` moved to 2026 tokens; dead `ui/Skeleton.tsx` removed. Listing: h1, es-ES count, filtered vs. no-listings empty, Spanish error + retry.
+- Verification: frontend build + 199 tests (new `pages/properties/__tests__/PropertiesList.test.tsx`); Playwright `/tmp/ra-shots57`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 58: search filters
+
+- Backend `search`: `city` is an escaped, anchored, case-insensitive regex; `viewsCount` added to `SORTABLE_FIELDS`.
+- Frontend `FilterBar` rebuilt (2026, `<form role="search">`, labels, room/bath selects, sort `viewsCount-desc` «Más vistos»); toggles off → `undefined` (was `false` → backend filtered `furnished=false`); `usePropertyFilters` drops `false` and uses only `setSearchParams` (was double history entry). `SearchParams.sort` now `'price'|'createdAt'|'viewsCount'`.
+- Verification: tsc clean; Jest `--runInBand` property.routes + mongoOperators 16; frontend build + 202 tests; Playwright `/tmp/ra-shots58`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 59: mobile headers
+
+- `AppShell` guest «Crear cuenta» never hid on mobile (`.ra-button` display beat Tailwind `hidden`) → wrapped to 2 lines; now `ra-app-register` hidden <640 px and a «Crear cuenta» button closes the mobile drawer for guests.
+- `PublicLayout`: mobile had no «Entrar»/«Viviendas»; now «Entrar» always, menu button <980 px (Viviendas, Producto, Para quién, + «Crear cuenta» <680 px), closes on navigation/Escape. «Mi cuenta» → `roleHome(role)` (was always `/tenant`); new `utils/roleHome.ts` used by RoleGuard, RedirectHome, AppShell. `PropertiesList` no longer re-filters `onlyTenantPro` client-side.
+- Verification: frontend tsc + build OK, vitest 49 files/206 (new `layout/__tests__/PublicLayout.test.tsx`); Playwright `/tmp/ra-shots59`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 60: accent-insensitive search + guest menu
+
+- New `src/utils/searchRegex.ts` (`escapeRegExp`, `accentInsensitivePattern`): property `search` city filter and `q`, plus `rentSuggestion` city comparables, ignore accents/ñ/ç and ’ vs '. No migration.
+- `AppShell` guest menu: no Mensajes/Asistente; `GuestAccount` block (explanation + «Crear cuenta» + «Entrar»), CSS `.ra-guest-account` replaces `.ra-mobile-nav-register`.
+- Verification: tsc clean; Jest `--runInBand` property.routes + mongoOperators 17, searchRegex + rentSuggestion + referenceImport 15; frontend build + 207 tests; Playwright `/tmp/ra-shots60`.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 62: resume intent after login + Modal/Toast 2026
+
+- `utils/authLinks.withIntent`; `LoginPrompt` `resume` prop (detail only) → return URL `?intent=save|apply`; `PropertyDetail` completes once (favorite + toast «Guardado en Favoritos», skipped if liked/mine/role without favorites; apply → focus message) and strips `intent`.
+- `ui/Modal`: 2026 classes (`.ra-modal*` in `@layer components` so caller Tailwind classes win — fixes signing modal stuck at 520 px), h2 + `aria-labelledby`, «Cerrar», mobile bottom sheet, initial focus in body. `ToastProvider`: `.ra-toast*`, role status/alert + aria-live, z-index 70 (top on mobile), counter ids (Date.now() collided), errors 6 s.
+- Verification: frontend tsc + build OK, 54 files/222 tests; Playwright `/tmp/ra-shots62`. Backend untouched.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 63: Tenant PRO retention scheduled + comparables cap
+
+- `jobs/tenantProRetention.ts`: `startTenantProRetentionJob` (cron 03:45, started in `app.ts`); purge uses a cursor over users with expired docs, deletes file then `$pull` doc + `$push` auditTrail, per-user try/catch, returns `{users, docs, failed}`; `tenantProDocsTtlDays()` (invalid → 365) also used by `GET /tenant-pro/me`. `deleteTP` basename-only, ENOENT-tolerant.
+- `rentSuggestion.findOwnComparables`: `sort({updatedAt:-1}).limit(MAX_OWN_COMPARABLES=300)`.
+- Verification: tsc clean; Jest `--runInBand` tests/tenantPro 8, rentSuggestion (new `tests/properties/rentSuggestion.comparables.test.ts`) + referenceImport + unit 14. Frontend untouched.
+
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 64: single toast system + payment dialog 2026
+
+- `react-hot-toast` removed (dependency + `<Toaster/>`): `TenantProPanel`, `CopyLinkButton`, `AdminAuditDashboard` use `useToast`; ZIP export progress shown in its button.
+- `PaymentModal`/`CheckoutForm`: `.ra-pay-*` classes, concept + es-ES amount, Stripe Elements `locale: 'es'`, card style with DM Sans/tokens, `.ra-button-blue` submit, alert errors; no-key state user-friendly (env var only in DEV). Tenant `Payments` modal title «Pagar recibo» + `paymentTitle` concept (was «Pagar renta» for deposits too).
+- Verification: frontend tsc + build OK, 56 files/227 tests (new PaymentModal 3, CopyLinkButton 2); Playwright `/tmp/ra-shots64`. Backend untouched.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 65: Button 2026 + honest Earnings page
+
+- `ui/Button`: `.ra-btn*` classes in `@layer components` (no inline styles), default `type="button"`, exported `buttonClassName()` for Links. Removed dead `pages/Login.tsx`, `pages/TenantDashboard.tsx`, `components/dashboard/ActiveContractWidget.tsx`. Landlord «Borrar» toasts on failure.
+- `pages/Earnings.tsx`: removed fake «+850 €» activity, «~5.4 %» and «100 % cobrado»; real stats only, 6-month chart with empty months (`lastSixMonths`), error + retry, link to `/landlord/payments`; breadcrumb «Ingresos».
+- Verification: frontend tsc + build OK, 58 files/235 tests (new Button 3, Earnings 5); Playwright `/tmp/ra-shots65`. Backend untouched.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 67: dependency audit + accent-insensitive ticket search
+
+- Root `npm audit fix` (no --force) + `nodemailer` ^10.1.0 (Node >=20) + removed global `brace-expansion` override (was vulnerable and broke minimatch 3): `npm audit --omit=dev` → 0. Frontend: axios, react-router 7.18.4, postcss. Remaining: dev-only majors (Jest 30, vitest 5, Tailwind 4, ts-node-dev).
+- `ticket.routes.ts` title search uses `accentInsensitivePattern` (own `escapeRegExp` removed).
+- Verification: tsc clean; Jest `--runInBand` all 97 suites pass in two batches (single process OOMs at 2 GB after 69 suites); frontend build OK, 237 tests OK (AppShell timeout under load, passes alone).
+
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 68: real frontend lint, tsx dev, serial backend suite
+
+- `frontend` `lint` = `tsc --noEmit -p tsconfig.test.json` (whole src incl. tests), added to CI; fixed 18 hidden test type errors + `usePolicyAcceptance.pendingPolicy` now typed nullable. vitest `testTimeout: 15000`.
+- Root `dev` = `tsx watch src/app.ts` (ts-node-dev removed). `jest.config.js` `workerIdleMemoryLimit: '1GB'` + `npm run test:backend:serial` (`--maxWorkers=1`): full suite in one command (97 suites, 458/459; `signature.security` flaked once with 401, passes alone).
+- Verification: tsc clean; frontend lint/build OK, 236/237 (AppShell timeout under load, passes alone). Details in `docs/MEJORA-CONTINUA.md` round 68.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 69: 2026 form fields, dead CSS, deterministic signature test
+
+- `ui/Input` and `ui/Select` use `.ra-field`/`.ra-input` (`@layer components`, no inline styles), with a new `containerClassName` prop for the wrapping label. `Select` is now used in `ContractWizard` (duration) and `ProfilePage` (specialty, previously an unassociated label). TicketDetail quote row width fixed.
+- Removed 182 lines of unused template CSS from `index.css` plus the unimported `src/style.css`.
+- `tests/contracts/signature.security.test.ts` pins `NODE_ENV`/`ALLOW_TEST_AUTH` and restores only its keys. Note: `/api/contracts/signature/webhook` and `/:id/signature/callback` sit behind `authenticate`, so they return 401 in production (open item #9 in review-firma).
+- Verification: frontend lint/build OK, 240/240 tests; signature.security 8/8. Details in `docs/MEJORA-CONTINUA.md` round 69.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 70: property form + ticket form on 2026 fields
+
+- `PropertyFormRHF` uses `Input`/`Select`/`.ra-input` (labels now associated), shows every field error (size/rooms/baths/floor/year/deposit/date errors were silently blocking "Siguiente"/"Crear"), jumps back to the failing step on submit (`onInvalid`), photo remove button visible on touch. `Input`/`Select` now `forwardRef` (usable with `register()`). `TicketCreatePage` drops its own `fieldClass`. New `.ra-field-hint`/`.ra-field-error`.
+- Gotcha: `frontend/src/setupTests.ts` globally mocks `zodResolver` to never return errors; form tests needing validation must `vi.unmock('@hookform/resolvers/zod')`.
+- Verification: frontend lint/build OK, 61 files / 247 tests; Playwright screenshots in `/tmp/ra-shots70`. Details in `docs/MEJORA-CONTINUA.md` round 70.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 71: real zod validation in tests + property form fixes
+
+- Removed the global `zodResolver` mock from `frontend/src/setupTests.ts` (form tests now see real validation; the `vi.unmock` gotcha from round 70 no longer applies).
+- `PropertyFormRHF`: numeric fields use a `num(message)` helper so an emptied field shows Spanish text instead of zod's "Expected number, received nan"; address search skips the picked/saved address (no reopening list, no search on edit), 1 s debounce for Nominatim.
+- Open for Jorge: Nominatim's usage policy forbids client-side autocomplete; a real geocoding provider is a product/billing decision.
+- Verification: frontend lint/build OK, 61 files / 250 tests. Details in `docs/MEJORA-CONTINUA.md` round 71.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 72: keyboard-accessible address combobox + gallery error
+
+- `PropertyFormRHF` address suggestions are an ARIA combobox/listbox (arrows, Enter picks without advancing the step, Escape/blur close). Gallery step now shows `images` errors (a non-absolute photo URL used to block «Siguiente» silently with zod's «Invalid url»).
+- `ui/Dropzone` and `RentSuggestionCard` moved from inline styles / Tailwind indigo to `--ra-*` tokens.
+- Gotcha: without `APP_URL`, `/api/uploads/images` returns relative `/uploads/…` URLs that both frontend and backend property schemas reject.
+- Verification: frontend lint/build OK, 61 files / 254 tests; Playwright `/tmp/ra-shots72`. Details in `docs/MEJORA-CONTINUA.md` round 72.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 73: property photo URLs + public-route test for contracts
+
+- Property image schemas (backend `property.schema.ts`, frontend `PropertyFormRHF`) accept `http(s)` URLs or own `/uploads/<name>` paths (`isOwnUploadUrl`); relative uploads (no `APP_URL`) no longer block publishing, and `javascript:`/`data:` image URLs are rejected.
+- New `tests/security/contract-public-routes.test.ts`: Firma.dev, signature callback and Stripe webhooks reach their controllers without JWT; 23 private `/api/contracts` routes return 401 (incl. `/signature/webhook` and `/:id/signature/callback`, open item #9).
+- Verification: tsc clean; Jest properties+uploads 43/43, new test 26/26; frontend lint/build OK, 61 files / 255 tests. Details in `docs/MEJORA-CONTINUA.md` round 73.
+
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 74: Badge and Drawer on 2026 tokens + dead UI removed
+
+- `ui/Badge` now takes `tone: StatusTone` and renders `.ra-badge .ra-badge-<tone>` classes (index.css); `StatusBadge`, `ContractStatusBadge` and `AgencyLandlords` use it. `STATUS_TONE_STYLES` removed. `ui/Drawer` styling moved to `.drawer-panel-left/right` + `.is-open` classes (only `width` stays inline).
+- Removed unused `ui/Alert`, `ui/Pagination`, unrouted `pages/Verification` and `services/verification`.
+- Verification: frontend lint/build OK, 63 files / 260 tests; Playwright `/tmp/ra-shots74`. Details in `docs/MEJORA-CONTINUA.md` round 74.
+
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 75: public invite routes were behind global authenticate
+
+- `app.use('/api', authenticate, postsignRouter)` runs `authenticate` for every `/api/*` request reaching it; `/api/agency-invites/:token`, `/:token/accept` and `/api/invites/preview` were mounted after it and returned 401 to anonymous invitees (also in production). Moved above it in `src/app.ts`. Hidden in tests because `jest.setup.ts` sets `ALLOW_TEST_AUTH=true`.
+- New `tests/security/invite-public-routes.test.ts` (no test-auth shortcut). `InviteAccept`/`CoTenantInviteAccept` only show "Invitación no válida" on 404 (else retry) and translate accept error codes.
+- Verification: tsc clean; Jest agency+cotenant+security 11 suites / 116 tests; frontend lint/build OK, 64 files / 266 tests. Details in `docs/MEJORA-CONTINUA.md` round 75.
+
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 76: no more prefix-less `app.use('/api', authenticate, …)`
+
+- Private routers in `src/app.ts` are mounted under their own prefix (`/api/postsign`, `/api/tenant-pro`, `/api/me/tenant-pro`, `/api/appointments`, `/api/applications`, `/api/payments`, `/api/connect`, `/api/service-offers`, `/api/tax`); their internal paths are now relative. `serviceOffers.routes.ts` also exports `serviceOfferAppointmentRoutes` (reschedule/cancel). `/api/invites` and `/api/institution` keep the `requireVerified` they used to inherit from the global mount.
+- New `tests/security/route-auth-map.test.ts` walks the Express stack: every `/api` route must return 401 without JWT unless it is in `PUBLIC_ROUTES` (27 entries); public ones must never answer "Token requerido"; unknown `/api` paths return 404. Add new public routes to that list.
+- Verification: tsc clean; 25 related Jest suites OK; anonymous and unverified-JWT responses identical to the previous code across 632 method/route combinations (except unknown paths → 404). Details in `docs/MEJORA-CONTINUA.md` round 76.
+
+### 2026-10-12 - Claude Code (autonomous worker) - Round 77: compliance dashboard totals + Spanish 2026 UI
+
+- `getComplianceDashboard` (`src/modules/rentalPublic/services/complianceDashboard.service.ts`) now returns `totals.compliant` and `totals.nonCompliant` over the whole filter (the admin screen used to count non-compliant from the current page only). Status counts respect the `status` filter (before, `risk` ignored it). Institution portal shares the service; its fields are unchanged.
+- `frontend/src/pages/admin/ComplianceDashboard.tsx` rewritten with `PageHeader`/`Card`/`Input`/`Select`/`Badge`, Spanish labels, area dropdown from `byArea`, Spanish `invalid_date_range` (also from the CSV Blob). Admin nav/AdminHome/Reports say «Cumplimiento» / «Eventos del sistema».
+- Verification: tsc clean; Jest admin+institution compliance 9/9; frontend lint/build OK, 65 files / 272 tests; Playwright `/tmp/ra-shots77`. Details in `docs/MEJORA-CONTINUA.md` round 77.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 78: system events + policy acceptances (CSV injection, date range, 2026 UI)
+
+- `src/services/systemEvents.service.ts` uses `parseDateRange` (dateTo inclusive of the whole day; invalid/inverted → 400 `invalid_date_range` in list and CSV); page/pageSize fall back to 1/25. New `tests/admin/admin.system-events.test.ts`.
+- `AdminCompliancePage` built its CSV client-side without formula neutralisation (User-Agent is user-controlled): now `frontend/src/utils/csv.ts` (mirror of backend `utils/csv.ts`). `frontend/src/utils/download.ts` (`saveBlob`, `blobErrorBody`) shared with `ComplianceDashboard` and `SystemEvents`.
+- `SystemEvents` and `AdminCompliancePage` rewritten with PageHeader/Card/Select/Badge/Modal; all 4 event types and cookies_policy in filters; breadcrumbs «Políticas»/«Pistas de firma». Gotcha: a `sr-only` `<th>` inside `overflow-x-auto` widens the page on mobile unless the scroll container is `relative`.
+- Verification: tsc clean; Jest 3/3; frontend lint/build OK, 67 files / 280 tests; Playwright `/tmp/ra-shots78`. Details in `docs/MEJORA-CONTINUA.md` round 78.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 79: policy acceptances paginated server-side + server CSV
+
+- `src/services/policyAcceptances.service.ts` (new): `GET /api/admin/policies/acceptances` returns `{ data, total, page, pageSize }` (activeOnly now in the Mongo query as policyType/version pairs); 400 `invalid_user_id` / `invalid_policy_type`. New `GET /api/admin/policies/acceptances/export.csv` (`csvRows`). New `tests/admin/admin.policy-acceptances.test.ts`.
+- `AdminCompliancePage` paginates (25) and downloads the server CSV; `frontend/src/utils/csv.ts` removed (no users left). Note: `rejectMongoOperators` + `hpp` already block `$` keys and query arrays globally.
+- Verification: tsc clean; Jest 4 suites / 22 tests; frontend lint/build OK, 67 files / 282 tests; Playwright `/tmp/ra-shots79`. Details in `docs/MEJORA-CONTINUA.md` round 79.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 80: /api/verification behind authenticate + Tenant PRO admin review
+
+- `src/routes/verification.routes.ts`: `router.use(authenticate)` (approve/reject/dev-verify were 403 for everyone, admin included); 400 `invalid_user_id`, 404 `user_not_found`. Removed from the public list in `route-auth-map.test.ts`. New `tests/verification/verification.routes.test.ts`.
+- `src/routes/admin.tenantPro.routes.ts`: new `GET /api/admin/tenant-pro/:userId/docs/:docId` (decrypts, sniffs PDF/PNG/JPEG, inline, no-store; 410 `doc_purged`); decision validated (400 `invalid_decision`/`invalid_max_rent` 1–100000, 409 `not_pending`, 404 `user_not_found`); pending list without `url`/`hash`/`auditTrail`, adds `name`, `createdAt`, `docs[].available`. New `tests/tenantPro/admin.review.test.ts`.
+- `AdminTenantProPage` rewritten with the 2026 system (cards, document preview modal). `services/tenantPro.ts` adds `fetchTenantProDoc` and types.
+- Verification: tsc clean; Jest 6 suites OK (see MEJORA-CONTINUA round 80); frontend lint/build OK, 68 files / 287 tests; Playwright `/tmp/ra-shots80`.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 81: admin users list (escaped search, server CSV, 2026 UI)
+
+- `getAllUsers` (`src/controllers/user.controller.ts`): `q` escaped (was raw `$regex`), searches email/name/companyName accent-insensitively, sorts by `createdAt` desc, 400 `invalid_role`. New `GET /api/users/export.csv` (admin, `csvRows`, max 10k). Admin user routes wrapped in `asyncHandler`.
+- `frontend/src/pages/admin/AdminUsersPage.tsx` rewritten (PageHeader, Modal «Nueva agencia», debounced search → page 1, Spanish role badges, ErrorCard, server CSV, mobile stacked row).
+- Open: `PATCH /api/users/:id` lets admin write any body field (no whitelist).
+- Verification: tsc clean; Jest admin.users 4/4 + route-auth-map OK; frontend lint/build OK, 69 files / 292 tests; Playwright `/tmp/ra-shots81`. Details in `docs/MEJORA-CONTINUA.md` round 81.
+
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 82: PATCH /api/users/:id whitelist + random Tenant PRO filenames
+
+- `updateUser` (`src/controllers/user.controller.ts`) now uses `buildUserUpdate`: self → phone/bio/avatar/jobTitle/monthlyIncome/companyName/serviceCategory (typed, trimmed, `null`/`''` unsets); admin also name, email (normalized, 409 on duplicate via `findUserByEmail`), role only among tenant/landlord/pro/agency (`role_locked` for admin/institution targets), boolean `isVerified`. 400 `invalid_user_id`. New `tests/admin/admin.users.update.test.ts` (5).
+- `encryptAndSaveTP(buf)` (signature changed, no filename) writes `<32 hex>.bin`; `readDecryptedTP` uses `path.basename`. Old files keep their names and still read.
+- Verification: tsc clean; Jest admin.users.update 5/5, admin.users, session-revocation, tenantPro (3 suites), route-auth-map OK. Frontend untouched. Details in `docs/MEJORA-CONTINUA.md` round 82.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 83: admin account dialog + revoking verification closes approved Verification
+
+- New `frontend/src/pages/admin/AdminUserDialog.tsx` (exports `AdminUser`): name button in each `AdminUsersPage` row opens a Modal to edit name/email/companyName/role (only tenant/landlord/pro/agency; admin/institution shown read-only)/isVerified via `PATCH /api/users/:id`, sending only changed fields; row updated in place.
+- `updateUser`: `isVerified: false` also sets an approved `Verification` to `rejected` (requireVerified accepted either). Test in `tests/admin/admin.users.update.test.ts` (needs `x-user-verified: false` because tests run with `ALLOW_UNVERIFIED`).
+- Open: `/api/users` is behind `requireVerified`, so unverified accounts get 403 on `/api/users/me`.
+- Verification: tsc clean; Jest 4 suites / 18 tests; frontend lint/build OK, 69 files / 294 tests; Playwright `/tmp/ra-shots83`. Details in `docs/MEJORA-CONTINUA.md` round 83.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 84: own profile without requireVerified
+
+- `src/app.ts` mounts `userProfileRoutes` (GET/PUT `/api/users/me`) with `authenticate` only; `/me/stats` and the rest of `/api/users` keep `requireVerified`. Unverified accounts got 403 on «Perfil y cuenta».
+- `getMe` computes `isVerified` from an approved `Verification` too; `updateProfile` (PUT /me) uses `buildUserUpdate(body, target, false)` (400 `invalid_<field>`).
+- `ProfilePage` shows «Identidad sin verificar · Verificarla» (tenant → `/tenant/kyc`) from `/api/users/me`.
+- Tests: new `tests/auth/unverified-profile.test.ts`; `session-claims` and `admin.users.update` now use `/api/contracts` and `/me/stats` as verified-only routes. Frontend 70 files / 296 tests. Details in `docs/MEJORA-CONTINUA.md` round 84.
+
+### 2026-10-16 - Claude Code (autonomous worker) - Round 85: unverified-account UX
+
+- `formatApiError` maps 403 `owner_not_verified`/`user_not_verified` to a Spanish message without request id (`isNotVerifiedError`, `NOT_VERIFIED_MESSAGE` exported). `AuthContext.login` refreshes from `/api/users/me` after login.
+- `AppShell`: `VerificationNotice` for non-admin accounts with `isVerified === false` (tenant → «Ver qué falta» `/tenant/kyc`); `useUnread` skips polling when unverified. `TenantHome` skips `listContracts` when unverified.
+- `/tenant/kyc` (`pages/tenant/Kyc.tsx`) rewritten: status badge + honest explanation. `/api/kyc` Stripe Identity provider is a stub; only the admin checkbox verifies accounts (noted for Jorge).
+- Verification: frontend lint/build OK, 71 files / 302 tests; Playwright `/tmp/ra-shots85`. Backend untouched. Details in `docs/MEJORA-CONTINUA.md` round 85.
+
+## 2026-10-15 — IA preparada para Claude (rama feat/claude-ia, Claude Code)
+- Nuevo `src/services/llm.service.ts`: un solo punto de llamada a la IA. Usa Claude (`@anthropic-ai/sdk`, `claude-opus-5-5`, esfuerzo `low`, fallback de servidor ante rechazos) si hay `ANTHROPIC_API_KEY`; si no, Gemini con `GOOGLE_API_KEY` como antes. `CLAUDE_MODEL` y `CLAUDE_EFFORT` lo ajustan sin tocar código.
+- `ai.service.ts` (descripciones + health) y `assistant.service.ts` (Clara) pasan por él. Health devuelve también `provider`.
+- Producción NO tiene ninguna clave de IA (ni Google ni Anthropic): la IA no funciona hoy. Jorge pide créditos de Claude for Startups; cuando lleguen: desplegar esta rama + `ANTHROPIC_API_KEY` en `.env.valeris`.
+- Tests: `ai.routes.test.ts` y nuevo `llm.service.test.ts` OK; `tsc --noEmit` OK.

@@ -1,6 +1,6 @@
 {
   "general": [
-    { "label": "Conversaciones", "path": "/inbox" },
+    { "label": "Mensajes", "path": "/inbox" },
     { "label": "Asistente", "path": "/assistant" }
   ],
   "tenant": [
@@ -11,7 +11,7 @@
     { "label": "Contratos", "path": "/contracts" },
     { "label": "Pagos", "path": "/tenant/payments" },
     { "label": "Mis incidencias", "path": "/tickets" },
-    { "label": "Verificación KYC", "path": "/tenant/kyc" },
+    { "label": "Verificación de identidad", "path": "/tenant/kyc" },
     { "label": "Tenant PRO", "path": "/tenant-pro" },
     { "label": "Perfil y cuenta", "path": "/profile" }
   ],
@@ -20,13 +20,16 @@
     { "label": "Mis propiedades", "path": "/owner/properties" },
     { "label": "Contratos", "path": "/contracts" },
     { "label": "Pagos", "path": "/landlord/payments" },
-    { "label": "Incidencias de mis propiedades", "path": "/landlord/issues" },
+    { "label": "Incidencias", "path": "/landlord/issues" },
+    { "label": "Profesionales", "path": "/pros" },
     { "label": "Visitas", "path": "/landlord/showings" },
     { "label": "Servicios", "path": "/landlord/services" },
     { "label": "Perfil y cuenta", "path": "/profile" }
   ],
   "agency": [
     { "label": "Inicio", "path": "/agency" },
+    { "label": "Inmuebles", "path": "/agency/properties" },
+    { "label": "Contratos", "path": "/contracts" },
     { "label": "Propietarios", "path": "/agency/landlords" },
     { "label": "Perfil y cuenta", "path": "/profile" }
   ],
@@ -46,9 +49,9 @@
     { "label": "Pagos", "path": "/admin/payments" },
     { "label": "Reportes", "path": "/admin/reports" },
     { "label": "Ajustes", "path": "/admin/settings" },
-    { "label": "Compliance", "path": "/admin/compliance" },
+    { "label": "Cumplimiento", "path": "/admin/compliance" },
     { "label": "Zonas tensionadas", "path": "/admin/compliance/tensioned-areas" },
-    { "label": "System events", "path": "/admin/system-events" },
+    { "label": "Eventos del sistema", "path": "/admin/system-events" },
     { "label": "Perfil y cuenta", "path": "/profile" }
   ]
 }

@@ -8,7 +8,14 @@ import { verifyConnectHmac } from '../../src/services/signature/docusign.provide
 import { connectDb, disconnectDb, clearDb } from '../utils/db';
 
 describe('Signature webhook authentication', () => {
-  const originalEnv = { ...process.env };
+  // Solo las variables que tocan estos tests: sustituir process.env entero hacía depender
+  // el resultado del entorno heredado. /signature/webhook y /:id/signature/callback pasan por
+  // authenticate, así que sin el atajo de test (ALLOW_TEST_AUTH) responderían 401, no 400.
+  const ENV_KEYS = [
+    'NODE_ENV', 'ALLOW_TEST_AUTH', 'SIGN_PROVIDER', 'SIGNATURE_WEBHOOK_SECRET',
+    'SIGN_WEBHOOK_SECRET', 'DOCUSIGN_WEBHOOK_SECRET',
+  ];
+  const originalEnv = Object.fromEntries(ENV_KEYS.map((key) => [key, process.env[key]]));
   let contractId: string;
   const payload = { envelopeId: 'security-envelope', eventId: 'security-event', status: 'sent' };
   const sign = (body: string, secret = 'canonical-secret') =>
@@ -17,6 +24,8 @@ describe('Signature webhook authentication', () => {
   beforeAll(connectDb);
   afterAll(disconnectDb);
   beforeEach(async () => {
+    process.env.NODE_ENV = 'test';
+    process.env.ALLOW_TEST_AUTH = 'true';
     process.env.SIGN_PROVIDER = 'signaturit';
     process.env.SIGNATURE_WEBHOOK_SECRET = 'canonical-secret';
     delete process.env.SIGN_WEBHOOK_SECRET;
@@ -30,7 +39,10 @@ describe('Signature webhook authentication', () => {
     contractId = contract.id;
   });
   afterEach(async () => {
-    process.env = { ...originalEnv };
+    for (const key of ENV_KEYS) {
+      if (originalEnv[key] === undefined) delete process.env[key];
+      else process.env[key] = originalEnv[key];
+    }
     await clearDb();
   });
 

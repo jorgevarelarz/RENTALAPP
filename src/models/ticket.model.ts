@@ -8,6 +8,8 @@ export interface ITicket extends Document {
   service: string;
   title: string;
   description: string;
+  /** Fotos de la avería: URLs de /uploads propios (ticket.routes valida con isOwnUploadUrl). */
+  photos?: string[];
   status: 'open'|'quoted'|'in_progress'|'awaiting_schedule'|'scheduled'|'awaiting_validation'|'closed'|'disputed';
   quote?: { amount: number; currency: 'EUR'; proId: string; ts: Date };
   extra?: { amount: number; reason: string; status: 'pending'|'approved'|'rejected' };
@@ -24,6 +26,7 @@ const s = new Schema<ITicket>({
   service: { type: String, required: true },
   title: { type: String, required: true },
   description: { type: String, required: true },
+  photos: { type: [String], default: undefined },
   status: { type: String, default: 'open' },
   quote: { amount: Number, currency: String, proId: String, ts: Date },
   extra: { amount: Number, reason: String, status: String },
@@ -31,4 +34,9 @@ const s = new Schema<ITicket>({
   history: [{ ts: Date, actor: String, action: String, payload: Schema.Types.Mixed }],
   escrowId: String
 },{timestamps:true});
+// Listados por rol (ticket.routes /my/*), ordenados por fecha
+s.index({ openedBy: 1, createdAt: -1 });
+s.index({ ownerId: 1, createdAt: -1 });
+s.index({ proId: 1, createdAt: -1 });
+s.index({ contractId: 1 });
 export default model<ITicket>('Ticket', s);

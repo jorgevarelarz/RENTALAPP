@@ -35,7 +35,7 @@ Estados: **confirmado** = problema observado en código o herramientas; **valida
 | --- | --- | --- | --- |
 | 15 | validar | Revisar caducidad, cierre e invalidación de sesiones. | JWT de 7 días y logout local en `services/auth.ts`. Cierre: bloqueo de cuenta/cambio de contraseña invalida acceso según una política explícita. |
 | 16 | confirmado | Planificar sesión en cookie HttpOnly con protección CSRF. | El token se guarda en `localStorage`. Cambiar backend y ambos clientes juntos, con pruebas de login, expiración, logout y OAuth; no mover sólo el almacenamiento. |
-| 17 | validar | Revisar contraseñas y abuso del reset. | Registro/reset admiten 6 caracteres; el límite IP está en login/register/request-reset, no en reset. Cierre: política acordada, límites y pruebas sin enumeración de cuentas. |
+| 17 | validar | Revisar contraseñas y abuso del reset. | Registro/reset admiten 6 caracteres; el límite IP está en login/register/request-reset, no en reset. Cierre: política acordada, límites y pruebas sin enumeración de cuentas. **2026-10-11 (`claude/mejora-continua`):** mínimo 8 en registro y reset, límite IP también en `/reset`, login sin enumeración; pruebas en `tests/auth/login-policy.test.ts`. |
 | 18 | validar | Comprobar la revocación de verificación y roles en sesiones existentes. | `requireVerified` acepta inmediatamente `user.isVerified` del JWT. Cierre: una verificación revocada o un cambio de privilegios no conserva permisos antiguos indefinidamente. |
 | 19 | validar | Revisar subidas y descarga privada por tipo de documento. | `/uploads/contracts` está bloqueado, pero `/uploads` es estático. Inventariar todas las rutas de escritura; probar contenido real, tamaño, extensión, traversal y permisos. |
 | 20 | validar | Completar errores asíncronos en rutas Express. | Hay handlers `async` directos, incluidos webhooks, y Express 4. Cierre: un fallo de BD/proveedor devuelve respuesta controlada y deja el evento reintentable. |
@@ -60,7 +60,7 @@ Estados: **confirmado** = problema observado en código o herramientas; **valida
 
 | ID | Estado | Acción | Evidencia y criterio de cierre |
 | --- | --- | --- | --- |
-| 37 | confirmado | Sustituir el lint ficticio por una comprobación real. | `frontend/package.json` imprime `Lint pendiente`. Reusar tooling disponible o retirar la falsa señal verde hasta configurarlo. |
+| 37 | local | Sustituir el lint ficticio por una comprobación real. | `frontend/package.json` imprimía `Lint pendiente`. Desde la ronda 68 de `docs/MEJORA-CONTINUA.md`, `npm --prefix frontend run lint` comprueba los tipos de todo `src`, tests incluidos (`tsconfig.test.json`), y CI lo ejecuta. Sin ESLint todavía. |
 | 38 | confirmado | Añadir typecheck al portal institucional. | Su build sólo ejecuta Vite. Cierre: CI falla ante un error TypeScript deliberado y el build válido pasa. |
 | 39 | validar | Revisar accesibilidad de formularios, modales y pagos. | Prueba de teclado, foco, etiquetas, mensajes de error y contraste; no se ha realizado una auditoría visual en esta sesión. |
 | 40 | validar | Revisar carga, error, vacío y doble envío de acciones críticas. | Cierre: usuario entiende qué ocurrió y un doble clic no duplica solicitudes, firmas o pagos. |

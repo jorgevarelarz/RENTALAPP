@@ -6,7 +6,11 @@ import { ContractParty } from '../models/contractParty.model';
 import { getNextSigningStatus } from '../domain/contracts/status';
 import { AdminRequest } from '../models/adminRequest.model';
 import { User } from '../models/user.model';
-import { sendEmail } from '../utils/email';
+import { Property } from '../models/property.model';
+import { sendCoTenantInviteEmail } from '../utils/email';
+import { frontendUrl } from '../utils/frontendUrl';
+import { isManagingAgency } from '../utils/propertyAccess';
+import { sendRouteError } from '../utils/routeError';
 
 const redactEmail = (email?: string) => {
   if (!email || !email.includes('@')) return '';
@@ -17,6 +21,40 @@ const redactEmail = (email?: string) => {
   const domainRed = domainName.length <= 2 ? `${domainName[0]}*` : `${domainName[0]}***${domainName.slice(-1)}`;
   const tld = domainParts.slice(1).join('.');
   return `${localRed}@${domainRed}${tld ? `.${tld}` : ''}`;
+};
+
+const INVITE_TTL_MS = 48 * 60 * 60 * 1000;
+/** Entre dos envíos de la misma invitación vigente, para no usar la app para mandar correo en bucle. */
+export const INVITE_RESEND_COOLDOWN_MS = 10 * 60 * 1000;
+
+const newInviteToken = () => {
+  const token = crypto.randomBytes(32).toString('hex');
+  return {
+    token,
+    tokenHash: crypto.createHash('sha256').update(token).digest('hex'),
+    expiresAt: new Date(Date.now() + INVITE_TTL_MS),
+  };
+};
+
+/**
+ * El email dice quién invita y qué vivienda es; el token solo viaja en el enlace.
+ * Guarda en la invitación si el correo salió, para que la interfaz pueda avisar.
+ */
+const sendInviteEmail = async (party: any, token: string, expiresAt: Date, contract: any, inviterId?: string) => {
+  const [property, inviter]: any[] = await Promise.all([
+    contract.property ? Property.findById(contract.property).select('title address city').lean() : null,
+    inviterId ? User.findById(inviterId).select('name').lean() : null,
+  ]);
+  const emailStatus = await sendCoTenantInviteEmail(party.email, {
+    link: frontendUrl('/invites/accept', { token }),
+    inviterName: inviter?.name,
+    propertyTitle: property?.title,
+    propertyAddress: [property?.address, property?.city].filter(Boolean).join(', '),
+    expiresAt,
+  });
+  party.inviteEmailStatus = emailStatus;
+  await party.save();
+  return emailStatus;
 };
 
 export const inviteCoTenant = async (req: Request, res: Response) => {
@@ -41,9 +79,7 @@ export const inviteCoTenant = async (req: Request, res: Response) => {
     if (existing && existing.status !== 'REMOVED') {
       return res.status(400).json({ error: 'already_invited' });
     }
-    const token = crypto.randomBytes(32).toString('hex');
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const expiresAt = new Date(Date.now() + 48 * 60 * 60 * 1000);
+    const { token, tokenHash, expiresAt } = newInviteToken();
     let party = existing;
     if (party) {
       party.status = 'INVITED';
@@ -64,16 +100,82 @@ export const inviteCoTenant = async (req: Request, res: Response) => {
         inviteExpiresAt: expiresAt,
       });
     }
-    const link = `${process.env.FRONTEND_URL || 'http://localhost:3001'}/invites/accept?token=${token}`;
-    await sendEmail(
-      normalizedEmail,
-      'Invitación para co-titular del contrato',
-      `<p>Has sido invitado como co-titular en un contrato de alquiler.</p><p><a href="${link}">Aceptar invitación</a></p>`,
-    );
-    res.json({ ok: true, partyId: party._id });
+    const emailStatus = await sendInviteEmail(party, token, expiresAt, contract, userId);
+    res.json({ ok: true, partyId: party._id, emailStatus });
   } catch (err: any) {
     console.error(err);
     res.status(500).json({ error: 'invite_failed' });
+  }
+};
+
+/**
+ * Reenvía una invitación de co-titular aún sin aceptar con un enlace nuevo (el anterior deja de valer).
+ * Solo el inquilino principal; si la invitación sigue vigente, como mucho una vez cada 10 minutos.
+ */
+export const resendCoTenantInvite = async (req: Request, res: Response) => {
+  try {
+    const { id, partyId } = req.params as { id: string; partyId: string };
+    const userId = req.user?.id;
+    const contract = await Contract.findById(id);
+    if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
+    if (String(contract.tenant) !== String(userId)) {
+      return res.status(403).json({ error: 'Solo el inquilino principal puede invitar' });
+    }
+    if (['completed', 'terminated', 'cancelled'].includes(String(contract.status))) {
+      return res.status(400).json({ error: 'contract_closed' });
+    }
+    const party = Types.ObjectId.isValid(partyId) ? await ContractParty.findById(partyId) : null;
+    if (!party || String(party.contractId) !== String(contract._id)) {
+      return res.status(404).json({ error: 'party_not_found' });
+    }
+    if (party.status !== 'INVITED') return res.status(400).json({ error: 'not_invited' });
+    const now = Date.now();
+    const stillValid = !!party.inviteExpiresAt && party.inviteExpiresAt.getTime() > now;
+    // Si el último correo falló no hay espera: el invitado no ha recibido nada.
+    const lastEmailFailed = party.inviteEmailStatus === 'failed';
+    if (stillValid && !lastEmailFailed && party.updatedAt && now - party.updatedAt.getTime() < INVITE_RESEND_COOLDOWN_MS) {
+      return res.status(429).json({ error: 'resend_too_soon' });
+    }
+    const { token, tokenHash, expiresAt } = newInviteToken();
+    party.inviteTokenHash = tokenHash;
+    party.inviteExpiresAt = expiresAt;
+    party.invitedByUserId = userId ? new Types.ObjectId(userId) : party.invitedByUserId;
+    await party.save();
+    const emailStatus = await sendInviteEmail(party, token, expiresAt, contract, userId);
+    res.json({ ok: true, partyId: party._id, expiresAt, emailStatus });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: 'resend_failed' });
+  }
+};
+
+/**
+ * Cancela una invitación de co-titular que nadie ha aceptado: el enlace deja de valer y el correo
+ * puede volver a invitarse. Solo el inquilino principal. Para quien ya se unió está la baja con
+ * aprobación del administrador (remove-request).
+ */
+export const cancelCoTenantInvite = async (req: Request, res: Response) => {
+  try {
+    const { id, partyId } = req.params as { id: string; partyId: string };
+    const userId = req.user?.id;
+    const contract = Types.ObjectId.isValid(id) ? await Contract.findById(id) : null;
+    if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
+    if (String(contract.tenant) !== String(userId)) {
+      return res.status(403).json({ error: 'Solo el inquilino principal puede cancelar invitaciones' });
+    }
+    const party = Types.ObjectId.isValid(partyId) ? await ContractParty.findById(partyId) : null;
+    if (!party || String(party.contractId) !== String(contract._id)) {
+      return res.status(404).json({ error: 'party_not_found' });
+    }
+    if (party.status !== 'INVITED') return res.status(400).json({ error: 'not_invited' });
+    party.status = 'REMOVED';
+    party.inviteTokenHash = undefined;
+    party.inviteExpiresAt = undefined;
+    await party.save();
+    res.json({ ok: true, partyId: party._id });
+  } catch (err: any) {
+    console.error(err);
+    res.status(500).json({ error: 'cancel_failed' });
   }
 };
 
@@ -170,11 +272,17 @@ export const getContractParties = async (req: Request, res: Response) => {
     const isLandlord = String(contract.landlord) === userId;
     const isParty = parties.some(p => String(p.userId) === userId) || String(contract.tenant) === userId;
     const isAdmin = user?.role === 'admin';
-    if (!isLandlord && !isParty && !isAdmin) {
+    // La agencia que aún gestiona el inmueble ve los co-titulares (solo lectura).
+    const isManagingAgencyOfContract =
+      user?.role === 'agency' &&
+      String((contract as any).agencyId || '') === userId &&
+      isManagingAgency(user, await Property.findById(contract.property).select('agencyId agencyAccess').lean());
+    if (!isLandlord && !isParty && !isAdmin && !isManagingAgencyOfContract) {
       return res.status(403).json({ error: 'forbidden' });
     }
 
-    const userIds = parties.map(p => String(p.userId)).filter(Boolean);
+    // Las invitaciones pendientes no tienen userId: String(undefined) rompía la consulta de usuarios.
+    const userIds = parties.filter(p => p.userId).map(p => String(p.userId));
     const users = await User.find({ _id: { $in: userIds } }).select('name avatar').lean();
     const umap = new Map(users.map((u: any) => [String(u._id), u]));
     const showFullEmail = isLandlord || isParty;
@@ -185,6 +293,13 @@ export const getContractParties = async (req: Request, res: Response) => {
       status: p.status,
       signedAt: p.signedAt,
       invitedAt: p.createdAt,
+      ...(p.status === 'INVITED'
+        ? {
+            expiresAt: p.inviteExpiresAt,
+            expired: !!p.inviteExpiresAt && p.inviteExpiresAt < new Date(),
+            emailFailed: p.inviteEmailStatus === 'failed',
+          }
+        : {}),
       email: showFullEmail ? p.email : redactEmail(p.email),
       user: p.userId
         ? {
@@ -218,7 +333,7 @@ export const getContractParties = async (req: Request, res: Response) => {
 
     res.json({ items: payload });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message || 'parties_failed' });
+    sendRouteError(res, err, 'parties_failed');
   }
 };
 
@@ -266,6 +381,30 @@ export const getMyInvites = async (req: Request, res: Response) => {
     });
     res.json({ items: payload });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message || 'invites_failed' });
+    sendRouteError(res, err, 'invites_failed');
   }
+};
+
+/**
+ * Vista previa pública de una invitación de co-titular: quien tiene el enlace aún puede no tener
+ * cuenta. Devuelve solo lo necesario para decidir (email invitado, inmueble y quién invita).
+ * El token va en la query, que no se guarda en los logs.
+ */
+export const getInvitePreview = async (req: Request, res: Response) => {
+  const token = typeof req.query.token === 'string' ? req.query.token : '';
+  if (!token) return res.status(400).json({ error: 'token_required' });
+  const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+  const party = await ContractParty.findOne({ inviteTokenHash: tokenHash, status: 'INVITED' }).lean();
+  if (!party) return res.status(404).json({ error: 'invite_not_found' });
+  const [contract, inviter]: any[] = await Promise.all([
+    Contract.findById(party.contractId).populate({ path: 'property', select: 'title address city' }).lean(),
+    party.invitedByUserId ? User.findById(party.invitedByUserId).select('name').lean() : null,
+  ]);
+  const property = contract?.property;
+  res.json({
+    email: party.email,
+    expired: !!party.inviteExpiresAt && party.inviteExpiresAt < new Date(),
+    inviterName: inviter?.name,
+    property: property ? { title: property.title, address: property.address, city: property.city } : undefined,
+  });
 };

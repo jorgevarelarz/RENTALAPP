@@ -1,4 +1,4 @@
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { generateText, llmConfig, MAX_OUTPUT_TOKENS } from './llm.service';
 import { Types } from 'mongoose';
 import { Contract } from '../models/contract.model';
 import { Payment } from '../models/payment.model';
@@ -8,8 +8,6 @@ import Appointment from '../models/appointment.model';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { getLatestLauDocument, upsertLatestLauDocument } from './legalDocuments.service';
-
-const MODEL_NAME = 'gemini-flash-latest';
 
 const STOP_WORDS = new Set([
   'el', 'la', 'los', 'las', 'de', 'del', 'y', 'o', 'a', 'en', 'por', 'para', 'un', 'una', 'que',
@@ -178,9 +176,8 @@ export async function answerWithClara(query: string, platformContext: Record<str
     };
   }
 
-  const apiKey = process.env.GOOGLE_API_KEY;
-  if (!apiKey) {
-    const err = new Error('GOOGLE_API_KEY no configurada');
+  if (!llmConfig()) {
+    const err = new Error('IA no configurada: falta ANTHROPIC_API_KEY');
     (err as any).status = 500;
     throw err;
   }
@@ -202,15 +199,7 @@ export async function answerWithClara(query: string, platformContext: Record<str
     },
   });
 
-  const genAI = new GoogleGenerativeAI(apiKey);
-  const model = genAI.getGenerativeModel({ model: MODEL_NAME });
-  const result = await model.generateContent(prompt);
-  const text = result.response.text()?.trim();
-  if (!text) {
-    const err = new Error('Respuesta vacía del modelo');
-    (err as any).status = 502;
-    throw err;
-  }
+  const { text } = await generateText(prompt, { maxTokens: MAX_OUTPUT_TOKENS.assistant });
   return {
     answer: text,
     lau: lauDoc ? { versionDate: lauDoc.versionDate, url: lauDoc.url } : undefined,

@@ -1,6 +1,7 @@
 import type { Request, Response } from 'express';
 import { Contract } from '../models/contract.model';
 import { Property } from '../models/property.model';
+import { Application } from '../models/application.model';
 
 export async function listAgencyProperties(req: Request, res: Response) {
   const u: any = (req as any).user;
@@ -14,7 +15,8 @@ export async function listAgencyProperties(req: Request, res: Response) {
   }
 
   const props = await Property.find({ agencyId })
-    .select('title address city status owner agencyAccess agencyTransferredAt createdAt updatedAt')
+    .select('title address city region price deposit status owner agencyAccess agencyTransferredAt createdAt updatedAt')
+    .populate('owner', 'name')
     .sort({ updatedAt: -1, _id: -1 })
     .lean();
 
@@ -28,8 +30,19 @@ export async function listAgencyProperties(req: Request, res: Response) {
     activeMap.set(key, { hasActive: true, lastPaidAt: c.lastPaidAt });
   }
 
+  // Solicitudes abiertas, solo de los inmuebles que la agencia sigue gestionando
+  const managedIds = props.filter((p: any) => p.agencyAccess === 'manage').map((p) => p._id);
+  const appCounts = managedIds.length
+    ? await Application.aggregate([
+        { $match: { propertyId: { $in: managedIds }, status: { $ne: 'rejected' } } },
+        { $group: { _id: '$propertyId', n: { $sum: 1 } } },
+      ])
+    : [];
+  const appMap = new Map<string, number>(appCounts.map((a: any) => [String(a._id), a.n]));
+
   const items = props.map((p: any) => {
     const active = activeMap.get(String(p._id));
+    const manages = p.agencyAccess === 'manage';
     return {
       id: String(p._id),
       title: p.title,
@@ -37,6 +50,12 @@ export async function listAgencyProperties(req: Request, res: Response) {
       city: p.city,
       status: p.status,
       ownerId: p.owner ? String((p.owner as any)?._id || p.owner) : undefined,
+      ownerName: (p.owner as any)?.name || undefined,
+      region: p.region,
+      // Precio y fianza solo mientras la gestiona: los necesita para preparar el contrato
+      price: manages ? p.price : undefined,
+      deposit: manages ? p.deposit : undefined,
+      openApplications: manages ? appMap.get(String(p._id)) || 0 : undefined,
       agencyAccess: p.agencyAccess,
       agencyTransferredAt: p.agencyTransferredAt,
       hasActiveContract: !!active?.hasActive,

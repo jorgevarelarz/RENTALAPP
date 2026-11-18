@@ -6,6 +6,7 @@ export interface UserProfile {
   email: string;
   name: string;
   role: 'tenant' | 'landlord' | 'admin' | 'pro';
+  isVerified?: boolean;
   phone?: string;
   avatar?: string;
   bio?: string;

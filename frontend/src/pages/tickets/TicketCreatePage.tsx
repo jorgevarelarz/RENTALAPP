@@ -1,119 +1,278 @@
-import React, { useEffect, useState } from "react";
-import { createTicket } from "../../services/tickets";
+import React, { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { ImagePlus, X } from "lucide-react";
+import { createTicket, uploadTicketPhotos } from "../../services/tickets";
 import { listContracts } from "../../services/contracts";
 import { useAuth } from "../../context/AuthContext";
 import { useNotify } from "../../utils/notify";
-import { sendEmail } from "../../services/notify";
+import Card from "../../components/ui/Card";
+import Input from "../../components/ui/Input";
+import Select from "../../components/ui/Select";
+import { buttonClassName } from "../../components/ui/Button";
+import PageHeader from "../../components/ui/PageHeader";
+import {
+  TICKET_DESCRIPTION_MAX,
+  TICKET_PHOTOS_MAX,
+  TICKET_PHOTO_BYTES_MAX,
+  TICKET_PHOTO_TYPES,
+  TICKET_SERVICES,
+  TICKET_TITLE_MAX,
+  getServiceLabel,
+  getTicketErrorText,
+} from "../../utils/tickets";
+
+const secondaryLink = buttonClassName('secondary');
+
+type Home = { id: string; title: string; address: string };
+
+/** Vivienda de un contrato: título del anuncio y dirección, si vienen poblados. */
+function toHome(c: any): Home {
+  const property = c?.property && typeof c.property === 'object' ? c.property : null;
+  const address = [property?.address, property?.city].filter(Boolean).join(', ');
+  return {
+    id: String(c._id),
+    title: property?.title || address || c.propertyAddress || 'Vivienda alquilada',
+    address: property?.title ? address : '',
+  };
+}
 
 export default function TicketCreatePage() {
   const { token } = useAuth();
-  const [contracts, setContracts] = useState<any[]>([]);
-  const [form, setForm] = useState({
-    contractId: "",
-    ownerId: "",
-    propertyId: "",
-    service: "plumbing",
-    title: "",
-    description: "",
-  });
-  const [result, setResult] = useState<any>(null);
+  const navigate = useNavigate();
   const { push } = useNotify();
+  const [contractId, setContractId] = useState("");
+  const [service, setService] = useState("");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const [sending, setSending] = useState(false);
+  const [photos, setPhotos] = useState<string[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["contracts", "active-for-ticket"],
+    queryFn: () => listContracts(token as string, { status: 'active' }),
+    enabled: Boolean(token),
+  });
+  const homes = useMemo(() => (data?.items || []).map(toHome), [data]);
+
+  // Con un solo contrato activo no hay nada que elegir
   useEffect(() => {
-    const loadContracts = async () => {
-      if (!token) return;
-      try {
-        const res = await listContracts(token, { status: 'active' });
-        setContracts(res.items || []);
-      } catch (error) {
-        console.error(error);
-      }
-    };
-    loadContracts();
-  }, [token]);
+    if (homes.length === 1) setContractId(homes[0].id);
+  }, [homes]);
 
-  const updateField = (key: string, value: any) =>
-    setForm((state) => ({
-      ...state,
-      [key]: value,
-    }));
-
-  const handleContractChange = (value: string) => {
-    const selected = contracts.find((c) => String(c._id) === value);
-    const property = selected?.property && typeof selected.property === 'object' ? selected.property : null;
-    updateField("contractId", value);
-    updateField("ownerId", selected?.ownerId || selected?.landlord || "");
-    updateField("propertyId", property?._id || selected?.property || "");
+  const addPhotos = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    e.target.value = '';
+    if (!files.length) return;
+    setPhotoError(null);
+    const room = TICKET_PHOTOS_MAX - photos.length;
+    if (files.length > room) return setPhotoError(`Puedes adjuntar hasta ${TICKET_PHOTOS_MAX} fotos.`);
+    if (files.some(f => !TICKET_PHOTO_TYPES.includes(f.type))) return setPhotoError('Solo se admiten fotos JPG, PNG o WebP.');
+    if (files.some(f => f.size > TICKET_PHOTO_BYTES_MAX)) return setPhotoError('Cada foto puede ocupar hasta 10 MB.');
+    setUploading(true);
+    try {
+      const urls = await uploadTicketPhotos(files);
+      setPhotos(prev => [...prev, ...urls].slice(0, TICKET_PHOTOS_MAX));
+    } catch (err) {
+      setPhotoError(getTicketErrorText(err, 'No se pudieron subir las fotos. Inténtalo de nuevo.'));
+    } finally {
+      setUploading(false);
+    }
   };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!contractId) return setError('Elige la vivienda.');
+    if (!service) return setError('Elige el tipo de avería.');
+    if (!title.trim()) return setError('Pon un título a la avería.');
+    if (!description.trim()) return setError('Describe qué pasa.');
+    if (uploading) return setError('Espera a que terminen de subirse las fotos.');
+    setSending(true);
+    setError(null);
     try {
-      const ticket = await createTicket(form);
-      setResult(ticket);
-      push("success", "Incidencia creada correctamente");
-      try {
-        await sendEmail(
-          "notificaciones@rental-app.test",
-          "Nueva incidencia creada",
-          `Se ha creado la incidencia ${ticket._id || "sin ID"}.`
-        );
-      } catch (error) {
-        console.warn("No se pudo disparar el email de incidencia", error);
-      }
-    } catch (err: any) {
-      push("error", err?.response?.data?.error || "No se pudo crear la incidencia");
+      const ticket = await createTicket({
+        contractId,
+        service,
+        title: title.trim(),
+        description: description.trim(),
+        ...(photos.length ? { photos } : {}),
+      });
+      push("success", "Avería comunicada. Hemos avisado a tu arrendador.");
+      navigate(`/tickets/${ticket._id}`);
+    } catch (err) {
+      setError(getTicketErrorText(err, 'No se pudo comunicar la avería. Inténtalo de nuevo.'));
+      setSending(false);
     }
   };
 
+  const header = (
+    <PageHeader
+      title="Comunicar una avería"
+      subtitle="Tu arrendador recibe un aviso por correo y elige un profesional para arreglarla."
+    />
+  );
+
+  if (isLoading) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6 pb-10">
+        {header}
+        <Card className="px-5 py-6 text-sm text-gray-500">Cargando tu contrato…</Card>
+      </div>
+    );
+  }
+
+  if (isError || homes.length === 0) {
+    return (
+      <div className="mx-auto max-w-2xl space-y-6 pb-10">
+        {header}
+        <Card className="space-y-3 px-5 py-6">
+          <p className="font-medium text-gray-900">
+            {isError ? 'No se pudo cargar tu contrato' : 'No tienes ningún alquiler activo'}
+          </p>
+          <p className="text-sm text-gray-500">
+            {isError
+              ? 'Vuelve a intentarlo en un momento.'
+              : 'Las averías se comunican desde un contrato activo. Cuando tu contrato empiece, podrás hacerlo aquí.'}
+          </p>
+          <Link to="/contracts" className={secondaryLink}>Ver mis contratos</Link>
+        </Card>
+      </div>
+    );
+  }
+
+  const selectedHome = homes.find(h => h.id === contractId);
+
   return (
-    <div style={{ maxWidth: 520, margin: "24px auto" }}>
-      <h2>Abrir incidencia</h2>
-      <form onSubmit={submit} style={{ display: "grid", gap: 10 }}>
-        <select
-          value={form.contractId}
-          onChange={(e) => handleContractChange(e.target.value)}
-          required
-        >
-          <option value="">Selecciona contrato activo</option>
-          {contracts.map((c) => {
-            const property = c.property && typeof c.property === 'object' ? c.property : null;
-            const label = property?.title || property?.address || c.propertyAddress || c._id;
-            return (
-              <option key={c._id} value={c._id}>
-                {label}
-              </option>
-            );
-          })}
-        </select>
-        <select
-          value={form.service}
-          onChange={(e) => updateField("service", e.target.value)}
-        >
-          <option value="plumbing">Fontanería</option>
-          <option value="electricity">Electricidad</option>
-          <option value="appliances">Electrodomésticos</option>
-          <option value="painting">Pintura</option>
-        </select>
-        <input
-          placeholder="Título"
-          value={form.title}
-          onChange={(e) => updateField("title", e.target.value)}
-          required
-        />
-        <textarea
-          placeholder="Descripción"
-          value={form.description}
-          onChange={(e) => updateField("description", e.target.value)}
-          rows={5}
-        />
-        <button type="submit">Crear</button>
-      </form>
-      {result && (
-        <pre style={{ background: "#fafafa", padding: 12, marginTop: 12 }}>
-          {JSON.stringify(result, null, 2)}
-        </pre>
-      )}
+    <div className="mx-auto max-w-2xl space-y-6 pb-10">
+      {header}
+      <Card className="p-5 sm:p-6">
+        <form onSubmit={submit} noValidate className="space-y-6">
+          {homes.length === 1 && selectedHome ? (
+            <div>
+              <p className="ra-field-label">Vivienda</p>
+              <p className="mt-1 text-sm text-gray-700">{selectedHome.title}</p>
+              {selectedHome.address && <p className="text-sm text-gray-500">{selectedHome.address}</p>}
+            </div>
+          ) : (
+            <Select label="Vivienda" value={contractId} onChange={e => setContractId(e.target.value)}>
+              <option value="">Elige la vivienda</option>
+              {homes.map(h => (
+                <option key={h.id} value={h.id}>
+                  {h.address ? `${h.title} · ${h.address}` : h.title}
+                </option>
+              ))}
+            </Select>
+          )}
+
+          <fieldset>
+            <legend className="ra-field-label">Tipo de avería</legend>
+            <div className="mt-2 flex flex-wrap gap-2">
+              {TICKET_SERVICES.map(key => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={service === key}
+                  onClick={() => setService(key)}
+                  className={`min-h-[36px] rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors ${
+                    service === key
+                      ? 'border-[var(--ra-ink)] bg-[var(--ra-ink)] text-white'
+                      : 'border-[var(--ra-line)] bg-white text-[var(--ra-ink)] hover:bg-[var(--ra-paper)]'
+                  }`}
+                >
+                  {getServiceLabel(key)}
+                </button>
+              ))}
+            </div>
+          </fieldset>
+
+          <Input
+            label="Título"
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            maxLength={TICKET_TITLE_MAX}
+            placeholder="Por ejemplo: gotea el grifo de la cocina"
+          />
+
+          <div className="ra-field">
+            <label htmlFor="ticket-description" className="ra-field-label">Qué pasa</label>
+            <textarea
+              id="ticket-description"
+              aria-describedby="ticket-description-help"
+              value={description}
+              onChange={e => setDescription(e.target.value)}
+              maxLength={TICKET_DESCRIPTION_MAX}
+              rows={5}
+              placeholder="Desde cuándo pasa, en qué parte de la casa y qué has probado."
+              className="ra-input resize-y"
+            />
+            <p id="ticket-description-help" className="ra-field-hint flex justify-between gap-3">
+              <span>Indica también cuándo puede entrar el profesional.</span>
+              <span className="tabular-nums">{description.length}/{TICKET_DESCRIPTION_MAX}</span>
+            </p>
+          </div>
+
+          <fieldset>
+            <legend className="ra-field-label">
+              Fotos <span className="font-normal text-[var(--ra-muted)]">(opcional)</span>
+            </legend>
+            <p className="ra-field-hint mt-0.5">
+              Ayudan al profesional a presupuestar sin tener que ir antes. Hasta {TICKET_PHOTOS_MAX}, JPG, PNG o WebP.
+            </p>
+            <ul className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-6">
+              {photos.map((url, i) => (
+                <li key={url} className="relative aspect-square overflow-hidden rounded-lg border border-[var(--border)] bg-gray-50">
+                  <img src={url} alt={`Foto ${i + 1} de la avería`} className="h-full w-full object-cover" />
+                  <button
+                    type="button"
+                    onClick={() => setPhotos(prev => prev.filter(p => p !== url))}
+                    aria-label={`Quitar la foto ${i + 1}`}
+                    className="absolute right-1 top-1 inline-flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-gray-700 shadow-sm hover:bg-white"
+                  >
+                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                  </button>
+                </li>
+              ))}
+              {photos.length < TICKET_PHOTOS_MAX && (
+                <li>
+                  <label
+                    className={`flex aspect-square cursor-pointer flex-col items-center justify-center gap-1 rounded-lg border border-dashed border-gray-300 text-xs font-medium text-gray-600 hover:border-gray-400 hover:bg-gray-50 ${
+                      uploading ? 'pointer-events-none opacity-60' : ''
+                    }`}
+                  >
+                    <ImagePlus className="h-5 w-5 text-gray-400" aria-hidden="true" />
+                    {uploading ? 'Subiendo…' : 'Añadir fotos'}
+                    <input
+                      type="file"
+                      multiple
+                      accept={TICKET_PHOTO_TYPES.join(',')}
+                      onChange={addPhotos}
+                      disabled={uploading}
+                      className="sr-only"
+                    />
+                  </label>
+                </li>
+              )}
+            </ul>
+            {photoError && <p role="alert" className="mt-2 text-sm text-red-700">{photoError}</p>}
+          </fieldset>
+
+          {error && (
+            <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+              {error}
+            </p>
+          )}
+
+          <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Link to="/tickets" className={secondaryLink}>Cancelar</Link>
+            <button type="submit" disabled={sending || uploading} className={buttonClassName('primary')}>
+              {sending ? 'Enviando…' : 'Comunicar avería'}
+            </button>
+          </div>
+        </form>
+      </Card>
     </div>
   );
 }

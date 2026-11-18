@@ -11,8 +11,16 @@ type PolicyType = (typeof REQUIRED_TYPES)[number];
 
 const storageKey = (type: string) => `policy_version_${type}`;
 
+const storedToken = (): string | null => {
+  try {
+    return JSON.parse(localStorage.getItem("user") || "null")?.token ?? null;
+  } catch {
+    return null;
+  }
+};
+
 export const usePolicyAcceptance = (
-  token: string | null = localStorage.getItem("token"),
+  token: string | null = storedToken(),
   requiredTypes: PolicyType[] = [...REQUIRED_TYPES]
 ) => {
   const [loading, setLoading] = useState(true);
@@ -93,7 +101,9 @@ export const usePolicyAcceptance = (
   };
 
   const hasAccepted = !needsAcceptance;
-  const pendingPolicy = pending[0] || null;
+  // Sin políticas pendientes, pending[0] es undefined aunque el tipo del array no lo diga.
+  const pendingPolicy =
+    (pending[0] as { policyType: PolicyType; version: string } | undefined) ?? null;
 
   return {
     loading,

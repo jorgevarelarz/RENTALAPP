@@ -12,6 +12,8 @@ import { RentPayment } from "../../src/models/rentPayment.model";
 import { runRentGeneration } from "../../src/jobs/rentGeneration.job";
 import { stripe } from "../../src/utils/stripe";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
+import { connectLandlord } from '../utils/connect';
+import * as emailUtils from "../../src/utils/email";
 
 const PASSWORD = "Passw0rd!";
 const NEW_PASSWORD = "NewPassw0rd!";
@@ -241,11 +243,16 @@ jest.setTimeout(180_000);
     const createIntent = jest.spyOn(stripe.paymentIntents, 'create').mockResolvedValue({
       id: 'pi_e2e_rent', client_secret: 'pi_e2e_rent_secret', status: 'requires_payment_method',
     } as any);
+    // Sin cuenta de cobros del propietario la renta no se puede pagar.
+    await request(app).post(`/api/contracts/${contractId}/pay-rent`).set(asUser(tenantToken)).send().expect(409);
+    const account = await connectLandlord(String(landlord._id), { accountId: 'acct_e2e_owner' });
     try {
       const started = await request(app).post(`/api/contracts/${contractId}/pay-rent`)
         .set(asUser(tenantToken)).send().expect(200);
       expect(started.body).toMatchObject({ amount: 750, clientSecret: 'pi_e2e_rent_secret' });
-      expect(createIntent).toHaveBeenCalledWith(expect.objectContaining({ amount: 75000, currency: 'eur' }));
+      expect(createIntent).toHaveBeenCalledWith(expect.objectContaining({
+        amount: 75000, currency: 'eur', transfer_data: { destination: 'acct_e2e_owner' },
+      }));
       const params = createIntent.mock.calls[0][0]!;
       const payload = JSON.stringify({
         id: 'evt_e2e_rent', type: 'payment_intent.succeeded',
@@ -263,6 +270,7 @@ jest.setTimeout(180_000);
       expect(createIntent).toHaveBeenCalledTimes(1);
     } finally {
       createIntent.mockRestore();
+      account.mockRestore();
     }
   });
 
@@ -348,17 +356,25 @@ jest.setTimeout(180_000);
   });
 
   it("password reset flow works (request + reset)", async () => {
+    const sendSpy = jest.spyOn(emailUtils, "sendEmail").mockResolvedValue(undefined);
     await request(app)
       .post("/api/auth/request-reset")
       .send({ email: "tenant@test.com" })
       .expect(200);
+    // El correo sale en segundo plano, después de la respuesta.
+    for (let i = 0; i < 300 && sendSpy.mock.calls.length === 0; i++) {
+      await new Promise((r) => setTimeout(r, 10));
+    }
 
-    const user = await User.findOne({ email: "tenant@test.com" });
+    const user = await User.findOne({ email: "tenant@test.com" }).select("+resetToken +resetTokenExp");
     expect(user?.resetToken && user?.resetTokenExp).toBeTruthy();
+    const token = String(sendSpy.mock.calls[0][2]).match(/[?&]token=([a-f0-9]+)/)?.[1];
+    sendSpy.mockRestore();
+    expect(token).toBeTruthy();
 
     await request(app)
       .post("/api/auth/reset")
-      .send({ token: user!.resetToken, password: NEW_PASSWORD })
+      .send({ token, password: NEW_PASSWORD })
       .expect(200);
 
     await request(app)

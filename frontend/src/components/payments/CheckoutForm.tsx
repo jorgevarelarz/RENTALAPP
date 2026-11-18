@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { CardElement, useElements, useStripe } from '@stripe/react-stripe-js';
 import { api as axios } from '../../api/client';
-import Button from '../ui/Button';
 import { Lock } from 'lucide-react';
 
 type Props = {
@@ -11,23 +10,21 @@ type Props = {
   clientSecret?: string;
 };
 
+// El campo de Stripe va en un iframe: no hereda la fuente ni los tokens, se le pasan a mano
 const CARD_STYLE = {
   style: {
     base: {
-      color: "#32325d",
-      fontFamily: '"Inter", sans-serif',
-      fontSmoothing: "antialiased",
-      fontSize: "16px",
-      "::placeholder": {
-        color: "#aab7c4"
-      }
+      color: '#0b1025',
+      fontFamily: '"DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif',
+      fontSmoothing: 'antialiased',
+      fontSize: '16px',
+      '::placeholder': { color: '#66708b' },
     },
-    invalid: {
-      color: "#fa755a",
-      iconColor: "#fa755a"
-    }
-  }
+    invalid: { color: '#b42318', iconColor: '#b42318' },
+  },
 };
+
+const euros = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
 const CheckoutForm: React.FC<Props> = ({ amount, currency = 'eur', onSuccess, clientSecret }) => {
   const stripe = useStripe();
@@ -62,42 +59,35 @@ const CheckoutForm: React.FC<Props> = ({ amount, currency = 'eur', onSuccess, cl
       } else if (result.paymentIntent?.status === 'succeeded') {
         onSuccess();
       } else {
-        throw new Error('Pago no completado');
+        throw new Error('El pago no se ha completado. Revisa la tarjeta o inténtalo de nuevo.');
       }
     } catch (err: any) {
-      setError(err.message || 'Error al procesar el pago.');
+      setError(err?.message || 'No se pudo procesar el pago. Inténtalo de nuevo.');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6">
-      <div className="bg-white p-4 border border-gray-300 rounded-xl focus-within:ring-2 focus-within:ring-blue-500 focus-within:border-blue-500 transition-all">
+    <form onSubmit={handleSubmit} className="ra-pay-form">
+      <span className="ra-pay-label">Tarjeta</span>
+      <div className="ra-pay-card">
         <CardElement options={{ style: CARD_STYLE.style, hidePostalCode: true }} />
       </div>
 
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg border border-red-100 animate-in fade-in">
+        <p className="ra-pay-error" role="alert">
           {error}
-        </div>
+        </p>
       )}
 
-      <Button
-        type="submit"
-        disabled={!stripe || loading}
-        className="w-full flex items-center justify-center gap-2 py-3 text-lg"
-      >
-        {loading ? 'Procesando...' : (
-          <>
-            <Lock size={18} /> Pagar {((amount / 100).toFixed(2))} €
-          </>
-        )}
-      </Button>
+      <button type="submit" className="ra-button ra-button-blue ra-pay-submit" disabled={!stripe || loading}>
+        {loading ? 'Procesando el pago…' : `Pagar ${euros.format(amount / 100)}`}
+      </button>
 
-      <div className="text-center text-xs text-gray-400 flex items-center justify-center gap-1">
-        <Lock size={12} /> Pagos seguros encriptados por Stripe
-      </div>
+      <p className="ra-pay-note">
+        <Lock size={13} aria-hidden /> Pago procesado por Stripe. RentalApp no guarda los datos de tu tarjeta.
+      </p>
     </form>
   );
 };

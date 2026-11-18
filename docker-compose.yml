@@ -11,6 +11,7 @@ volumes:
   nginx_html:
   nginx_acme:
   uploads_data:
+  storage_data:
 
 services:
   nginx-proxy:
@@ -86,4 +87,5 @@ services:
       - nginx-proxy
     volumes:
       - uploads_data:/app/uploads
+      - storage_data:/app/storage
     command: ["npm","run","start:prod"]

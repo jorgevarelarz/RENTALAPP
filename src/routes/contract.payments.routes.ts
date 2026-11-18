@@ -2,152 +2,70 @@ import { Router } from 'express';
 import { stripe } from '../utils/stripe';
 import { Contract } from '../models/contract.model';
 import { User } from '../models/user.model';
-import { calcPlatformFeeOnRent, calcSurchargeCents, calcSignFeeOnRent } from '../utils/rentFees';
 import { authenticate } from '../middleware/auth.middleware';
 import { requirePolicies } from '../middleware/requirePolicies';
 import type { PolicyType } from '../models/policy.model';
+import { sendRouteError } from '../utils/routeError';
+import { billableRent } from '../utils/rentPeriod';
+import { isRentChargeError, rentChargeSplit } from '../services/rentCharge.service';
 
 const r = Router();
 const REQUIRED_POLICIES: PolicyType[] = ['terms_of_service', 'data_processing'];
 
-r.post('/:id/pay-rent', async (req, res) => {
-  const tenantId = (req as any).user?.id;
-  if (!tenantId) return res.status(401).json({ error: 'unauthorized' });
+// `POST /:id/pay-rent` vive en contract.routes.ts (createRentPaymentIntent). Aquí hubo otra
+// implementación con la misma ruta que nunca llegaba a ejecutarse; se retiró el 2026-11-11.
 
-  const { method, paymentMethodId } = req.body || {};
-  if (!['sepa_debit', 'card', 'bizum'].includes(method)) return res.status(400).json({ error: 'invalid_method' });
-
-  const contract = await Contract.findById(req.params.id);
-  if (!contract) return res.status(404).json({ error: 'contract_not_found' });
-  if (String(contract.tenant) !== String(tenantId)) return res.status(403).json({ error: 'forbidden' });
-
-  const owner = await User.findById(contract.landlord);
-  const tenant = await User.findById(tenantId);
-  if (!owner?.stripeAccountId) return res.status(409).json({ error: 'owner_not_connected' });
-  if (!tenant?.stripeCustomerId) return res.status(409).json({ error: 'tenant_no_customer' });
-
-  const acct = await stripe.accounts.retrieve(owner.stripeAccountId);
-  if (!acct.charges_enabled) return res.status(409).json({ error: 'charges_disabled' });
-
-  const rentBase = contract.rentAmount ?? contract.rent;
-  const rentCents = Math.round((rentBase || 0) * 100);
-  const surchargeCents = calcSurchargeCents(method, rentCents);
-  const signFeeCents = contract.signFeeCollected ? 0 : calcSignFeeOnRent(rentCents);
-  const rentFeeCents = calcPlatformFeeOnRent(rentCents);
-  const applicationFeeCents = rentFeeCents + signFeeCents;
-  const amountCents = rentCents + surchargeCents;
-
-  const intent = await stripe.paymentIntents.create({
-    amount: amountCents,
-    currency: 'eur',
-    customer: tenant.stripeCustomerId!,
-    payment_method: paymentMethodId,
-    confirm: true,
-    payment_method_types: [method],
-    transfer_data: { destination: owner.stripeAccountId! },
-    application_fee_amount: applicationFeeCents,
-    metadata: {
-      kind: 'rent',
-      contractId: String(contract._id),
-      ownerId: String(owner._id),
-      tenantId: String(tenant._id),
-      method,
-      rentCents,
-      surchargeCents,
-      rentFeeCents,
-      signFeeCents,
-      },
-  });
-
-  contract.paymentRef = intent.id;
-  contract.lastPaidAt = new Date();
-  if (signFeeCents > 0) {
-    contract.signFeeCollected = true;
-    contract.signFeeCollectedAt = new Date();
-  }
-  await contract.save();
-
-  res.json({
-    ok: true,
-    intentId: intent.id,
-    method,
-    rentAmount: rentCents / 100,
-    surcharge: surchargeCents / 100,
-    platformFee: rentFeeCents / 100,
-    signFee: signFeeCents / 100,
-    totalToTenant: amountCents / 100,
-  });
-});
-
-// Cobro con método guardado (off-session)
+// Cobro con método guardado (off-session). Mismo reparto que el resto de cobros de renta:
+// el inquilino paga la renta, va a la cuenta del propietario y la plataforma retiene su comisión.
 r.post('/:id/pay-rent-saved', authenticate, requirePolicies(REQUIRED_POLICIES), async (req, res) => {
   const tenantId = (req as any).user?.id;
   if (!tenantId) return res.status(401).json({ error: 'unauthorized' });
 
-  const contract = await Contract.findById(req.params.id).populate(['landlord', 'tenant']);
-  if (!contract) return res.status(404).json({ error: 'contract_not_found' });
-  if (String((contract as any).tenant?._id || contract.tenant) !== String(tenantId)) {
-    return res.status(403).json({ error: 'forbidden' });
-  }
-
-  const landlord: any = (contract as any).landlord;
-  const tenant: any = (contract as any).tenant;
-  if (!landlord?.stripeAccountId) return res.status(400).json({ error: 'owner_not_connected' });
-  if (!tenant?.stripeCustomerId) return res.status(400).json({ error: 'no_saved_method' });
-
-  const rentBase = contract.rentAmount ?? contract.rent;
-  const rentCents = Math.round((rentBase || 0) * 100);
-  const platformFeeCents = calcPlatformFeeOnRent(rentCents);
-  const totalChargeCents = rentCents + platformFeeCents;
-
-  const paymentMethods = await stripe.paymentMethods.list({
-    customer: tenant.stripeCustomerId,
-    type: 'card',
-  });
-  if (!paymentMethods.data.length) {
-    return res.status(400).json({ error: 'no_saved_method' });
-  }
-  const defaultPaymentMethod = paymentMethods.data[0].id;
-
   try {
+    const contract = await Contract.findById(req.params.id);
+    if (!contract) return res.status(404).json({ error: 'contract_not_found' });
+    if (String(contract.tenant) !== String(tenantId)) return res.status(403).json({ error: 'forbidden' });
+    if (contract.status !== 'active' && contract.status !== 'signed') {
+      return res.status(400).json({ error: 'contract_not_active' });
+    }
+
+    const tenant = await User.findById(tenantId).select('stripeCustomerId').lean();
+    if (!tenant?.stripeCustomerId) return res.status(400).json({ error: 'no_saved_method' });
+
+    const rent = billableRent(contract);
+    if (rent === null) return res.status(400).json({ error: 'invalid_rent' });
+    const rentCents = Math.round(rent * 100);
+
+    const paymentMethods = await stripe.paymentMethods.list({ customer: tenant.stripeCustomerId, type: 'card' });
+    if (!paymentMethods.data.length) return res.status(400).json({ error: 'no_saved_method' });
+
+    const split = await rentChargeSplit(contract, rentCents);
     const intent = await stripe.paymentIntents.create({
-      amount: totalChargeCents,
+      amount: rentCents,
       currency: 'eur',
       customer: tenant.stripeCustomerId,
-      payment_method: defaultPaymentMethod,
+      payment_method: paymentMethods.data[0].id,
       off_session: true,
       confirm: true,
-      transfer_data: {
-        destination: landlord.stripeAccountId,
-        amount: rentCents,
-      },
+      ...split.params,
       metadata: {
-        kind: 'rent',
+        ...split.metadata,
         contractId: String(contract._id),
-        ownerId: String(landlord._id),
-        tenantId: String(tenant._id),
+        tenantId: String(tenantId),
         method: 'card_saved',
-        rentCents,
-        surchargeCents: 0,
-        rentFeeCents: platformFeeCents,
-        signFeeCents: 0,
-        period: new Date().toISOString(),
       },
     });
 
-    contract.paymentRef = intent.id;
-    contract.lastPaidAt = new Date();
-    await contract.save();
-
     return res.json({ success: true, status: intent.status });
   } catch (err: any) {
+    if (isRentChargeError(err)) return res.status(err.status).json({ error: err.code });
     if (err?.code === 'authentication_required' && err?.raw?.payment_intent?.client_secret) {
       return res.status(402).json({
         error: 'authentication_required',
         clientSecret: err.raw.payment_intent.client_secret,
       });
     }
-    return res.status(500).json({ error: err?.message || 'payment_failed' });
+    return sendRouteError(res, err, 'payment_failed');
   }
 });
 

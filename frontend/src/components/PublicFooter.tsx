@@ -57,7 +57,7 @@ export default function PublicFooter() {
           ))}
         </div>
         <div className="mt-10 flex flex-col gap-2 border-t border-gray-200 pt-6 text-xs text-gray-500 sm:flex-row sm:items-center sm:justify-between">
-          <p>© {new Date().getFullYear()} RentalApp. Todos los derechos reservados.</p>
+          <p>© {new Date().getFullYear()} RentalApp. Todos los derechos reservados. Un proyecto de <a href="https://valerisstudio.es/" target="_blank" rel="noopener" className="underline">Valeris Studio</a>.</p>
           <p>Hecho en España · app.rentalapp.es</p>
         </div>
       </div>

@@ -4,6 +4,8 @@ import { PipelineStage } from 'mongoose';
 import { ComplianceStatus } from '../modules/rentalPublic/models/complianceStatus.model';
 import { parseDateRange } from '../utils/dateRange';
 import { getInstitutionCaseIdSalt } from '../utils/getInstitutionCaseIdSalt';
+import { csvRows } from '../utils/csv';
+import { sendRouteError } from '../utils/routeError';
 
 const CASEID_SALT = getInstitutionCaseIdSalt();
 
@@ -156,9 +158,7 @@ function buildInstitutionComplianceCsv(data: InstitutionDashboardData) {
     i.checkedAt ? new Date(i.checkedAt).toISOString() : '',
   ]);
 
-  return [header, ...rows]
-    .map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(','))
-    .join('\n');
+  return csvRows([header, ...rows]);
 }
 
 export const getInstitutionComplianceDashboard = async (req: Request, res: Response) => {
@@ -187,7 +187,7 @@ export const getInstitutionComplianceDashboard = async (req: Request, res: Respo
     if (error?.message === 'invalid_date_range') {
       return res.status(400).json({ error: 'invalid_date_range' });
     }
-    res.status(500).json({ error: error?.message || 'institution_dashboard_failed' });
+    sendRouteError(res, error, 'institution_dashboard_failed');
   }
 };
 
@@ -216,6 +216,6 @@ export const exportInstitutionComplianceDashboardCsv = async (req: Request, res:
     if (error?.message === 'invalid_date_range') {
       return res.status(400).json({ error: 'invalid_date_range' });
     }
-    res.status(500).json({ error: error?.message || 'institution_dashboard_export_failed' });
+    sendRouteError(res, error, 'institution_dashboard_export_failed');
   }
 };

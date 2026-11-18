@@ -1,6 +1,7 @@
 import request from "supertest";
 import { app } from "../../src/app";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
+import { seedContractParties, LANDLORD_ID } from "../utils/contractParties";
 
 beforeAll(connectDb);
 afterAll(disconnectDb);
@@ -8,6 +9,7 @@ afterEach(clearDb);
 
 describe("Contracts API (multi-región)", () => {
   it("crea contrato válido en Galicia con cláusula autonómica IGVS", async () => {
+    await seedContractParties();
     const payload = {
       landlord: "507f1f77bcf86cd799439011",
       tenant: "507f1f77bcf86cd799439012",
@@ -25,6 +27,7 @@ describe("Contracts API (multi-región)", () => {
 
     const res = await request(app)
       .post("/api/contracts")
+      .set("x-user-id", LANDLORD_ID)
       .send(payload)
       .expect(201);
 
@@ -35,6 +38,7 @@ describe("Contracts API (multi-región)", () => {
   });
 
   it("rechaza contrato con región inválida", async () => {
+    await seedContractParties();
     const payload = {
       landlord: "507f1f77bcf86cd799439011",
       tenant: "507f1f77bcf86cd799439012",
@@ -47,6 +51,11 @@ describe("Contracts API (multi-región)", () => {
       clauses: []
     };
 
-    await request(app).post("/api/contracts").send(payload).expect(400);
+    const res = await request(app)
+      .post("/api/contracts")
+      .set("x-user-id", LANDLORD_ID)
+      .send(payload)
+      .expect(400);
+    expect(res.body.error).toBe("region_not_supported");
   });
 });

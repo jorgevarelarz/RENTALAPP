@@ -4,8 +4,10 @@ import { Mock, vi } from 'vitest';
 
 // Mock router param id
 vi.mock('react-router-dom', () => ({
+  Link: ({ to, children, ...rest }: any) => <a href={to} {...rest}>{children}</a>,
   useParams: () => ({ id: (global as any).__mockId || 'c1' }),
-}), { virtual: true });
+  useSearchParams: () => [new URLSearchParams((global as any).__mockSearch || ''), (global as any).__mockSetSearch || (() => {})],
+}));
 
 // Mock AuthContext with configurable user
 vi.mock('../../context/AuthContext', () => ({
@@ -22,7 +24,7 @@ vi.mock('axios', () => {
   const axiosMock: any = { get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn() };
   axiosMock.create = vi.fn(() => axiosMock);
   return { __esModule: true, default: axiosMock };
-}, { virtual: true });
+});
 
 // Stub ChatPanel to avoid deep imports
 vi.mock('../../components/ChatPanel', () => ({
@@ -34,6 +36,8 @@ vi.mock('../../services/contracts', () => ({
   __esModule: true,
   getContract: vi.fn(),
   createSignSession: vi.fn(),
+  payDeposit: vi.fn(),
+  getPaymentHistory: vi.fn().mockResolvedValue([]),
 }));
 
 import ContractDetail from '../ContractDetail';
@@ -55,6 +59,8 @@ describe('ContractDetail polling', () => {
     vi.useFakeTimers();
     (global as any).__mockAuth = { token: 't', user: null };
     (global as any).__mockId = 'c1';
+    (global as any).__mockSearch = '';
+    (global as any).__mockSetSearch = undefined;
   });
 
   afterEach(() => {

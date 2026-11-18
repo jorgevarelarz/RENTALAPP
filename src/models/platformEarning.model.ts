@@ -21,7 +21,7 @@ interface IPlatformEarning extends Document {
 const PlatformEarningSchema = new Schema<IPlatformEarning>({
   kind: { type: String, enum: ['rent', 'service'], required: true },
   ticketId: { type: String, index: true },
-  escrowId: { type: String, index: true },
+  escrowId: String,
   offerId: { type: String, index: true },
   proId: { type: String, index: true },
   serviceKey: String,
@@ -33,6 +33,13 @@ const PlatformEarningSchema = new Schema<IPlatformEarning>({
   paymentRef: String,
   city: String,
 }, { timestamps: true });
+
+// Una ganancia por escrow: la liberación del ticket puede reintentarse sin duplicarla.
+// Nombre propio porque en las BD existentes ya hay un `escrowId_1` no único con el nombre automático.
+PlatformEarningSchema.index(
+  { escrowId: 1 },
+  { name: 'escrowId_unique', unique: true, partialFilterExpression: { escrowId: { $type: 'string' } } },
+);
 
 export default model<IPlatformEarning>('PlatformEarning', PlatformEarningSchema);
 

@@ -38,8 +38,3 @@ afterEach(() => {
 // Compat layer for existing test helpers while the suite uses Vitest.
 (globalThis as any).jest = vi;
 
-vi.mock('@hookform/resolvers/zod', () => {
-  return {
-    zodResolver: () => async (values: any) => ({ values, errors: {} }),
-  };
-});

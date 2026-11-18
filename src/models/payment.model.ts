@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from 'mongoose';
+import { paymentDisputeSchema, type PaymentDispute } from './paymentDispute.schema';
 
 export type PaymentStatus = 'pending' | 'processing' | 'succeeded' | 'failed' | 'refunded';
 export type PaymentType = 'rent' | 'deposit' | 'service' | 'settlement';
@@ -23,6 +24,9 @@ export interface IPayment extends Document {
   receiptUrl?: string;
 
   paidAt?: Date;
+  amountRefunded?: number;
+  refundedAt?: Date;
+  dispute?: PaymentDispute;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -58,6 +62,10 @@ const PaymentSchema: Schema = new Schema(
     receiptUrl: { type: String },
 
     paidAt: { type: Date },
+    // Euros devueltos en Stripe (también en devoluciones parciales); `refunded` solo si es total.
+    amountRefunded: { type: Number },
+    refundedAt: { type: Date },
+    dispute: { type: paymentDisputeSchema, default: undefined },
   },
   { timestamps: true },
 );
@@ -66,5 +74,10 @@ PaymentSchema.index(
   { contract: 1, type: 1, billingMonth: 1, billingYear: 1 },
   { unique: true, partialFilterExpression: { type: 'rent' } },
 );
+
+// Listados por usuario (getMyPayments usa $or payer/payee ordenado por fecha) y por contrato
+PaymentSchema.index({ payer: 1, createdAt: -1 });
+PaymentSchema.index({ payee: 1, createdAt: -1 });
+PaymentSchema.index({ contract: 1, status: 1, createdAt: -1 });
 
 export const Payment = mongoose.model<IPayment>('Payment', PaymentSchema);

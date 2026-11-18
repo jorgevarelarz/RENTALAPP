@@ -30,4 +30,11 @@ describe('api client errors', () => {
     expect(formatApiError(err, 'Error de login', { includeRequestId: false }))
       .toBe('Usuario o contraseña incorrectos');
   });
+
+  it('explains the verification error in Spanish without a reference', () => {
+    const err = { response: { status: 403, data: { error: 'owner_not_verified', requestId: 'req_v' } } };
+    expect(formatApiError(err, 'No se pudo cargar')).toBe('Necesitas verificar tu identidad para usar esta sección.');
+    const other = { response: { status: 403, data: { error: 'forbidden', requestId: 'req_f' } } };
+    expect(formatApiError(other)).toBe('forbidden (ref: req_f)');
+  });
 });

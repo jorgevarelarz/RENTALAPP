@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { Verification } from '../models/verification.model';
 import { getUserId } from '../utils/getUserId';
+import { sendRouteError } from '../utils/routeError';
 
 /**
  * Middleware that ensures the requesting user has a verified status.
@@ -26,7 +27,7 @@ export const requireVerified = async (
         }
       }
     } catch (err: any) {
-      return res.status(500).json({ error: err.message || 'verification_check_failed' });
+      return sendRouteError(res, err, 'verification_check_failed');
     }
     return res.status(403).json({ error: 'owner_not_verified' });
   }
@@ -52,6 +53,6 @@ export const requireVerified = async (
     }
     next();
   } catch (err: any) {
-    res.status(500).json({ error: err.message || 'verification_check_failed' });
+    sendRouteError(res, err, 'verification_check_failed');
   }
 };

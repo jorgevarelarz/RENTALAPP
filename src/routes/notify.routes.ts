@@ -12,8 +12,8 @@ router.use('/notify', (_req: Request, res: Response, next: NextFunction) => {
 
 router.post('/notify/email', authenticate, requireAdmin, async (req, res) => {
   const { to, subject, body } = req.body || {};
-  await sendEmail(to, subject, body);
-  res.json({ ok: true });
+  const emailStatus = await sendEmail(to, subject, body);
+  res.json({ ok: true, emailStatus });
 });
 
 router.post('/notify/sms', authenticate, requireAdmin, async (req, res) => {

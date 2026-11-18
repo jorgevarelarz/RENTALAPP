@@ -5,6 +5,8 @@ import {
   login as apiLogin,
   logout as apiLogout,
   bootstrapAuthHeader,
+  refreshStoredUser,
+  changePassword as apiChangePassword,
 } from "../services/auth";
 
 type AuthCtx = {
@@ -12,6 +14,7 @@ type AuthCtx = {
   user: User | null;
   login: (email: string, password: string) => Promise<void>;
   logout: () => void;
+  changePassword: (currentPassword: string, password: string) => Promise<void>;
   hasRole: (...roles: User["role"][]) => boolean;
 };
 
@@ -22,11 +25,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     bootstrapAuthHeader();
+    let cancelled = false;
+    refreshStoredUser().then((fresh) => {
+      if (fresh && !cancelled) setUser(fresh);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const login = async (email: string, password: string) => {
     const u = await apiLogin(email, password);
     setUser(u);
+    // El login solo trae User.isVerified; /api/users/me cuenta también la verificación aprobada.
+    refreshStoredUser().then((fresh) => {
+      if (fresh) setUser(fresh);
+    });
   };
 
   const logout = () => {
@@ -34,11 +48,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null);
   };
 
+  const changePassword = async (currentPassword: string, password: string) => {
+    const u = await apiChangePassword(currentPassword, password);
+    if (u) setUser(u);
+  };
+
   const hasRole = (...roles: User["role"][]) => !!user && roles.includes(user.role);
 
   const token = user?.token ?? null;
 
-  return <Ctx.Provider value={{ token, user, login, logout, hasRole }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ token, user, login, logout, changePassword, hasRole }}>{children}</Ctx.Provider>;
 }
 
 export const useAuth = () => useContext(Ctx);

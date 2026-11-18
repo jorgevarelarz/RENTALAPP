@@ -4,6 +4,17 @@ import type { MongoMemoryServer } from 'mongodb-memory-server';
 import bcrypt from 'bcryptjs';
 import { startMongoMemoryServer } from '../../src/__tests__/utils/mongoMemoryServer';
 import { User } from '../../src/models/user.model';
+import * as email from '../../src/utils/email';
+import { hashResetToken } from '../../src/controllers/auth.controller';
+
+// request-reset responde antes de mandar el correo: espera a que el envío en segundo plano ocurra.
+const waitForCall = async (spy: jest.SpyInstance, timeoutMs = 3000) => {
+  const start = Date.now();
+  while (spy.mock.calls.length === 0) {
+    if (Date.now() - start > timeoutMs) throw new Error('sendEmail no se llamó');
+    await new Promise((r) => setTimeout(r, 10));
+  }
+};
 
 let app: any;
 let mongo: MongoMemoryServer | undefined;
@@ -26,6 +37,10 @@ beforeEach(async () => {
   await User.deleteMany({});
 });
 
+afterEach(() => {
+  jest.restoreAllMocks();
+});
+
 describe('Password reset flow', () => {
   it('request-reset devuelve 200 aunque el email no exista', async () => {
     const res = await request(app).post('/api/auth/request-reset').send({ email: 'ghost@example.com' });
@@ -33,7 +48,31 @@ describe('Password reset flow', () => {
     expect(res.body).toEqual({ ok: true });
   });
 
-  it('genera token y expiración para un usuario existente', async () => {
+  it('responde sin esperar al correo, exista o no la cuenta (sin enumeración por tiempo)', async () => {
+    // Un SMTP que no contesta nunca: si la ruta lo esperase, la petición se colgaría.
+    const sendSpy = jest.spyOn(email, 'sendEmail').mockReturnValue(new Promise<any>(() => {}));
+    await User.create({
+      name: 'Slow SMTP',
+      email: 'slow@example.com',
+      passwordHash: await bcrypt.hash('password123', 10),
+      role: 'tenant',
+    });
+
+    const started = Date.now();
+    const res = await request(app).post('/api/auth/request-reset').send({ email: 'slow@example.com' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ ok: true });
+    expect(Date.now() - started).toBeLessThan(1000);
+
+    // El token se genera igual en segundo plano.
+    await waitForCall(sendSpy);
+    const stored = await User.findOne({ email: 'slow@example.com' }).select('+resetToken').lean();
+    expect(stored?.resetToken).toBeTruthy();
+  });
+
+  it('guarda solo el hash del token y envía un enlace al frontend configurado', async () => {
+    process.env.FRONTEND_URL = 'https://app.example.test/';
+    const sendSpy = jest.spyOn(email, 'sendEmail').mockResolvedValue(undefined);
     const passwordHash = await bcrypt.hash('password123', 10);
     const user = await User.create({
       name: 'Test User',
@@ -45,10 +84,52 @@ describe('Password reset flow', () => {
     const res = await request(app).post('/api/auth/request-reset').send({ email: user.email });
     expect(res.status).toBe(200);
 
-    const updated = await User.findById(user._id).select('+passwordHash');
-    expect(updated?.resetToken).toBeDefined();
-    expect(updated?.resetTokenExp).toBeInstanceOf(Date);
+    await waitForCall(sendSpy);
+    expect(sendSpy).toHaveBeenCalledTimes(1);
+    const html = String(sendSpy.mock.calls[0][2]);
+    const match = html.match(/https:\/\/app\.example\.test\/reset\?token=([a-f0-9]{64})/);
+    expect(match).not.toBeNull();
+    expect(html).not.toContain('https://frontend/');
+    const token = match![1];
+
+    const updated = await User.findById(user._id).select('+resetToken +resetTokenExp');
+    expect(updated?.resetToken).toBe(hashResetToken(token));
+    expect(updated?.resetToken).not.toBe(token);
     expect(updated!.resetTokenExp!.getTime()).toBeGreaterThan(Date.now());
+
+    // Por defecto el token no sale en las consultas.
+    const plain = await User.findById(user._id).lean();
+    expect((plain as any).resetToken).toBeUndefined();
+
+    const reset = await request(app)
+      .post('/api/auth/reset')
+      .send({ token, password: 'newpassword' });
+    expect(reset.status).toBe(200);
+
+    // Un solo uso.
+    const again = await request(app)
+      .post('/api/auth/reset')
+      .send({ token, password: 'otherpassword' });
+    expect(again.status).toBe(400);
+    delete process.env.FRONTEND_URL;
+  });
+
+  it('no acepta el hash guardado como si fuera el token', async () => {
+    const user = await User.create({
+      name: 'Hash User',
+      email: 'hash@example.com',
+      passwordHash: await bcrypt.hash('oldpassword', 10),
+      role: 'tenant',
+      resetToken: hashResetToken('secreto'),
+      resetTokenExp: new Date(Date.now() + 60 * 60 * 1000),
+    });
+
+    const res = await request(app)
+      .post('/api/auth/reset')
+      .send({ token: hashResetToken('secreto'), password: 'newpassword' });
+    expect(res.status).toBe(400);
+    const stored = await User.findById(user._id).select('+passwordHash');
+    expect(await bcrypt.compare('oldpassword', stored!.passwordHash as string)).toBe(true);
   });
 
   it('permite cambiar la contraseña con un token válido', async () => {
@@ -59,7 +140,7 @@ describe('Password reset flow', () => {
       passwordHash,
       role: 'tenant',
     });
-    user.resetToken = 'validtoken';
+    user.resetToken = hashResetToken('validtoken');
     user.resetTokenExp = new Date(Date.now() + 60 * 60 * 1000);
     await user.save();
 
@@ -69,10 +150,10 @@ describe('Password reset flow', () => {
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ ok: true });
 
-    const updated = await User.findById(user._id).select('+passwordHash');
+    const updated = await User.findById(user._id).select('+passwordHash +resetToken +resetTokenExp');
     expect(updated?.resetToken).toBeFalsy();
     expect(updated?.resetTokenExp).toBeFalsy();
-    expect(await bcrypt.compare('newpassword', updated!.passwordHash)).toBe(true);
+    expect(await bcrypt.compare('newpassword', updated!.passwordHash as string)).toBe(true);
   });
 
   it('rechaza tokens inválidos o expirados', async () => {
@@ -83,13 +164,13 @@ describe('Password reset flow', () => {
       passwordHash,
       role: 'tenant',
     });
-    user.resetToken = 'expiredtoken';
+    user.resetToken = hashResetToken('expiredtoken');
     user.resetTokenExp = new Date(Date.now() - 1000);
     await user.save();
 
     const res = await request(app)
       .post('/api/auth/reset')
-      .send({ token: 'expiredtoken', password: 'newpass' });
+      .send({ token: 'expiredtoken', password: 'newpassword' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBeDefined();
   });

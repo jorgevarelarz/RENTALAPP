@@ -1,14 +1,22 @@
 import { api as axios } from '../api/client';
 
-export const upsertPro = async (token: string, userId: string, data: { displayName: string; city: string; services: { key: string; basePrice?: number }[] }) => {
-  void userId;
-  const res = await axios.post(`/api/pros`, data, { headers: { Authorization: `Bearer ${token}` } });
-  return res.data;
+export type ProServiceEntry = { key: string; basePrice?: number };
+export type ProProfile = { _id: string; displayName: string; city: string; services: ProServiceEntry[]; active: boolean; verified?: boolean };
+export type ProProfileInput = { displayName: string; city: string; services: ProServiceEntry[]; active: boolean };
+
+/** Perfil público del profesional autenticado, o null si aún no lo ha creado. */
+export const getMyProProfile = async (): Promise<ProProfile | null> => {
+  try {
+    const res = await axios.get('/api/pros/me');
+    return res.data;
+  } catch (err: any) {
+    if (err?.response?.status === 404) return null;
+    throw err;
+  }
 };
 
-export const getMyPro = async (token: string, userId: string) => {
-  void userId;
-  const res = await axios.get(`/api/pros/me`, { headers: { Authorization: `Bearer ${token}` } });
+export const saveProProfile = async (data: ProProfileInput): Promise<ProProfile> => {
+  const res = await axios.post('/api/pros', data);
   return res.data;
 };
 

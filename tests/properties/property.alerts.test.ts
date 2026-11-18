@@ -8,6 +8,7 @@ jest.mock("../../src/utils/email", () => ({
 
 import { app } from "../../src/app";
 import { AlertSubscription } from "../../src/models/alertSubscription.model";
+import { User } from "../../src/models/user.model";
 import { sendPriceAlert, sendAvailabilityAlert } from "../../src/utils/email";
 import { connectDb, disconnectDb, clearDb } from "../utils/db";
 
@@ -34,6 +35,10 @@ describe("Property alerts", () => {
       images: ["https://cdn/x1.jpg", "https://cdn/x2.jpg", "https://cdn/x3.jpg"],
     });
     pid = res.body._id;
+    await User.create([
+      { _id: "507f1f77bcf86cd799439099", name: "Precio", email: "precio@test.com", role: "tenant" },
+      { _id: "507f1f77bcf86cd799439098", name: "Fechas", email: "fechas@test.com", role: "tenant" },
+    ]);
     await AlertSubscription.create({
       userId: "507f1f77bcf86cd799439099",
       propertyId: pid,
@@ -65,10 +70,12 @@ describe("Property alerts", () => {
 
     const calls = (sendPriceAlert as jest.Mock).mock.calls;
     const priceAlertSent = calls.some(
-      ([to, property]) => to === "507f1f77bcf86cd799439099" && property.price === 650,
+      ([to, property]) => to === "precio@test.com" && property.price === 650,
     );
 
     expect(priceAlertSent).toBe(true);
+    // El aviso va al email del suscriptor, nunca a su id
+    expect(calls.every(([to]) => String(to).includes("@"))).toBe(true);
   });
 
   it("triggers availability alert on update", async () => {
@@ -80,7 +87,7 @@ describe("Property alerts", () => {
       .expect(200);
 
     const calls = (sendAvailabilityAlert as jest.Mock).mock.calls;
-    const availabilityAlertSent = calls.some(([to]) => to === "507f1f77bcf86cd799439098");
+    const availabilityAlertSent = calls.some(([to]) => to === "fechas@test.com");
 
     expect(availabilityAlertSent).toBe(true);
   });

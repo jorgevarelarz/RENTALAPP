@@ -16,6 +16,8 @@ describe('PolicyModal', () => {
       loading: false,
       needsAcceptance: false,
       hasAccepted: false,
+      activeVersion: null,
+      pendingPolicy: null,
       acceptPolicy: vi.fn(),
     });
   });
@@ -43,6 +45,8 @@ describe('PolicyModal', () => {
       loading: false,
       needsAcceptance: true,
       hasAccepted: false,
+      activeVersion: null,
+      pendingPolicy: null,
       acceptPolicy,
     });
 

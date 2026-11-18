@@ -1,8 +1,11 @@
 import { ReactNode, useEffect } from 'react';
 
-// Datos del titular de la plataforma. Completar con la razón social,
-// NIF y domicilio registrales antes de campañas públicas de captación.
-export const LEGAL_OWNER = 'RentalApp';
+// Titular de la plataforma (art. 10 LSSI y art. 13 RGPD): RentalApp es una marca
+// de Jorge Varela Ruiz, que la explota como autónomo.
+export const LEGAL_BRAND = 'RentalApp';
+export const LEGAL_OWNER = 'Jorge Varela Ruiz';
+export const LEGAL_NIF = '49331074F';
+export const LEGAL_ADDRESS = 'Rúa Sorolla 1, 3.º B, 15173 Oleiros (A Coruña)';
 export const LEGAL_CONTACT_EMAIL = 'info@rentalapp.es';
 
 type Section = { title: string; body: ReactNode };
@@ -40,13 +43,18 @@ export default function LegalLayout({
             <div className="mt-3 space-y-3 text-gray-700 [&_li]:ml-5 [&_li]:list-disc [&_ul]:space-y-2">{body}</div>
           </section>
         ))}
-        <p className="mt-12 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
-          ¿Dudas sobre este documento? Escríbenos a{' '}
-          <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className="font-semibold text-indigo-600 hover:underline">
-            {LEGAL_CONTACT_EMAIL}
-          </a>
-          .
-        </p>
+        <div className="mt-12 rounded-lg border border-gray-200 bg-gray-50 p-4 text-sm text-gray-600">
+          <p>
+            {LEGAL_BRAND} es una plataforma de {LEGAL_OWNER}, NIF {LEGAL_NIF}, con domicilio en {LEGAL_ADDRESS}.
+          </p>
+          <p className="mt-2">
+            ¿Dudas sobre este documento? Escríbenos a{' '}
+            <a href={`mailto:${LEGAL_CONTACT_EMAIL}`} className="font-semibold text-indigo-600 hover:underline">
+              {LEGAL_CONTACT_EMAIL}
+            </a>
+            .
+          </p>
+        </div>
       </div>
     </main>
   );

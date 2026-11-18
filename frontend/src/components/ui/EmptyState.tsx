@@ -1,12 +1,20 @@
 import React from 'react';
 
-export default function EmptyState({ title, detail, cta }: { title: string; detail?: string; cta?: React.ReactNode }) {
+type Props = {
+  title: string;
+  detail?: string;
+  cta?: React.ReactNode;
+};
+
+// Vacío de una lista: qué pasa y qué hacer, sin ilustraciones
+export default function EmptyState({ title, detail, cta }: Props) {
   return (
-    <div style={{ textAlign: 'center', border: '1px dashed #E5E7EB', padding: 20, borderRadius: 12, background: '#F9FAFB' }}>
-      <div style={{ fontWeight: 700, marginBottom: 6 }}>{title}</div>
-      {detail && <div style={{ color: '#6B7280', marginBottom: 10 }}>{detail}</div>}
-      {cta}
+    <div className="flex flex-col gap-4 rounded-xl border border-[var(--ra-line)] bg-white px-5 py-6 md:flex-row md:items-center md:justify-between">
+      <div className="min-w-0">
+        <p className="font-medium text-gray-900 [overflow-wrap:anywhere]">{title}</p>
+        {detail && <p className="mt-1 text-sm text-gray-500">{detail}</p>}
+      </div>
+      {cta && <div className="shrink-0">{cta}</div>}
     </div>
   );
 }
-

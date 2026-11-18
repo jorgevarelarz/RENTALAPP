@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
+import { Types } from 'mongoose';
 import { Application } from '../models/application.model';
 import { Property } from '../models/property.model';
 import { Contract } from '../models/contract.model';
+import { isManagingAgency } from '../utils/propertyAccess';
+import { notifyApplication } from '../services/applicationNotice.service';
 
 export async function listMyApplications(req: Request, res: Response) {
   const user: any = (req as any).user;
@@ -39,6 +42,7 @@ export async function listMyApplications(req: Request, res: Response) {
     proposedDate: a.proposedDate,
     proposedBy: a.proposedBy,
     visitDate: a.visitDate,
+    message: a.message,
     contractId: contractMap.get(String(a.propertyId?._id))?._id,
     contractStatus: contractMap.get(String(a.propertyId?._id))?.status,
     property: a.propertyId ? {
@@ -67,19 +71,32 @@ export async function proposeVisit(req: Request, res: Response) {
   const { id } = req.params;
   const { visitDate } = req.body || {};
   if (!visitDate) return res.status(400).json({ error: 'visitDate_required' });
+  const proposed = new Date(visitDate);
+  if (Number.isNaN(proposed.getTime())) return res.status(400).json({ error: 'invalid_visit_date' });
+  // Margen de un minuto para el reloj del navegador; una visita en el pasado no se puede concertar
+  if (proposed.getTime() < Date.now() - 60 * 1000) return res.status(400).json({ error: 'visit_date_in_past' });
 
+  if (!Types.ObjectId.isValid(String(id))) return res.status(404).json({ error: 'application_not_found' });
   const app = await Application.findById(id);
   if (!app) return res.status(404).json({ error: 'application_not_found' });
+  if (app.status === 'rejected') return res.status(409).json({ error: 'application_closed' });
 
   const property = await Property.findById(app.propertyId);
   if (!property) return res.status(404).json({ error: 'property_not_found' });
 
-  const isOwner = String(property.owner) === String(userId);
+  // La agencia que gestiona el inmueble actúa por el propietario
+  const isOwner = String(property.owner) === String(userId) || isManagingAgency(user, property);
   const isTenant = String(app.tenantId) === String(userId);
   const isAdmin = user?.role === 'admin';
   if (!isOwner && !isTenant && !isAdmin) return res.status(403).json({ error: 'forbidden' });
 
-  app.proposedDate = new Date(visitDate);
+  // Cambiar una visita concertada a la misma hora no es un cambio. La visita concertada (`visitDate`)
+  // sigue en pie hasta que la otra parte acepte la nueva fecha.
+  if (app.visitDate && app.visitDate.getTime() > Date.now() && Math.abs(app.visitDate.getTime() - proposed.getTime()) < 60 * 1000) {
+    return res.status(400).json({ error: 'same_visit_date' });
+  }
+
+  app.proposedDate = proposed;
   app.proposedBy = isOwner || isAdmin ? 'landlord' : 'tenant';
   app.status = 'proposed';
   await app.save();
@@ -91,6 +108,8 @@ export async function proposeVisit(req: Request, res: Response) {
     proposedDate: app.proposedDate,
     proposedBy: app.proposedBy,
   });
+  // Aviso a la otra parte; no retrasa la respuesta y nunca lanza
+  void notifyApplication('proposed', app._id, userId);
 }
 
 export async function acceptProposedVisit(req: Request, res: Response) {
@@ -99,17 +118,22 @@ export async function acceptProposedVisit(req: Request, res: Response) {
   if (!userId) return res.status(401).json({ error: 'unauthorized' });
 
   const { id } = req.params;
+  if (!Types.ObjectId.isValid(String(id))) return res.status(404).json({ error: 'application_not_found' });
   const app = await Application.findById(id);
   if (!app) return res.status(404).json({ error: 'application_not_found' });
+  if (app.status === 'rejected') return res.status(409).json({ error: 'application_closed' });
 
   if (!app.proposedDate || !app.proposedBy) {
     return res.status(409).json({ error: 'no_proposed_date' });
   }
+  // Una propuesta cuya hora ya pasó no se acepta: hay que proponer otra
+  if (app.proposedDate.getTime() < Date.now()) return res.status(409).json({ error: 'proposed_date_passed' });
 
   const property = await Property.findById(app.propertyId);
   if (!property) return res.status(404).json({ error: 'property_not_found' });
 
-  const isOwner = String(property.owner) === String(userId);
+  // La agencia que gestiona el inmueble actúa por el propietario
+  const isOwner = String(property.owner) === String(userId) || isManagingAgency(user, property);
   const isTenant = String(app.tenantId) === String(userId);
   const isAdmin = user?.role === 'admin';
   if (!isOwner && !isTenant && !isAdmin) return res.status(403).json({ error: 'forbidden' });
@@ -126,4 +150,5 @@ export async function acceptProposedVisit(req: Request, res: Response) {
   await app.save();
 
   res.json({ ok: true, _id: app._id, status: app.status, visitDate: app.visitDate });
+  void notifyApplication('scheduled', app._id, userId);
 }

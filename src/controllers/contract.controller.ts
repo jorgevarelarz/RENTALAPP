@@ -6,13 +6,13 @@ import { Types } from 'mongoose';
 import { User } from '../models/user.model';
 import { Property } from '../models/property.model';
 import { generateContractPDF } from '../utils/pdfGenerator';
-import { getCatalogByRegion } from '../policies/clauses';
+import { contractRegionKey, getCatalogByRegion } from '../policies/clauses';
 import { CLAUSE_POLICY_VERSION } from '../policies/clauses/catalog.v1';
 import { computePdfHash } from '../utils/pdfHash';
 import { recordContractHistory } from '../utils/history';
 import { ContractHistory } from '../models/history.model';
 import { signaturitProvider } from '../signature/signaturit';
-import { ensureFirmaSignature } from '../services/signature.service';
+import { ensureFirmaSignature, ensureLandlordOrAdmin, initSignature, renderClausesForSignature, toContractView, urlsVisibleTo } from '../services/signature.service';
 import * as docusignProvider from '../services/signature/docusign.provider';
 import { sendContractReadyEmail } from '../utils/email';
 import PDFDocument from 'pdfkit';
@@ -21,15 +21,20 @@ import { recordFunnelEvent } from '../services/funnelEvents.service';
 import { generateContractPdfFile } from '../services/pdfGenerator';
 import { evaluateAndPersist } from '../modules/rentalPublic';
 // @ts-ignore
-import { ensureCanReadContract } from '../utils/contractAccess';
+import { ensureCanReadContract, isActiveCoTenant } from '../utils/contractAccess';
+import { ContractParty } from '../models/contractParty.model';
+import { RentPayment } from '../models/rentPayment.model';
+import { sendRouteError } from '../utils/routeError';
+import { logger } from '../utils/logger';
 
-const objectId = z.string().regex(/^[a-f\d]{24}$/i);
+const objectId = z.string().regex(/^[a-f\d]{24}$/i).transform((s: string) => s.toLowerCase());
 
 const createContractSchema = z.object({
   landlord: objectId,
   tenant: objectId,
   property: objectId,
-  region: z.string().toLowerCase(),
+  // Opcional: la región sale del inmueble; si viene, tiene que coincidir con la suya.
+  region: z.string().toLowerCase().optional(),
   rent: z.number().positive(),
   deposit: z.number().min(0),
   startDate: z.string().transform((s: string) => new Date(s)),
@@ -41,6 +46,37 @@ function parsePagination(query: any) {
   const page = Math.max(1, parseInt(query.page as string) || 1);
   const limit = Math.min(50, Math.max(1, parseInt(query.limit as string) || 10));
   return { page, limit };
+}
+
+/**
+ * Quién puede crear un contrato sobre un inmueble (A2): el propietario, la agencia que lo gestiona
+ * (`agencyAccess: 'manage'`) o un administrador. El arrendador del contrato tiene que ser el dueño
+ * del inmueble y el inquilino, otra cuenta que exista.
+ */
+async function checkContractParties(
+  actor: any,
+  data: { landlord: string; tenant: string; property: string },
+): Promise<{ status: number; error: string; property?: any }> {
+  const property: any = await Property.findById(data.property)
+    .select('owner agencyId agencyAccess refAgencyId region')
+    .lean();
+  if (!property) return { status: 404, error: 'property_not_found' };
+
+  const actorId = String(actor?._id ?? actor?.id ?? '');
+  const role = actor?.role;
+  const allowed =
+    role === 'admin' ||
+    (role === 'landlord' && String(property.owner) === actorId) ||
+    (role === 'agency' &&
+      property.agencyId != null &&
+      String(property.agencyId) === actorId &&
+      property.agencyAccess === 'manage');
+  if (!allowed) return { status: 403, error: 'forbidden' };
+
+  if (String(property.owner) !== data.landlord) return { status: 400, error: 'landlord_not_owner' };
+  if (data.tenant === data.landlord) return { status: 400, error: 'tenant_is_landlord' };
+  if (!(await User.exists({ _id: data.tenant }))) return { status: 400, error: 'tenant_not_found' };
+  return { status: 200, error: '', property };
 }
 
 export async function create(req: Request, res: Response) {
@@ -60,7 +96,26 @@ export async function create(req: Request, res: Response) {
     return res.status(400).json({ error: 'invalid_date_range' });
   }
 
-  const catalog = getCatalogByRegion(data.region);
+  const actor: any = req.user;
+  let parties: Awaited<ReturnType<typeof checkContractParties>>;
+  try {
+    parties = await checkContractParties(actor, data);
+  } catch (error) {
+    console.error('Error al crear el contrato:', error);
+    return res.status(500).json({ error: 'contract_creation_failed' });
+  }
+  if (parties.status !== 200) return res.status(parties.status).json({ error: parties.error });
+
+  // La región (y con ella la fianza autonómica) es la del inmueble, no la que diga el cuerpo.
+  const region = contractRegionKey(parties.property?.region);
+  if (data.region && contractRegionKey(data.region) !== data.region) {
+    return res.status(400).json({ error: 'region_not_supported' });
+  }
+  if (!region) return res.status(400).json({ error: 'region_not_supported' });
+  if (data.region && data.region !== region) {
+    return res.status(400).json({ error: 'region_mismatch', propertyRegion: region });
+  }
+  const catalog = getCatalogByRegion(region);
   if (!catalog || Object.keys(catalog).length === 0) {
     return res.status(400).json({ error: 'region_not_supported' });
   }
@@ -87,7 +142,6 @@ export async function create(req: Request, res: Response) {
   }
 
   try {
-    const actor: any = req.user;
     const actorIdRaw = actor?._id ?? actor?.id;
     const isAgency = actor?.role === 'agency';
 
@@ -101,7 +155,7 @@ export async function create(req: Request, res: Response) {
     // con el mismo inquilino. Un inquilino nuevo corta la atribución.
     let refAgencyIdToAttach: any = undefined;
     if (!agencyIdToAttach) {
-      const propertyDoc: any = await Property.findById(data.property).select('refAgencyId').lean();
+      const propertyDoc: any = parties.property;
       if (propertyDoc?.refAgencyId) {
         const priorContracts = await Contract.find({ property: data.property })
           .select('tenant')
@@ -121,7 +175,7 @@ export async function create(req: Request, res: Response) {
       property: data.property,
       agencyId: agencyIdToAttach,
       refAgencyId: refAgencyIdToAttach,
-      region: data.region,
+      region,
       rent: data.rent,
       deposit: data.deposit,
       startDate: data.startDate,
@@ -143,7 +197,7 @@ export async function create(req: Request, res: Response) {
 
     const actorId = req.user?.id;
     await recordContractHistory(contract._id, 'CREATED', actorId, {
-      region: data.region,
+      region,
       clausePolicyVersion: CLAUSE_POLICY_VERSION,
     });
     await recordContractHistory(contract._id, 'PDF_GENERATED', actorId, { pdfPath: publicPath, pdfHash });
@@ -190,7 +244,9 @@ export async function create(req: Request, res: Response) {
 
 export const getContractPDF = async (req: Request, res: Response) => {
   try {
-    await ensureCanReadContract({ contractId: req.params.id, user: req.user as any });
+    if (!(await isActiveCoTenant(req.params.id, req.user?.id))) {
+      await ensureCanReadContract({ contractId: req.params.id, user: req.user as any });
+    }
     const contract = await Contract.findById(req.params.id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
 
@@ -256,8 +312,9 @@ export const getContractPDF = async (req: Request, res: Response) => {
     doc.end();
 
   } catch (err: any) {
-    console.error(err);
-    res.status(500).json({ error: 'Error generando el PDF' });
+    // Los errores de acceso de ensureCanReadContract traen su estado (400/403/404).
+    if (res.headersSent) return;
+    sendRouteError(res, err, 'contract_pdf_failed');
   }
 };
 
@@ -271,8 +328,7 @@ export const signContract = async (req: Request, res: Response) => {
     const contract = await signContractAction(req.params.id, userRef);
     res.json({ message: 'Contrato firmado', contract });
   } catch (err: any) {
-    console.error(err);
-    res.status(400).json({ error: err.message });
+    sendRouteError(res, err, 'contract_sign_failed');
   }
 };
 
@@ -294,31 +350,21 @@ export const requestSignature = async (req: Request, res: Response) => {
     const { id } = req.params;
     const contract = await Contract.findById(id);
     if (!contract) return res.status(404).json({ error: 'Contrato no encontrado' });
+    ensureLandlordOrAdmin(contract, req.user as any);
     const landlord = await User.findById(contract.landlord);
     const tenant = await User.findById(contract.tenant);
     const property = await Property.findById(contract.property);
     if (!landlord || !tenant || !property) {
       return res.status(404).json({ error: 'Datos incompletos para el contrato' });
     }
-    const catalogForSignature = contract.region ? getCatalogByRegion(contract.region) : null;
-    const clausesText = Array.isArray(contract.clauses)
-      ? contract.clauses.map(clause => {
-          const current = clause as any;
-          const definition = catalogForSignature?.[current.id];
-          if (definition) {
-            try {
-              return `• ${definition.label}\n${definition.render(current.params ?? {})}`; 
-            } catch (err) {
-              console.error('Error renderizando cláusula para firma:', err);
-            }
-          }
-          const paramsText = current?.params ? JSON.stringify(current.params) : '';
-          return paramsText ? `• ${current.id}\n${paramsText}` : `• ${current.id}`;
-        })
-      : [];
+    const provider = (process.env.SIGN_PROVIDER || 'mock').toLowerCase();
+    if (provider === 'firma') {
+      const result = await initSignature(id, req.user as any);
+      return res.json({ envelopeId: result.envelopeId, status: result.status, recipientUrls: result.recipientUrls });
+    }
+    const clausesText = renderClausesForSignature(contract);
     const { absolutePath: signaturePdfPath } = await generateContractPDF({ contract, clausesText });
 
-    const provider = (process.env.SIGN_PROVIDER || 'mock').toLowerCase();
     if (provider === 'docusign') {
       const embedded = String(process.env.SIGN_EMBEDDED || 'false').toLowerCase() === 'true';
       const env = await docusignProvider.createEnvelope({ contract, landlord, tenant, embedded });
@@ -335,7 +381,7 @@ export const requestSignature = async (req: Request, res: Response) => {
         },
       });
       await recordContractHistory(contract.id, 'signatureRequested', 'Firma DocuSign solicitada');
-      return res.json({ envelopeId: env.envelopeId, status: env.status, recipientUrls: env.recipientUrls });
+      return res.json({ envelopeId: env.envelopeId, status: env.status, recipientUrls: urlsVisibleTo(contract, req.user as any, env.recipientUrls) });
     }
 
     // Mock/default flow (signaturit stub)
@@ -355,8 +401,7 @@ export const requestSignature = async (req: Request, res: Response) => {
     await recordContractHistory(contract.id, 'signatureRequested', 'Firma mock solicitada');
     res.json({ message: 'Firma electrónica iniciada', signerLinks, requestId });
   } catch (error: any) {
-    console.error(error);
-    res.status(500).json({ error: 'Error iniciando la firma', details: error.message });
+    sendRouteError(res, error, 'signature_request_failed');
   }
 };
 
@@ -371,9 +416,15 @@ export const createSigningSession = async (req: Request, res: Response) => {
       if (String(contract.tenant) !== user?.id) {
         return res.status(403).json({ error: 'Solo el inquilino puede firmar este contrato' });
       }
-      const { recipientUrls } = await ensureFirmaSignature(contract);
-      if (!recipientUrls?.tenantUrl) return res.status(502).json({ error: 'Firma.dev no devolvió el enlace de firma' });
-      return res.json({ signingUrl: recipientUrls.tenantUrl, provider: 'firma' });
+      try {
+        const { recipientUrls } = await ensureFirmaSignature(contract);
+        if (!recipientUrls?.tenantUrl) return res.status(502).json({ error: 'Firma.dev no devolvió el enlace de firma' });
+        return res.json({ signingUrl: recipientUrls.tenantUrl, provider: 'firma' });
+      } catch (error: any) {
+        if (error?.status) return sendRouteError(res, error, 'firma_session_failed');
+        logger.error({ contractId: id, err: error }, 'firma_session_failed');
+        return res.status(502).json({ error: 'Error al conectar con Firma.dev' });
+      }
     }
     if (!process.env.SIGNATURIT_TOKEN) {
       return res.status(500).json({ error: 'SIGNATURIT_TOKEN no configurado' });
@@ -401,22 +452,27 @@ export const createSigningSession = async (req: Request, res: Response) => {
       depositAmount: contract.deposit ?? (contract as any).depositAmount,
     });
 
-    const { requestId, signerLinks } = await signaturitProvider.createSignatureFlow({
-      contractId: String(contract._id),
-      pdfPath,
-      signers: [
-        {
-          role: 'tenant',
-          userId: String(tenant?._id || contract.tenant),
-          name: tenant?.name || (contract as any).tenantName || 'Inquilino',
-          email: tenant?.email || (contract as any).tenantEmail || 'email@test.com',
-        },
-      ],
-      returnUrl: process.env.SIGN_REDIRECT_URL || 'https://example.com/signing-complete',
-      webhookUrl: process.env.SIGN_WEBHOOK_URL || 'https://api.example.com/webhook/signature',
-    });
-
-    await fs.unlink(pdfPath).catch(() => {});
+    let flow: Awaited<ReturnType<typeof signaturitProvider.createSignatureFlow>>;
+    try {
+      flow = await signaturitProvider.createSignatureFlow({
+        contractId: String(contract._id),
+        pdfPath,
+        signers: [
+          {
+            role: 'tenant',
+            userId: String(tenant?._id || contract.tenant),
+            name: tenant?.name || (contract as any).tenantName || 'Inquilino',
+            email: tenant?.email || (contract as any).tenantEmail || 'email@test.com',
+          },
+        ],
+        returnUrl: process.env.SIGN_REDIRECT_URL || 'https://example.com/signing-complete',
+        webhookUrl: process.env.SIGN_WEBHOOK_URL || 'https://api.example.com/webhook/signature',
+      });
+    } finally {
+      // El PDF lleva DNI: se borra también si el proveedor falla
+      await fs.unlink(pdfPath).catch(() => {});
+    }
+    const { requestId, signerLinks } = flow;
 
     const signingUrl = signerLinks.tenant;
 
@@ -442,7 +498,11 @@ export const listContracts = async (req: Request, res: Response) => {
   try {
     const { page, limit } = parsePagination(req.query);
     const q: any = {};
-    if (req.query.status) q.status = req.query.status;
+    if (typeof req.query.status === 'string' && req.query.status) q.status = req.query.status;
+    // Opcional: «Mis contratos» pide también los contratos en los que el usuario es co-titular.
+    // El resto de pantallas (incidencias, panel del casero) siguen viendo solo casero e inquilino principal.
+    const includeCoTenant = req.query.include === 'cotenant';
+    let coTenantIds = new Set<string>();
 
     const user = req.user;
     if (!user) {
@@ -461,6 +521,17 @@ export const listContracts = async (req: Request, res: Response) => {
       q.agencyId = user.id;
     } else if (user.role !== 'admin') {
       q.$or = [{ landlord: user.id }, { tenant: user.id }];
+      if (includeCoTenant && user.id && Types.ObjectId.isValid(user.id)) {
+        const parties = await ContractParty.find({
+          role: 'TENANT',
+          userId: user.id,
+          status: { $in: ['JOINED', 'SIGNED'] },
+        })
+          .select('contractId')
+          .lean();
+        coTenantIds = new Set(parties.map(p => String(p.contractId)));
+        if (coTenantIds.size) q.$or.push({ _id: { $in: [...coTenantIds] } });
+      }
     }
 
     const [items, total] = await Promise.all([
@@ -496,10 +567,16 @@ export const listContracts = async (req: Request, res: Response) => {
       const tenant = getUser(c.tenant);
       const ownerId = getId(c.landlord);
       const tenantId = getId(c.tenant);
+      const myRole =
+        ownerId === String(user.id) ? 'landlord'
+        : tenantId === String(user.id) ? 'tenant'
+        : coTenantIds.has(String(c._id)) ? 'cotenant'
+        : undefined;
       return {
-        ...c,
+        ...toContractView(c as any, user as any),
         ownerId,
         tenantId,
+        ...(myRole ? { myRole } : {}),
         landlordName: landlord?.name,
         landlordEmail: landlord?.email,
         tenantName: tenant?.name,
@@ -518,7 +595,7 @@ export const listContracts = async (req: Request, res: Response) => {
     });
     res.json({ items: hydrated, total, page, limit });
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'contracts_list_failed');
   }
 };
 
@@ -560,13 +637,26 @@ export const getContract = async (req: Request, res: Response) => {
     const isLandlord = ownerId === user.id;
     const isTenant = tenantId === user.id;
     const isAdmin = user.role === 'admin';
+    // La agencia gestora ya pasó la comprobación de arriba; antes caía aquí en 403.
+    const isAgency = user.role === 'agency';
+    // Co-titular que ya aceptó la invitación: puede ver el contrato que va a firmar.
+    const isCoTenant =
+      !isLandlord && !isTenant && !isAdmin && !isAgency && (await isActiveCoTenant(c._id, user.id));
 
-    if (!isLandlord && !isTenant && !isAdmin) {
+    if (!isLandlord && !isTenant && !isAdmin && !isAgency && !isCoTenant) {
       return res.status(403).json({ error: 'No autorizado' });
     }
 
+    // Disputas (contracargos) de recibos de renta, para avisar en el detalle; la de la fianza
+    // ya viene en el contrato (`depositDispute`).
+    const disputedRent = await RentPayment.find({ contractId: c._id, 'dispute.id': { $exists: true } })
+      .select('period amount dispute')
+      .sort({ period: 1 })
+      .lean();
+
     const result: any = {
-      ...c,
+      ...toContractView(c as any, user as any),
+      rentDisputes: disputedRent.map((rp: any) => ({ period: rp.period, amount: rp.amount, ...rp.dispute })),
       ownerId,
       tenantId,
       landlordName: landlord?.name,
@@ -586,6 +676,6 @@ export const getContract = async (req: Request, res: Response) => {
     };
     res.json(result);
   } catch (err: any) {
-    res.status(err.status || 500).json({ error: err.message, code: err.status || 500 });
+    sendRouteError(res, err, 'contract_get_failed');
   }
 };

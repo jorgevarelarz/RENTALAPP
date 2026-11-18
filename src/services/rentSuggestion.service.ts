@@ -1,3 +1,4 @@
+import { accentInsensitivePattern } from '../utils/searchRegex';
 import { Property } from '../models/property.model';
 import { TensionedArea } from '../modules/rentalPublic/models/tensionedArea.model';
 import {
@@ -44,6 +45,8 @@ export type RentSuggestion = {
 
 /** Minimum comparable listings before we trust our own market data over the official index. */
 export const MIN_OWN_COMPARABLES = 5;
+/** The most recent listings are enough for a zone price; a big city must not load them all. */
+export const MAX_OWN_COMPARABLES = 300;
 const SEARCH_RADII_KM = [2, 5, 10];
 const EARTH_RADIUS_KM = 6378.1;
 /** Guard rails so a pile of adjustments can never run away from the zone price. */
@@ -146,6 +149,8 @@ async function findOwnComparables(input: SuggestionInput) {
           },
         },
       })
+        .sort({ updatedAt: -1 })
+        .limit(MAX_OWN_COMPARABLES)
         .select('price sizeM2')
         .lean();
 
@@ -157,8 +162,11 @@ async function findOwnComparables(input: SuggestionInput) {
 
   const docs = await Property.find({
     ...baseQuery,
-    city: new RegExp(`^${escapeRegExp(input.city)}$`, 'i'),
+    // Sin distinguir tildes: «A Coruna» y «A Coruña» son la misma ciudad para los comparables
+    city: new RegExp(`^${accentInsensitivePattern(String(input.city || '').trim())}$`, 'i'),
   })
+    .sort({ updatedAt: -1 })
+    .limit(MAX_OWN_COMPARABLES)
     .select('price sizeM2')
     .lean();
 

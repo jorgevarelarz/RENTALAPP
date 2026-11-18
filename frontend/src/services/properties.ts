@@ -21,7 +21,7 @@ export type SearchParams = {
   nearLng?: number;
   nearLat?: number;
   maxKm?: number;
-  sort?: 'price' | 'createdAt' | 'views';
+  sort?: 'price' | 'createdAt' | 'viewsCount';
   dir?: 'asc' | 'desc';
   page?: number;
   limit?: number;
@@ -39,6 +39,19 @@ export const listProperties = async (params: Partial<SearchParams> = {}) => {
   const data = res.data as Property[] | Partial<PropertyListResponse>;
   if (Array.isArray(data)) return data;
   return Array.isArray(data.items) ? data.items : [];
+};
+
+// Todos los inmuebles que gestiona la cuenta (dueño o agencia), página a página
+export const listMyProperties = async (params: { status?: 'draft' | 'active' | 'archived' } = {}) => {
+  const limit = 100;
+  const items: Property[] = [];
+  for (let page = 1; page <= 20; page += 1) {
+    const { data } = await client.get('/api/properties/mine', { params: { ...params, page, limit } });
+    const batch = Array.isArray(data?.items) ? (data.items as Property[]) : [];
+    items.push(...batch);
+    if (batch.length < limit || items.length >= Number(data?.total || 0)) break;
+  }
+  return items;
 };
 
 export const getProperty = async (id: string) => {
@@ -69,8 +82,9 @@ export async function incrementView(id: string) {
   }
 }
 
-export async function applyToProperty(id: string) {
-  const { data } = await client.post(`/api/properties/${id}/apply`);
+export async function applyToProperty(id: string, message?: string) {
+  const text = message?.trim();
+  const { data } = await client.post(`/api/properties/${id}/apply`, text ? { message: text } : {});
   return data as { ok: boolean };
 }
 

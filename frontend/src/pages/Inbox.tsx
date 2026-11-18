@@ -7,6 +7,8 @@ import EmptyState from '../components/ui/EmptyState';
 import PageHeader from '../components/ui/PageHeader';
 import { useNavigate } from 'react-router-dom';
 import { toAbsoluteUrl } from '../utils/media';
+import { apiErrorText } from '../utils/apiErrors';
+import { systemMessageLabel } from '../utils/chatSystem';
 
 export default function Inbox() {
   const [items, setItems] = useState<Conversation[]>([]);
@@ -31,7 +33,7 @@ export default function Inbox() {
         const data = await listConversations({ page: 1, limit: 50, kind: 'direct' });
         setItems(data);
       } catch (e: any) {
-        setErr(e?.response?.data?.error || e?.message || 'Error al cargar conversaciones');
+        setErr(apiErrorText(e, 'No se pudieron cargar las conversaciones.'));
       } finally {
         setLoading(false);
       }
@@ -45,7 +47,7 @@ export default function Inbox() {
         const data = await listRelatedUsers();
         setRelated(data);
       } catch (e: any) {
-        setErr(e?.response?.data?.error || e?.message || 'Error al cargar usuarios');
+        setErr(apiErrorText(e, 'No se pudo cargar la lista de contactos.'));
       }
     })();
   }, [showNew]);
@@ -61,30 +63,9 @@ export default function Inbox() {
     return '#';
   };
 
-  const systemLabel = (code?: string) => {
-    const map: Record<string, string> = {
-      TICKET_OPENED: 'Incidencia creada',
-      CLOSE_REQUESTED: 'Solicitud de cierre',
-      CLOSED_BY_TENANT: 'Incidencia cerrada',
-      PAYMENT_SUCCEEDED: 'Pago realizado',
-      PAYMENT_FAILED: 'Pago fallido',
-      PAYMENT_PROCESSING: 'Pago en proceso',
-      APPOINTMENT_CONFIRMED: 'Cita confirmada',
-      APPOINTMENT_REJECTED: 'Cita rechazada',
-      APPOINTMENT_CANCELLED: 'Cita cancelada',
-      APPOINTMENT_RESCHEDULED: 'Cita reprogramada',
-      SLOT_PROPOSED: 'Propuesta de cita',
-      SERVICE_OFFERED: 'Presupuesto enviado',
-      OFFER_ACCEPTED: 'Presupuesto aceptado',
-      OFFER_REJECTED: 'Presupuesto rechazado',
-      SERVICE_DONE: 'Trabajo finalizado',
-    };
-    return code ? map[code] || `Evento: ${code}` : 'Evento del sistema';
-  };
-
   const lastPreview = (c: Conversation) => {
     if (!c.lastMessage) return '';
-    if (c.lastMessage.type === 'system') return systemLabel(c.lastMessage.systemCode);
+    if (c.lastMessage.type === 'system') return systemMessageLabel(c.lastMessage.systemCode);
     if (c.lastMessage.attachmentUrl) return '📎 Archivo adjunto';
     return c.lastMessage.body || '';
   };
@@ -92,7 +73,7 @@ export default function Inbox() {
   return (
     <div className="space-y-4">
       <PageHeader
-        title="Conversaciones"
+        title="Mensajes"
         subtitle="Conversaciones con propietarios, profesionales y soporte."
         cta={(
           <button
@@ -139,8 +120,8 @@ export default function Inbox() {
       {err && <div className="text-sm text-red-600">{err}</div>}
       {!loading && items.length === 0 ? (
         <EmptyState
-          title="Aun no tienes conversaciones"
-          detail="Cuando envies solicitudes o tengas un contrato, podras chatear aqui."
+          title="Aún no tienes conversaciones"
+          detail="Cuando haya una solicitud de visita o un contrato, podrás hablar aquí con la otra parte."
           cta={(
             <button
               type="button"

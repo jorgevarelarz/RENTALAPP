@@ -51,6 +51,27 @@ export function signingUrlFor(signingRequestUserId: string) {
   return `${SIGNING_APP_URL}/${signingRequestUserId}?lang=es`;
 }
 
+/**
+ * El enlace de firma se construye con el id de "signing request user" de cada firmante.
+ * Se usa al crear el sobre y para reparar enlaces que faltaban en un sobre ya enviado.
+ */
+export async function fetchFirmaSignerLinks(
+  requestId: string,
+  signers: { role: SignatureRole; email: string }[],
+): Promise<Partial<Record<SignatureRole, string>>> {
+  const usersRes = await firmaFetch(`/signing-requests/${requestId}/users`);
+  const usersBody = (await usersRes.json()) as FirmaUser[] | { results?: FirmaUser[] };
+  const users = Array.isArray(usersBody) ? usersBody : usersBody.results || [];
+
+  const signerLinks: Partial<Record<SignatureRole, string>> = {};
+  for (const signer of signers) {
+    const email = signer.email.trim().toLowerCase();
+    const user = users.find((u) => u.email && u.email.trim().toLowerCase() === email);
+    if (user?.id) signerLinks[signer.role] = signingUrlFor(user.id);
+  }
+  return signerLinks;
+}
+
 // Firma.dev firma el cuerpo como `${t}.${body}` con HMAC-SHA256 en hex: "t=<unix>,v1=<hex>".
 export function verifyFirmaSignature(
   rawBody: string | Buffer | undefined,
@@ -137,16 +158,7 @@ export const firmaProvider: SignatureProvider = {
     const requestId = created.id;
     if (!requestId) throw new Error('Firma.dev no devolvió el identificador de la solicitud');
 
-    // El enlace de firma se construye con el id de "signing request user" de cada firmante.
-    const usersRes = await firmaFetch(`/signing-requests/${requestId}/users`);
-    const usersBody = (await usersRes.json()) as FirmaUser[] | { results?: FirmaUser[] };
-    const users = Array.isArray(usersBody) ? usersBody : usersBody.results || [];
-
-    const signerLinks: Record<string, string> = {};
-    for (const signer of args.signers) {
-      const user = users.find((u) => u.email && u.email.toLowerCase() === signer.email.toLowerCase());
-      if (user?.id) signerLinks[signer.role] = signingUrlFor(user.id);
-    }
+    const signerLinks = (await fetchFirmaSignerLinks(requestId, args.signers)) as Record<string, string>;
     return { requestId, signerLinks };
   },
 
